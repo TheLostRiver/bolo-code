@@ -120,7 +120,7 @@ SessionStart → UserPromptSubmit → callModel
 
 | # | 切片 |
 |---|------|
-| 5.1 | 会话持久化 / resume / transcript |
+| 5.1 | ~~会话持久化 / resume / transcript~~ ✅ 最小 JSON 快照；见 `docs/SESSIONS.md` |
 | 5.2 | CLI 入口复用 core |
 | 5.3 | macOS / Linux 构建 |
 | 5.4 | ~~microcompact（清旧 tool_result）~~ ✅ 见 `docs/COMPACTION.md` §4 |

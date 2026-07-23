@@ -16,7 +16,7 @@
     <id>/SKILL.md
   plugins/
     <plugin-id>/bolo.plugin.json
-  sessions/                 # 会话持久化（后续）
+  sessions/                 # 会话 JSON 快照（见 docs/SESSIONS.md）
 ```
 
 ### 项目（仓库根下的 `.bolo/`）
@@ -32,7 +32,7 @@
     <id>/SKILL.md           # 项目 skill（同 id 覆盖 ~/.bolo/skills）
   plugins/
     <plugin-id>/bolo.plugin.json
-  sessions/
+  sessions/                 # 默认 scope=project 落盘处
 ```
 
 对照 Claude Code：项目级常落在仓库的 `.claude/`；Bolo 固定用 **`.bolo/`**。
@@ -148,6 +148,12 @@ const ws = await loadWorkspace({ cwd: process.cwd() })
 用户全局：`~/.bolo/BOLO.md`。
 
 搜索顺序、截断预算、注入为 system 段：见 **[SYSTEM_PROMPT.md](./SYSTEM_PROMPT.md)**。
+
+## 9. 会话持久化
+
+`sessions/` 存放 **`<sessionId>.json`** 快照（messages + 配置切片）。  
+API：`saveSession` / `loadSession` / `resumeSession`；可选 `createSession({ autoSave: true })`。  
+详见 **[SESSIONS.md](./SESSIONS.md)**。
 
 ```
 ~/.bolo/BOLO.md          # 用户全局

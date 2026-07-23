@@ -47,6 +47,16 @@ import {
   assembleSessionSystemPrompt,
   type AssembleSessionSystemPromptOptions,
 } from './systemPrompt.ts'
+import {
+  applySnapshotToSession,
+  loadSession,
+  maybeAutoSaveSession,
+  saveSession,
+  setSessionPersistMeta,
+  type SaveSessionOptions,
+  type SessionScope,
+  type SessionSnapshot,
+} from './sessionPersist.ts'
 
 export type { AskPermissionFn, Terminal }
 export type { QueryDeps, PrepareMessagesFn } from './deps.ts'
@@ -105,6 +115,28 @@ export {
   getNextPermissionMode,
   decidePermission,
 } from '../../permissions/src/index.ts'
+export {
+  SESSION_SNAPSHOT_VERSION,
+  toSnapshot,
+  parseSessionSnapshot,
+  saveSession,
+  loadSession,
+  resolveSessionFilePath,
+  resolveIdOrPath,
+  looksLikeSessionPath,
+  sessionFileName,
+  applySnapshotToSession,
+  setSessionPersistMeta,
+  getSessionPersistMeta,
+  maybeAutoSaveSession,
+  atomicWriteJson,
+  type SessionSnapshot,
+  type SessionScope,
+  type SaveSessionOptions,
+  type LoadSessionOptions,
+  type PersistableSession,
+  type SessionPersistMeta,
+} from './sessionPersist.ts'
 
 export type SessionEvent =
   | { type: 'phase'; phase: SessionPhase | string }
@@ -161,6 +193,15 @@ export type CreateSessionOptions = {
   model?: string
   source?: SessionStartSource
   onEvent?: (e: SessionEvent) => void
+  /**
+   * 每轮 submitPrompt 结束后自动 saveSession。
+   * true = project scope；或传 { scope, sessionsDir, filePath }。
+   */
+  autoSave?: boolean | {
+    scope?: SessionScope
+    sessionsDir?: string
+    filePath?: string
+  }
 }
 
 export type BoloSession = {
@@ -321,6 +362,19 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
     }
   }
   // 否则：productionDeps 已默认 micro（DEFAULT_MICROCOMPACT_OPTIONS）
+
+  if (opts.autoSave) {
+    const as =
+      opts.autoSave === true
+        ? { scope: 'project' as SessionScope }
+        : opts.autoSave
+    setSessionPersistMeta(session, {
+      autoSave: true,
+      scope: as.scope ?? 'project',
+      sessionsDir: as.sessionsDir,
+      filePath: as.filePath,
+    })
+  }
 
   setPhase(session, 'starting')
   const start = await runHooks(
@@ -492,7 +546,99 @@ export async function submitPrompt(
   })
 
   if (session.phase !== 'ready') setPhase(session, 'ready')
+  await maybeAutoSaveSession(session)
   return terminal
+}
+
+export type ResumeSessionOptions = {
+  /** session id 或 .json 路径 */
+  idOrPath: string
+  /** load 时解析 project scope 用的 cwd；默认 process.cwd() 或快照内 cwd */
+  cwd?: string
+  scope?: SessionScope
+  sessionsDir?: string
+  filePath?: string
+  /**
+   * true（默认）：按 cwd/mode 重建 systemPromptSections；
+   * false：使用快照中的 system 段。
+   */
+  reassembleSystem?: boolean
+  /** 覆盖 createSession 的其余选项（provider / hooks / skills…） */
+  create?: Omit<CreateSessionOptions, 'cwd' | 'sessionId' | 'source' | 'permissionMode'>
+  /** 恢复后是否 autoSave（默认 false） */
+  autoSave?: CreateSessionOptions['autoSave']
+  onEvent?: (e: SessionEvent) => void
+  askPermission?: AskPermissionFn
+  provider?: LlmProvider
+  hooks?: HooksConfig
+  skills?: LoadedSkill[]
+  systemPrompt?: boolean | AssembleSessionSystemPromptOptions
+  source?: SessionStartSource
+}
+
+/**
+ * 从磁盘快照恢复会话（SessionStart source 默认 resume）
+ */
+export async function resumeSession(
+  opts: ResumeSessionOptions,
+): Promise<{ session: BoloSession; snapshot: SessionSnapshot; path: string }> {
+  const { path: filePath, snapshot } = await loadSession(opts.idOrPath, {
+    scope: opts.scope,
+    cwd: opts.cwd,
+    sessionsDir: opts.sessionsDir,
+    filePath: opts.filePath,
+  })
+
+  const cwd = opts.cwd ?? snapshot.cwd
+  const reassemble = opts.reassembleSystem !== false
+
+  const session = await createSession({
+    ...opts.create,
+    cwd,
+    sessionId: snapshot.id,
+    permissionMode: snapshot.permissionMode,
+    model: opts.create?.model ?? snapshot.model,
+    autoCompactEnabled:
+      opts.create?.autoCompactEnabled ?? snapshot.autoCompactEnabled,
+    contextWindowTokens:
+      opts.create?.contextWindowTokens ?? snapshot.contextWindowTokens,
+    maxPtlRetries: opts.create?.maxPtlRetries ?? snapshot.maxPtlRetries,
+    provider: opts.provider ?? opts.create?.provider,
+    hooks: opts.hooks ?? opts.create?.hooks,
+    skills: opts.skills ?? opts.create?.skills,
+    askPermission: opts.askPermission ?? opts.create?.askPermission,
+    onEvent: opts.onEvent ?? opts.create?.onEvent,
+    systemPrompt: reassemble
+      ? (opts.systemPrompt ?? opts.create?.systemPrompt ?? true)
+      : false,
+    source: opts.source ?? 'resume',
+    autoSave: opts.autoSave ?? opts.create?.autoSave,
+  })
+
+  applySnapshotToSession(session, snapshot, {
+    restoreSystemSections: !reassemble,
+  })
+
+  // 重建 system 失败或为空时回退快照
+  if (reassemble && session.systemPromptSections.length === 0) {
+    session.systemPromptSections = [...snapshot.systemPromptSections]
+  }
+
+  setSessionPersistMeta(session, {
+    createdAt: snapshot.createdAt,
+    filePath,
+    scope: opts.scope ?? 'project',
+  })
+
+  return { session, snapshot, path: filePath }
+}
+
+/** 显式保存当前会话（同 saveSession，便于从 core 入口发现） */
+export async function persistSession(
+  session: BoloSession,
+  options?: SaveSessionOptions,
+): Promise<{ path: string; snapshot: SessionSnapshot }> {
+  return saveSession(session, options)
 }
 
 export type CompactSessionOptions = {
