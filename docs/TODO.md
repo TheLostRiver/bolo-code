@@ -37,7 +37,7 @@ P3  GUI / 打磨 / 后置
 | **P1-b** | **Prompt 缓存友好前缀** | 省 token |
 | **P1-c** | **JSONL transcript 双写** | 按 `TODO_SESSION_JSONL` A+B |
 | **P1-d** | **内置 skill-creator / plugin-creator** | 元技能 |
-| **P2-a** | **Subagent 真 loop（S0–S6）** | 废 stub，Agent 工具 |
+| **P2-a** | **Subagent 真 loop（S0–S6）** | ✅ 废 stub，Agent 工具 |
 | **P2-b** | **MCP stdio** | 真连接，禁止 mock 冒充 |
 | **P2-c** | Plugins / Subagent 目录定义 / JSONL 侧链 | |
 | **P3** | Electron · 完整 Ink · fork/async agent | |
@@ -105,8 +105,8 @@ P3  GUI / 打磨 / 后置
 | R4 | `/rules` | 依赖 Slash | ✅ |
 | C1–C4 | **Prompt 静态/动态边界 + 前缀稳定测试** | M-Cost（`PROMPT_CACHE.md` + stable/volatile + `test-prompt-cache`） | ✅ |
 | J-A/B | **JSONL 双写** | `TODO_SESSION_JSONL` Phase A+B | ⬜ |
-| K1–K2 | **skill-creator / plugin-creator** | M-Creators | ⬜ |
-| SL5 | `/skills` + `/<skill-id>` 回落 | | ⬜ |
+| K1–K2 | **skill-creator / plugin-creator** | M-Creators | ✅ |
+| SL5 | `/skills` + `/<skill-id>` 回落 | | ✅ |
 
 ---
 
@@ -114,7 +114,7 @@ P3  GUI / 打磨 / 后置
 
 | ID | 主题 | 状态 |
 |----|------|------|
-| S0–S6 | **Subagent** 真 `runSubagent` + Agent 工具；废 stub | ⬜ |
+| S0–S6 | **Subagent** 真 `runSubagent` + Agent 工具；废 stub | ✅ |
 | MCP1 | **MCP stdio** listTools/call → 进 tools 表 | ⬜ |
 | PL1 | Plugins 真加载 | ⬜ |
 | S7+ | `.bolo/agents` · 侧链 transcript · 权限细化 | ⬜ |

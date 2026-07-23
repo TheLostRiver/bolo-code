@@ -839,6 +839,7 @@ export {
   dispatchSlashCommand,
   submitUserInput,
   getSlashCommand,
+  invokeSkillBySlash,
   SLASH_COMMANDS,
   EFFORT_LEVELS,
   isEffortLevel,

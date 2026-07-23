@@ -132,6 +132,47 @@ async function main() {
     assert(unk.message.toLowerCase().includes('unknown'), 'unknown msg')
   }
 
+  // skill 回落：/skill-creator（挂 mock skill）
+  session.skills = [
+    {
+      meta: {
+        id: 'skill-creator',
+        name: 'skill-creator',
+        description: 'mock creator',
+        path: '/tmp/skill-creator/SKILL.md',
+        userInvocable: true,
+      },
+      source: 'bundled',
+      body: 'CREATE A SKILL STEPS',
+      frontmatter: {},
+    },
+  ]
+  const beforeMsgs = session.messages.length
+  const sc = await submitUserInput(session, '/skill-creator')
+  assert(sc.type === 'slash', 'skill-creator slash')
+  if (sc.type === 'slash') {
+    assert(sc.message.toLowerCase().includes('skill-creator'), 'loaded msg')
+  }
+  assert(session.messages.length === beforeMsgs + 1, 'skill injected as msg')
+  assert(
+    session.messages[session.messages.length - 1]!.content.includes(
+      'CREATE A SKILL STEPS',
+    ),
+    'skill body in message',
+  )
+
+  const skillCmd = await submitUserInput(session, '/skill skill-creator')
+  assert(skillCmd.type === 'slash', '/skill <id>')
+  if (skillCmd.type === 'slash') {
+    assert(skillCmd.message.toLowerCase().includes('loaded'), '/skill loaded')
+  }
+
+  const skillsList = await submitUserInput(session, '/skills')
+  assert(skillsList.type === 'slash', '/skills')
+  if (skillsList.type === 'slash') {
+    assert(skillsList.message.includes('skill-creator'), '/skills lists id')
+  }
+
   // empty
   const empty = await submitUserInput(session, '   ')
   assert(empty.type === 'empty', 'empty input')

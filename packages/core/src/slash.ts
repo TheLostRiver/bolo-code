@@ -12,6 +12,11 @@ import {
 } from '../../permissions/src/index.ts'
 import type { ChatMessage } from '../../shared/src/index.ts'
 import type { CompactSummarizer } from '../../compact/src/index.ts'
+import {
+  findSkillById,
+  formatSkillBodyForInjection,
+  type LoadedSkill,
+} from '../../skills/src/index.ts'
 import type { Terminal } from './queryLoop.ts'
 
 /** slash 需要的会话切片（与 BoloSession 兼容） */
@@ -24,6 +29,8 @@ export type SlashSession = {
   model?: string
   effortLevel?: string
   compactSummarizer?: CompactSummarizer
+  /** 会话 skill 全文表；供 /skills 与 /<skill-id> 回落 */
+  skills?: LoadedSkill[]
 }
 
 export type ParseSlashResult =
@@ -316,6 +323,88 @@ async function cmdRules(
   }
 }
 
+function sessionSkills(session: SlashSession): LoadedSkill[] {
+  return session.skills ?? []
+}
+
+function cmdSkills(session: SlashSession, args: string): SlashDispatchResult {
+  const skills = sessionSkills(session)
+  const filter = args.trim().toLowerCase()
+  const list = filter
+    ? skills.filter(
+        (s) =>
+          s.meta.id.toLowerCase().includes(filter) ||
+          s.meta.name.toLowerCase().includes(filter),
+      )
+    : skills
+
+  if (!list.length) {
+    return {
+      ok: true,
+      message: filter
+        ? `No skills matching "${args.trim()}".`
+        : 'No skills loaded. Place SKILL.md under .bolo/skills/<id>/ or use bundled creators.',
+    }
+  }
+
+  const lines = ['Skills (catalog):', '']
+  for (const s of list) {
+    const inv =
+      s.meta.userInvocable === false ? ' [not user-invocable]' : ''
+    const desc = s.meta.description ?? '(no description)'
+    lines.push(`  /${s.meta.id}  [${s.source}]${inv}`)
+    lines.push(`    ${desc}`)
+  }
+  lines.push('')
+  lines.push('Invoke: /<skill-id>  or  /skill <id>')
+  return { ok: true, message: lines.join('\n') }
+}
+
+function cmdSkill(session: SlashSession, args: string): SlashDispatchResult {
+  const id = args.trim()
+  if (!id) {
+    return {
+      ok: false,
+      message: 'Usage: /skill <id>  (or /skills to list)',
+    }
+  }
+  return invokeSkillBySlash(session, id)
+}
+
+/**
+ * 用户 slash 调 skill：注入全文到 messages（不调 LLM）。
+ * 尊重 user-invocable: false。
+ */
+export function invokeSkillBySlash(
+  session: SlashSession,
+  idOrName: string,
+): SlashDispatchResult {
+  const skills = sessionSkills(session)
+  const found = findSkillById(skills, idOrName)
+  if (!found) {
+    const ids = skills.map((s) => s.meta.id).join(', ') || '(none)'
+    return {
+      ok: false,
+      message: `Unknown skill "${idOrName}". Known: ${ids}. Try /skills.`,
+    }
+  }
+  if (found.meta.userInvocable === false) {
+    return {
+      ok: false,
+      message: `Skill "${found.meta.id}" is not user-invocable (user-invocable: false).`,
+    }
+  }
+  const body = formatSkillBodyForInjection(found)
+  session.messages.push({
+    role: 'user',
+    content: `[Skill: ${found.meta.id}]\n\n${body}`,
+  })
+  return {
+    ok: true,
+    message: `Loaded skill "${found.meta.id}" [${found.source}] into conversation (${body.length} chars). Continue with a prompt or let the agent use these instructions.`,
+  }
+}
+
 /** 内置注册表（顺序即 /help 列表顺序） */
 export const SLASH_COMMANDS: SlashCommandDef[] = [
   {
@@ -368,6 +457,18 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     usage: '[list|show <name>]',
     run: cmdRules,
   },
+  {
+    name: 'skills',
+    summary: 'List loaded skills (catalog)',
+    usage: '[filter]',
+    run: cmdSkills,
+  },
+  {
+    name: 'skill',
+    summary: 'Load a skill body into the conversation by id',
+    usage: '<id>',
+    run: cmdSkill,
+  },
 ]
 
 const COMMAND_MAP = new Map(SLASH_COMMANDS.map((c) => [c.name, c]))
@@ -382,13 +483,20 @@ export async function dispatchSlashCommand(
   args: string,
 ): Promise<SlashDispatchResult> {
   const cmd = getSlashCommand(name)
-  if (!cmd) {
-    return {
-      ok: false,
-      message: `Unknown command /${name}. Type /help for list.`,
-    }
+  if (cmd) {
+    return await cmd.run(session, args)
   }
-  return await cmd.run(session, args)
+
+  // 回落：/<skill-id> 或 /skill-creator（user-invocable skill）
+  const skills = sessionSkills(session)
+  if (skills.length && findSkillById(skills, name)) {
+    return invokeSkillBySlash(session, name)
+  }
+
+  return {
+    ok: false,
+    message: `Unknown command /${name}. Type /help for list, or /skills for skill ids.`,
+  }
 }
 
 /**

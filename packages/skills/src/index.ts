@@ -1,10 +1,11 @@
 /**
  * Skill 发现与加载 — 对照 HelsincyCode loadSkillsDir + SkillTool
  *
- * 路径：
- *   ~/.bolo/skills/<id>/SKILL.md   （全局，BOLO_CONFIG_DIR 可覆盖）
- *   .bolo/skills/<id>/SKILL.md     （项目）
- *   插件 skills/
+ * 路径（同 id 后者覆盖前者）：
+ *   packages/bundled-skills/<id>/SKILL.md  （发行内置）
+ *   ~/.bolo/skills/<id>/SKILL.md           （全局，BOLO_CONFIG_DIR 可覆盖）
+ *   .bolo/skills/<id>/SKILL.md             （项目）
+ *   插件 skills/                           （workspace 合并时再覆盖）
  *
  * Token 策略（对齐 HC）：
  *   - 默认只把「目录索引」进上下文（name + description + when_to_use）
@@ -15,6 +16,7 @@
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
+import { fileURLToPath } from 'node:url'
 
 export type SkillMeta = {
   id: string
@@ -49,9 +51,19 @@ export type SkillCatalogEntry = {
   disableModelInvocation: boolean
 }
 
+/**
+ * 仓库内置 skills 根目录（packages/bundled-skills）。
+ * 相对本文件：packages/skills/src → ../../bundled-skills
+ */
+export function getBundledSkillsDir(): string {
+  const here = path.dirname(fileURLToPath(import.meta.url))
+  return path.resolve(here, '..', '..', 'bundled-skills')
+}
+
 export function describeSkillLayout(userRoot?: string) {
   const root = userRoot ?? path.join(os.homedir(), '.bolo')
   return {
+    bundled: path.join(getBundledSkillsDir(), '<id>', 'SKILL.md'),
     user: path.join(root, 'skills', '<id>', 'SKILL.md'),
     project: path.join('.bolo', 'skills', '<id>', 'SKILL.md'),
     plugin: path.join('<plugin>', 'skills', '<id>', 'SKILL.md'),
@@ -144,8 +156,18 @@ export type DiscoverSkillsOptions = {
   cwd: string
   /** 默认 ~/.bolo（或 BOLO_CONFIG_DIR） */
   userBoloDir?: string
+  /**
+   * 内置 skills 目录；默认 getBundledSkillsDir()。
+   * 传 `false` 跳过 bundled（测试用）。
+   */
+  bundledSkillsDir?: string | false
 }
 
+/**
+ * 发现 skills。合并优先级（同 id）：
+ * bundled → user → project（后者覆盖前者）。
+ * 插件层由 loadWorkspace 再覆盖。
+ */
 export async function discoverSkills(
   opts: DiscoverSkillsOptions,
 ): Promise<LoadedSkill[]> {
@@ -153,17 +175,27 @@ export async function discoverSkills(
     opts.userBoloDir ??
     process.env.BOLO_CONFIG_DIR?.trim() ??
     path.join(os.homedir(), '.bolo')
-  const project = await discoverSkillsInDir(
-    path.join(opts.cwd, '.bolo', 'skills'),
-    'project',
-  )
+
+  const map = new Map<string, LoadedSkill>()
+
+  if (opts.bundledSkillsDir !== false) {
+    const bundledDir = opts.bundledSkillsDir ?? getBundledSkillsDir()
+    const bundled = await discoverSkillsInDir(bundledDir, 'bundled')
+    for (const s of bundled) map.set(s.meta.id, s)
+  }
+
   const user = await discoverSkillsInDir(
     path.join(userRoot, 'skills'),
     'user',
   )
-  const map = new Map<string, LoadedSkill>()
   for (const s of user) map.set(s.meta.id, s)
+
+  const project = await discoverSkillsInDir(
+    path.join(opts.cwd, '.bolo', 'skills'),
+    'project',
+  )
   for (const s of project) map.set(s.meta.id, s)
+
   return [...map.values()]
 }
 

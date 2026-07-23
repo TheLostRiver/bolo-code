@@ -1,10 +1,16 @@
 /**
  * Skill 目录索引 + 按需加载 — 对照 HC skill_listing / SkillTool
+ * 含 bundled skill-creator / plugin-creator 发现
  */
+import { promises as fs } from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import {
   formatSkillCatalog,
   findSkillById,
   formatSkillBodyForInjection,
+  discoverSkills,
+  getBundledSkillsDir,
   type LoadedSkill,
 } from '../packages/skills/src/index.ts'
 import { executeTool } from '../packages/tools/src/index.ts'
@@ -67,5 +73,55 @@ const blocked = await executeTool(
   { cwd: process.cwd(), skills },
 )
 assert(!blocked.ok, 'disable-model-invocation blocks tool')
+
+// ── bundled creators ──
+const bundledDir = getBundledSkillsDir()
+const discovered = await discoverSkills({
+  cwd: process.cwd(),
+  // 隔离 user/project：空临时目录
+  userBoloDir: path.join(os.tmpdir(), `bolo-skill-test-user-${Date.now()}`),
+})
+const creator = findSkillById(discovered, 'skill-creator')
+const pluginCreator = findSkillById(discovered, 'plugin-creator')
+assert(creator, 'bundled skill-creator found')
+assert(pluginCreator, 'bundled plugin-creator found')
+assert(creator!.source === 'bundled', 'skill-creator source=bundled')
+assert(pluginCreator!.source === 'bundled', 'plugin-creator source=bundled')
+assert(
+  creator!.meta.path.includes(path.join('skill-creator', 'SKILL.md')) ||
+    creator!.meta.path.replace(/\\/g, '/').includes('skill-creator/SKILL.md'),
+  'skill-creator path under bundled',
+)
+const cat = formatSkillCatalog(discovered)
+assert(cat.includes('skill-creator'), 'skill-creator in catalog')
+assert(cat.includes('plugin-creator'), 'plugin-creator in catalog')
+
+// project 同 id 覆盖 bundled
+const tmpProject = await fs.mkdtemp(path.join(os.tmpdir(), 'bolo-skill-proj-'))
+const overrideDir = path.join(tmpProject, '.bolo', 'skills', 'skill-creator')
+await fs.mkdir(overrideDir, { recursive: true })
+await fs.writeFile(
+  path.join(overrideDir, 'SKILL.md'),
+  `---
+name: skill-creator
+id: skill-creator
+description: project override
+---
+OVERRIDE BODY
+`,
+  'utf8',
+)
+const merged = await discoverSkills({
+  cwd: tmpProject,
+  userBoloDir: path.join(os.tmpdir(), `bolo-skill-test-user2-${Date.now()}`),
+})
+const overridden = findSkillById(merged, 'skill-creator')
+assert(overridden, 'override still found')
+assert(overridden!.source === 'project', 'project overrides bundled')
+assert(overridden!.body.includes('OVERRIDE BODY'), 'override body')
+
+// bundled dir 可定位
+const st = await fs.stat(bundledDir)
+assert(st.isDirectory(), 'bundled-skills dir exists')
 
 console.log('SKILL CATALOG TESTS PASS')

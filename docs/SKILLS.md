@@ -29,11 +29,12 @@
 
 | 来源 | 路径 |
 |------|------|
+| **bundled** | 仓库 `packages/bundled-skills/`（发行内置，如 skill-creator / plugin-creator） |
 | user | `~/.bolo/skills` |
-| project | `.bolo/skills`（**同 id 覆盖 user**） |
+| project | `.bolo/skills`（**同 id 覆盖 user / bundled**） |
 | plugin | 插件内 `skills/`（再覆盖） |
 
-发现代码：`discoverSkills()` 先 user 再 project。
+发现代码：`discoverSkills()` 顺序 **bundled → user → project**（后者覆盖前者）；workspace 再合并 plugin。
 
 `SKILL.md` 示例：
 
@@ -100,12 +101,21 @@ createSessionFromWorkspace
 npx tsx scripts/test-skill-catalog.ts
 ```
 
-## 6. 仍未做
+## 6. 内置元技能（bundled）
 
-- 用户 slash `/skill-name` UI  
+| id | 作用 |
+|----|------|
+| `skill-creator` | 引导写出可用的 `SKILL.md` 目录 |
+| `plugin-creator` | 引导脚手架 `bolo.plugin.json` + contributes |
+
+路径：`packages/bundled-skills/<id>/SKILL.md`，由 `getBundledSkillsDir()`（`import.meta`）定位。  
+Slash：`/skill-creator`、`/plugin-creator`、`/skill <id>`、`/skills`（未知内置命令时回落到同名 user-invocable skill）。
+
+## 7. 仍未做
+
 - 远程 skill / MCP skill  
 - 与 HC 完全一致的动态 skill_discovery 预取  
 
 ---
 
-**一句话：** 有 `~/.bolo/skills`；全局 skill **进目录、不进全文**；全文靠模型调 **Skill** 工具按需加载，避免 token 爆炸。
+**一句话：** 有 bundled + `~/.bolo/skills`；skill **进目录、不进全文**；全文靠 **Skill** 工具或 slash `/<id>` 按需加载，避免 token 爆炸。
