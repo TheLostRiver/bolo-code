@@ -225,6 +225,11 @@ export type BoloSession = {
   compactSummarizer?: CompactSummarizer
   skills: LoadedSkill[]
   model?: string
+  /**
+   * 会话级 effort 档位（/effort）；仅存字段，暂无 provider 映射。
+   * `undefined` 视为 auto。
+   */
+  effortLevel?: string
   /** 会话级 auto compact 开关（prepareMessages） */
   autoCompactEnabled: boolean
   contextWindowTokens: number
@@ -785,3 +790,19 @@ export function setPermissionMode(session: BoloSession, mode: PermissionMode) {
     phase: session.phase,
   })
 }
+
+// ── slash 总线（parse / dispatch / submitUserInput）──
+export {
+  parseSlashLine,
+  dispatchSlashCommand,
+  submitUserInput,
+  getSlashCommand,
+  SLASH_COMMANDS,
+  EFFORT_LEVELS,
+  isEffortLevel,
+  type ParseSlashResult,
+  type SlashDispatchResult,
+  type SubmitUserInputResult,
+  type SlashCommandDef,
+  type EffortLevel,
+} from './slash.ts'

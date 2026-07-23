@@ -145,6 +145,8 @@ export function formatHelp(): string {
   return `bolo — Bolo Code 最小 CLI
 
 用法:
+  bolo                               新会话（TTY：欢迎 banner + REPL）
+  bolo "question"                    新会话单轮 prompt
   bolo --resume                      列出当前项目会话并选择进入
   bolo --resume <id>                 恢复会话并打印摘要
   bolo --resume <id> -p "prompt"     恢复后单轮 submit 并打印助手输出
@@ -156,6 +158,10 @@ export function formatHelp(): string {
   2. ~/.bolo/sessions/<id>.json（或 $BOLO_CONFIG_DIR/sessions/）
   也可用绝对/相对 .json 路径作为 id。
 
+REPL 斜杠命令（会话内）:
+  /help  /clear  /compact  /context  /model  /effort  /plan  /permissions
+  详见 docs/SLASH_COMMANDS.md
+
 选项:
   -r, --resume [id|path]   恢复会话；无 id 时列项目 .bolo/sessions
   -p, --prompt [text]      单轮 prompt（隐含 --print）
@@ -163,6 +169,9 @@ export function formatHelp(): string {
       --cwd <dir>          解析 project sessions 的工作目录
   -h, --help               帮助
 
-无 API key 时仍可加载快照；真正 callModel 时会报错（除非 BOLO_PROVIDER=mock）。
+环境:
+  NO_COLOR / BOLO_PLAIN=1  欢迎 banner 仅输出一行 BOLO
+
+无 API key 时仍可加载快照 / 启动会话；真正 callModel 时会报错（除非 BOLO_PROVIDER=mock）。
 `
 }

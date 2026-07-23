@@ -1,13 +1,17 @@
 # Progress Log
 
-## Session: P0-a RS1–RS6 实现
+## Session: P0-b + P0-c（slash + BOLO banner）
 
-- `listProjectSessions`：扫项目 `.bolo/sessions/*.json`，updatedAt 降序，preview/消息数
-- `parseArgs`：`--resume` / `-r` 无 value → picker（`resume: true`）
-- CLI：TTY 编号选择；非 TTY 列表 + exit 2；空列表提示 `bolo` + exit 1
-- 测试：`scripts/test-session-list.ts` + 扩展 `test-cli-resume`
-- 文档：`TODO.md` RS1–RS6 ✅、`SESSIONS.md` 标明已实现
+- `packages/core/src/slash.ts`：parseSlashLine、注册表、dispatch、submitUserInput
+- 命令：/help /clear /compact /context /model /effort /plan /permissions
+- `BoloSession.effortLevel` 会话字段
+- CLI REPL / 单轮走 submitUserInput（resume + 新会话）
+- `packages/cli/src/tui/banner.ts`：BOLO + Bolot ASCII；plain/NO_COLOR 单行
+- `main.ts`：无参 TTY → 新会话 + banner + REPL；非 TTY 不挂起
+- resume 成功后缩略 `BOLO · session <id>`（T7）
+- 文档：SLASH_COMMANDS.md、BRAND.md（Bolot）、TUI.md；TODO 勾选 SL* / T0–T2 / T7
+- 测试：`scripts/test-slash.ts`
 
 ## 默认下一刀
 
-P0-b：斜杠命令总线（`docs/TODO.md` SL0–SL3）
+P1-a：`.bolo/rules` 发现 + 注入

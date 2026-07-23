@@ -73,11 +73,11 @@ P3  GUI / 打磨 / 后置
 
 | ID | 任务 | 状态 |
 |----|------|------|
-| SL0 | `docs/SLASH_COMMANDS.md` 契约 | ⬜ |
-| SL1 | `parseSlash` + 注册表 + `submitUserInput` | ⬜ |
-| SL2 | `/help` `/compact` `/clear` `/context` | ⬜ |
-| SL3 | `/model` **`/effort`** `/plan` `/permissions` | ⬜ |
-| SL4 | CLI REPL 走 `submitUserInput` | ⬜ |
+| SL0 | `docs/SLASH_COMMANDS.md` 契约 | ✅ |
+| SL1 | `parseSlash` + 注册表 + `submitUserInput` | ✅ |
+| SL2 | `/help` `/compact` `/clear` `/context` | ✅ |
+| SL3 | `/model` **`/effort`** `/plan` `/permissions` | ✅ |
+| SL4 | CLI REPL 走 `submitUserInput` | ✅ |
 
 详见 `ROADMAP.md` §5。
 
@@ -87,11 +87,11 @@ P3  GUI / 打磨 / 后置
 
 | ID | 任务 | 状态 |
 |----|------|------|
-| T0 | `docs/TUI.md` + `docs/BRAND.md`（吉祥物定稿） | ⬜ |
-| T1 | `renderWelcomeBanner`：**大写 BOLO** + 原创吉祥物 ASCII | ⬜ |
-| T2 | `bolo` **无参 TTY** → 新会话 + banner + 输入循环 | ⬜ |
+| T0 | `docs/TUI.md` + `docs/BRAND.md`（吉祥物定稿） | ✅ |
+| T1 | `renderWelcomeBanner`：**大写 BOLO** + 原创吉祥物 ASCII | ✅ |
+| T2 | `bolo` **无参 TTY** → 新会话 + banner + 输入循环 | ✅ |
 | T3–T6 | 状态行 / 流式工具行 / 权限 y/n / 接 slash | ⬜ |
-| T7 | 与 **RS\*** 合流：resume 路径也显示缩略 banner | ⬜ |
+| T7 | 与 **RS\*** 合流：resume 路径也显示缩略 banner | ✅（轻量一行） |
 
 吉祥物候选：Bolot / Nyxkit / Pipkin / Glim（**择一**，禁止抄第三方 IP）。
 
@@ -162,11 +162,9 @@ P3  GUI / 打磨 / 后置
 
 若只开一刀：
 
-> **P0-a：实现 `bolo --resume`（无 id）→ 列出当前项目 `.bolo/sessions` → 用户选择 resume。**
+> **P1-a：`.bolo/rules` 发现 + 注入**（或 P1-b prompt cache / JSONL）。
 
-理由：HC 日用路径；Bolo 已有 resume API；不依赖 JSONL/MCP/Slash。
-
-第二刀建议：**P0-b 斜杠** 或 **P0-c T0–T2 欢迎屏**（看你更在意操控还是「看得见产品」）。
+P0-a/b/c 最小切片已齐：resume 列表、斜杠总线、BOLO 欢迎 + 无参新会话。
 
 ---
 

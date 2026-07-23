@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "description": "Bolo Code 最小 CLI（resume / 单轮 prompt）",
+  "description": "Bolo Code 最小 CLI（新会话 / resume / slash / banner）",
   "bin": {
     "bolo": "./bin/bolo.js"
   },

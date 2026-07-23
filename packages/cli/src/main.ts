@@ -2,6 +2,7 @@
  * bolo CLI 入口
  */
 import { formatHelp, isResumePicker, parseArgs } from './parseArgs.ts'
+import { runNewSessionCli } from './newSessionCli.ts'
 import { ResumePickerError, runResumeCli } from './resumeCli.ts'
 
 /**
@@ -57,40 +58,80 @@ async function main(): Promise<void> {
     process.exit(2)
   }
 
-  if (args.help || (!args.resume && process.argv.slice(2).length === 0)) {
+  if (args.help) {
     process.stdout.write(formatHelp())
     process.exit(0)
   }
 
-  if (!args.resume) {
-    process.stderr.write(
-      'error: currently only --resume is supported. See --help.\n',
-    )
-    process.exit(2)
+  const cwd = args.cwd ?? process.cwd()
+  const isTty = process.stdin.isTTY === true
+
+  // ── --resume 路径 ──
+  if (args.resume) {
+    let prompt = args.prompt
+    if (!prompt && !isResumePicker(args.resume)) {
+      prompt = await readStdinIfPiped()
+    }
+    try {
+      await runResumeCli({
+        idOrPath: isResumePicker(args.resume) ? true : args.resume,
+        cwd,
+        prompt,
+        print: args.print || Boolean(prompt),
+      })
+    } catch (err) {
+      if (err instanceof ResumePickerError) {
+        process.stderr.write(`error: ${err.message}\n`)
+        process.exit(err.exitCode)
+      }
+      const msg = err instanceof Error ? err.message : String(err)
+      process.stderr.write(`error: ${msg}\n`)
+      process.exit(1)
+    }
+    return
   }
 
+  // ── 新会话路径（无 --resume）──
   let prompt = args.prompt
-  // 无显式 prompt 时，非 TTY 可从管道读入（有 id 时）
-  if (!prompt && !isResumePicker(args.resume)) {
+  if (!prompt && !isTty) {
     prompt = await readStdinIfPiped()
   }
 
-  try {
-    await runResumeCli({
-      idOrPath: isResumePicker(args.resume) ? true : args.resume,
-      cwd: args.cwd ?? process.cwd(),
-      prompt,
-      print: args.print || Boolean(prompt),
-    })
-  } catch (err) {
-    if (err instanceof ResumePickerError) {
-      process.stderr.write(`error: ${err.message}\n`)
-      process.exit(err.exitCode)
+  // 无参 + TTY → banner + REPL
+  if (!prompt && !args.print && isTty) {
+    try {
+      await runNewSessionCli({ cwd })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      process.stderr.write(`error: ${msg}\n`)
+      process.exit(1)
     }
-    const msg = err instanceof Error ? err.message : String(err)
-    process.stderr.write(`error: ${msg}\n`)
-    process.exit(1)
+    return
   }
+
+  // 有 prompt / print：单轮新会话
+  if (prompt?.trim()) {
+    try {
+      await runNewSessionCli({
+        cwd,
+        prompt,
+        print: true,
+        isTty: false,
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      process.stderr.write(`error: ${msg}\n`)
+      process.exit(1)
+    }
+    return
+  }
+
+  // 非 TTY 无参：help，勿挂起
+  process.stderr.write(
+    'error: bolo with no args requires a TTY. Use --help, --resume, or pass a prompt.\n',
+  )
+  process.stdout.write(formatHelp())
+  process.exit(2)
 }
 
 main()

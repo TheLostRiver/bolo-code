@@ -7,13 +7,14 @@ import * as readline from 'node:readline'
 import {
   listProjectSessions,
   resumeSession,
-  submitPrompt,
+  submitUserInput,
   type BoloSession,
   type SessionListItem,
   type SessionSnapshot,
 } from '../../core/src/index.ts'
 import type { ChatMessage } from '../../shared/src/index.ts'
 import { createCliProvider } from './provider.ts'
+import { renderWelcomeBanner } from './tui/banner.ts'
 
 export type ResumeCliOptions = {
   /** session id / 路径；省略或 true 时进入项目列表选择 */
@@ -273,17 +274,28 @@ export async function runOnePrompt(
   },
 ): Promise<{ terminalReason: string; assistantText: string }> {
   const writeOut = options?.writeOut ?? ((s) => process.stdout.write(s))
+  const writeErr = options?.writeErr ?? ((s) => process.stderr.write(s))
   const before = session.messages.length
-  const terminal = await submitPrompt(session, prompt)
+  const result = await submitUserInput(session, prompt)
+
+  if (result.type === 'empty') {
+    return { terminalReason: 'empty', assistantText: '' }
+  }
+
+  if (result.type === 'slash') {
+    const msg = result.message
+    writeOut(msg.endsWith('\n') ? msg : `${msg}\n`)
+    return { terminalReason: 'slash', assistantText: msg }
+  }
+
+  const terminal = result.terminal
   const assistantText = lastAssistantText(session.messages, before)
   if (assistantText) {
     writeOut(assistantText.endsWith('\n') ? assistantText : `${assistantText}\n`)
   }
   if (terminal.reason !== 'completed') {
     const detail = terminal.detail ? `: ${terminal.detail}` : ''
-    options?.writeErr?.(
-      `warn: turn ended with ${terminal.reason}${detail}\n`,
-    )
+    writeErr(`warn: turn ended with ${terminal.reason}${detail}\n`)
   }
   return { terminalReason: terminal.reason, assistantText }
 }
@@ -300,7 +312,7 @@ export async function runRepl(
 ): Promise<void> {
   const writeOut = options?.writeOut ?? ((s) => process.stdout.write(s))
   const writeErr = options?.writeErr ?? ((s) => process.stderr.write(s))
-  writeOut('Interactive mode (empty line or /exit to quit).\n')
+  writeOut('Interactive mode (empty line or /exit to quit). Type /help for commands.\n')
 
   const rl = readline.createInterface({
     input: process.stdin,
@@ -360,6 +372,16 @@ export async function runResumeCli(
     cwd,
     writeErr,
   })
+
+  // T7：resume 后缩略一行 BOLO + id
+  writeOut(
+    `${renderWelcomeBanner({
+      condensed: true,
+      sessionId: result.session.id,
+      model: result.session.model,
+      version: '0.0.1',
+    })}\n`,
+  )
   writeOut(`${formatSessionSummary(result.summary)}\n`)
 
   const prompt = opts.prompt?.trim()
