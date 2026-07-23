@@ -1,0 +1,26 @@
+{
+  "name": "bolo-code",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Cross-platform graphical AI coding agent (Electron + headless core)",
+  "type": "module",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "echo \"Scaffold only — implement packages first\"",
+    "build": "echo \"Scaffold only — implement packages first\"",
+    "typecheck": "echo \"Scaffold only — implement packages first\"",
+    "test": "echo \"Scaffold only — implement packages first\""
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TheLostRiver/bolo-code.git"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,10 @@
+{
+  "name": "@bolo/desktop",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Electron GUI host for Bolo Code (scaffold)",
+  "scripts": {
+    "dev": "echo \"Phase 3: wire Electron + @bolo/core\""
+  }
+}

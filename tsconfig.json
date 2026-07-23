@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "baseUrl": ".",
+    "paths": {
+      "@bolo/shared": ["packages/shared/src/index.ts"],
+      "@bolo/core": ["packages/core/src/index.ts"],
+      "@bolo/hooks": ["packages/hooks/src/index.ts"],
+      "@bolo/tools": ["packages/tools/src/index.ts"],
+      "@bolo/skills": ["packages/skills/src/index.ts"],
+      "@bolo/mcp": ["packages/mcp/src/index.ts"],
+      "@bolo/plugins": ["packages/plugins/src/index.ts"],
+      "@bolo/providers": ["packages/providers/src/index.ts"]
+    }
+  },
+  "include": ["packages/*/src/**/*.ts", "apps/*/src/**/*.ts"]
+}
