@@ -2,10 +2,11 @@
  * 会话 transcript 持久化（最小可用）
  *
  * 对照 HelsincyCode sessionStorage：有 session id、落盘、resume。
- * Bolo 简化为单文件 JSON 快照（非整段 JSONL 事件流），无遥测。
+ * Bolo v1：单文件 JSON 快照；T1 双写旁路 JSONL append（见 sessionTranscript.ts）。
+ * Resume 仍读 JSON（T1）；无遥测。
  *
  * 路径：
- * - 项目：`<cwd>/.bolo/sessions/<id>.json`（默认）
+ * - 项目：`<cwd>/.bolo/sessions/<id>.json`（默认）+ 旁路 `<id>.jsonl`
  * - 用户：`~/.bolo/sessions/<id>.json`（或 BOLO_CONFIG_DIR）
  */
 
@@ -24,6 +25,7 @@ import {
   parsePermissionMode,
   type PermissionMode,
 } from '../../permissions/src/index.ts'
+import { dualWriteSessionTranscript } from './sessionTranscript.ts'
 
 /** 可落盘的会话切片（避免与 index 循环依赖） */
 export type PersistableSession = {
@@ -317,8 +319,12 @@ export async function atomicWriteJson(
 
 export async function saveSession(
   session: PersistableSession,
-  options?: SaveSessionOptions & { previous?: Partial<SessionSnapshot> },
-): Promise<{ path: string; snapshot: SessionSnapshot }> {
+  options?: SaveSessionOptions & {
+    previous?: Partial<SessionSnapshot>
+    /** 关闭旁路 JSONL 双写（默认开启 T1 双写） */
+    dualWriteTranscript?: boolean
+  },
+): Promise<{ path: string; snapshot: SessionSnapshot; transcriptPath?: string }> {
   const filePath = options?.filePath
     ? path.resolve(options.filePath)
     : resolveSessionFilePath(session.id, {
@@ -339,7 +345,25 @@ export async function saveSession(
 
   const snapshot = toSnapshot(session, previous)
   await atomicWriteJson(filePath, snapshot)
-  return { path: filePath, snapshot }
+
+  // T1 双写：JSON 快照保留；旁路增量 append .jsonl（失败不阻断 JSON 写成功）
+  let transcriptPath: string | undefined
+  if (options?.dualWriteTranscript !== false) {
+    try {
+      const tw = await dualWriteSessionTranscript(session, filePath, {
+        createdAt: snapshot.createdAt,
+      })
+      transcriptPath = tw.transcriptPath
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      session.onEvent?.({
+        type: 'error',
+        message: `transcript dual-write failed: ${message}`,
+      })
+    }
+  }
+
+  return { path: filePath, snapshot, transcriptPath }
 }
 
 async function loadSessionSnapshotFromPath(

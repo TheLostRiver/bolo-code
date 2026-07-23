@@ -1,7 +1,8 @@
 # 会话持久化与 Resume（最小可用）
 
 > 对照 HelsincyCode `sessionStorage`：有 session id、落盘、resume。  
-> Bolo：**单文件 JSON 快照**（非整段 JSONL 事件流），**无遥测**。
+> Bolo：**单文件 JSON 快照**为主路径；**T1 双写**旁路 JSONL append（`sessionTranscript.ts`），**无遥测**。  
+> **Resume / `loadSession` 本阶段仍只读 JSON**；`.jsonl` 仅写入与审计，待 Phase C 再优先读 jsonl。
 
 ## 1. 路径约定
 
@@ -9,10 +10,23 @@
 |-------|------|
 | **project**（默认） | `<cwd>/.bolo/sessions/<sessionId>.json` |
 | **user** | `~/.bolo/sessions/<sessionId>.json`（或 `$BOLO_CONFIG_DIR/sessions/`） |
+| **transcript（T1 旁路）** | 同目录 `<sessionId>.jsonl`（`saveSession` / autoSave 增量 append） |
 
 - 目录由 `ensureUserLayout` / `ensureProjectLayout` 创建。
 - 项目 `.bolo/sessions/` 已在仓库 `.gitignore` 中。
 - 也可传入绝对 `filePath` / `sessionsDir`（测试或自定义）。
+
+### 1.1 目标格式 v2：JSONL（T1 双写中）
+
+每行一个 JSON entry（线性，无 parentUuid）：
+
+| type | 用途 |
+|------|------|
+| `meta` | 文件首行：id / cwd / permissionMode / model / createdAt |
+| `message` | 包裹现有 `ChatMessage` |
+| `compact_boundary` | full compact 边界（API 已备；compact 接线见后续 Phase） |
+
+`saveSession` 仍原子写 JSON 快照，并按上次 `messages.length` **增量 append** 新消息到 `.jsonl`；messages 变短时 rewrite 整份 jsonl。详见 `docs/TODO_SESSION_JSONL.md`。
 
 ## 2. 快照格式（version 1）
 
@@ -78,13 +92,17 @@ const session = await createSession({
 
 ## 4. 与 HC 的差异
 
-| HelsincyCode | Bolo（本轮） |
-|--------------|--------------|
-| JSONL 追加 transcript | 整会话 JSON 覆盖写 |
-| 项目哈希目录 + 多类 entry | 固定 `.bolo/sessions/<id>.json` |
-| 丰富元数据 / 侧链 agent | 仅主会话 messages + 配置切片 |
+| HelsincyCode | Bolo（本轮 / T1） |
+|--------------|------------------|
+| JSONL 追加 transcript | JSON 快照 + 旁路 `.jsonl` 增量 append |
+| 项目哈希目录 + 多类 entry | 固定 `.bolo/sessions/<id>.json` + `<id>.jsonl` |
+| 丰富元数据 / 侧链 agent | 仅主会话 messages + 配置切片；entry 最小集 meta/message/boundary |
 
-后续若需要增量 transcript 或 GUI 历史列表，可在本格式上扩展，不必先抄 HC 全量。
+Resume 仍走 JSON；jsonl 主读路径见 TODO Phase C。
+
+```bash
+npx tsx scripts/test-transcript-append.ts
+```
 
 ## 5. CLI：`bolo --resume`
 
@@ -139,6 +157,7 @@ npx bolo --resume <id> --cwd /path/to/project
 
 ```bash
 npx tsx scripts/test-session-persist.ts
+npx tsx scripts/test-transcript-append.ts
 npx tsx scripts/test-cli-resume.ts
 npx tsx scripts/test-session-list.ts
 ```

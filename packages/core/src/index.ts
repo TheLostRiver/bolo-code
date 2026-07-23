@@ -161,6 +161,25 @@ export {
   type PersistableSession,
   type SessionPersistMeta,
 } from './sessionPersist.ts'
+export {
+  appendTranscriptLine,
+  ensureTranscriptFile,
+  recordSessionMessages,
+  appendCompactBoundary,
+  dualWriteSessionTranscript,
+  resolveTranscriptPathFromJson,
+  resolveTranscriptFilePath,
+  sessionTranscriptFileName,
+  countTranscriptMessageEntries,
+  rewriteTranscriptFromMessages,
+  getTranscriptWriteState,
+  setTranscriptWriteState,
+  type TranscriptEntry,
+  type TranscriptMetaEntry,
+  type TranscriptMessageEntry,
+  type TranscriptCompactBoundaryEntry,
+  type TranscriptMetaInput,
+} from './sessionTranscript.ts'
 
 export type SessionEvent =
   | { type: 'phase'; phase: SessionPhase | string }
