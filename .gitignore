@@ -18,6 +18,7 @@ release/
 
 # IDE / OS
 .idea/
+.cursor/
 .vscode/*
 !.vscode/extensions.json
 .DS_Store
