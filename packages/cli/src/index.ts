@@ -29,4 +29,8 @@ export {
   shouldUsePlainBanner,
   type BannerOptions,
 } from './tui/banner.ts'
+export {
+  formatSessionStatusLine,
+  type StatusLineSession,
+} from './tui/statusLine.ts'
 export { createCliProvider, NO_KEY_MSG } from './provider.ts'

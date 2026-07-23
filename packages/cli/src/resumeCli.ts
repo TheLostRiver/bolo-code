@@ -15,6 +15,7 @@ import {
 import type { ChatMessage } from '../../shared/src/index.ts'
 import { createCliProvider } from './provider.ts'
 import { renderWelcomeBanner } from './tui/banner.ts'
+import { formatSessionStatusLine } from './tui/statusLine.ts'
 
 export type ResumeCliOptions = {
   /** session id / 路径；省略或 true 时进入项目列表选择 */
@@ -324,6 +325,7 @@ export async function runOnePrompt(
 
 /**
  * 极简 REPL：一行输入 → submit → 打印
+ * 每次 prompt 前打印 T3 状态行。
  */
 export async function runRepl(
   session: BoloSession,
@@ -349,6 +351,7 @@ export async function runRepl(
 
   try {
     for (;;) {
+      writeOut(`${formatSessionStatusLine(session)}\n`)
       const line = await question('bolo> ')
       const text = line.trim()
       if (!text || text === '/exit' || text === '/quit') break
@@ -405,6 +408,7 @@ export async function runResumeCli(
     })}\n`,
   )
   writeOut(`${formatSessionSummary(result.summary)}\n`)
+  writeOut(`${formatSessionStatusLine(result.session)}\n`)
 
   const prompt = opts.prompt?.trim()
   const print = opts.print === true

@@ -4,6 +4,7 @@
  * 禁止：Electron / DOM / 遥测
  */
 
+import path from 'node:path'
 import {
   runFullCompact,
   type CompactSummarizer,
@@ -59,12 +60,19 @@ import {
   applySnapshotToSession,
   loadSession,
   maybeAutoSaveSession,
+  resolveJsonPathFromTranscript,
+  resolveSessionFilePath,
   saveSession,
   setSessionPersistMeta,
+  looksLikeSessionPath,
   type SaveSessionOptions,
   type SessionScope,
   type SessionSnapshot,
 } from './sessionPersist.ts'
+import {
+  loadTranscriptMessages,
+  resolveTranscriptPathFromJson,
+} from './sessionTranscript.ts'
 
 export type { AskPermissionFn, Terminal }
 export type { QueryDeps, PrepareMessagesFn } from './deps.ts'
@@ -155,6 +163,7 @@ export {
   resolveSessionFilePath,
   resolveIdOrPath,
   looksLikeSessionPath,
+  resolveJsonPathFromTranscript,
   sessionFileName,
   applySnapshotToSession,
   setSessionPersistMeta,
@@ -180,6 +189,8 @@ export {
   sessionTranscriptFileName,
   countTranscriptMessageEntries,
   rewriteTranscriptFromMessages,
+  loadTranscriptFile,
+  loadTranscriptMessages,
   getTranscriptWriteState,
   setTranscriptWriteState,
   type TranscriptEntry,
@@ -682,17 +693,123 @@ export type ResumeSessionOptions = {
 }
 
 /**
- * 从磁盘快照恢复会话（SessionStart source 默认 resume）
+ * JSON 缺失时尝试旁路 `{id}.jsonl` 重建最小快照（J-C 起步）。
+ * loadSession 成功时不改动；路径以 `.jsonl` 结尾时直接读 transcript。
+ */
+async function loadSessionOrTranscript(
+  idOrPath: string,
+  options?: {
+    scope?: SessionScope
+    cwd?: string
+    sessionsDir?: string
+    filePath?: string
+  },
+): Promise<{ path: string; snapshot: SessionSnapshot; fromTranscript: boolean }> {
+  const explicitPath = options?.filePath ?? (
+    looksLikeSessionPath(idOrPath) ? idOrPath : undefined
+  )
+  if (explicitPath && path.resolve(explicitPath).endsWith('.jsonl')) {
+    return buildSnapshotFromTranscript(path.resolve(explicitPath), {
+      idOrPath,
+      cwd: options?.cwd,
+    })
+  }
+
+  try {
+    const loaded = await loadSession(idOrPath, options)
+    return { ...loaded, fromTranscript: false }
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException)?.code
+    const msg = err instanceof Error ? err.message : String(err)
+    const missing =
+      code === 'ENOENT' ||
+      /session not found|ENOENT|no such file/i.test(msg)
+    if (!missing) throw err
+  }
+
+  // 候选 jsonl 路径
+  const candidates: string[] = []
+  if (options?.filePath) {
+    candidates.push(resolveTranscriptPathFromJson(path.resolve(options.filePath)))
+  } else if (looksLikeSessionPath(idOrPath)) {
+    candidates.push(resolveTranscriptPathFromJson(path.resolve(idOrPath)))
+  } else {
+    const jsonPath = resolveSessionFilePath(idOrPath, {
+      scope: options?.scope,
+      cwd: options?.cwd,
+      sessionsDir: options?.sessionsDir,
+    })
+    candidates.push(resolveTranscriptPathFromJson(jsonPath))
+    if (!options?.sessionsDir && !options?.scope) {
+      const userJson = resolveSessionFilePath(idOrPath, { scope: 'user' })
+      candidates.push(resolveTranscriptPathFromJson(userJson))
+    }
+  }
+
+  let lastErr: unknown
+  for (const transcriptPath of candidates) {
+    try {
+      return await buildSnapshotFromTranscript(transcriptPath, {
+        idOrPath,
+        cwd: options?.cwd,
+      })
+    } catch (e) {
+      lastErr = e
+    }
+  }
+  throw lastErr instanceof Error
+    ? lastErr
+    : new Error(`session not found: ${idOrPath} (json and jsonl)`)
+}
+
+async function buildSnapshotFromTranscript(
+  transcriptPath: string,
+  opts: { idOrPath: string; cwd?: string },
+): Promise<{ path: string; snapshot: SessionSnapshot; fromTranscript: boolean }> {
+  const { messages, meta, path: tPath } =
+    await loadTranscriptMessages(transcriptPath)
+  const jsonPath = resolveJsonPathFromTranscript(tPath)
+  const id =
+    meta?.sessionId ||
+    path.basename(jsonPath).replace(/\.json$/i, '') ||
+    opts.idOrPath
+  const now = new Date().toISOString()
+  const mode = parsePermissionMode(
+    typeof meta?.permissionMode === 'string' ? meta.permissionMode : 'default',
+  )
+  const snapshot: SessionSnapshot = {
+    version: 1,
+    id,
+    cwd: meta?.cwd ?? opts.cwd ?? process.cwd(),
+    permissionMode: mode,
+    messages,
+    systemPromptSections: [],
+    model: meta?.model,
+    autoCompactEnabled: true,
+    contextWindowTokens: 128_000,
+    maxPtlRetries: 3,
+    createdAt: meta?.createdAt ?? now,
+    updatedAt: now,
+  }
+  return { path: jsonPath, snapshot, fromTranscript: true }
+}
+
+/**
+ * 从磁盘快照恢复会话（SessionStart source 默认 resume）。
+ * JSON 主路径；JSON 缺失时回退旁路 `.jsonl`（loadTranscriptMessages）。
  */
 export async function resumeSession(
   opts: ResumeSessionOptions,
 ): Promise<{ session: BoloSession; snapshot: SessionSnapshot; path: string }> {
-  const { path: filePath, snapshot } = await loadSession(opts.idOrPath, {
-    scope: opts.scope,
-    cwd: opts.cwd,
-    sessionsDir: opts.sessionsDir,
-    filePath: opts.filePath,
-  })
+  const { path: filePath, snapshot } = await loadSessionOrTranscript(
+    opts.idOrPath,
+    {
+      scope: opts.scope,
+      cwd: opts.cwd,
+      sessionsDir: opts.sessionsDir,
+      filePath: opts.filePath,
+    },
+  )
 
   const cwd = opts.cwd ?? snapshot.cwd
   const reassemble = opts.reassembleSystem !== false

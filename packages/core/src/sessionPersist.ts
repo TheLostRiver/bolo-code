@@ -129,14 +129,25 @@ export function resolveSessionFilePath(
   return path.join(getProjectLayout(cwd).sessionsDir, sessionFileName(sessionId))
 }
 
-/** 判断字符串是否像路径（含分隔符或 .json）而非纯 id */
+/** 判断字符串是否像路径（含分隔符或 .json / .jsonl）而非纯 id */
 export function looksLikeSessionPath(idOrPath: string): boolean {
   return (
     idOrPath.endsWith('.json') ||
+    idOrPath.endsWith('.jsonl') ||
     idOrPath.includes('/') ||
     idOrPath.includes('\\') ||
     path.isAbsolute(idOrPath)
   )
+}
+
+/** 由 `.jsonl` 推导同目录 JSON 快照路径 */
+export function resolveJsonPathFromTranscript(transcriptPath: string): string {
+  const resolved = path.resolve(transcriptPath)
+  if (resolved.endsWith('.jsonl')) {
+    return resolved.slice(0, -'.jsonl'.length) + '.json'
+  }
+  if (resolved.endsWith('.json')) return resolved
+  return `${resolved}.json`
 }
 
 export function resolveIdOrPath(

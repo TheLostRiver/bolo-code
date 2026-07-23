@@ -10,6 +10,7 @@ import {
 } from '../../core/src/index.ts'
 import { createCliProvider } from './provider.ts'
 import { renderWelcomeBanner } from './tui/banner.ts'
+import { formatSessionStatusLine } from './tui/statusLine.ts'
 import { runOnePrompt, runRepl } from './resumeCli.ts'
 
 export type NewSessionCliOptions = {
@@ -82,6 +83,7 @@ export async function runNewSessionCli(
       plain: opts.plainBanner,
     })
     writeOut(banner.endsWith('\n') ? banner : `${banner}\n`)
+    writeOut(`${formatSessionStatusLine(session)}\n`)
   }
 
   const prompt = opts.prompt?.trim()

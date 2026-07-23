@@ -13,6 +13,7 @@ import {
   parseArgs,
   renderWelcomeBanner,
   shouldUsePlainBanner,
+  formatSessionStatusLine,
 } from '../packages/cli/src/index.ts'
 
 function assert(cond: unknown, msg: string) {
@@ -205,6 +206,24 @@ async function main() {
   })
   assert(condensed.includes('BOLO'), 'condensed BOLO')
   assert(condensed.includes('sess_x'), 'condensed id')
+
+  // ── T3 status line ──
+  const status = formatSessionStatusLine({
+    permissionMode: 'plan',
+    model: 'm1',
+    effortLevel: 'high',
+    messages: [{}, {}, {}],
+  })
+  assert(
+    status === 'mode=plan · model=m1 · effort=high · messages=3',
+    `status line: ${status}`,
+  )
+  const statusDefault = formatSessionStatusLine({ messages: [] })
+  assert(
+    statusDefault ===
+      'mode=default · model=(unset) · effort=auto · messages=0',
+    `status defaults: ${statusDefault}`,
+  )
 
   // ── parseArgs 无参不崩 ──
   const bare = parseArgs([])

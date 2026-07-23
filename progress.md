@@ -1,20 +1,23 @@
 # Progress Log
 
-## Session: M-Subagent S0–S6（真 subagent loop）
+## Session: T3 状态行 + JSONL load（J-C 起步）
 
-- `docs/SUBAGENT.md`：类型、工具策略、禁递归、完成定义
-- `packages/core/src/subagent.ts`：
-  - `AgentDefinition` + 内置 `explore` / `general`
-  - `resolveAgentTools`（始终排除 Agent）
-  - `runSubagent`：SubagentStart → 独立 messages + queryLoop → 摘要 → SubagentStop
-  - `createAgentTool` / `createDefaultTools`（builtins + Agent）
-  - `spawnSubagentStub` → 真 `spawnSubagent`（兼容别名）
-- `submitPrompt` 注入 `createDefaultTools()`；tool 执行经 `extras.subagentParent` 传父上下文
-- `scripts/test-subagent.ts` mock 父子两轮
-- smoke-turn 移除 stub 假完成
-- 测试：test-subagent / smoke-turn / test-tool-calling 全绿
-- TODO / ROADMAP 勾选 S0–S6
+- **文档同步**
+  - `docs/TODO.md`：J-A/B ✅（19f7594）、RS9 ✅、T3 ✅；下一刀 → T4–T6 / J-C+ / S7
+  - `docs/SESSIONS.md`：`loadTranscriptMessages` + JSON 缺失 resume 回退
+  - `docs/TODO_SESSION_JSONL.md`：Phase C1/C2/C5 勾选；C3 部分
+  - `task_plan.md` / 本文件对齐 main 水位（plugins / continue / MCP / subagent 已在 main）
+
+- **T3 轻量状态行**
+  - `packages/cli/src/tui/statusLine.ts`：`formatSessionStatusLine`
+  - REPL 每次 `bolo>` 前打印；新会话 banner 后、resume 摘要后各一行
+  - 格式：`mode=… · model=… · effort=… · messages=N`
+
+- **J-C 最小**
+  - `loadTranscriptFile` / `loadTranscriptMessages`（`sessionTranscript.ts`）
+  - `resumeSession`：`loadSession` 成功不改；JSON 缺失或路径为 `.jsonl` 时回退
+  - 测试：`scripts/test-transcript-load.ts`
 
 ## 默认下一刀
 
-P2-b MCP stdio，或 S7 `.bolo/agents` 目录定义
+T4–T6（流式工具行 / 权限 y/n）或 J-C+（jsonl 优先）或 S7（`.bolo/agents`）

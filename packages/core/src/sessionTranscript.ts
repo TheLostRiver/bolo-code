@@ -281,6 +281,106 @@ export async function countTranscriptMessageEntries(
   }
 }
 
+const DEFAULT_TRANSCRIPT_MAX_BYTES = 32 * 1024 * 1024
+
+function isTranscriptChatMessage(x: unknown): x is ChatMessage {
+  if (!x || typeof x !== 'object') return false
+  const m = x as Record<string, unknown>
+  if (typeof m.role !== 'string' || typeof m.content !== 'string') return false
+  return (
+    m.role === 'system' ||
+    m.role === 'user' ||
+    m.role === 'assistant' ||
+    m.role === 'tool'
+  )
+}
+
+/**
+ * 按行解析 jsonl → entries（坏行跳过）。
+ * Phase C 最小读路径；默认上限 32MiB。
+ */
+export async function loadTranscriptFile(
+  file: string,
+  opts?: { maxBytes?: number },
+): Promise<{ entries: TranscriptEntry[]; path: string }> {
+  const filePath = path.resolve(file)
+  const maxBytes = opts?.maxBytes ?? DEFAULT_TRANSCRIPT_MAX_BYTES
+  const st = await fs.stat(filePath)
+  if (st.size > maxBytes) {
+    throw new Error(
+      `transcript too large: ${st.size} bytes > max ${maxBytes} (${filePath})`,
+    )
+  }
+  const raw = await fs.readFile(filePath, 'utf8')
+  const entries: TranscriptEntry[] = []
+  for (const line of raw.split(/\r?\n/)) {
+    const t = line.trim()
+    if (!t) continue
+    try {
+      const o = JSON.parse(t) as Record<string, unknown>
+      if (!o || typeof o.type !== 'string') continue
+      if (o.type === 'meta') {
+        if (typeof o.sessionId !== 'string') continue
+        entries.push(o as TranscriptMetaEntry)
+        continue
+      }
+      if (o.type === 'message') {
+        if (!isTranscriptChatMessage(o.message)) continue
+        entries.push({
+          type: 'message',
+          sessionId: typeof o.sessionId === 'string' ? o.sessionId : '',
+          timestamp:
+            typeof o.timestamp === 'string' ? o.timestamp : nowIso(),
+          message: cloneMessage(o.message),
+          uuid: typeof o.uuid === 'string' ? o.uuid : undefined,
+        })
+        continue
+      }
+      if (o.type === 'compact_boundary') {
+        entries.push({
+          type: 'compact_boundary',
+          sessionId: typeof o.sessionId === 'string' ? o.sessionId : '',
+          timestamp:
+            typeof o.timestamp === 'string' ? o.timestamp : nowIso(),
+          summary: typeof o.summary === 'string' ? o.summary : undefined,
+          uuid: typeof o.uuid === 'string' ? o.uuid : undefined,
+        })
+      }
+    } catch {
+      // 损坏行跳过
+    }
+  }
+  return { entries, path: filePath }
+}
+
+/**
+ * 从 jsonl 重建线性 messages（只取 type=message 行，按文件顺序）。
+ * 供 JSON 快照缺失时的 resume 回退；不改变 loadSession 的 JSON 主路径。
+ */
+export async function loadTranscriptMessages(
+  file: string,
+  opts?: { maxBytes?: number },
+): Promise<{
+  messages: ChatMessage[]
+  meta?: TranscriptMetaEntry
+  path: string
+  entryCount: number
+}> {
+  const { entries, path: filePath } = await loadTranscriptFile(file, opts)
+  let meta: TranscriptMetaEntry | undefined
+  const messages: ChatMessage[] = []
+  for (const e of entries) {
+    if (e.type === 'meta' && !meta) meta = e
+    if (e.type === 'message') messages.push(cloneMessage(e.message))
+  }
+  return {
+    messages,
+    meta,
+    path: filePath,
+    entryCount: entries.length,
+  }
+}
+
 /**
  * T1 双写：在 JSON 快照旁增量 append `{id}.jsonl`。
  * - 新文件：meta + 全部 messages
