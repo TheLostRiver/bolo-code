@@ -24,7 +24,7 @@
 
 | 来源 | 借鉴 | 不借鉴 |
 |------|------|--------|
-| [HelsincyCode](file:///D:/DEV/HelsincyCode)（Claude Code 系） | Hook 事件模型、Tool 注册、Permission 流、Skill/Plugin/MCP 分层、Query 循环 | 巨型 CLI/Ink 栈、遥测、GrowthBook、50 万行历史包袱 |
+| HelsincyCode / Claude Code 系实现 | Hook 事件模型、Tool 注册、Permission 流、Skill/Plugin/MCP 分层、Query 循环 | 巨型 CLI/Ink 栈、遥测、GrowthBook、50 万行历史包袱 |
 | [earendil-works/pi](https://github.com/earendil-works/pi) | 包拆分：`ai` / `agent-core` / coding-agent；多 provider LLM 统一层；agent loop 清晰 | 默认弱权限模型；TUI 为主 |
 | [openai/codex](https://github.com/openai/codex) | 本地 agent 产品感、会话/审批 UX、CLI+App 并存思路 | Rust 主栈（我们选 TS+Electron） |
 

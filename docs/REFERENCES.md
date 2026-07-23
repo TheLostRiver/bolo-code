@@ -1,22 +1,22 @@
 # 参考项目笔记
 
-## HelsincyCode（本地 `D:\DEV\HelsincyCode`）
+## HelsincyCode / Claude Code 系参考实现
 
-体量：约 50 万行级、Claude Code 系 CLI。
+体量：约 50 万行级、Claude Code 系 CLI（仅作架构参考，仓库内不嵌入外部源码路径）。
 
 **值得抽的结构**
 
-| 区域 | 路径印象 | 对我们的意义 |
+| 区域 | 模块印象 | 对我们的意义 |
 |------|----------|--------------|
-| Hook 事件全集 | `src/entrypoints/sdk/coreTypes.ts` `HOOK_EVENTS` | 事件命名与扩展列表 |
-| Hook 元数据 | `src/utils/hooks/hooksConfigManager.ts` | matcher 字段、exit code 语义 |
-| Hook schema | `src/schemas/hooks.ts` | command/prompt/http/agent 配置形态 |
-| Query 引擎 | `src/QueryEngine.ts` / `src/query.ts` | 主循环边界 |
-| Tools | `src/tools/*` | Tool 插件化注册 |
-| MCP | `src/services/mcp/*` | 连接与工具桥接 |
-| Skills | `src/skills/*` | bundled + 目录加载 |
-| Plugins | `src/utils/plugins/*` | 贡献点合并 |
-| Agent/子代理 | `src/tools/AgentTool/*` | 子代理生命周期 |
+| Hook 事件全集 | entrypoints / SDK 中的 `HOOK_EVENTS` | 事件命名与扩展列表 |
+| Hook 元数据 | hooks 配置管理（matcher、exit code） | matcher 字段、exit code 语义 |
+| Hook schema | hooks 配置 schema | command/prompt/http/agent 配置形态 |
+| Query 引擎 | Query / 主循环 | 主循环边界 |
+| Tools | tools 注册与实现 | Tool 插件化注册 |
+| MCP | MCP 服务层 | 连接与工具桥接 |
+| Skills | skills 加载 | bundled + 目录加载 |
+| Plugins | plugins 加载与合并 | 贡献点合并 |
+| Agent/子代理 | Agent tool / 子代理 | 子代理生命周期 |
 
 **不要搬**
 
