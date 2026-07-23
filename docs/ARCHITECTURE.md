@@ -19,6 +19,8 @@
 - 不 fork HelsincyCode / Claude Code 全量源码当基座（体量与许可证/维护成本不可控）
 - 不把 UI 逻辑写进 Runtime
 - 不把权限判断散落在各个 Tool 实现里
+- **不做遥测 / 分析上报 / GrowthBook 类远程门控**（参考项目中有，Bolo 明确剥离）
+- **不凭空发明协议**：MCP/插件/子代理等先对照参考实现再写（见 [ENGINEERING_PRINCIPLES.md](./ENGINEERING_PRINCIPLES.md)）
 
 ## 2. 参考项目取舍
 
@@ -178,23 +180,29 @@ Renderer  ──IPC──►  Main  ──invoke──►  Core Runtime
 - 危险 tool 默认需 PermissionRequest
 - 密钥只存 main / OS keychain，不进 renderer 明文日志
 
-## 8. 配置布局（规划）
+## 8. 配置布局（已实现，见 docs/CONFIG.md）
 
 ```
-~/.bolo/
-  config.json
+~/.bolo/   或  $BOLO_CONFIG_DIR
+  config.json      # provider / permissionMode …
+  mcp.json
+  hooks.json
   skills/
   plugins/
-  mcp.json
-  hooks.json          # 或并入 config
   sessions/
 
-.project/
-  .bolo/
-    config.json
-    skills/
-    hooks.json
+<project>/.bolo/
+  config.json      # 覆盖全局
+  mcp.json
+  hooks.json
+  skills/
+  plugins/
+  sessions/
 ```
+
+合并：defaults < user < project < 环境变量（API Key 等最高）。
+
+代码：`packages/config` · `loadWorkspace({ cwd })` · `npx tsx scripts/bolo-init.ts`
 
 ## 9. 实现顺序（与 ROADMAP 对齐）
 

@@ -9,6 +9,6 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@bolo/shared": "workspace:*"
+    "@bolo/shared": "*"
   }
 }

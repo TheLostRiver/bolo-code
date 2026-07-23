@@ -16,6 +16,9 @@ release/
 .env.*
 !.env.example
 
+# Bolo local runtime (sessions; never commit keys in project config if any)
+.bolo/sessions/
+
 # IDE / OS
 .idea/
 .cursor/
@@ -32,7 +35,10 @@ npm-debug.log*
 .turbo/
 coverage/
 
-# Local planning (optional session files)
-# keep docs/, ignore ad-hoc scratch
+# Local temp outputs
+.tmp*
+_out_*.txt
+
+# Local planning scratch (root task_plan/findings/progress 默认纳入版本，便于恢复)
 *.local.md
 .planning/.active_plan

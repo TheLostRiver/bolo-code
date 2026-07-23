@@ -9,10 +9,21 @@
     "node": ">=20"
   },
   "scripts": {
-    "dev": "echo \"Scaffold only — implement packages first\"",
-    "build": "echo \"Scaffold only — implement packages first\"",
-    "typecheck": "echo \"Scaffold only — implement packages first\"",
-    "test": "echo \"Scaffold only — implement packages first\""
+    "smoke": "tsx scripts/smoke-turn.ts",
+    "test:compact": "tsx scripts/test-compact.ts",
+    "dev": "tsx scripts/smoke-turn.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:provider": "tsx scripts/test-provider-unit.ts",
+    "smoke:live": "tsx scripts/smoke-live.ts",
+    "test:config": "tsx scripts/test-config.ts",
+    "bolo:init": "tsx scripts/bolo-init.ts",
+    "test:skills": "tsx scripts/test-skill-catalog.ts",
+    "test": "tsx scripts/test-compact.ts && tsx scripts/test-permissions.ts && tsx scripts/test-provider-unit.ts && tsx scripts/test-config.ts && tsx scripts/test-skill-catalog.ts && tsx scripts/smoke-turn.ts",
+    "test:permissions": "tsx scripts/test-permissions.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
   },
   "workspaces": [
     "packages/*",

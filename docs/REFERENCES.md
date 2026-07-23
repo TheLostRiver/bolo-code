@@ -44,4 +44,8 @@
 
 ## 综合决策（一句话）
 
-> **HelsincyCode 的扩展与 Hook 语义 + pi 的包边界 + Codex 的产品入口意识 + Electron GUI。**
+> **HelsincyCode 的扩展与 Hook / Tool 管道语义 + pi 的包边界 + Codex 的产品入口意识 + Electron GUI；不做遥测。**
+
+## 工程纪律
+
+详见 [ENGINEERING_PRINCIPLES.md](./ENGINEERING_PRINCIPLES.md)：先映射参考模块再写代码；禁止 analytics/phone-home。

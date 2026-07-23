@@ -14,8 +14,17 @@
 |------|------|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 总体架构、模块边界、数据流 |
 | [docs/HOOKS.md](docs/HOOKS.md) | 至少 10 个 Hook 事件规范 |
+| [docs/PERMISSIONS.md](docs/PERMISSIONS.md) | **权限四档对照 HelsincyCode** |
+| [docs/AGENT_LOOP.md](docs/AGENT_LOOP.md) | **Agent loop 对照 HelsincyCode query/tool 管道** |
+| [docs/COMPACTION.md](docs/COMPACTION.md) | **上下文压缩（对照参考，禁止截断冒充）** |
+| [docs/ENGINEERING_PRINCIPLES.md](docs/ENGINEERING_PRINCIPLES.md) | **先借鉴再实现；禁止遥测** |
+| [docs/DEEP_ANALYSIS.md](docs/DEEP_ANALYSIS.md) | 深度分析：状态机、风险、验收门禁 |
+| [docs/SKILLS.md](docs/SKILLS.md) | **全局 skills 目录 + 按需 Skill 工具** |
+| [docs/CONFIG.md](docs/CONFIG.md) | **全局 ~/.bolo 与项目 .bolo 配置** |
+| [docs/PROVIDERS.md](docs/PROVIDERS.md) | OpenAI 兼容 Provider 与环境变量 |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | 分阶段实施路线 |
 | [docs/REFERENCES.md](docs/REFERENCES.md) | 参考项目与取舍 |
+| [task_plan.md](task_plan.md) | 会话工作计划（planning-with-files） |
 
 ## 仓库
 
@@ -23,4 +32,18 @@
 
 ## 状态
 
-当前为 **架构规划 + 仓库骨架** 阶段，核心 Runtime 与 GUI 尚未实现。
+- **M0–M1 已完成**：文档契约 + headless `queryLoop` + 权限四档 + compact 管道（smoke/单测）
+- **当前主线**：**M2** 真 Provider + 真压缩（见 [docs/ROADMAP.md](docs/ROADMAP.md)）
+- **未做**：MCP 真连接、Electron 产品壳、会话持久化
+
+## 快速命令
+
+```bash
+npx tsx scripts/bolo-init.ts              # 初始化 ~/.bolo 与项目 .bolo
+npx tsx scripts/test-config.ts
+npx tsx scripts/test-permissions.ts
+npx tsx scripts/test-compact.ts
+npx tsx scripts/test-provider-unit.ts
+npx tsx scripts/smoke-turn.ts
+npx tsx scripts/smoke-live.ts             # 需 API key
+```

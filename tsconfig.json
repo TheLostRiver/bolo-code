@@ -10,6 +10,9 @@
     "declaration": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "types": ["node"],
     "baseUrl": ".",
     "paths": {
       "@bolo/shared": ["packages/shared/src/index.ts"],
@@ -19,8 +22,11 @@
       "@bolo/skills": ["packages/skills/src/index.ts"],
       "@bolo/mcp": ["packages/mcp/src/index.ts"],
       "@bolo/plugins": ["packages/plugins/src/index.ts"],
-      "@bolo/providers": ["packages/providers/src/index.ts"]
+      "@bolo/providers": ["packages/providers/src/index.ts"],
+      "@bolo/compact": ["packages/compact/src/index.ts"],
+      "@bolo/permissions": ["packages/permissions/src/index.ts"],
+      "@bolo/config": ["packages/config/src/index.ts"]
     }
   },
-  "include": ["packages/*/src/**/*.ts", "apps/*/src/**/*.ts"]
+  "include": ["packages/*/src/**/*.ts", "apps/*/src/**/*.ts", "scripts/**/*.ts"]
 }
