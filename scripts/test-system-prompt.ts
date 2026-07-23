@@ -12,9 +12,11 @@ import {
   prepareModelMessages,
   assembleSessionSystemPrompt,
   createSession,
+  permissionModeBehaviorLine,
 } from '../packages/core/src/index.ts'
 import type { ChatMessage } from '../packages/shared/src/index.ts'
 import type { LoadedSkill } from '../packages/skills/src/index.ts'
+import type { PermissionMode } from '../packages/permissions/src/index.ts'
 
 function assert(c: unknown, m: string) {
   if (!c) {
@@ -62,8 +64,85 @@ async function main() {
   assert(joined.includes(tmp) || joined.includes('Working directory'), 'env cwd')
   assert(joined.includes('2026-07-24'), 'env date')
   assert(joined.includes('default'), 'permission mode')
+  assert(
+    joined.includes('writes and shell typically ask'),
+    'default mode behavior in env',
+  )
+  assert(
+    joined.includes('Permission modes (product)'),
+    'static System lists permission modes',
+  )
   assert(joined.includes('test-model'), 'model')
   assert(joined.includes('Project BOLO'), 'bolo md in system')
+
+  // 2b) 不同 permissionMode → Environment 行为关键词不同
+  const modeKeywords: Record<
+    PermissionMode,
+    { must: string[] }
+  > = {
+    default: {
+      must: ['Permission mode: default', 'writes and shell typically ask'],
+    },
+    acceptEdits: {
+      must: [
+        'Permission mode: acceptEdits',
+        'more permissive',
+        'dangerous shell',
+      ],
+    },
+    plan: {
+      must: [
+        'Permission mode: plan',
+        'read-only',
+        'avoid file edits',
+      ],
+    },
+    bypassPermissions: {
+      must: [
+        'Permission mode: bypassPermissions',
+        'auto-allowed',
+        'act responsibly',
+      ],
+    },
+  }
+
+  for (const mode of Object.keys(modeKeywords) as PermissionMode[]) {
+    const modeSections = await getSystemPrompt({
+      cwd: tmp,
+      userConfigDir: userDir,
+      loadInstructions: false,
+      permissionMode: mode,
+      date: '2026-07-24',
+    })
+    const text = modeSections.join('\n')
+    const envBlock = modeSections.find((s) => s.startsWith('# Environment'))
+    assert(envBlock, `${mode}: has Environment section`)
+    for (const kw of modeKeywords[mode].must) {
+      assert(
+        envBlock!.includes(kw),
+        `${mode}: Environment contains "${kw}"`,
+      )
+    }
+    // 行为行应与 helper 一致
+    assert(
+      envBlock!.includes(permissionModeBehaviorLine(mode)),
+      `${mode}: matches permissionModeBehaviorLine`,
+    )
+    // 其他 mode 的专属短语不应误出现在当前 Environment 行
+    for (const other of Object.keys(modeKeywords) as PermissionMode[]) {
+      if (other === mode) continue
+      const otherLine = permissionModeBehaviorLine(other)
+      assert(
+        !envBlock!.includes(otherLine),
+        `${mode}: Environment must not include ${other} behavior line`,
+      )
+    }
+    // System 静态段仍列出四档摘要
+    assert(
+      text.includes('acceptEdits — workspace file edits'),
+      `${mode}: System static mode list present`,
+    )
+  }
 
   // 3) skill catalog 可选
   const fakeSkill: LoadedSkill = {
@@ -122,6 +201,10 @@ async function main() {
     permissionMode: 'acceptEdits',
   })
   assert(assembled.some((s) => s.includes('Bolo Code')), 'assemble identity')
+  assert(
+    assembled.some((s) => s.includes('Permission mode: acceptEdits')),
+    'assemble acceptEdits behavior',
+  )
 
   const session = await createSession({
     cwd: tmp,

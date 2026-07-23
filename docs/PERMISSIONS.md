@@ -63,6 +63,8 @@ runToolUse 调用 gate，再 hooks/UI
 Session.permissionMode 可切换
 ```
 
+系统提示词（System + Environment）会注入模式行为说明，见 `docs/PROMPT_CATALOG.md` / `docs/SYSTEM_PROMPT.md`。
+
 ## 6. 验收
 
 - gate 单测：四模式 × Bash/Write/Read  

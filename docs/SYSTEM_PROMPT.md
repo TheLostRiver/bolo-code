@@ -51,10 +51,10 @@ flowchart TD
 **列表顺序（默认）：**
 
 1. **Identity** — Bolo Code 编程助手  
-2. **System** — 权限模式直觉、hooks、工具结果/标签、注入风险  
+2. **System** — 四档 permission mode 行为摘要、hooks、工具结果/标签、注入风险  
 3. **Task style** — 简洁、用工具、可逆修改  
 4. **Tools** — schema、Read 优先、Skill 目录仅索引  
-5. **Environment** — cwd、date、platform、shell 提示、permissionMode、model（可知时）  
+5. **Environment** — cwd、date、platform、shell 提示、**当前 permissionMode + 行为说明**、model（可知时）  
 6. **BOLO.md** — 用户/项目指令（见 §3）  
 7. **Skill catalog** — `formatSkillCatalog`（仅 id/描述，无全文）  
 8. **MCP 占位** — 可选，默认不注入  

@@ -60,6 +60,7 @@ export {
   assembleSessionSystemPrompt,
   systemSectionsToMessages,
   boloMdCandidatePaths,
+  permissionModeBehaviorLine,
   BOLO_MD_MAX_CHARS_PER_FILE,
   BOLO_MD_MAX_TOTAL_CHARS,
 } from './systemPrompt.ts'
