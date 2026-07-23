@@ -290,8 +290,9 @@ type CompactSummarizer = (req: {
 
 ### P1
 
-- [ ] token 估计 + auto 阈值  
-- [ ] 连续失败熔断  
+- [x] token 估计 + auto 阈值（`getAutoCompactThreshold` / `shouldAutoCompact`）  
+- [x] 连续失败熔断（`createAutoCompactPrepare`）  
+- [x] auto 挂 `prepareMessages` + `compactSession(trigger=auto)`（需 `autoCompactEnabled` + `compactSummarizer`）  
 - [ ] microcompact 清旧 tool_result  
 - [ ] PTL 截断重试  
 
@@ -308,7 +309,8 @@ type CompactSummarizer = (req: {
 |----|------|
 | **现在** | 本文 + 删除伪实现 + `packages/compact` 类型/管道骨架 + 单测用 fake summarizer |
 | **紧随 Core 稳定后** | 接真 Provider 的 no-tool summarizer；manual compact 命令/API |
-| **主循环成熟后** | autoPolicy 挂 query；microcompact |
+| **已接线** | `createSession({ autoCompactEnabled, compactSummarizer })` → `createAutoCompactPrepare` → `compactSession('auto')`；`querySource=compact` 不递归 |
+| **下期** | microcompact；默认 config 是否开 auto（现默认 `autoCompactEnabled: false`） |
 | **再后** | transcript 路径、partial compact |
 
 ---

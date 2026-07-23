@@ -34,6 +34,7 @@ Bolo **P0** 对齐：
 | 可注入 deps | `QueryDeps` | `packages/core/src/deps.ts` |
 | 主 while 循环 | `queryLoop` | `packages/core/src/queryLoop.ts` |
 | 调模型 | `deps.callModel` | `deps.callModel` ← provider.completeStream |
+| **系统提示词** | `getSystemPrompt` + query 前缀 | **`systemPromptSections` + `prepareModelMessages`**（见 `docs/SYSTEM_PROMPT.md`） |
 | 跑 tools | `runTools` | `toolOrchestration.ts`（v1 **全串行**） |
 | 单 tool | `runToolUse` | `toolExecution.ts` |
 | 结束 | stop hooks / terminal | Stop hooks + `Terminal` |

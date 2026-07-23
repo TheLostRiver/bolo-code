@@ -74,6 +74,13 @@ defaults
 }
 ```
 
+| 字段 | 默认 | 说明 |
+|------|------|------|
+| `autoCompactEnabled` | `false` | 为 true 且会话有 `compactSummarizer` 时，queryLoop 的 `prepareMessages` 达 token 阈值会走 full compact（对照 HC autoCompactIfNeeded） |
+| `contextWindowTokens` | `128000` | 用于 `getAutoCompactThreshold`；无真实 tokenizer 时粗估 chars/4 |
+
+`createSessionFromWorkspace` 会读上述字段；也可用 `createSession({ autoCompactEnabled, contextWindowTokens, compactSummarizer })` 直接开。
+
 **API Key 建议**：用环境变量 `BOLO_API_KEY` / `OPENAI_API_KEY`，不要把密钥提交进项目 `.bolo/config.json`。  
 全局 `~/.bolo/config.json` 可写 `provider.apiKey`（本机私有，勿同步公开仓库）。
 
@@ -129,10 +136,28 @@ const ws = await loadWorkspace({ cwd: process.cwd() })
 | settings / mcp 等 | `config.json` + `mcp.json` + `hooks.json` |
 | 用户 skills | `~/.bolo/skills` |
 | 项目配置 | `.bolo/`（不进 git 可自行 ignore secrets） |
+| `CLAUDE.md` / memory | **`BOLO.md`**（主品牌）+ 可选兼容 `CLAUDE.md` / `AGENTS.md`；见 `docs/SYSTEM_PROMPT.md` |
 
-## 8. Git 建议
+## 8. 项目指令文件（BOLO.md）
+
+推荐在仓库根或 `.bolo/` 放置 **`BOLO.md`**，写入项目约定（构建、风格、禁忌）。  
+用户全局：`~/.bolo/BOLO.md`。
+
+搜索顺序、截断预算、注入为 system 段：见 **[SYSTEM_PROMPT.md](./SYSTEM_PROMPT.md)**。
+
+```
+~/.bolo/BOLO.md          # 用户全局
+{repo}/BOLO.md           # 项目根（优先品牌）
+{repo}/.bolo/BOLO.md     # 项目配置目录
+# 兼容（可选读取）：CLAUDE.md / AGENTS.md
+```
+
+关闭：`BOLO_DISABLE_BOLO_MD=1`。
+
+## 9. Git 建议
 
 项目 `.bolo/config.json` 可提交非密钥字段；密钥用 env。  
+`BOLO.md` **适合提交**到仓库（团队共享约定）。  
 可在项目 `.gitignore` 增加：
 
 ```
@@ -141,9 +166,10 @@ const ws = await loadWorkspace({ cwd: process.cwd() })
 
 （按需 ignore 含密钥的本地 config。）
 
-## 9. 命令
+## 10. 命令
 
 ```bash
 npx tsx scripts/bolo-init.ts          # 初始化全局 + 当前项目布局
-npx tsx scripts/test-config.ts        # 单测
+npx tsx scripts/test-config.ts        # 配置单测
+npx tsx scripts/test-system-prompt.ts # 系统提示词 + BOLO.md
 ```

@@ -65,12 +65,13 @@ SessionStart → UserPromptSubmit → callModel
 
 | 模块 | 状态 | 完成定义（未达） |
 |------|------|------------------|
-| Skills | 发现/加载草稿 | 进 system 上下文并在真实 turn 生效 |
+| Skills | 发现/加载 + **catalog 进 system** | 全文仅 Skill 工具；见 `docs/SKILLS.md` |
+| **System prompt / BOLO.md** | **中心组装 + 会话一等公民** | 见 `docs/SYSTEM_PROMPT.md`；无 DYNAMIC_BOUNDARY / 遥测 |
 | MCP | 命名 + mock invoke | **stdio 真连接** listTools/callTool |
 | Plugins | contributes 合并草稿 | 项目插件目录热加载验收 |
 | Subagent | Start/Stop stub | 独立 loop + 工具裁剪 + 结果回写 |
-| Compact | full 管道 + fake summarizer | **真模型 no-tool summarizer** + auto 挂 prepareMessages |
-| Providers | 仅 mock | OpenAI 兼容 / Anthropic 真流式 |
+| Compact | full 管道 + summarizer + **auto 挂 prepareMessages** | 默认 config 仍关 auto；microcompact / PTL 重试未做 |
+| Providers | mock + OpenAI 兼容 + Anthropic | 配置与流式细节打磨 |
 | Electron | README 占位 | 可开窗完成一轮会话 |
 
 ---
@@ -85,9 +86,10 @@ SessionStart → UserPromptSubmit → callModel
 |---|------|----------|------|
 | 2.1 | **真 Provider** | 流式 text + tool_call 解析 | 配置 API 后 `submitPrompt` 真模型一轮 |
 | 2.2 | **Compact 接真模型** | `compactConversation` + prompt 约束 | manual compact 产生可用摘要；失败不毁 messages |
-| 2.3 | **auto compact 挂点** | `autoCompact` 阈值 + 熔断 | `prepareMessages` 达阈值触发；`querySource=compact` 不递归 |
+| 2.3 | **auto compact 挂点** ✅ | `autoCompact` 阈值 + 熔断 | `createSession` + `prepareMessages` 达阈值触发；`querySource=compact` 不递归；`test-auto-compact` |
 | 2.4 | **权限加深（可选）** | 规则 allow/deny 持久化 | Always allow 会话级；仍无遥测 |
 | 2.5 | **Tool 契约收紧** | Tool 注册/校验形状 | 未知 tool 明确错误；输入 schema 最小校验 |
+| 2.6 | **系统提示词 + BOLO.md** ✅ | `getSystemPrompt` / `getUserContext` | `docs/SYSTEM_PROMPT.md` · `test-system-prompt` |
 
 **M2 完成标准：** 无 Electron，仅 CLI/smoke 脚本，能对真实仓库「提问 → 读改文件/Bash（按模式）→ 压缩 → 续聊」。
 

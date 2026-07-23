@@ -24,6 +24,7 @@ import type {
   ToolUseBlock,
 } from './toolExecution.ts'
 import { runTools } from './toolOrchestration.ts'
+import { prepareModelMessages } from './systemPrompt.ts'
 
 export type TerminalReason =
   | 'completed'
@@ -50,6 +51,11 @@ export type QueryLoopParams = {
   cwd: string
   hooks: HooksConfig
   messages: ChatMessage[]
+  /**
+   * 权威 system 段；每轮 callModel 前缀。
+   * 未传时回退 messages 内已有 system（兼容旧调用）。
+   */
+  systemPromptSections?: readonly string[]
   deps: QueryDeps
   permissionMode: PermissionMode
   askPermission: AskPermissionFn
@@ -100,12 +106,30 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
       tokenCount: 0,
     })
     if (prepared.didCompact) {
+      // 注意：runAutoCompact 可能返回与 params.messages 同一数组引用；
+      // 必须先拷贝再就地写回，否则 length=0 会清空 spread 源。
+      const next = prepared.messages.slice()
       params.messages.length = 0
-      params.messages.push(...prepared.messages)
+      params.messages.push(...next)
     }
-    const messagesForQuery = prepared.didCompact
+    const conversation = prepared.didCompact
       ? params.messages
-      : prepared.messages
+      : prepared.messages.filter(
+          (m) =>
+            m.role !== 'system' ||
+            m.content.trim() === 'Conversation compacted',
+        )
+
+    // system 一等公民：每轮保证前缀正确（Provider 会合并 role:system）
+    const messagesForQuery =
+      params.systemPromptSections && params.systemPromptSections.length > 0
+        ? prepareModelMessages({
+            systemSections: params.systemPromptSections,
+            conversation,
+          })
+        : prepared.didCompact
+          ? params.messages
+          : prepared.messages
 
     let assistantText = ''
     const toolBlocks: ToolUseBlock[] = []

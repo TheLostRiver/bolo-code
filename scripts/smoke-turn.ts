@@ -77,6 +77,8 @@ async function main() {
   const session = await createSession({
     cwd,
     hooks,
+    // smoke 走最短 mock 路径；system 管线见 scripts/test-system-prompt.ts
+    systemPrompt: false,
     // smoke：default 下 Bash 会 ask；hook 已 allow。再兜底 askPermission。
     permissionMode: 'default',
     askPermission: async () => 'allow',
