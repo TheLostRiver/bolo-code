@@ -12,6 +12,7 @@ import {
   findToolByName,
   type BoloTool,
 } from '../../tools/src/index.ts'
+import type { QueryDeps } from './deps.ts'
 import {
   runToolUse,
   type AskPermissionFn,
@@ -29,6 +30,8 @@ export type RunToolsParams = {
   askPermission: AskPermissionFn
   skills?: LoadedSkill[]
   tools?: readonly BoloTool[]
+  /** 供 Agent 工具启动子 loop */
+  deps?: QueryDeps
   signal?: AbortSignal
   onEvent?: (e: ToolExecutionEvent) => void
 }
@@ -82,6 +85,7 @@ export async function runTools(params: RunToolsParams): Promise<RunToolsResult> 
     askPermission: params.askPermission,
     skills: params.skills,
     tools,
+    deps: params.deps,
     signal: params.signal,
     onEvent: params.onEvent,
   }

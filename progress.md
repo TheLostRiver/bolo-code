@@ -1,17 +1,20 @@
 # Progress Log
 
-## Session: P0-b + P0-c（slash + BOLO banner）
+## Session: M-Subagent S0–S6（真 subagent loop）
 
-- `packages/core/src/slash.ts`：parseSlashLine、注册表、dispatch、submitUserInput
-- 命令：/help /clear /compact /context /model /effort /plan /permissions
-- `BoloSession.effortLevel` 会话字段
-- CLI REPL / 单轮走 submitUserInput（resume + 新会话）
-- `packages/cli/src/tui/banner.ts`：BOLO + Bolot ASCII；plain/NO_COLOR 单行
-- `main.ts`：无参 TTY → 新会话 + banner + REPL；非 TTY 不挂起
-- resume 成功后缩略 `BOLO · session <id>`（T7）
-- 文档：SLASH_COMMANDS.md、BRAND.md（Bolot）、TUI.md；TODO 勾选 SL* / T0–T2 / T7
-- 测试：`scripts/test-slash.ts`
+- `docs/SUBAGENT.md`：类型、工具策略、禁递归、完成定义
+- `packages/core/src/subagent.ts`：
+  - `AgentDefinition` + 内置 `explore` / `general`
+  - `resolveAgentTools`（始终排除 Agent）
+  - `runSubagent`：SubagentStart → 独立 messages + queryLoop → 摘要 → SubagentStop
+  - `createAgentTool` / `createDefaultTools`（builtins + Agent）
+  - `spawnSubagentStub` → 真 `spawnSubagent`（兼容别名）
+- `submitPrompt` 注入 `createDefaultTools()`；tool 执行经 `extras.subagentParent` 传父上下文
+- `scripts/test-subagent.ts` mock 父子两轮
+- smoke-turn 移除 stub 假完成
+- 测试：test-subagent / smoke-turn / test-tool-calling 全绿
+- TODO / ROADMAP 勾选 S0–S6
 
 ## 默认下一刀
 
-P1-a：`.bolo/rules` 发现 + 注入
+P2-b MCP stdio，或 S7 `.bolo/agents` 目录定义

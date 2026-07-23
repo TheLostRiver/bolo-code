@@ -24,6 +24,8 @@ import {
   type BoloTool,
   type ToolResult,
 } from '../../tools/src/index.ts'
+import type { QueryDeps } from './deps.ts'
+import type { QueryLoopEvent } from './queryLoop.ts'
 
 export type ToolUseBlock = {
   id: string
@@ -60,10 +62,12 @@ export type RunToolUseContext = {
   permissionMode: PermissionMode
   askPermission: AskPermissionFn
   skills?: LoadedSkill[]
-  /** 默认真内置工具集 */
+  /** 默认：内置 + Agent */
   tools?: readonly BoloTool[]
+  /** 供 Agent 工具 runSubagent */
+  deps?: QueryDeps
   signal?: AbortSignal
-  onEvent?: (e: ToolExecutionEvent) => void
+  onEvent?: (e: ToolExecutionEvent | QueryLoopEvent) => void
 }
 
 export type RunToolUseResult = {
@@ -359,7 +363,23 @@ export async function runToolUse(
       cwd: ctx.cwd,
       sessionId: ctx.sessionId,
       signal: ctx.signal,
-      extras: { skills: ctx.skills },
+      extras: {
+        skills: ctx.skills,
+        subagentParent: ctx.deps
+          ? {
+              parentSessionId: ctx.sessionId,
+              cwd: ctx.cwd,
+              hooks: ctx.hooks,
+              deps: ctx.deps,
+              permissionMode: ctx.permissionMode,
+              askPermission: ctx.askPermission,
+              allTools: tools,
+              skills: ctx.skills,
+              signal: ctx.signal,
+              onEvent: ctx.onEvent,
+            }
+          : undefined,
+      },
     })
   } catch (e) {
     result = {

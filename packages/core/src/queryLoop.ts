@@ -283,6 +283,7 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
       askPermission: params.askPermission,
       skills: params.skills,
       tools,
+      deps: params.deps,
       signal: params.signal,
       onEvent: params.onEvent,
     })

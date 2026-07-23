@@ -39,6 +39,7 @@ import {
 } from './deps.ts'
 import { queryLoop, type QueryLoopEvent, type Terminal } from './queryLoop.ts'
 import type { AskPermissionFn } from './toolExecution.ts'
+import { createDefaultTools } from './subagent.ts'
 import {
   parsePermissionMode,
   type PermissionMode,
@@ -589,6 +590,7 @@ export async function submitPrompt(
     permissionMode: session.permissionMode,
     askPermission: session.askPermission,
     skills: session.skills,
+    tools: createDefaultTools(),
     maxTurns: options?.maxTurns ?? 8,
     querySource: options?.querySource ?? 'repl_main_thread',
     maxPtlRetries: session.maxPtlRetries,
@@ -790,37 +792,24 @@ export async function compactSession(
   return { ok: true }
 }
 
-export async function spawnSubagentStub(
-  session: BoloSession,
-  agentType: string,
-): Promise<{ agentId: string }> {
-  const agentId = newId('agent')
-  await runHooks(
-    'SubagentStart',
-    {
-      hook_event_name: 'SubagentStart',
-      session_id: session.id,
-      cwd: session.cwd,
-      timestamp: nowIso(),
-      agent_id: agentId,
-      agent_type: agentType,
-    },
-    session.hooks,
-  )
-  await runHooks(
-    'SubagentStop',
-    {
-      hook_event_name: 'SubagentStop',
-      session_id: session.id,
-      cwd: session.cwd,
-      timestamp: nowIso(),
-      agent_id: agentId,
-      agent_type: agentType,
-    },
-    session.hooks,
-  )
-  return { agentId }
-}
+export {
+  AGENT_TOOL_NAME,
+  EXPLORE_AGENT,
+  GENERAL_AGENT,
+  createAgentTool,
+  createDefaultTools,
+  getAgentDefinition,
+  listBuiltinAgents,
+  resolveAgentTools,
+  runSubagent,
+  spawnSubagent,
+  spawnSubagentStub,
+  type AgentDefinition,
+  type ResolveAgentToolsResult,
+  type RunSubagentParams,
+  type RunSubagentResult,
+  type SubagentParentContext,
+} from './subagent.ts'
 
 /**
  * 切换权限模式（对照 HC cyclePermissionMode 的 session 侧）

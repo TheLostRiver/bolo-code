@@ -6,7 +6,6 @@
 import {
   createSession,
   submitPrompt,
-  spawnSubagentStub,
   compactSession,
 } from '../packages/core/src/index.ts'
 import type { HooksConfig } from '../packages/shared/src/index.ts'
@@ -118,7 +117,7 @@ async function main() {
     process.exit(1)
   }
 
-  await spawnSubagentStub(session, 'explore')
+  // Subagent 真 loop 见 scripts/test-subagent.ts（勿再调 stub 假完成）
 
   const compact = await compactSession(session, {
     trigger: 'manual',
