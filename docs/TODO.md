@@ -61,7 +61,7 @@ P3  GUI / 打磨 / 后置
 | **RS6** | 列表字段：id · mtime · preview · 消息数 | | ✅ |
 | RS7 | JSONL 双格式列表 | 随 JSONL P1 | ⬜ |
 | RS8 | 箭头键 / 美化 picker | 随 M-TUI P1 | ⬜ |
-| RS9 | `--continue` 最近一条 | P1 捷径 | ⬜ |
+| RS9 | `--continue` 最近一条 | P1 捷径 | ✅ |
 
 **范围钉死：** 默认 **仅当前项目** sessions；全局 `~/.bolo/sessions` 需显式 flag（如 `--scope user`）再议。
 
@@ -116,7 +116,7 @@ P3  GUI / 打磨 / 后置
 |----|------|------|
 | S0–S6 | **Subagent** 真 `runSubagent` + Agent 工具；废 stub | ✅ |
 | MCP1 | **MCP stdio** listTools/call → 进 tools 表 | ✅ |
-| PL1 | Plugins 真加载 | ⬜ |
+| PL1 | Plugins 真加载（本地发现 + skills/hooks/mcp 合并；非市场） | ✅ 最小 |
 | S7+ | `.bolo/agents` · 侧链 transcript · 权限细化 | ⬜ |
 | J-C+ | JSONL resume 主路径 · list 增强 | ⬜ |
 

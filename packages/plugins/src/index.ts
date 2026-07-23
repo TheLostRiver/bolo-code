@@ -1,6 +1,11 @@
 /**
- * 插件加载与贡献点合并
- * 后写覆盖前写；同名 tool 冲突时记录 error 并跳过后者
+ * 插件加载与贡献点合并（PL1 最小真加载）
+ *
+ * 能力：发现 user/project `.bolo/plugins/*` + `bolo.plugin.json`；
+ * 合并 contributes.skills（缺省则扫根下 `skills/`）、hooks、mcp、agents。
+ * 非市场、非远程安装、非热 reload。
+ *
+ * 后写覆盖前写；同名 mcp 冲突时记录 error 并覆盖。
  */
 
 import { promises as fs } from 'node:fs'
@@ -104,31 +109,37 @@ export async function mergePluginContributions(
 
   for (const plugin of plugins) {
     const c = plugin.manifest.contributes
-    if (!c) continue
 
-    if (c.skills) {
-      for (const rel of c.skills) {
-        const dir = path.resolve(plugin.root, rel)
-        const found = await discoverSkillsInDir(dir, 'plugin')
-        for (const s of found) {
-          if (seenSkillIds.has(s.meta.id)) {
-            // 后写覆盖
-            skills = skills.filter((x) => x.meta.id !== s.meta.id)
-          }
-          seenSkillIds.add(s.meta.id)
-          skills.push(s)
+    // skills：contributes.skills 相对路径列表；未声明则扫 <plugin>/skills/；显式 [] 跳过
+    let skillRels: string[]
+    if (c?.skills && c.skills.length > 0) {
+      skillRels = c.skills
+    } else if (c === undefined || c.skills === undefined) {
+      skillRels = ['skills']
+    } else {
+      skillRels = []
+    }
+    for (const rel of skillRels) {
+      const dir = path.resolve(plugin.root, rel)
+      const found = await discoverSkillsInDir(dir, 'plugin')
+      for (const s of found) {
+        if (seenSkillIds.has(s.meta.id)) {
+          // 后写覆盖
+          skills = skills.filter((x) => x.meta.id !== s.meta.id)
         }
+        seenSkillIds.add(s.meta.id)
+        skills.push(s)
       }
     }
 
-    if (c.hooks) {
+    if (c?.hooks) {
       const hookPath = path.resolve(plugin.root, c.hooks)
       const cfg = await readJson<HooksConfig>(hookPath)
       if (cfg) hooks = deepMergeHooks(hooks, cfg)
       else errors.push(`plugin ${plugin.manifest.id}: cannot read hooks ${c.hooks}`)
     }
 
-    if (c.mcpServers) {
+    if (c?.mcpServers) {
       const mcpPath = path.resolve(plugin.root, c.mcpServers)
       const servers = await loadMcpConfigFile(mcpPath)
       for (const s of servers) {
@@ -141,7 +152,7 @@ export async function mergePluginContributions(
       }
     }
 
-    if (c.agents) {
+    if (c?.agents) {
       for (const a of c.agents) {
         if (!agents.includes(a)) agents.push(a)
       }

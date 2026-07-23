@@ -129,6 +129,28 @@ export function formatSessionList(items: SessionListItem[]): string {
 }
 
 /**
+ * `--continue` / `-c`：取 listProjectSessions 第一条（已按 mtime/updatedAt 降序）。
+ * 空列表 → exit 1（与 picker 一致）。
+ */
+export async function resolveContinueSessionId(opts: {
+  cwd: string
+  sessionsDir?: string
+}): Promise<string> {
+  const items = await listProjectSessions({
+    cwd: opts.cwd,
+    sessionsDir: opts.sessionsDir,
+    limit: 1,
+  })
+  if (items.length === 0) {
+    throw new ResumePickerError(
+      'No sessions in this project. Start a new session with: bolo',
+      1,
+    )
+  }
+  return items[0]!.id
+}
+
+/**
  * 无 id：列项目会话并选 id。
  * - 空列表 → exit 1
  * - 非 TTY → 打印列表，要求 --resume <id>，exit 2

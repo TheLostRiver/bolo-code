@@ -141,7 +141,7 @@
 | JSON 快照 + `bolo --resume <id>` | ✅ 必须带 id/path |
 | **`bolo --resume`（无 id）→ 当前项目会话列表 + 交互选择** | ⬜ **缺口**；HC 有此体验，Bolo 未实现 |
 | `listSessions`（按 cwd / project 过滤） | ⬜ 与上条共用；JSONL 规划 E1 相关 |
-| `bolo --continue`（最近一条） | ⬜ |
+| `bolo --continue`（最近一条） | ✅ |
 | JSONL transcript | ⬜ 规划 `TODO_SESSION_JSONL.md` |
 | list / continue / **无参新建会话** `bolo` | ⬜ 现无参只打印 help / 报仅支持 resume |
 | **启动欢迎屏（welcome）** | ⬜ 对照 HC logo/welcome 布局 |
@@ -398,7 +398,7 @@ $ bolo < cmd                   # 非 TTY：无 ANSI 花活，纯文本
 | **T5** | 权限 ask：TTY 下 y/n（或数字）选择；非 TTY 保持策略 | 测 |
 | **T6** | 与 **M-Slash** 合流：输入 `/` 走总线；`/help` 在 TUI 内可读 | |
 | **T7** | `--resume <id>` 缩略 banner；**`--resume` 无 id → 项目会话列表选择（RS1–RS4）** | 对齐 HC；测 |
-| **T7b** | `--continue` 最近会话 | P1 |
+| **T7b** | `--continue` 最近会话 | ✅ |
 | **T8** | 可选 Ink/React 终端框架升级完整布局 | **P1**；T1–T7 可用零依赖 |
 | **T9** | 主题 / 窄终端换行 / 吉祥物开关 | P1 |
 | **T10** | 与 Electron 共享「品牌资源」（同一 ASCII 源文件） | M4 时 |

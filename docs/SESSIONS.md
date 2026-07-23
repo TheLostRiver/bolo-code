@@ -140,6 +140,7 @@ npx bolo --resume <id> --cwd /path/to/project
 |------|------|
 | `--resume <id>` 成功 | 打印摘要：id、cwd、文件路径、消息数、最近一条 |
 | **`--resume` / `-r` 无 id（已实现 RS1–RS6）** | `listProjectSessions` 扫当前项目 `.bolo/sessions`；TTY 编号选择后 `resumeSession`；非 TTY 打印列表并要求 `--resume <id>`（exit 2）；空列表提示 `bolo` 新建（exit 1） |
+| **`--continue` / `-c`（RS9）** | `listProjectSessions` 第一条（最新）→ `resumeSession`；空列表 exit 1 |
 | 另有 prompt（`-p` / 位置参数 / 管道 stdin） | `submitPrompt` 一轮并打印助手文本；默认 autoSave |
 | TTY 且无 prompt、无 `--print` | 极简 readline 循环（`bolo>` → submit → 打印；空行或 `/exit` 退出） |
 | `--print` 且无 prompt | 仅摘要后退出 |

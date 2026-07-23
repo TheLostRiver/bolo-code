@@ -3,7 +3,11 @@
  */
 import { formatHelp, isResumePicker, parseArgs } from './parseArgs.ts'
 import { runNewSessionCli } from './newSessionCli.ts'
-import { ResumePickerError, runResumeCli } from './resumeCli.ts'
+import {
+  resolveContinueSessionId,
+  ResumePickerError,
+  runResumeCli,
+} from './resumeCli.ts'
 
 /**
  * 非 TTY 时尝试读 stdin。
@@ -65,6 +69,32 @@ async function main(): Promise<void> {
 
   const cwd = args.cwd ?? process.cwd()
   const isTty = process.stdin.isTTY === true
+
+  // ── --continue / -c：最新一条 ──
+  if (args.continue) {
+    let prompt = args.prompt
+    if (!prompt) {
+      prompt = await readStdinIfPiped()
+    }
+    try {
+      const id = await resolveContinueSessionId({ cwd })
+      await runResumeCli({
+        idOrPath: id,
+        cwd,
+        prompt,
+        print: args.print || Boolean(prompt),
+      })
+    } catch (err) {
+      if (err instanceof ResumePickerError) {
+        process.stderr.write(`error: ${err.message}\n`)
+        process.exit(err.exitCode)
+      }
+      const msg = err instanceof Error ? err.message : String(err)
+      process.stderr.write(`error: ${msg}\n`)
+      process.exit(1)
+    }
+    return
+  }
 
   // ── --resume 路径 ──
   if (args.resume) {

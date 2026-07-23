@@ -56,7 +56,7 @@ defaults
 - **MCP server 同名**：项目覆盖用户  
 - **Hooks**：数组合并（用户 + 项目 + 插件 contributes）  
 - **Skills 同 id**：项目覆盖用户；插件 contributes 再覆盖  
-- **Plugins**：先用户目录，再项目目录  
+- **Plugins（PL1）**：扫 user/project `plugins/<id>/bolo.plugin.json`；`contributes.skills`（或默认 `skills/`）合并进 workspace skills catalog；**无**市场/远程安装 
 
 ## 3. `config.json` 示例
 

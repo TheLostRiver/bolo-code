@@ -80,6 +80,27 @@ async function main() {
     'utf8',
   )
 
+  // 项目 plugin：bolo.plugin.json + skills/ → 进 workspace catalog（PL1）
+  const pluginRoot = path.join(
+    getProjectBoloDir(projectCwd),
+    'plugins',
+    'tmp-plugin',
+  )
+  await fs.mkdir(path.join(pluginRoot, 'skills', 'from-plugin'), {
+    recursive: true,
+  })
+  await writeJsonFile(path.join(pluginRoot, 'bolo.plugin.json'), {
+    id: 'tmp-plugin',
+    name: 'Tmp Plugin',
+    version: '0.0.1',
+    contributes: { skills: ['skills'] },
+  })
+  await fs.writeFile(
+    path.join(pluginRoot, 'skills', 'from-plugin', 'SKILL.md'),
+    '---\nname: From Plugin\ndescription: plugin skill for catalog\n---\nPlugin body\n',
+    'utf8',
+  )
+
   const ws = await loadWorkspace({ cwd: projectCwd })
   assert(ws.config.provider?.model === 'project-model', 'project model wins')
   assert(ws.config.provider?.baseUrl === 'https://user.example/v1', 'user base kept')
@@ -87,6 +108,14 @@ async function main() {
   assert(ws.mcpServers.find((s) => s.name === 'u')?.args?.[0] === 'project-wins', 'mcp project wins')
   assert(ws.mcpServers.some((s) => s.name === 'p'), 'project mcp present')
   assert(ws.skills.some((s) => s.meta.id === 'demo'), 'user skill found')
+  assert(
+    ws.plugins.some((p) => p.manifest.id === 'tmp-plugin'),
+    'project plugin discovered',
+  )
+  assert(
+    ws.skills.some((s) => s.meta.id === 'from-plugin' && s.source === 'plugin'),
+    'plugin skill merged into catalog',
+  )
   assert(ws.providerKind === 'mock', 'no key → mock')
 
   const merged = mergeConfigs(

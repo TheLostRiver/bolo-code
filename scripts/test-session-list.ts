@@ -17,6 +17,7 @@ import {
   formatHelp,
   formatSessionList,
   pickProjectSessionId,
+  resolveContinueSessionId,
   ResumePickerError,
 } from '../packages/cli/src/index.ts'
 import type { ChatMessage } from '../packages/shared/src/index.ts'
@@ -122,11 +123,23 @@ async function main() {
   const p5 = parseArgs(['-r', 'sid', '--print'])
   assert(p5.resume === 'sid' && p5.print, '-r id still works')
 
+  // ── parseArgs --continue / -c（RS9）──
+  const c1 = parseArgs(['--continue'])
+  assert(c1.continue === true, '--continue → true')
+  const c2 = parseArgs(['-c'])
+  assert(c2.continue === true, '-c → true')
+  const c3 = parseArgs(['--continue', '-p', 'hi'])
+  assert(c3.continue === true && c3.prompt === 'hi' && c3.print, '--continue + prompt')
+
   const help = formatHelp()
   assert(help.includes('bolo --resume'), 'help bare resume')
   assert(
     help.includes('列出') || help.toLowerCase().includes('list') || help.includes('选择'),
     'help mentions list/select',
+  )
+  assert(
+    help.includes('--continue') && (help.includes('-c') || help.includes('最新')),
+    'help mentions --continue',
   )
 
   // ── formatSessionList ──
@@ -188,6 +201,23 @@ async function main() {
     readChoice: async () => '2',
   })
   assert(picked === 'sess_old', `pick #2 → sess_old got ${picked}`)
+
+  // ── --continue：list 第一条 = 最新 ──
+  const contId = await resolveContinueSessionId({ cwd, sessionsDir })
+  assert(contId === 'sess_new', `continue → newest sess_new got ${contId}`)
+  assert(contId === listed[0]!.id, 'continue matches list[0]')
+
+  let contEmptyCode: number | undefined
+  try {
+    await resolveContinueSessionId({
+      cwd: path.join(tmpRoot, 'empty3'),
+      sessionsDir: path.join(tmpRoot, 'empty-sessions-cont'),
+    })
+  } catch (e) {
+    assert(e instanceof ResumePickerError, 'continue empty ResumePickerError')
+    contEmptyCode = (e as ResumePickerError).exitCode
+  }
+  assert(contEmptyCode === 1, `continue empty exit 1 got ${contEmptyCode}`)
 
   await fs.rm(tmpRoot, { recursive: true, force: true })
   console.log('PASS: test-session-list')

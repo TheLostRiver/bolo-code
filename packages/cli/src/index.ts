@@ -13,6 +13,7 @@ export {
   runOnePrompt,
   runRepl,
   pickProjectSessionId,
+  resolveContinueSessionId,
   formatSessionList,
   buildSessionSummary,
   formatSessionSummary,

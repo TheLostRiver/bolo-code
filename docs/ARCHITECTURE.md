@@ -159,11 +159,13 @@ idle
 - 隔离：独立 session id、独立 hook 上下文、可裁剪 tools
 - 生命周期事件：SubagentStart / SubagentStop
 
-### 6.5 插件
+### 6.5 插件（PL1 最小真加载）
 
 - 清单：`bolo.plugin.json`（id、version、contributes）
-- 可贡献：skills、hooks、mcp servers、agents、commands、tools
-- 激活范围：user / project / session
+- 发现：`~/.bolo/plugins/*` 与 `<project>/.bolo/plugins/*`（`loadWorkspace`）
+- 可贡献：skills（缺省扫插件根 `skills/`）、hooks、mcp servers、agents
+- **非**插件市场 / 远程安装 / 热 reload；仅本地目录 + 贡献点合并
+- 激活范围：user / project（session 级后置）
 
 ## 7. Electron 边界
 

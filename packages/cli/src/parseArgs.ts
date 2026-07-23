@@ -3,6 +3,7 @@
  *
  * 支持：
  *   --resume | --resume <id> | --resume=<id> | -r | -r <id>
+ *   --continue | -c
  *   --print | -p [prompt]
  *   --cwd <path>
  *   --help | -h
@@ -16,6 +17,11 @@ export type CliArgs = {
    * `true` = `--resume` 无 id，进入项目会话列表选择
    */
   resume?: string | true
+  /**
+   * `true` = 恢复 listProjectSessions 第一条（最新）
+   * 与 --resume 同时出现时 continue 优先
+   */
+  continue?: boolean
   /** 单轮 / 非交互：有 prompt 则 submit 后退出；无 prompt 则只打印摘要 */
   print: boolean
   /** 用户输入（-p 值、位置参数拼接、或后续由 stdin 填充） */
@@ -61,6 +67,12 @@ export function parseArgs(argv: string[]): CliArgs {
 
     if (a === '-h' || a === '--help') {
       out.help = true
+      continue
+    }
+
+    // --continue / -c：resume 列表第一条（最新）
+    if (a === '--continue' || a === '-c') {
+      out.continue = true
       continue
     }
 
@@ -147,6 +159,8 @@ export function formatHelp(): string {
 用法:
   bolo                               新会话（TTY：欢迎 banner + REPL）
   bolo "question"                    新会话单轮 prompt
+  bolo --continue                    恢复当前项目最新一条会话
+  bolo -c                            同上（--continue 短选项）
   bolo --resume                      列出当前项目会话并选择进入
   bolo --resume <id>                 恢复会话并打印摘要
   bolo --resume <id> -p "prompt"     恢复后单轮 submit 并打印助手输出
@@ -163,6 +177,7 @@ REPL 斜杠命令（会话内）:
   详见 docs/SLASH_COMMANDS.md
 
 选项:
+  -c, --continue           恢复 listProjectSessions 第一条（最新）
   -r, --resume [id|path]   恢复会话；无 id 时列项目 .bolo/sessions
   -p, --prompt [text]      单轮 prompt（隐含 --print）
       --print              非交互：有 prompt 则跑一轮，否则只摘要
