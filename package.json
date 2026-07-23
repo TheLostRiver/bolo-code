@@ -8,6 +8,9 @@
   "engines": {
     "node": ">=20"
   },
+  "bin": {
+    "bolo": "./packages/cli/bin/bolo.js"
+  },
   "scripts": {
     "smoke": "tsx scripts/smoke-turn.ts",
     "test:compact": "tsx scripts/test-compact.ts",
@@ -20,7 +23,9 @@
     "test:skills": "tsx scripts/test-skill-catalog.ts",
     "test:system-prompt": "tsx scripts/test-system-prompt.ts",
     "test:auto-compact": "tsx scripts/test-auto-compact.ts",
-    "test": "tsx scripts/test-compact.ts && tsx scripts/test-permissions.ts && tsx scripts/test-provider-unit.ts && tsx scripts/test-config.ts && tsx scripts/test-skill-catalog.ts && tsx scripts/test-system-prompt.ts && tsx scripts/test-auto-compact.ts && tsx scripts/smoke-turn.ts",
+    "test:session": "tsx scripts/test-session-persist.ts",
+    "test:cli": "tsx scripts/test-cli-resume.ts",
+    "test": "tsx scripts/test-compact.ts && tsx scripts/test-permissions.ts && tsx scripts/test-provider-unit.ts && tsx scripts/test-config.ts && tsx scripts/test-skill-catalog.ts && tsx scripts/test-system-prompt.ts && tsx scripts/test-auto-compact.ts && tsx scripts/test-session-persist.ts && tsx scripts/test-cli-resume.ts && tsx scripts/smoke-turn.ts",
     "test:permissions": "tsx scripts/test-permissions.ts"
   },
   "devDependencies": {

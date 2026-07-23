@@ -21,6 +21,7 @@
 | [docs/DEEP_ANALYSIS.md](docs/DEEP_ANALYSIS.md) | 深度分析：状态机、风险、验收门禁 |
 | [docs/SKILLS.md](docs/SKILLS.md) | **全局 skills 目录 + 按需 Skill 工具** |
 | [docs/CONFIG.md](docs/CONFIG.md) | **全局 ~/.bolo 与项目 .bolo 配置** |
+| [docs/SESSIONS.md](docs/SESSIONS.md) | **会话 JSON 落盘与 `bolo --resume`** |
 | [docs/PROVIDERS.md](docs/PROVIDERS.md) | OpenAI 兼容 Provider 与环境变量 |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | 分阶段实施路线 |
 | [docs/REFERENCES.md](docs/REFERENCES.md) | 参考项目与取舍 |
@@ -34,12 +35,15 @@
 
 - **M0–M1 已完成**：文档契约 + headless `queryLoop` + 权限四档 + compact 管道（smoke/单测）
 - **当前主线**：**M2** 真 Provider + 真压缩（见 [docs/ROADMAP.md](docs/ROADMAP.md)）
-- **未做**：MCP 真连接、Electron 产品壳、会话持久化
+- **未做**：MCP 真连接、Electron 产品壳、完整 TUI
 
 ## 快速命令
 
 ```bash
 npx tsx scripts/bolo-init.ts              # 初始化 ~/.bolo 与项目 .bolo
+npx bolo --resume <sessionId>             # 恢复会话（见 docs/SESSIONS.md）
+npx tsx scripts/test-session-persist.ts
+npx tsx scripts/test-cli-resume.ts
 npx tsx scripts/test-config.ts
 npx tsx scripts/test-permissions.ts
 npx tsx scripts/test-compact.ts

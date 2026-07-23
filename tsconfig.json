@@ -25,8 +25,13 @@
       "@bolo/providers": ["packages/providers/src/index.ts"],
       "@bolo/compact": ["packages/compact/src/index.ts"],
       "@bolo/permissions": ["packages/permissions/src/index.ts"],
-      "@bolo/config": ["packages/config/src/index.ts"]
+      "@bolo/config": ["packages/config/src/index.ts"],
+      "@bolo/cli": ["packages/cli/src/index.ts"]
     }
   },
-  "include": ["packages/*/src/**/*.ts", "apps/*/src/**/*.ts", "scripts/**/*.ts"]
+  "include": [
+    "packages/*/src/**/*.ts",
+    "apps/*/src/**/*.ts",
+    "scripts/**/*.ts"
+  ]
 }

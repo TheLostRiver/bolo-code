@@ -349,13 +349,56 @@ async function loadSessionSnapshotFromPath(
   return parseSessionSnapshot(JSON.parse(raw) as unknown)
 }
 
+/**
+ * 读会话快照。
+ * - 路径 / filePath / sessionsDir / 显式 scope：只查该处
+ * - 纯 id 且未指定 scope/sessionsDir：先 project（cwd），再 user（~/.bolo）
+ */
 export async function loadSession(
   idOrPath: string,
   options?: LoadSessionOptions,
 ): Promise<{ path: string; snapshot: SessionSnapshot }> {
-  const { filePath } = resolveIdOrPath(idOrPath, options)
-  const snapshot = await loadSessionSnapshotFromPath(filePath)
-  return { path: filePath, snapshot }
+  if (options?.filePath) {
+    const filePath = path.resolve(options.filePath)
+    const snapshot = await loadSessionSnapshotFromPath(filePath)
+    return { path: filePath, snapshot }
+  }
+  if (looksLikeSessionPath(idOrPath)) {
+    const filePath = path.resolve(idOrPath)
+    const snapshot = await loadSessionSnapshotFromPath(filePath)
+    return { path: filePath, snapshot }
+  }
+  if (options?.sessionsDir || options?.scope) {
+    const { filePath } = resolveIdOrPath(idOrPath, options)
+    const snapshot = await loadSessionSnapshotFromPath(filePath)
+    return { path: filePath, snapshot }
+  }
+
+  // 纯 id：project → user
+  const projectPath = resolveSessionFilePath(idOrPath, {
+    scope: 'project',
+    cwd: options?.cwd,
+  })
+  try {
+    const snapshot = await loadSessionSnapshotFromPath(projectPath)
+    return { path: projectPath, snapshot }
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException)?.code
+    if (code !== 'ENOENT') throw err
+  }
+  const userPath = resolveSessionFilePath(idOrPath, { scope: 'user' })
+  try {
+    const snapshot = await loadSessionSnapshotFromPath(userPath)
+    return { path: userPath, snapshot }
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException)?.code
+    if (code === 'ENOENT') {
+      throw new Error(
+        `session not found: ${idOrPath} (looked in project and user sessions)`,
+      )
+    }
+    throw err
+  }
 }
 
 /**

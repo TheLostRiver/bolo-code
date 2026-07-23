@@ -1,0 +1,19 @@
+{
+  "name": "@bolo/cli",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Bolo Code 最小 CLI（resume / 单轮 prompt）",
+  "bin": {
+    "bolo": "./bin/bolo.js"
+  },
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@bolo/core": "*",
+    "@bolo/providers": "*",
+    "@bolo/shared": "*"
+  }
+}

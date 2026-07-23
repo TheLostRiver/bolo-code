@@ -84,8 +84,53 @@ const session = await createSession({
 
 后续若需要增量 transcript 或 GUI 历史列表，可在本格式上扩展，不必先抄 HC 全量。
 
-## 5. 验收
+## 5. CLI：`bolo --resume`
+
+最小 CLI 包 `@bolo/cli`（bin：`bolo`）。对照参考实现的 `-r/--resume`，本轮只做入口接线，**无 Ink TUI / 无遥测**。
+
+### 用法
+
+```bash
+# 仓库内（需已安装依赖；tsx 在根 devDependencies）
+npx bolo --resume <sessionId>
+npx bolo --resume=<sessionId>
+npx bolo -r <sessionId>
+npx bolo --resume path/to/session.json
+
+# 恢复后只打印摘要（非交互）
+npx bolo --resume <id> --print
+
+# 恢复后单轮 prompt，打印助手输出
+npx bolo --resume <id> -p "继续上次任务"
+npx bolo --resume <id> "位置参数也会当作 prompt"
+
+# 指定解析 project sessions 的 cwd
+npx bolo --resume <id> --cwd /path/to/project
+```
+
+也可：`npx tsx packages/cli/src/main.ts --resume <id>`。
+
+### 行为
+
+| 场景 | 行为 |
+|------|------|
+| `--resume` 成功 | 打印摘要：id、cwd、文件路径、消息数、最近一条 |
+| 另有 prompt（`-p` / 位置参数 / 管道 stdin） | `submitPrompt` 一轮并打印助手文本；默认 autoSave |
+| TTY 且无 prompt、无 `--print` | 极简 readline 循环（`bolo>` → submit → 打印；空行或 `/exit` 退出） |
+| `--print` 且无 prompt | 仅摘要后退出 |
+| 无 API key | **仍可加载快照**；真正 callModel 时清晰报错（`BOLO_PROVIDER=mock` 可离线） |
+
+### 查找顺序（纯 id）
+
+1. `<cwd>/.bolo/sessions/<id>.json`（project）
+2. `~/.bolo/sessions/<id>.json` 或 `$BOLO_CONFIG_DIR/sessions/`（user）
+3. 含路径分隔符或 `.json` 后缀 → 当作文件路径
+
+与 `loadSession` / `resumeSession` 一致。
+
+## 6. 验收
 
 ```bash
 npx tsx scripts/test-session-persist.ts
+npx tsx scripts/test-cli-resume.ts
 ```
