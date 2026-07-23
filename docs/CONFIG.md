@@ -141,6 +141,7 @@ const ws = await loadWorkspace({ cwd: process.cwd() })
 | 用户 skills | `~/.bolo/skills` |
 | 项目配置 | `.bolo/`（不进 git 可自行 ignore secrets） |
 | `CLAUDE.md` / memory | **`BOLO.md`**（主品牌）+ 可选兼容 `CLAUDE.md` / `AGENTS.md`；见 `docs/SYSTEM_PROMPT.md` |
+| 项目 rules | **`.bolo/rules/**/*.md`**（+ 可选 `~/.bolo/rules`）；见 **[RULES.md](./RULES.md)** |
 
 ## 8. 项目指令文件（BOLO.md）
 
@@ -182,4 +183,5 @@ API：`saveSession` / `loadSession` / `resumeSession`；可选 `createSession({ 
 npx tsx scripts/bolo-init.ts          # 初始化全局 + 当前项目布局
 npx tsx scripts/test-config.ts        # 配置单测
 npx tsx scripts/test-system-prompt.ts # 系统提示词 + BOLO.md
+npx tsx scripts/test-rules.ts         # .bolo/rules 装载 + 注入
 ```

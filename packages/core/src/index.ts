@@ -95,6 +95,17 @@ export {
   BOLO_MD_MAX_TOTAL_CHARS,
 } from './systemPrompt.ts'
 export {
+  loadBoloRules,
+  parseRuleFrontmatter,
+  collectRuleCandidates,
+  BOLO_RULES_MAX_CHARS_PER_FILE,
+  BOLO_RULES_MAX_TOTAL_CHARS,
+  type BoloRuleSource,
+  type LoadBoloRulesResult,
+  type LoadBoloRulesOptions,
+  type RuleFrontmatter,
+} from './rules.ts'
+export {
   createProviderFromEnv,
   createOpenAICompatibleProvider,
   createAnthropicProvider,
@@ -293,6 +304,8 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
       skillCatalog: extra.skillCatalog,
       boloMd: extra.boloMd,
       loadInstructions: extra.loadInstructions,
+      boloRules: extra.boloRules,
+      loadRules: extra.loadRules,
       userConfigDir: extra.userConfigDir,
       mcpPlaceholder: extra.mcpPlaceholder,
       overrideSystemPrompt: extra.overrideSystemPrompt,

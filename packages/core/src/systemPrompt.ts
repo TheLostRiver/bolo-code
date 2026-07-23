@@ -14,6 +14,7 @@ import {
 import { getBoloHomeDir } from '../../config/src/paths.ts'
 import type { ChatMessage } from '../../shared/src/index.ts'
 import type { PermissionMode } from '../../permissions/src/index.ts'
+import { loadBoloRules } from './rules.ts'
 
 /** 单文件默认上限（字符） */
 export const BOLO_MD_MAX_CHARS_PER_FILE = 32_000
@@ -194,6 +195,10 @@ export type GetSystemPromptOptions = SystemPromptEnv & {
   boloMd?: string
   /** 是否在组装时加载 BOLO.md（默认 true） */
   loadInstructions?: boolean
+  /** 已加载的 rules 文本；undefined 时按 loadRules 自动装载 */
+  boloRules?: string
+  /** 是否在组装时加载 .bolo/rules（默认 true） */
+  loadRules?: boolean
   userConfigDir?: string
   mcpPlaceholder?: boolean
 }
@@ -310,6 +315,7 @@ MCP servers may be configured later. No MCP tool list is injected in this build 
 /**
  * 默认系统提示词各段（数组顺序即注入顺序）。
  * 对照 HC getSystemPrompt 的 section 拼接，精简文案。
+ * 注入序：Identity → System → Task → Tools → Environment → rules → BOLO.md → skill catalog
  */
 export async function getSystemPrompt(
   opts: GetSystemPromptOptions,
@@ -321,6 +327,19 @@ export async function getSystemPrompt(
     toolsSection(),
     environmentSection(opts),
   ]
+
+  // rules 在 BOLO.md 之前：可拆分约束 vs 项目总说明
+  let boloRules = opts.boloRules
+  if (boloRules === undefined && opts.loadRules !== false) {
+    const loaded = await loadBoloRules({
+      cwd: opts.cwd,
+      userConfigDir: opts.userConfigDir,
+    })
+    boloRules = loaded.text
+  }
+  if (boloRules?.trim()) {
+    sections.push(boloRules.trim())
+  }
 
   let boloMd = opts.boloMd
   if (boloMd === undefined && opts.loadInstructions !== false) {

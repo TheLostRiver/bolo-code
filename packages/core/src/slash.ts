@@ -239,6 +239,83 @@ function cmdPermissions(
   return { ok: true, message: `permissionMode set to ${raw}` }
 }
 
+async function cmdRules(
+  session: SlashSession,
+  args: string,
+): Promise<SlashDispatchResult> {
+  const { loadBoloRules } = await import('./rules.ts')
+  const loaded = await loadBoloRules({ cwd: session.cwd })
+  const parts = args.trim().split(/\s+/).filter(Boolean)
+  const sub = (parts[0] ?? 'list').toLowerCase()
+
+  if (sub === 'list' || sub === '') {
+    if (!loaded.sources.length) {
+      return {
+        ok: true,
+        message:
+          'No rules loaded.\nPlace markdown under .bolo/rules/ (or ~/.bolo/rules/).\nSee docs/RULES.md.',
+      }
+    }
+    const lines = [
+      `Loaded ${loaded.sources.length} rule file(s) into system prompt:`,
+      '',
+      ...loaded.sources.map(
+        (s, i) =>
+          `  ${i + 1}. ${s.label}  (${s.chars} chars${s.truncated ? ', truncated' : ''})`,
+      ),
+      '',
+      'Tip: /rules show <name>  ·  dirs: .bolo/rules/  ~/.bolo/rules/',
+    ]
+    return { ok: true, message: lines.join('\n') }
+  }
+
+  if (sub === 'show') {
+    const name = parts.slice(1).join(' ').trim()
+    if (!name) {
+      return {
+        ok: false,
+        message: 'Usage: /rules show <name>  (basename or path fragment)',
+      }
+    }
+    const needle = name.replace(/\\/g, '/').toLowerCase()
+    const hit =
+      loaded.sources.find((s) => s.label.toLowerCase() === needle) ??
+      loaded.sources.find((s) =>
+        s.label.toLowerCase().endsWith('/' + needle),
+      ) ??
+      loaded.sources.find((s) => s.label.toLowerCase().includes(needle))
+    if (!hit) {
+      return {
+        ok: false,
+        message: `No loaded rule matching "${name}". Try /rules list.`,
+      }
+    }
+    // 从 system sections 抽对应 ### 块；找不到则只回 label
+    const section = session.systemPromptSections.find((s) =>
+      s.includes('# Project rules'),
+    )
+    if (section) {
+      const marker = `### ${hit.label}`
+      const idx = section.indexOf(marker)
+      if (idx !== -1) {
+        const rest = section.slice(idx)
+        const next = rest.indexOf('\n### ', marker.length)
+        const body = (next === -1 ? rest : rest.slice(0, next)).trim()
+        return { ok: true, message: body }
+      }
+    }
+    return {
+      ok: true,
+      message: `${hit.label}\n(${hit.chars} chars, scope=${hit.scope})`,
+    }
+  }
+
+  return {
+    ok: false,
+    message: `Unknown /rules subcommand "${sub}". Use: list | show <name>`,
+  }
+}
+
 /** 内置注册表（顺序即 /help 列表顺序） */
 export const SLASH_COMMANDS: SlashCommandDef[] = [
   {
@@ -284,6 +361,12 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     summary: 'Show or set permission mode (four tiers)',
     usage: '[mode]',
     run: cmdPermissions,
+  },
+  {
+    name: 'rules',
+    summary: 'List or show loaded .bolo/rules',
+    usage: '[list|show <name>]',
+    run: cmdRules,
   },
 ]
 

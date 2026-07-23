@@ -101,8 +101,8 @@ P3  GUI / 打磨 / 后置
 
 | ID | 主题 | 关键切片 | 状态 |
 |----|------|----------|------|
-| R1–R2 | **`.bolo/rules` 发现 + 注入** | M-Rules | ⬜ |
-| R4 | `/rules` | 依赖 Slash | ⬜ |
+| R1–R2 | **`.bolo/rules` 发现 + 注入** | M-Rules | ✅ |
+| R4 | `/rules` | 依赖 Slash | ✅ |
 | C1–C4 | **Prompt 静态/动态边界 + 前缀稳定测试** | M-Cost | ⬜ |
 | J-A/B | **JSONL 双写** | `TODO_SESSION_JSONL` Phase A+B | ⬜ |
 | K1–K2 | **skill-creator / plugin-creator** | M-Creators | ⬜ |
