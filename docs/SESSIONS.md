@@ -39,6 +39,7 @@ import {
   submitPrompt,
   saveSession,
   loadSession,
+  listProjectSessions,
   resumeSession,
   persistSession,
 } from '../packages/core/src/index.ts'
@@ -71,6 +72,7 @@ const session = await createSession({
 | `toSnapshot` / `parseSessionSnapshot` | 序列化 / 校验 |
 | `saveSession` / `persistSession` | 原子写（temp + rename） |
 | `loadSession` | 读 JSON → `SessionSnapshot` |
+| `listProjectSessions` | 扫项目 `.bolo/sessions/*.json`（mtime/updatedAt 降序；坏文件跳过） |
 | `resumeSession` | load + `createSession` + 恢复 messages/配置 |
 | `resolveSessionFilePath` | 仅解析路径 |
 
@@ -92,6 +94,10 @@ const session = await createSession({
 
 ```bash
 # 仓库内（需已安装依赖；tsx 在根 devDependencies）
+# 无 id：列出当前项目会话（TTY 选择 / 非 TTY 打印列表）
+npx bolo --resume
+npx bolo -r
+
 npx bolo --resume <sessionId>
 npx bolo --resume=<sessionId>
 npx bolo -r <sessionId>
@@ -108,13 +114,14 @@ npx bolo --resume <id> "位置参数也会当作 prompt"
 npx bolo --resume <id> --cwd /path/to/project
 ```
 
-也可：`npx tsx packages/cli/src/main.ts --resume <id>`。
+也可：`npx tsx packages/cli/src/main.ts --resume` 或 `--resume <id>`。
 
 ### 行为
 
 | 场景 | 行为 |
 |------|------|
-| `--resume` 成功 | 打印摘要：id、cwd、文件路径、消息数、最近一条 |
+| `--resume <id>` 成功 | 打印摘要：id、cwd、文件路径、消息数、最近一条 |
+| **`--resume` / `-r` 无 id（已实现 RS1–RS6）** | `listProjectSessions` 扫当前项目 `.bolo/sessions`；TTY 编号选择后 `resumeSession`；非 TTY 打印列表并要求 `--resume <id>`（exit 2）；空列表提示 `bolo` 新建（exit 1） |
 | 另有 prompt（`-p` / 位置参数 / 管道 stdin） | `submitPrompt` 一轮并打印助手文本；默认 autoSave |
 | TTY 且无 prompt、无 `--print` | 极简 readline 循环（`bolo>` → submit → 打印；空行或 `/exit` 退出） |
 | `--print` 且无 prompt | 仅摘要后退出 |
@@ -133,4 +140,5 @@ npx bolo --resume <id> --cwd /path/to/project
 ```bash
 npx tsx scripts/test-session-persist.ts
 npx tsx scripts/test-cli-resume.ts
+npx tsx scripts/test-session-list.ts
 ```

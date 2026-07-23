@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * bolo 可执行入口：用 tsx 跑 TypeScript main。
- * 用法：bolo --resume <id>
+ * 用法：bolo --resume [id]
  */
 import { spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'

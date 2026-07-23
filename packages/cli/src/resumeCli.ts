@@ -1,19 +1,23 @@
 /**
  * resume 接线：load/resumeSession + 摘要 + 可选单轮 submit / 极简 REPL
+ * 无 id 时 listProjectSessions → TTY 选择 / 非 TTY 列表
  */
 
 import * as readline from 'node:readline'
 import {
+  listProjectSessions,
   resumeSession,
   submitPrompt,
   type BoloSession,
+  type SessionListItem,
   type SessionSnapshot,
 } from '../../core/src/index.ts'
 import type { ChatMessage } from '../../shared/src/index.ts'
 import { createCliProvider } from './provider.ts'
 
 export type ResumeCliOptions = {
-  idOrPath: string
+  /** session id / 路径；省略或 true 时进入项目列表选择 */
+  idOrPath?: string | true
   cwd?: string
   /** 单轮 prompt；有则 submit 后结束（除非 interactive） */
   prompt?: string
@@ -30,6 +34,16 @@ export type ResumeCliOptions = {
   /** 注入 stdout 便于测试 */
   writeOut?: (s: string) => void
   writeErr?: (s: string) => void
+  /**
+   * 是否 TTY（选择器）。默认 process.stdin.isTTY。
+   * 测试可强制 false。
+   */
+  isTty?: boolean
+  /**
+   * 注入选择器输入（测试用，返回 1-based 编号字符串）。
+   * 未注入时用 readline。
+   */
+  readChoice?: (prompt: string) => Promise<string>
 }
 
 export type ResumeCliResult = {
@@ -48,6 +62,16 @@ export type SessionSummary = {
   permissionMode: string
   model?: string
   lastMessage?: { role: string; preview: string }
+}
+
+/** 选择器失败时抛出，带建议 exit code */
+export class ResumePickerError extends Error {
+  readonly exitCode: number
+  constructor(message: string, exitCode: number) {
+    super(message)
+    this.name = 'ResumePickerError'
+    this.exitCode = exitCode
+  }
 }
 
 function previewText(content: string, max = 120): string {
@@ -89,6 +113,94 @@ export function formatSessionSummary(s: SessionSummary): string {
   return lines.join('\n')
 }
 
+/** 编号列表（stdout） */
+export function formatSessionList(items: SessionListItem[]): string {
+  if (!items.length) return '(no sessions)'
+  return items
+    .map((it, i) => {
+      const n = String(i + 1).padStart(2, ' ')
+      const when = it.updatedAt.replace('T', ' ').replace(/\.\d{3}Z$/, 'Z')
+      const model = it.model ? `  model=${it.model}` : ''
+      const prev = it.preview || '(no user message)'
+      return `${n}. ${it.id}  msgs=${it.messageCount}  ${when}${model}\n    ${prev}`
+    })
+    .join('\n')
+}
+
+/**
+ * 无 id：列项目会话并选 id。
+ * - 空列表 → exit 1
+ * - 非 TTY → 打印列表，要求 --resume <id>，exit 2
+ * - TTY → 问编号，返回选中 id
+ */
+export async function pickProjectSessionId(opts: {
+  cwd: string
+  sessionsDir?: string
+  isTty?: boolean
+  writeOut?: (s: string) => void
+  writeErr?: (s: string) => void
+  readChoice?: (prompt: string) => Promise<string>
+}): Promise<string> {
+  const writeOut = opts.writeOut ?? ((s) => process.stdout.write(s))
+  const writeErr = opts.writeErr ?? ((s) => process.stderr.write(s))
+  const items = await listProjectSessions({
+    cwd: opts.cwd,
+    sessionsDir: opts.sessionsDir,
+  })
+
+  if (items.length === 0) {
+    throw new ResumePickerError(
+      'No sessions in this project. Start a new session with: bolo',
+      1,
+    )
+  }
+
+  const listText = formatSessionList(items)
+  writeOut(`${listText}\n`)
+
+  const isTty = opts.isTty ?? process.stdin.isTTY === true
+  if (!isTty) {
+    writeErr(
+      'Non-interactive terminal: pick a session with --resume <id> (see list above).\n',
+    )
+    throw new ResumePickerError(
+      'non-interactive resume requires --resume <id>',
+      2,
+    )
+  }
+
+  const readChoice =
+    opts.readChoice ??
+    (async (q: string) => {
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+        terminal: true,
+      })
+      try {
+        return await new Promise<string>((resolve) => {
+          rl.question(q, resolve)
+        })
+      } finally {
+        rl.close()
+      }
+    })
+
+  for (;;) {
+    const raw = (await readChoice(`Select session [1-${items.length}]: `)).trim()
+    if (!raw) {
+      writeErr('Please enter a number.\n')
+      continue
+    }
+    const n = Number.parseInt(raw, 10)
+    if (!Number.isFinite(n) || n < 1 || n > items.length) {
+      writeErr(`Invalid choice. Enter 1–${items.length}.\n`)
+      continue
+    }
+    return items[n - 1]!.id
+  }
+}
+
 /** 取本轮新增的助手可见文本（从 messages 末尾向前） */
 export function lastAssistantText(
   messages: ChatMessage[],
@@ -114,7 +226,7 @@ export function lastAssistantText(
  * 仅加载并 resume（不跑 prompt）— 测试与 CLI 共用
  */
 export async function resumeFromIdOrPath(
-  opts: ResumeCliOptions,
+  opts: ResumeCliOptions & { idOrPath: string },
 ): Promise<ResumeCliResult> {
   const { provider, missingKey, kind, model } = createCliProvider({
     forceMock: opts.forceMock,
@@ -219,15 +331,35 @@ export async function runRepl(
 }
 
 /**
- * CLI 主流程：resume → 摘要 → prompt / print / repl
+ * CLI 主流程：可选 picker → resume → 摘要 → prompt / print / repl
  */
 export async function runResumeCli(
   opts: ResumeCliOptions,
 ): Promise<ResumeCliResult> {
   const writeOut = opts.writeOut ?? ((s) => process.stdout.write(s))
   const writeErr = opts.writeErr ?? ((s) => process.stderr.write(s))
+  const cwd = opts.cwd ?? process.cwd()
 
-  const result = await resumeFromIdOrPath({ ...opts, writeErr })
+  let idOrPath: string
+  if (opts.idOrPath === undefined || opts.idOrPath === true) {
+    idOrPath = await pickProjectSessionId({
+      cwd,
+      sessionsDir: opts.sessionsDir,
+      isTty: opts.isTty,
+      writeOut,
+      writeErr,
+      readChoice: opts.readChoice,
+    })
+  } else {
+    idOrPath = opts.idOrPath
+  }
+
+  const result = await resumeFromIdOrPath({
+    ...opts,
+    idOrPath,
+    cwd,
+    writeErr,
+  })
   writeOut(`${formatSessionSummary(result.summary)}\n`)
 
   const prompt = opts.prompt?.trim()

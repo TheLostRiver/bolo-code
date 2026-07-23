@@ -473,3 +473,113 @@ export async function maybeAutoSaveSession(
     session.onEvent?.({ type: 'error', message: `autoSave failed: ${message}` })
   }
 }
+
+/** 项目会话列表项（对齐 HC listSessions 轻量字段，无遥测） */
+export type SessionListItem = {
+  id: string
+  filePath: string
+  /** ISO：优先 snapshot.updatedAt，否则文件 mtime */
+  updatedAt: string
+  messageCount: number
+  /** 首条有意义 user 摘要，截断 */
+  preview: string
+  cwd?: string
+  model?: string
+}
+
+const PREVIEW_MAX = 80
+
+/** 从 messages 取首条非空 user 内容摘要 */
+export function sessionPreviewFromMessages(
+  messages: unknown,
+  max = PREVIEW_MAX,
+): string {
+  if (!Array.isArray(messages)) return ''
+  for (const m of messages) {
+    if (!m || typeof m !== 'object') continue
+    const row = m as Record<string, unknown>
+    if (row.role !== 'user') continue
+    if (typeof row.content !== 'string') continue
+    const one = row.content.replace(/\s+/g, ' ').trim()
+    if (!one) continue
+    if (one.length <= max) return one
+    return `${one.slice(0, max - 1)}…`
+  }
+  return ''
+}
+
+/**
+ * 列出当前项目 `.bolo/sessions/*.json`（可覆盖 sessionsDir）。
+ * 按 updatedAt / mtime 降序；坏文件跳过。
+ */
+export async function listProjectSessions(opts: {
+  cwd: string
+  sessionsDir?: string
+  limit?: number
+}): Promise<SessionListItem[]> {
+  const sessionsDir =
+    opts.sessionsDir ?? getProjectLayout(opts.cwd).sessionsDir
+  const limit = opts.limit ?? 50
+
+  let names: string[]
+  try {
+    names = await fs.readdir(sessionsDir)
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException)?.code
+    if (code === 'ENOENT') return []
+    throw err
+  }
+
+  const items: SessionListItem[] = []
+
+  for (const name of names) {
+    if (!name.endsWith('.json') || name.startsWith('.')) continue
+    const filePath = path.join(sessionsDir, name)
+    try {
+      const st = await fs.stat(filePath)
+      if (!st.isFile()) continue
+      const raw = await fs.readFile(filePath, 'utf8')
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(raw) as unknown
+      } catch {
+        continue
+      }
+      if (!parsed || typeof parsed !== 'object') continue
+      const o = parsed as Record<string, unknown>
+      const idFromFile = name.slice(0, -'.json'.length)
+      const id =
+        typeof o.id === 'string' && o.id.trim() ? o.id.trim() : idFromFile
+      const messages = Array.isArray(o.messages) ? o.messages : []
+      const mtimeIso = st.mtime.toISOString()
+      const updatedAt =
+        typeof o.updatedAt === 'string' && o.updatedAt.trim()
+          ? o.updatedAt
+          : mtimeIso
+      items.push({
+        id,
+        filePath,
+        updatedAt,
+        messageCount: messages.length,
+        preview: sessionPreviewFromMessages(messages),
+        cwd: typeof o.cwd === 'string' ? o.cwd : undefined,
+        model: typeof o.model === 'string' ? o.model : undefined,
+      })
+    } catch {
+      // 坏文件 / 不可读：跳过
+      continue
+    }
+  }
+
+  items.sort((a, b) => {
+    const ta = Date.parse(a.updatedAt)
+    const tb = Date.parse(b.updatedAt)
+    if (Number.isFinite(tb) && Number.isFinite(ta) && tb !== ta) {
+      return tb - ta
+    }
+    // 回退：字符串降序
+    return b.updatedAt.localeCompare(a.updatedAt)
+  })
+
+  return items.slice(0, Math.max(0, limit))
+}

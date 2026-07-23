@@ -49,15 +49,16 @@ async function main() {
   const a5 = parseArgs(['--cwd', '/proj', '--resume', 'id1'])
   assert(a5.cwd === '/proj', 'cwd')
 
-  let threw = false
-  try {
-    parseArgs(['--resume'])
-  } catch {
-    threw = true
-  }
-  assert(threw, 'missing resume value throws')
+  const a6 = parseArgs(['--resume'])
+  assert(a6.resume === true, 'bare --resume is picker mode')
+  const a7 = parseArgs(['--resume='])
+  assert(a7.resume === true, 'empty --resume= is picker mode')
 
   assert(formatHelp().includes('--resume'), 'help mentions resume')
+  assert(
+    formatHelp().includes('列出') || formatHelp().includes('选择'),
+    'help mentions list without id',
+  )
 
   // ── 2) 临时 session 文件 → resume ──
   const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'bolo-cli-'))

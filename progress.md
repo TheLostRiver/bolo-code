@@ -1,13 +1,13 @@
 # Progress Log
 
-## Session: roadmap 增补 CLI TUI / 品牌
+## Session: P0-a RS1–RS6 实现
 
-- `docs/ROADMAP.md`：新增 **M-TUI**、§2.5 TUI 行、§5c、轨道 E
-- 约定：`bolo` 启动欢迎；字标 **大写 BOLO**；原创吉祥物候选 Bolot / Nyxkit / Pipkin / Glim
-- 对照 HC 欢迎/REPL **布局**；不抄商标与 IP
-- 切片 T0–T10；依赖新建会话 + 协同 slash
+- `listProjectSessions`：扫项目 `.bolo/sessions/*.json`，updatedAt 降序，preview/消息数
+- `parseArgs`：`--resume` / `-r` 无 value → picker（`resume: true`）
+- CLI：TTY 编号选择；非 TTY 列表 + exit 2；空列表提示 `bolo` + exit 1
+- 测试：`scripts/test-session-list.ts` + 扩展 `test-cli-resume`
+- 文档：`TODO.md` RS1–RS6 ✅、`SESSIONS.md` 标明已实现
 
-## 前序
+## 默认下一刀
 
-- Subagent / Rules / creators / effort / M-Cost 已在详细版 ROADMAP
-- 会话 JSONL：`docs/TODO_SESSION_JSONL.md`
+P0-b：斜杠命令总线（`docs/TODO.md` SL0–SL3）

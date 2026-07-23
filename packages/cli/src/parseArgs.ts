@@ -2,7 +2,7 @@
  * 最小 argv 解析（无 commander 依赖）
  *
  * 支持：
- *   --resume <id> | --resume=<id> | -r <id>
+ *   --resume | --resume <id> | --resume=<id> | -r | -r <id>
  *   --print | -p [prompt]
  *   --cwd <path>
  *   --help | -h
@@ -11,8 +11,11 @@
 
 export type CliArgs = {
   help: boolean
-  /** session id 或 .json 路径 */
-  resume?: string
+  /**
+   * session id / .json 路径；
+   * `true` = `--resume` 无 id，进入项目会话列表选择
+   */
+  resume?: string | true
   /** 单轮 / 非交互：有 prompt 则 submit 后退出；无 prompt 则只打印摘要 */
   print: boolean
   /** 用户输入（-p 值、位置参数拼接、或后续由 stdin 填充） */
@@ -82,18 +85,25 @@ export function parseArgs(argv: string[]): CliArgs {
       continue
     }
 
+    // --resume / -r：可无 value → picker（true）
     if (a === '--resume' || a === '-r') {
-      const { value, next } = takeValue(argv, i)
-      out.resume = value
-      i = next
+      const next = argv[i + 1]
+      if (next === undefined || next.startsWith('-')) {
+        out.resume = true
+      } else {
+        out.resume = next
+        i++
+      }
       continue
     }
     if (a.startsWith('--resume=')) {
-      out.resume = a.slice('--resume='.length)
+      const v = a.slice('--resume='.length)
+      out.resume = v === '' ? true : v
       continue
     }
-    if (a.startsWith('-r=') && a.length > 3) {
-      out.resume = a.slice(3)
+    if (a.startsWith('-r=')) {
+      const v = a.slice(3)
+      out.resume = v === '' ? true : v
       continue
     }
 
@@ -126,10 +136,16 @@ export function parseArgs(argv: string[]): CliArgs {
   return out
 }
 
+/** 是否为「无 id → 列表选择」模式 */
+export function isResumePicker(resume: CliArgs['resume']): resume is true {
+  return resume === true
+}
+
 export function formatHelp(): string {
   return `bolo — Bolo Code 最小 CLI
 
 用法:
+  bolo --resume                      列出当前项目会话并选择进入
   bolo --resume <id>                 恢复会话并打印摘要
   bolo --resume <id> -p "prompt"     恢复后单轮 submit 并打印助手输出
   bolo --resume=<id> --print         仅摘要（非交互）
@@ -141,7 +157,7 @@ export function formatHelp(): string {
   也可用绝对/相对 .json 路径作为 id。
 
 选项:
-  -r, --resume <id|path>   恢复会话
+  -r, --resume [id|path]   恢复会话；无 id 时列项目 .bolo/sessions
   -p, --prompt [text]      单轮 prompt（隐含 --print）
       --print              非交互：有 prompt 则跑一轮，否则只摘要
       --cwd <dir>          解析 project sessions 的工作目录

@@ -1,8 +1,8 @@
 /**
  * bolo CLI 入口
  */
-import { formatHelp, parseArgs } from './parseArgs.ts'
-import { runResumeCli } from './resumeCli.ts'
+import { formatHelp, isResumePicker, parseArgs } from './parseArgs.ts'
+import { ResumePickerError, runResumeCli } from './resumeCli.ts'
 
 /**
  * 非 TTY 时尝试读 stdin。
@@ -70,19 +70,23 @@ async function main(): Promise<void> {
   }
 
   let prompt = args.prompt
-  // 无显式 prompt 时，非 TTY 可从管道读入
-  if (!prompt) {
+  // 无显式 prompt 时，非 TTY 可从管道读入（有 id 时）
+  if (!prompt && !isResumePicker(args.resume)) {
     prompt = await readStdinIfPiped()
   }
 
   try {
     await runResumeCli({
-      idOrPath: args.resume,
+      idOrPath: isResumePicker(args.resume) ? true : args.resume,
       cwd: args.cwd ?? process.cwd(),
       prompt,
       print: args.print || Boolean(prompt),
     })
   } catch (err) {
+    if (err instanceof ResumePickerError) {
+      process.stderr.write(`error: ${err.message}\n`)
+      process.exit(err.exitCode)
+    }
     const msg = err instanceof Error ? err.message : String(err)
     process.stderr.write(`error: ${msg}\n`)
     process.exit(1)
