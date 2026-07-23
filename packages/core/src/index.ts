@@ -85,6 +85,11 @@ export type { PermissionMode } from '../../permissions/src/index.ts'
 export {
   loadBoloMd,
   getSystemPrompt,
+  getSystemPromptPartition,
+  getCacheStableSections,
+  getCacheStablePrefix,
+  getVolatileSections,
+  partitionSystemPromptSections,
   buildEffectiveSystemPrompt,
   prepareModelMessages,
   assembleSessionSystemPrompt,
@@ -93,6 +98,11 @@ export {
   permissionModeBehaviorLine,
   BOLO_MD_MAX_CHARS_PER_FILE,
   BOLO_MD_MAX_TOTAL_CHARS,
+} from './systemPrompt.ts'
+export type {
+  SystemPromptPartition,
+  GetSystemPromptOptions,
+  SystemPromptEnv,
 } from './systemPrompt.ts'
 export {
   loadBoloRules,

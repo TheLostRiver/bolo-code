@@ -103,7 +103,7 @@ P3  GUI / 打磨 / 后置
 |----|------|----------|------|
 | R1–R2 | **`.bolo/rules` 发现 + 注入** | M-Rules | ✅ |
 | R4 | `/rules` | 依赖 Slash | ✅ |
-| C1–C4 | **Prompt 静态/动态边界 + 前缀稳定测试** | M-Cost | ⬜ |
+| C1–C4 | **Prompt 静态/动态边界 + 前缀稳定测试** | M-Cost（`PROMPT_CACHE.md` + stable/volatile + `test-prompt-cache`） | ✅ |
 | J-A/B | **JSONL 双写** | `TODO_SESSION_JSONL` Phase A+B | ⬜ |
 | K1–K2 | **skill-creator / plugin-creator** | M-Creators | ⬜ |
 | SL5 | `/skills` + `/<skill-id>` 回落 | | ⬜ |
@@ -162,9 +162,9 @@ P3  GUI / 打磨 / 后置
 
 若只开一刀：
 
-> **P1-a：`.bolo/rules` 发现 + 注入**（或 P1-b prompt cache / JSONL）。
+> **P1-c：JSONL transcript 双写**（或 K1–K2 creators / P2 Subagent）。
 
-P0-a/b/c 最小切片已齐：resume 列表、斜杠总线、BOLO 欢迎 + 无参新会话。
+P0 与 P1-a/b 最小切片已齐：resume 列表、斜杠、BOLO 欢迎、rules、prompt cache 前缀。
 
 ---
 

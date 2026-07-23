@@ -1,6 +1,6 @@
 /**
  * 系统提示词管线 — 对照 HelsincyCode getSystemPrompt / buildEffectiveSystemPrompt / getUserContext
- * 无遥测、无 GrowthBook、无 DYNAMIC_BOUNDARY 缓存。
+ * 无遥测、无 GrowthBook；布局对齐「静态前缀 + 动态尾」以便 API prompt cache（见 docs/PROMPT_CACHE.md）。
  */
 
 import { promises as fs } from 'node:fs'
@@ -185,6 +185,11 @@ export type SystemPromptEnv = {
   shellHint?: string
   permissionMode?: PermissionMode | string
   model?: string
+  /**
+   * 可注入时钟（仅影响 Environment 的 Date 行，当未传 date 时）。
+   * 便于 prompt-cache 稳定前缀测试；默认 `() => new Date()`。
+   */
+  now?: () => Date
 }
 
 export type GetSystemPromptOptions = SystemPromptEnv & {
@@ -201,6 +206,46 @@ export type GetSystemPromptOptions = SystemPromptEnv & {
   loadRules?: boolean
   userConfigDir?: string
   mcpPlaceholder?: boolean
+}
+
+/**
+ * 拆分结果：先 cache-stable，后 volatile。
+ * 与 HC 静态段 / DYNAMIC_BOUNDARY 同思路，Bolo 不做全局 cache scope / 遥测。
+ */
+export type SystemPromptPartition = {
+  cacheStableSections: string[]
+  volatileSections: string[]
+}
+
+/** 稳定段标题前缀（用于从完整 sections 回拆） */
+const CACHE_STABLE_HEADINGS = [
+  '# Identity',
+  '# System',
+  '# Task style',
+  '# Tools',
+] as const
+
+function joinSections(sections: readonly string[]): string {
+  return sections
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join('\n\n')
+}
+
+function formatEnvDate(d: Date): string {
+  return d.toLocaleDateString('en-CA', {
+    weekday: 'short',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  })
+}
+
+function isCacheStableHeading(section: string): boolean {
+  const head = section.trimStart()
+  return CACHE_STABLE_HEADINGS.some(
+    (h) => head === h || head.startsWith(h + '\n') || head.startsWith(h + '\r'),
+  )
 }
 
 function identitySection(): string {
@@ -277,14 +322,7 @@ function toolsSection(): string {
 }
 
 function environmentSection(env: SystemPromptEnv): string {
-  const date =
-    env.date ??
-    new Date().toLocaleDateString('en-CA', {
-      weekday: 'short',
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    })
+  const date = env.date ?? formatEnvDate(env.now?.() ?? new Date())
   const platform = env.platform ?? `${process.platform} ${os.release()}`
   const shell =
     env.shellHint ??
@@ -313,20 +351,69 @@ MCP servers may be configured later. No MCP tool list is injected in this build 
 }
 
 /**
- * 默认系统提示词各段（数组顺序即注入顺序）。
- * 对照 HC getSystemPrompt 的 section 拼接，精简文案。
- * 注入序：Identity → System → Task → Tools → Environment → rules → BOLO.md → skill catalog
+ * 少变静态段：Identity / System / Task style / Tools。
+ * 不依赖 cwd、date、mode、rules、BOLO.md、skills。
  */
-export async function getSystemPrompt(
-  opts: GetSystemPromptOptions,
-): Promise<string[]> {
-  const sections: string[] = [
+export function getCacheStableSections(): string[] {
+  return [
     identitySection(),
     systemRulesSection(),
     taskStyleSection(),
     toolsSection(),
-    environmentSection(opts),
-  ]
+  ].filter((s) => s.trim().length > 0)
+}
+
+/**
+ * 从完整 system sections 或 partition 取出稳定前缀字符串（字节级可比）。
+ * - 无参：返回当前代码内置 stable 段拼接
+ * - `{ cacheStableSections }`：直接拼接
+ * - `string[]`：按标题拆出 stable 段再拼接
+ */
+export function getCacheStablePrefix(
+  sectionsOrPartition?:
+    | readonly string[]
+    | { cacheStableSections?: readonly string[] },
+): string {
+  if (sectionsOrPartition == null) {
+    return joinSections(getCacheStableSections())
+  }
+  if (
+    !Array.isArray(sectionsOrPartition) &&
+    sectionsOrPartition.cacheStableSections
+  ) {
+    return joinSections(sectionsOrPartition.cacheStableSections)
+  }
+  if (Array.isArray(sectionsOrPartition)) {
+    return joinSections(
+      partitionSystemPromptSections(sectionsOrPartition).cacheStableSections,
+    )
+  }
+  return joinSections(getCacheStableSections())
+}
+
+/**
+ * 将完整 sections 按标题拆成 stable / volatile（未知标题归 volatile）。
+ */
+export function partitionSystemPromptSections(
+  sections: readonly string[],
+): SystemPromptPartition {
+  const cacheStableSections: string[] = []
+  const volatileSections: string[] = []
+  for (const s of sections) {
+    if (!s.trim()) continue
+    if (isCacheStableHeading(s)) cacheStableSections.push(s)
+    else volatileSections.push(s)
+  }
+  return { cacheStableSections, volatileSections }
+}
+
+/**
+ * 易变段：Environment（date/mode/cwd…）→ rules → BOLO.md → skill catalog → 可选 MCP 占位。
+ */
+export async function getVolatileSections(
+  opts: GetSystemPromptOptions,
+): Promise<string[]> {
+  const sections: string[] = [environmentSection(opts)]
 
   // rules 在 BOLO.md 之前：可拆分约束 vs 项目总说明
   let boloRules = opts.boloRules
@@ -365,6 +452,31 @@ export async function getSystemPrompt(
   }
 
   return sections.filter((s) => s.trim().length > 0)
+}
+
+/**
+ * 默认系统提示词各段（数组顺序即注入顺序）：**先 stable 后 volatile**。
+ * 对照 HC 静态段在前、动态在后；Bolo 无 DYNAMIC_BOUNDARY 全局 cache。
+ * 注入序：Identity → System → Task → Tools → Environment → rules → BOLO.md → skill catalog
+ */
+export async function getSystemPrompt(
+  opts: GetSystemPromptOptions,
+): Promise<string[]> {
+  const { cacheStableSections, volatileSections } =
+    await getSystemPromptPartition(opts)
+  return [...cacheStableSections, ...volatileSections]
+}
+
+/**
+ * 显式返回 stable / volatile 两段（顺序固定，供测试与文档对齐）。
+ */
+export async function getSystemPromptPartition(
+  opts: GetSystemPromptOptions,
+): Promise<SystemPromptPartition> {
+  return {
+    cacheStableSections: getCacheStableSections(),
+    volatileSections: await getVolatileSections(opts),
+  }
 }
 
 export type BuildEffectiveSystemPromptOptions = {
@@ -411,14 +523,16 @@ export function systemSectionsToMessages(
  * 将 system 与对话消息分离组装，供 callModel。
  * - 去掉 conversation 里「陈旧」的 system（避免与权威 sections 重复）
  * - 保留 compact 边界 system（API 视图一部分，对照 buildPostCompactMessages）
- * - 以 sections 为权威 system 前缀
- * - 可选 extraSystem（如 SessionStart hook 注入）接在默认段之后
+ * - 以 sections 为权威 system 前缀（期望已是 **stable → volatile**）
+ * - 可选 extraSystem（如 SessionStart hook 注入）接在默认段**之后**（volatile 尾，会 cache-break）
+ * - 对话 user/assistant/tool 永远在全部 system 之后（不打断稳定前缀）
  */
 export function prepareModelMessages(opts: {
   systemSections: readonly string[]
   conversation: readonly ChatMessage[]
   extraSystem?: readonly string[]
 }): ChatMessage[] {
+  // 固定序：权威 sections（stable…volatile）→ extraSystem → 对话
   const system = systemSectionsToMessages([
     ...opts.systemSections,
     ...(opts.extraSystem ?? []),

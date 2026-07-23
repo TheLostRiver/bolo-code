@@ -76,8 +76,15 @@ export type ToolLike =
       inputJSONSchema?: JsonSchema
     }
 
+/** 按 name 稳定排序，避免 Map/注册序导致 tools 数组扰动 prompt cache */
+function sortToolsByName(tools: ToolLike[]): ToolLike[] {
+  return [...tools].sort((a, b) =>
+    a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }),
+  )
+}
+
 export function toolsToOpenAI(tools: ToolLike[]) {
-  return tools.map((t) => {
+  return sortToolsByName(tools).map((t) => {
     const schema =
       'inputJSONSchema' in t && t.inputJSONSchema
         ? t.inputJSONSchema
@@ -94,7 +101,7 @@ export function toolsToOpenAI(tools: ToolLike[]) {
 }
 
 export function toolsToAnthropic(tools: ToolLike[]) {
-  return tools.map((t) => {
+  return sortToolsByName(tools).map((t) => {
     const schema =
       'inputJSONSchema' in t && t.inputJSONSchema
         ? t.inputJSONSchema
