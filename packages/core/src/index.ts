@@ -7,6 +7,7 @@
 import {
   runFullCompact,
   type CompactSummarizer,
+  type MicrocompactOptions,
 } from '../../compact/src/index.ts'
 import { runHooks } from '../../hooks/src/index.ts'
 import {
@@ -30,7 +31,9 @@ import {
   type SessionStartSource,
 } from '../../shared/src/index.ts'
 import {
+  composePrepareMessages,
   createAutoCompactPrepare,
+  createMicrocompactPrepare,
   productionDeps,
   type QueryDeps,
 } from './deps.ts'
@@ -47,7 +50,24 @@ import {
 
 export type { AskPermissionFn, Terminal }
 export type { QueryDeps, PrepareMessagesFn } from './deps.ts'
-export { productionDeps, createAutoCompactPrepare, identityPrepareMessages } from './deps.ts'
+export {
+  productionDeps,
+  createAutoCompactPrepare,
+  createMicrocompactPrepare,
+  composePrepareMessages,
+  identityPrepareMessages,
+} from './deps.ts'
+export type { MicrocompactOptions } from '../../compact/src/index.ts'
+export {
+  microcompactMessages,
+  TOOL_RESULT_CLEARED_MESSAGE,
+  DEFAULT_MICROCOMPACT_OPTIONS,
+  isPromptTooLongError,
+  truncateHeadForPtlRetry,
+  groupMessagesByApiRound,
+  DEFAULT_MAX_PTL_RETRIES,
+  PTL_RETRY_MARKER,
+} from '../../compact/src/index.ts'
 export { queryLoop } from './queryLoop.ts'
 export { runTools } from './toolOrchestration.ts'
 export { runToolUse } from './toolExecution.ts'
@@ -95,6 +115,12 @@ export type SessionEvent =
   | { type: 'hook'; event: string; exitCode: number; blocked?: boolean }
   | { type: 'permission_decision'; mode: string; behavior: string; reason: string }
   | { type: 'error'; message: string }
+  | {
+      type: 'ptl_retry'
+      attempt: number
+      maxRetries: number
+      droppedMessageCount: number
+    }
   | { type: 'done'; terminal?: Terminal }
 
 export type CreateSessionOptions = {
@@ -121,6 +147,16 @@ export type CreateSessionOptions = {
   autoCompactEnabled?: boolean
   /** 模型上下文窗口估计（tokens），用于 auto 阈值；默认 128_000 */
   contextWindowTokens?: number
+  /**
+   * Microcompact（清旧 tool_result，无 LLM）。
+   * 默认启用；`false` 关闭。顺序：micro → auto full。
+   */
+  microcompact?: MicrocompactOptions | false
+  /**
+   * callModel / compact summarizer 命中 PTL 时截断重试次数。
+   * 默认 3；0 = 关闭。
+   */
+  maxPtlRetries?: number
   /** 模型名（写入环境段；可从 workspace 传入） */
   model?: string
   source?: SessionStartSource
@@ -148,6 +184,8 @@ export type BoloSession = {
   /** 会话级 auto compact 开关（prepareMessages） */
   autoCompactEnabled: boolean
   contextWindowTokens: number
+  /** PTL 截断重试上限；0 = 关 */
+  maxPtlRetries: number
   onEvent: (e: SessionEvent) => void
 }
 
@@ -235,23 +273,54 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
     model: opts.model,
     autoCompactEnabled: opts.autoCompactEnabled === true,
     contextWindowTokens: opts.contextWindowTokens ?? 128_000,
+    maxPtlRetries:
+      opts.maxPtlRetries === undefined
+        ? 3
+        : Math.max(0, opts.maxPtlRetries),
     onEvent: opts.onEvent ?? (() => {}),
   }
 
-  // 对照 HC query/deps autocompact：达阈值 → full compact（真 summarizer，禁止 slice）
+  // 对照 HC query.ts：microcompact → autocompact → callModel
+  const microOpts: MicrocompactOptions | undefined =
+    opts.microcompact === false
+      ? { enabled: false }
+      : opts.microcompact === undefined
+        ? undefined
+        : opts.microcompact
+  const microPrepare = createMicrocompactPrepare(microOpts)
+
   if (session.autoCompactEnabled && session.compactSummarizer) {
     session.deps = {
       ...session.deps,
-      prepareMessages: createAutoCompactPrepare({
-        enabled: true,
-        contextWindowTokens: session.contextWindowTokens,
-        runAutoCompact: async () => {
-          const r = await compactSession(session, { trigger: 'auto' })
-          return r.ok ? session.messages : null
-        },
-      }),
+      prepareMessages: composePrepareMessages(
+        microPrepare,
+        createAutoCompactPrepare({
+          enabled: true,
+          contextWindowTokens: session.contextWindowTokens,
+          runAutoCompact: async () => {
+            const r = await compactSession(session, { trigger: 'auto' })
+            return r.ok ? session.messages : null
+          },
+        }),
+      ),
+    }
+  } else if (opts.deps) {
+    // 自定义 deps：在其 prepare 前挂 micro（便宜、幂等）
+    session.deps = {
+      ...session.deps,
+      prepareMessages: composePrepareMessages(
+        microPrepare,
+        opts.deps.prepareMessages,
+      ),
+    }
+  } else if (opts.microcompact === false || opts.microcompact !== undefined) {
+    // 覆盖 productionDeps 默认 micro 配置
+    session.deps = {
+      ...session.deps,
+      prepareMessages: microPrepare,
     }
   }
+  // 否则：productionDeps 已默认 micro（DEFAULT_MICROCOMPACT_OPTIONS）
 
   setPhase(session, 'starting')
   const start = await runHooks(
@@ -297,6 +366,10 @@ export type CreateSessionFromWorkspaceOptions = {
   autoCompactEnabled?: boolean
   /** 覆盖 workspace.config.contextWindowTokens */
   contextWindowTokens?: number
+  /** 覆盖 workspace.config.microcompactEnabled；或传入完整 MicrocompactOptions */
+  microcompact?: MicrocompactOptions | false
+  /** 覆盖 workspace.config.maxPtlRetries */
+  maxPtlRetries?: number
 }
 
 /**
@@ -334,6 +407,14 @@ export async function createSessionFromWorkspace(
       opts.contextWindowTokens ??
       workspace.config.contextWindowTokens ??
       128_000,
+    microcompact:
+      opts.microcompact !== undefined
+        ? opts.microcompact
+        : workspace.config.microcompactEnabled === false
+          ? false
+          : undefined,
+    maxPtlRetries:
+      opts.maxPtlRetries ?? workspace.config.maxPtlRetries,
     systemPrompt:
       opts.systemPrompt === false
         ? false
@@ -406,6 +487,7 @@ export async function submitPrompt(
     skills: session.skills,
     maxTurns: options?.maxTurns ?? 8,
     querySource: options?.querySource ?? 'repl_main_thread',
+    maxPtlRetries: session.maxPtlRetries,
     onEvent: (e) => mapLoopEvent(session, e),
   })
 
@@ -472,6 +554,7 @@ export async function compactSession(
     messages: session.messages,
     trigger,
     customInstructions: opts.customInstructions,
+    maxPtlRetries: session.maxPtlRetries,
     hookInstructions: pre.injectText || undefined,
     summarize: session.compactSummarizer,
     keepRecentMessageCount: opts.keepRecentMessageCount ?? 0,

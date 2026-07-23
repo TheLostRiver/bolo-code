@@ -70,7 +70,7 @@ SessionStart → UserPromptSubmit → callModel
 | MCP | 命名 + mock invoke | **stdio 真连接** listTools/callTool |
 | Plugins | contributes 合并草稿 | 项目插件目录热加载验收 |
 | Subagent | Start/Stop stub | 独立 loop + 工具裁剪 + 结果回写 |
-| Compact | full 管道 + summarizer + **auto 挂 prepareMessages** | 默认 config 仍关 auto；microcompact / PTL 重试未做 |
+| Compact | full + auto + microcompact + **PTL 重试** | 默认 config 仍关 auto |
 | Providers | mock + OpenAI 兼容 + Anthropic | 配置与流式细节打磨 |
 | Electron | README 占位 | 可开窗完成一轮会话 |
 
@@ -123,7 +123,8 @@ SessionStart → UserPromptSubmit → callModel
 | 5.1 | 会话持久化 / resume / transcript |
 | 5.2 | CLI 入口复用 core |
 | 5.3 | macOS / Linux 构建 |
-| 5.4 | microcompact（清旧 tool_result） |
+| 5.4 | ~~microcompact（清旧 tool_result）~~ ✅ 见 `docs/COMPACTION.md` §4 |
+| 5.4b | ~~PTL 截断重试~~ ✅ 见 `docs/COMPACTION.md` §2.5 |
 | 5.5 | apply_patch 真 diff + UI |
 | 5.6 | 本地结构化 trace（**不上报**） |
 
@@ -171,8 +172,8 @@ flowchart LR
 | `permissions` | 四档表驱动 | 会话规则表 |
 | `tools` | 最小内置 | schema + 更安全 Bash |
 | `providers` | mock | OpenAI 兼容 + Anthropic |
-| `compact` | full + 测试 | 真 summarizer + micro |
-| `core` | queryLoop 管道 | prepareMessages 挂 auto |
+| `compact` | full + micro + PTL 重试 | transcript |
+| `core` | queryLoop：prepare 链 micro → auto | 持久化 / resume |
 | `skills` / `mcp` / `plugins` | 骨架 | M3 真实现 |
 | `apps/desktop` | 占位 | M4 |
 

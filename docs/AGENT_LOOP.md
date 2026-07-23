@@ -8,9 +8,13 @@
 ```
 while true:
   messagesForQuery = project/compact 视图(messages)
-  deps.microcompact(messagesForQuery)     // 可选，P1
-  deps.autocompact(messagesForQuery)      // 阈值，P1 挂点
+  deps.prepareMessages:          // 默认
+    microcompact                 // 清旧 tool_result（无 LLM）
+    autocompact if needed        // 阈值 → full compact
   stream = deps.callModel(messagesForQuery, tools, …)
+  if PTL error and attempts < maxPtlRetries:
+    truncateHeadForPtlRetry(session.messages)  // 丢最旧 API 轮次
+    re-prepare → retry callModel（不计额外 maxTurns）
   collect assistant text + tool_use blocks
   if no tool_use:
     Stop hooks → terminal completed
@@ -38,7 +42,9 @@ Bolo **P0** 对齐：
 | 跑 tools | `runTools` | `toolOrchestration.ts`（v1 **全串行**） |
 | 单 tool | `runToolUse` | `toolExecution.ts` |
 | 结束 | stop hooks / terminal | Stop hooks + `Terminal` |
-| micro/auto compact | deps | **挂点 no-op**，真逻辑见 COMPACTION.md |
+| micro compact | `microcompactMessages` | `createMicrocompactPrepare`（默认开） |
+| auto compact | `autoCompactIfNeeded` | `createAutoCompactPrepare`（需开关+summarizer） |
+| PTL 重试 | compact 内 `truncateHeadForPTLRetry` | `isPromptTooLongError` + `truncateHeadForPtlRetry`；`maxPtlRetries` 默认 3 |
 | 遥测 logEvent | 遍地 | **不实现** |
 
 ## 2. 模块边界

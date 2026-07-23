@@ -160,6 +160,12 @@ export type FullCompactInput = {
   /** 后缀保留条数（按 message 条，P0.5 可改为按 turn）；0 = 全量摘要 */
   keepRecentMessageCount?: number
   suppressFollowUpQuestions?: boolean
+  /**
+   * summarizer 自身 PTL 时截断最旧轮次再试的次数。
+   * 默认 DEFAULT_MAX_PTL_RETRIES（3）；0 = 不重试。
+   * 仅改 summarizer 入参副本，不改调用方 messages。
+   */
+  maxPtlRetries?: number
 }
 
 export type FullCompactFailure = {
@@ -199,19 +205,44 @@ export async function runFullCompact(
     input.hookInstructions,
   )
   const compactPrompt = getCompactPrompt(instructions)
+  const maxPtl =
+    input.maxPtlRetries === undefined
+      ? DEFAULT_MAX_PTL_RETRIES
+      : Math.max(0, input.maxPtlRetries)
 
-  let raw: string
-  try {
-    const out = await input.summarize({
-      messages: input.messages,
-      compactPrompt,
-    })
-    raw = out.text?.trim() ?? ''
-  } catch (e) {
-    return {
-      ok: false,
-      reason: `summarizer failed: ${e instanceof Error ? e.message : String(e)}`,
-      messagesUnchanged: true,
+  // 对照 HC compactConversation：summarizer 命中 PTL 时截断最旧 API 轮次再试
+  let messagesToSummarize = input.messages
+  let raw: string | undefined
+  let lastError: string | undefined
+  let ptlAttempts = 0
+
+  for (;;) {
+    try {
+      const out = await input.summarize({
+        messages: messagesToSummarize,
+        compactPrompt,
+      })
+      raw = out.text?.trim() ?? ''
+      break
+    } catch (e) {
+      lastError = e instanceof Error ? e.message : String(e)
+      if (!isPromptTooLongError(e) || ptlAttempts >= maxPtl) {
+        return {
+          ok: false,
+          reason: `summarizer failed: ${lastError}`,
+          messagesUnchanged: true,
+        }
+      }
+      ptlAttempts += 1
+      const truncated = truncateHeadForPtlRetry(messagesToSummarize)
+      if (!truncated) {
+        return {
+          ok: false,
+          reason: `summarizer failed (PTL, cannot truncate further): ${lastError}`,
+          messagesUnchanged: true,
+        }
+      }
+      messagesToSummarize = truncated.messages
     }
   }
 
@@ -220,6 +251,7 @@ export async function runFullCompact(
   }
 
   const keepN = Math.max(0, input.keepRecentMessageCount ?? 0)
+  // 后缀保留仍相对调用方原 messages（失败不毁原会话）
   const messagesToKeep =
     keepN > 0 ? input.messages.slice(-keepN) : []
 
@@ -288,4 +320,383 @@ export function shouldAutoCompact(opts: {
   const maxFail = opts.maxConsecutiveFailures ?? 3
   if (opts.consecutiveFailures >= maxFail) return false
   return opts.tokenCount >= getAutoCompactThreshold(opts.contextWindowTokens)
+}
+
+// ── PTL（prompt too long）识别 + 截断重试（对照 HC compact.ts / errors.ts）──
+
+/** 对照 HC MAX_PTL_RETRIES；0 = 关闭 */
+export const DEFAULT_MAX_PTL_RETRIES = 3
+
+/** 截断后若以 assistant 开头，前插合成 user（对照 HC PTL_RETRY_MARKER） */
+export const PTL_RETRY_MARKER =
+  '[earlier conversation truncated for PTL retry]'
+
+/**
+ * 启发式：何种错误算「上下文过长」。
+ *
+ * 字符串（小写匹配，任一命中）：
+ * - `prompt is too long`（Anthropic / Vertex）
+ * - `context_length_exceeded` / `maximum context length`（OpenAI 系）
+ * - `input is too long` / `request too large`
+ * - `context window` 且含 exceed|over|limit
+ * - `too many tokens`（输入侧）
+ *
+ * 可选 status：
+ * - `413` 一律视为 PTL
+ * - `400` 仅当正文也命中上述字符串时（避免把普通 invalid_request 当成 PTL）
+ *
+ * 不把纯 `max_tokens` 输出上限、鉴权/429 当成 PTL。
+ */
+export function isPromptTooLongError(
+  error: unknown,
+  opts?: { status?: number },
+): boolean {
+  const status =
+    opts?.status ??
+    (typeof error === 'object' &&
+    error !== null &&
+    'status' in error &&
+    typeof (error as { status: unknown }).status === 'number'
+      ? (error as { status: number }).status
+      : extractHttpStatusFromMessage(errorToMessage(error)))
+
+  const msg = errorToMessage(error).toLowerCase()
+
+  if (status === 413) return true
+
+  const stringHit = matchesPtlMessage(msg)
+  if (status === 400) return stringHit
+  return stringHit
+}
+
+function errorToMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'string') return error
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof (error as { message: unknown }).message === 'string'
+  ) {
+    return (error as { message: string }).message
+  }
+  return String(error ?? '')
+}
+
+function extractHttpStatusFromMessage(message: string): number | undefined {
+  // 例：OpenAI-compatible HTTP 413: ... / Anthropic HTTP 400: ...
+  const m = message.match(/\bHTTP\s+(\d{3})\b/i)
+  if (!m) return undefined
+  const n = parseInt(m[1]!, 10)
+  return Number.isFinite(n) ? n : undefined
+}
+
+function matchesPtlMessage(msgLower: string): boolean {
+  if (msgLower.includes('prompt is too long')) return true
+  if (msgLower.includes('context_length_exceeded')) return true
+  if (msgLower.includes('maximum context length')) return true
+  if (msgLower.includes('input is too long')) return true
+  if (msgLower.includes('request too large')) return true
+  if (msgLower.includes('too many tokens')) return true
+  if (
+    msgLower.includes('context window') &&
+    (msgLower.includes('exceed') ||
+      msgLower.includes('over') ||
+      msgLower.includes('limit'))
+  ) {
+    return true
+  }
+  // OpenAI 常见：input length and max_tokens exceed context limit
+  if (
+    msgLower.includes('exceed context limit') ||
+    msgLower.includes('exceeds the context')
+  ) {
+    return true
+  }
+  return false
+}
+
+/**
+ * 按「API 轮次」分组：每个新的 assistant 开启一组（含其前的 user / 后的 tool）。
+ * 对照 HC groupMessagesByApiRound（Bolo 无 message.id，每条 assistant 视为新一轮）。
+ */
+export function groupMessagesByApiRound(
+  messages: ChatMessage[],
+): ChatMessage[][] {
+  const groups: ChatMessage[][] = []
+  let current: ChatMessage[] = []
+  let currentHasAssistant = false
+
+  for (const msg of messages) {
+    if (msg.role === 'assistant' && current.length > 0 && currentHasAssistant) {
+      groups.push(current)
+      current = [msg]
+      currentHasAssistant = true
+    } else {
+      current.push(msg)
+      if (msg.role === 'assistant') currentHasAssistant = true
+    }
+  }
+  if (current.length > 0) groups.push(current)
+  return groups
+}
+
+export type TruncatePtlResult = {
+  messages: ChatMessage[]
+  /** 丢掉的消息条数 */
+  droppedMessageCount: number
+  /** 丢掉的 API 轮次数 */
+  droppedGroupCount: number
+}
+
+/**
+ * PTL 截断：丢最旧 API 轮次，保留 system 前缀 / compact boundary / 最近对话。
+ *
+ * 策略：
+ * 1. 剥掉上次重试的合成 marker
+ * 2. 前缀：连续 leading system（含 content === `Conversation compacted` 的 boundary）
+ * 3. 主体按 API 轮次分组；丢掉最旧若干组
+ *    - 若能解析 tokenGap：累计丢到覆盖 gap
+ *    - 否则丢约 20% 组（至少 1 组）
+ * 4. 至少保留 1 组主体；主体若以 assistant 开头则前插 PTL_RETRY_MARKER user
+ *
+ * 返回 null：无法再截（主体不足 2 组，或 drop 后为空）
+ */
+export function truncateHeadForPtlRetry(
+  messages: ChatMessage[],
+  opts?: {
+    /** 报错里解析的超限 token 数；未知则按比例丢 */
+    tokenGap?: number
+    /** 无 gap 时丢弃组比例，默认 0.2 */
+    dropFraction?: number
+  },
+): TruncatePtlResult | null {
+  const input = stripPtlRetryMarker(messages)
+
+  const prefix: ChatMessage[] = []
+  let i = 0
+  while (i < input.length && input[i]!.role === 'system') {
+    prefix.push(input[i]!)
+    i += 1
+  }
+  const body = input.slice(i)
+  if (body.length === 0) return null
+
+  const groups = groupMessagesByApiRound(body)
+  if (groups.length < 2) return null
+
+  const tokenGap = opts?.tokenGap
+  let dropCount: number
+  if (tokenGap !== undefined && tokenGap > 0) {
+    let acc = 0
+    dropCount = 0
+    for (const g of groups) {
+      acc += estimateTokens(g)
+      dropCount += 1
+      if (acc >= tokenGap) break
+    }
+  } else {
+    const frac = opts?.dropFraction ?? 0.2
+    dropCount = Math.max(1, Math.floor(groups.length * frac))
+  }
+
+  // 至少留 1 组可续聊
+  dropCount = Math.min(dropCount, groups.length - 1)
+  if (dropCount < 1) return null
+
+  const dropped = groups.slice(0, dropCount)
+  let kept = groups.slice(dropCount).flat()
+  const droppedMessageCount = dropped.reduce((n, g) => n + g.length, 0)
+
+  if (kept.length === 0) return null
+
+  if (kept[0]?.role === 'assistant') {
+    kept = [{ role: 'user', content: PTL_RETRY_MARKER }, ...kept]
+  }
+
+  return {
+    messages: [...prefix, ...kept],
+    droppedMessageCount,
+    droppedGroupCount: dropCount,
+  }
+}
+
+function stripPtlRetryMarker(messages: ChatMessage[]): ChatMessage[] {
+  // 去掉任意 leading system 之后紧跟的合成 marker（或消息[0] 即为 marker）
+  let i = 0
+  while (i < messages.length && messages[i]!.role === 'system') i += 1
+  if (
+    i < messages.length &&
+    messages[i]!.role === 'user' &&
+    messages[i]!.content === PTL_RETRY_MARKER
+  ) {
+    return [...messages.slice(0, i), ...messages.slice(i + 1)]
+  }
+  return messages
+}
+
+// ── Microcompact（清旧 tool_result，无 LLM）────────────────────────
+
+/** 与 HC TIME_BASED_MC_CLEARED_MESSAGE / TOOL_RESULT_CLEARED_MESSAGE 对齐 */
+export const TOOL_RESULT_CLEARED_MESSAGE = '[Old tool result content cleared]'
+
+export type MicrocompactOptions = {
+  /** 默认 true */
+  enabled?: boolean
+  /**
+   * 保留最近 N 条 role:tool 全文；更早的替换为占位。
+   * 至少 1（与 HC keepRecent 下限一致）。默认 4。
+   */
+  keepRecentToolResults?: number
+  /**
+   * 单条 tool 结果超过此字符数时截断（含「最近 N 条」）。
+   * 0 = 不按字符截断。默认 50_000。
+   */
+  maxToolResultChars?: number
+  /**
+   * 可选：仅清理这些工具名对应的结果（按前序 assistant.tool_calls 匹配）。
+   * 未设则清理全部 role:tool。
+   */
+  compactableToolNames?: readonly string[]
+}
+
+export type MicrocompactResult = {
+  messages: ChatMessage[]
+  clearedToolUseIds: string[]
+  truncatedToolUseIds: string[]
+  /** 粗估节省 tokens（chars/4） */
+  tokensSavedEstimate: number
+}
+
+export const DEFAULT_MICROCOMPACT_OPTIONS: Required<
+  Pick<MicrocompactOptions, 'enabled' | 'keepRecentToolResults' | 'maxToolResultChars'>
+> = {
+  enabled: true,
+  keepRecentToolResults: 4,
+  maxToolResultChars: 50_000,
+}
+
+function isClearedPlaceholder(content: string): boolean {
+  return content.trim() === TOOL_RESULT_CLEARED_MESSAGE
+}
+
+function truncateToolContent(content: string, maxChars: number): string {
+  if (maxChars <= 0 || content.length <= maxChars) return content
+  const head = content.slice(0, maxChars)
+  return `${head}\n\n…[tool result truncated: ${content.length} chars → ${maxChars}]`
+}
+
+/**
+ * 解析 tool_call_id → tool name（最近一次同 id 的 assistant tool_calls 为准）
+ */
+function buildToolNameById(messages: ChatMessage[]): Map<string, string> {
+  const map = new Map<string, string>()
+  for (const m of messages) {
+    if (m.role !== 'assistant' || !m.tool_calls?.length) continue
+    for (const tc of m.tool_calls) {
+      if (tc.id) map.set(tc.id, tc.name)
+    }
+  }
+  return map
+}
+
+/**
+ * Microcompact：不调用 LLM，只清/截旧 tool 结果正文。
+ * 对照 HC microcompactMessages 的 content-clear 语义（无 cache_edits / 无遥测）。
+ *
+ * - 保留最近 keepRecentToolResults 条可压缩 tool 全文
+ * - 更早的替换为 TOOL_RESULT_CLEARED_MESSAGE
+ * - 可选 maxToolResultChars 对保留条做截断
+ * - 不删除消息、不改 role / tool_call_id
+ */
+export function microcompactMessages(
+  messages: ChatMessage[],
+  options?: MicrocompactOptions,
+): MicrocompactResult {
+  const enabled = options?.enabled ?? DEFAULT_MICROCOMPACT_OPTIONS.enabled
+  if (!enabled || messages.length === 0) {
+    return {
+      messages,
+      clearedToolUseIds: [],
+      truncatedToolUseIds: [],
+      tokensSavedEstimate: 0,
+    }
+  }
+
+  const keepRecent = Math.max(
+    1,
+    options?.keepRecentToolResults ?? DEFAULT_MICROCOMPACT_OPTIONS.keepRecentToolResults,
+  )
+  const maxChars =
+    options?.maxToolResultChars ?? DEFAULT_MICROCOMPACT_OPTIONS.maxToolResultChars
+  const nameById = buildToolNameById(messages)
+  const nameFilter = options?.compactableToolNames?.length
+    ? new Set(options.compactableToolNames)
+    : null
+
+  type ToolHit = { index: number; id: string }
+  const hits: ToolHit[] = []
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i]!
+    if (m.role !== 'tool') continue
+    const id = m.tool_call_id ?? `idx_${i}`
+    if (nameFilter) {
+      const name = nameById.get(id)
+      // 无法解析名时保守：仍可清理（Bolo 简化消息模型）
+      if (name && !nameFilter.has(name)) continue
+    }
+    hits.push({ index: i, id })
+  }
+
+  if (hits.length === 0) {
+    return {
+      messages,
+      clearedToolUseIds: [],
+      truncatedToolUseIds: [],
+      tokensSavedEstimate: 0,
+    }
+  }
+
+  const keepSet = new Set(hits.slice(-keepRecent).map((h) => h.index))
+  const clearedToolUseIds: string[] = []
+  const truncatedToolUseIds: string[] = []
+  let tokensSavedEstimate = 0
+  let changed = false
+
+  const next = messages.map((m, i) => {
+    if (m.role !== 'tool') return m
+    if (!hits.some((h) => h.index === i)) return m
+
+    const id = m.tool_call_id ?? `idx_${i}`
+    const content = m.content ?? ''
+
+    if (!keepSet.has(i)) {
+      if (isClearedPlaceholder(content)) return m
+      tokensSavedEstimate += Math.ceil(content.length / 4)
+      clearedToolUseIds.push(id)
+      changed = true
+      return {
+        ...m,
+        content: TOOL_RESULT_CLEARED_MESSAGE,
+      }
+    }
+
+    // 最近 N 条：可选按字符截断
+    if (maxChars > 0 && content.length > maxChars && !isClearedPlaceholder(content)) {
+      const truncated = truncateToolContent(content, maxChars)
+      tokensSavedEstimate += Math.ceil((content.length - truncated.length) / 4)
+      truncatedToolUseIds.push(id)
+      changed = true
+      return { ...m, content: truncated }
+    }
+
+    return m
+  })
+
+  return {
+    messages: changed ? next : messages,
+    clearedToolUseIds,
+    truncatedToolUseIds,
+    tokensSavedEstimate,
+  }
 }

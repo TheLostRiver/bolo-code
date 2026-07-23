@@ -78,8 +78,12 @@ defaults
 |------|------|------|
 | `autoCompactEnabled` | `false` | 为 true 且会话有 `compactSummarizer` 时，queryLoop 的 `prepareMessages` 达 token 阈值会走 full compact（对照 HC autoCompactIfNeeded） |
 | `contextWindowTokens` | `128000` | 用于 `getAutoCompactThreshold`；无真实 tokenizer 时粗估 chars/4 |
+| `microcompactEnabled` | `true` | 为 true 时 prepare 链先跑 microcompact（清旧 tool 正文，无 LLM）；`false` 关闭 |
+| `maxPtlRetries` | `3` | callModel / compact summarizer 命中上下文过长时截断最旧轮次再试的次数；`0` 关闭 |
 
-`createSessionFromWorkspace` 会读上述字段；也可用 `createSession({ autoCompactEnabled, contextWindowTokens, compactSummarizer })` 直接开。
+`createSessionFromWorkspace` 会读上述字段；也可用 `createSession({ autoCompactEnabled, contextWindowTokens, compactSummarizer, microcompact, maxPtlRetries })` 直接开。
+
+**prepare / 失败恢复顺序**：`microcompact` → `auto full compact` → `callModel` →（PTL 则 truncate → 再 prepare → 重试）。见 `docs/COMPACTION.md` §2.5。
 
 **API Key 建议**：用环境变量 `BOLO_API_KEY` / `OPENAI_API_KEY`，不要把密钥提交进项目 `.bolo/config.json`。  
 全局 `~/.bolo/config.json` 可写 `provider.apiKey`（本机私有，勿同步公开仓库）。

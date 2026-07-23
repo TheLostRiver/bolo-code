@@ -26,6 +26,16 @@ export type BoloConfigJson = {
   autoCompactEnabled?: boolean
   /** 模型上下文窗口估计（auto compact） */
   contextWindowTokens?: number
+  /**
+   * Microcompact（清旧 tool_result，无 LLM）。
+   * 默认 true；false 关闭。细项见 createSession({ microcompact })。
+   */
+  microcompactEnabled?: boolean
+  /**
+   * callModel / compact summarizer 命中 PTL（上下文过长）时截断重试次数。
+   * 默认 3；0 = 关闭。
+   */
+  maxPtlRetries?: number
 }
 
 export type McpFileJson = {
@@ -58,6 +68,8 @@ export const DEFAULT_CONFIG: BoloConfigJson = {
   permissionMode: 'default',
   autoCompactEnabled: false,
   contextWindowTokens: 128_000,
+  microcompactEnabled: true,
+  maxPtlRetries: 3,
 }
 
 export const DEFAULT_MCP_FILE: McpFileJson = {

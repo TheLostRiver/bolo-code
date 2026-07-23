@@ -2,13 +2,19 @@
  * queryLoop — 对照 HelsincyCode query.ts queryLoop
  *
  * while true:
- *   prepareMessages (micro/auto 挂点)
+ *   prepareMessages（默认链：microcompact → auto full compact）
  *   callModel stream (+ tools)
+ *     若 PTL：截断最旧 API 轮次 → 写回 session → 再 prepare → 重试（有限次）
  *   if tool_use → runTools → continue
  *   else → Stop hooks → terminal
  */
 
 import { runHooks } from '../../hooks/src/index.ts'
+import {
+  isPromptTooLongError,
+  truncateHeadForPtlRetry,
+  DEFAULT_MAX_PTL_RETRIES,
+} from '../../compact/src/index.ts'
 import {
   nowIso,
   type ChatMessage,
@@ -43,6 +49,12 @@ export type QueryLoopEvent =
   | { type: 'text'; text: string }
   | { type: 'hook'; event: string; exitCode: number; blocked?: boolean }
   | { type: 'error'; message: string }
+  | {
+      type: 'ptl_retry'
+      attempt: number
+      maxRetries: number
+      droppedMessageCount: number
+    }
   | { type: 'done'; terminal: Terminal }
   | ToolExecutionEvent
 
@@ -65,6 +77,11 @@ export type QueryLoopParams = {
   tools?: readonly BoloTool[]
   /** 会话 skill 注册表（Skill 工具按需加载全文） */
   skills?: LoadedSkill[]
+  /**
+   * callModel 因上下文过长失败时，截断最旧轮次再试的次数。
+   * 默认 3；0 = 关闭。对照 HC MAX_PTL_RETRIES。
+   */
+  maxPtlRetries?: number
   onEvent?: (e: QueryLoopEvent) => void
   signal?: AbortSignal
 }
@@ -73,11 +90,51 @@ function emit(params: QueryLoopParams, e: QueryLoopEvent) {
   params.onEvent?.(e)
 }
 
+function applyPreparedToSession(
+  params: QueryLoopParams,
+  prepared: { messages: ChatMessage[]; didCompact?: boolean },
+): ChatMessage[] {
+  if (prepared.didCompact) {
+    // 注意：runAutoCompact 可能返回与 params.messages 同一数组引用；
+    // 必须先拷贝再就地写回，否则 length=0 会清空 spread 源。
+    const next = prepared.messages.slice()
+    params.messages.length = 0
+    params.messages.push(...next)
+  }
+  return prepared.didCompact
+    ? params.messages
+    : prepared.messages.filter(
+        (m) =>
+          m.role !== 'system' ||
+          m.content.trim() === 'Conversation compacted',
+      )
+}
+
+function buildMessagesForQuery(
+  params: QueryLoopParams,
+  prepared: { messages: ChatMessage[]; didCompact?: boolean },
+  conversation: ChatMessage[],
+): ChatMessage[] {
+  if (params.systemPromptSections && params.systemPromptSections.length > 0) {
+    return prepareModelMessages({
+      systemSections: params.systemPromptSections,
+      conversation,
+    })
+  }
+  return prepared.didCompact ? params.messages : prepared.messages
+}
+
 export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
   const maxTurns = params.maxTurns ?? 8
   const querySource = params.querySource ?? 'repl_main_thread'
   const tools = params.tools ?? createBuiltinTools()
+  const maxPtlRetries =
+    params.maxPtlRetries === undefined
+      ? DEFAULT_MAX_PTL_RETRIES
+      : Math.max(0, params.maxPtlRetries)
   let turnCount = 0
+  /** 本 turn 内 PTL 重试计数；成功 callModel 后清零 */
+  let ptlAttemptsThisTurn = 0
 
   while (true) {
     if (params.signal?.aborted) {
@@ -100,80 +157,97 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
 
     emit(params, { type: 'phase', phase: 'running' })
 
-    const prepared = await params.deps.prepareMessages({
-      messages: params.messages,
-      querySource,
-      tokenCount: 0,
-    })
-    if (prepared.didCompact) {
-      // 注意：runAutoCompact 可能返回与 params.messages 同一数组引用；
-      // 必须先拷贝再就地写回，否则 length=0 会清空 spread 源。
-      const next = prepared.messages.slice()
-      params.messages.length = 0
-      params.messages.push(...next)
-    }
-    const conversation = prepared.didCompact
-      ? params.messages
-      : prepared.messages.filter(
-          (m) =>
-            m.role !== 'system' ||
-            m.content.trim() === 'Conversation compacted',
-        )
-
-    // system 一等公民：每轮保证前缀正确（Provider 会合并 role:system）
-    const messagesForQuery =
-      params.systemPromptSections && params.systemPromptSections.length > 0
-        ? prepareModelMessages({
-            systemSections: params.systemPromptSections,
-            conversation,
-          })
-        : prepared.didCompact
-          ? params.messages
-          : prepared.messages
-
+    // 同一 turn 内：callModel 失败且为 PTL 时截断后 continue，不额外消耗 maxTurns
+    let modelOk = false
     let assistantText = ''
     const toolBlocks: ToolUseBlock[] = []
-    let modelError: string | undefined
 
-    try {
-      for await (const ev of params.deps.callModel({
-        messages: messagesForQuery,
-        signal: params.signal,
-        tools,
-      })) {
-        if (ev.type === 'text_delta') {
-          assistantText += ev.text
-          emit(params, { type: 'text', text: ev.text })
-        } else if (ev.type === 'tool_call') {
-          let input: unknown = {}
-          try {
-            input = ev.arguments ? JSON.parse(ev.arguments) : {}
-          } catch {
-            input = { raw: ev.arguments }
-          }
-          toolBlocks.push({
-            id: ev.id || params.deps.uuid(),
-            name: ev.name,
-            input,
-            argumentsJson: ev.arguments,
-          })
-        } else if (ev.type === 'error') {
-          modelError = ev.message
-        }
+    while (!modelOk) {
+      if (params.signal?.aborted) {
+        const terminal: Terminal = { reason: 'aborted' }
+        emit(params, { type: 'done', terminal })
+        return terminal
       }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      emit(params, { type: 'error', message: msg })
-      const terminal: Terminal = { reason: 'error', detail: msg }
-      emit(params, { type: 'done', terminal })
-      return terminal
-    }
 
-    if (modelError && !assistantText && toolBlocks.length === 0) {
-      emit(params, { type: 'error', message: modelError })
-      const terminal: Terminal = { reason: 'error', detail: modelError }
-      emit(params, { type: 'done', terminal })
-      return terminal
+      const prepared = await params.deps.prepareMessages({
+        messages: params.messages,
+        querySource,
+        tokenCount: 0,
+      })
+      const conversation = applyPreparedToSession(params, prepared)
+      const messagesForQuery = buildMessagesForQuery(
+        params,
+        prepared,
+        conversation,
+      )
+
+      assistantText = ''
+      toolBlocks.length = 0
+      let modelError: string | undefined
+
+      try {
+        for await (const ev of params.deps.callModel({
+          messages: messagesForQuery,
+          signal: params.signal,
+          tools,
+        })) {
+          if (ev.type === 'text_delta') {
+            assistantText += ev.text
+            emit(params, { type: 'text', text: ev.text })
+          } else if (ev.type === 'tool_call') {
+            let input: unknown = {}
+            try {
+              input = ev.arguments ? JSON.parse(ev.arguments) : {}
+            } catch {
+              input = { raw: ev.arguments }
+            }
+            toolBlocks.push({
+              id: ev.id || params.deps.uuid(),
+              name: ev.name,
+              input,
+              argumentsJson: ev.arguments,
+            })
+          } else if (ev.type === 'error') {
+            modelError = ev.message
+          }
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        const recovered = tryPtlRecover(
+          params,
+          msg,
+          maxPtlRetries,
+          ptlAttemptsThisTurn,
+        )
+        if (recovered) {
+          ptlAttemptsThisTurn = recovered.nextAttempts
+          continue
+        }
+        emit(params, { type: 'error', message: msg })
+        const terminal: Terminal = { reason: 'error', detail: msg }
+        emit(params, { type: 'done', terminal })
+        return terminal
+      }
+
+      if (modelError && !assistantText && toolBlocks.length === 0) {
+        const recovered = tryPtlRecover(
+          params,
+          modelError,
+          maxPtlRetries,
+          ptlAttemptsThisTurn,
+        )
+        if (recovered) {
+          ptlAttemptsThisTurn = recovered.nextAttempts
+          continue
+        }
+        emit(params, { type: 'error', message: modelError })
+        const terminal: Terminal = { reason: 'error', detail: modelError }
+        emit(params, { type: 'done', terminal })
+        return terminal
+      }
+
+      modelOk = true
+      ptlAttemptsThisTurn = 0
     }
 
     // OpenAI 回灌：assistant 需带 tool_calls 结构
@@ -217,6 +291,36 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
       params.messages.push(m)
     }
   }
+}
+
+/**
+ * PTL 恢复：若识别为上下文过长且未超限，截断 session.messages 并返回新 attempt 计数。
+ * 截断后下一轮会再跑 prepareMessages（micro / auto）。
+ */
+function tryPtlRecover(
+  params: QueryLoopParams,
+  errorMessage: string,
+  maxPtlRetries: number,
+  ptlAttemptsThisTurn: number,
+): { nextAttempts: number } | null {
+  if (maxPtlRetries <= 0) return null
+  if (!isPromptTooLongError(errorMessage)) return null
+  if (ptlAttemptsThisTurn >= maxPtlRetries) return null
+
+  const truncated = truncateHeadForPtlRetry(params.messages)
+  if (!truncated) return null
+
+  const nextAttempts = ptlAttemptsThisTurn + 1
+  params.messages.length = 0
+  params.messages.push(...truncated.messages)
+
+  emit(params, {
+    type: 'ptl_retry',
+    attempt: nextAttempts,
+    maxRetries: maxPtlRetries,
+    droppedMessageCount: truncated.droppedMessageCount,
+  })
+  return { nextAttempts }
 }
 
 async function runStopHooks(params: QueryLoopParams): Promise<void> {
