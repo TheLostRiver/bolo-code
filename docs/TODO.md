@@ -115,7 +115,7 @@ P3  GUI / 打磨 / 后置
 | ID | 主题 | 状态 |
 |----|------|------|
 | S0–S6 | **Subagent** 真 `runSubagent` + Agent 工具；废 stub | ✅ |
-| MCP1 | **MCP stdio** listTools/call → 进 tools 表 | ⬜ |
+| MCP1 | **MCP stdio** listTools/call → 进 tools 表 | ✅ |
 | PL1 | Plugins 真加载 | ⬜ |
 | S7+ | `.bolo/agents` · 侧链 transcript · 权限细化 | ⬜ |
 | J-C+ | JSONL resume 主路径 · list 增强 | ⬜ |

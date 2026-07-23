@@ -190,7 +190,7 @@
 
 | 能力 | 状态 |
 |------|------|
-| MCP stdio / Plugins 真加载 | ⬜ 骨架 |
+| MCP stdio / Plugins 真加载 | 🟡 MCP stdio ✅ / Plugins ⬜ |
 | Subagent 真 loop | ⬜ 见 §5b / M-Subagent |
 | Electron | ⬜ |
 
@@ -236,7 +236,7 @@
 | # | 切片 | 状态 |
 |---|------|------|
 | 3.1 Skills 打磨 | 🟡 |
-| 3.2 MCP stdio | ⬜ |
+| 3.2 MCP stdio | ✅ |
 | 3.3 Plugins 真加载 | ⬜ |
 | **3.4 Subagent** | 🟡 S0–S6 ✅ → **见 M-Subagent / §5b** |
 

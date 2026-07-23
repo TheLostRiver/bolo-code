@@ -21,7 +21,14 @@ import {
   loadWorkspace,
   type ResolvedWorkspace,
 } from '../../config/src/index.ts'
+import {
+  closeMcpConnections,
+  connectMcpServers,
+  type ConnectedMcpServer,
+  type ConnectMcpResult,
+} from '../../mcp/src/index.ts'
 import type { LoadedSkill } from '../../skills/src/index.ts'
+import type { BoloTool } from '../../tools/src/index.ts'
 import {
   newId,
   nowIso,
@@ -191,6 +198,7 @@ export type SessionEvent =
   | { type: 'hook'; event: string; exitCode: number; blocked?: boolean }
   | { type: 'permission_decision'; mode: string; behavior: string; reason: string }
   | { type: 'error'; message: string }
+  | { type: 'warning'; message: string }
   | {
       type: 'ptl_retry'
       attempt: number
@@ -276,6 +284,13 @@ export type BoloSession = {
   contextWindowTokens: number
   /** PTL 截断重试上限；0 = 关 */
   maxPtlRetries: number
+  /**
+   * 会话工具表（内置 + Agent + 可选 MCP）。
+   * 未设置时 submitPrompt 回落 createDefaultTools()。
+   */
+  tools?: BoloTool[]
+  /** 已连接的 MCP stdio 进程；endSession 时关闭 */
+  mcpConnections?: ConnectedMcpServer[]
   onEvent: (e: SessionEvent) => void
 }
 
@@ -475,15 +490,27 @@ export type CreateSessionFromWorkspaceOptions = {
   microcompact?: MicrocompactOptions | false
   /** 覆盖 workspace.config.maxPtlRetries */
   maxPtlRetries?: number
+  /**
+   * 是否连接 workspace.mcpServers（stdio listTools → 注册 mcp__*）。
+   * 默认 true；失败只 warn，不炸会话。
+   */
+  connectMcp?: boolean
+  /** MCP 单请求超时（ms） */
+  mcpTimeoutMs?: number
 }
 
 /**
  * 从 ~/.bolo + 项目 .bolo 装配 Session
  * system 由 assembleSessionSystemPrompt 统一组装（含 BOLO.md + skill catalog）
+ * 可选连接 MCP stdio（失败 warn 不炸会话）
  */
 export async function createSessionFromWorkspace(
   opts: CreateSessionFromWorkspaceOptions,
-): Promise<{ session: BoloSession; workspace: ResolvedWorkspace }> {
+): Promise<{
+  session: BoloSession
+  workspace: ResolvedWorkspace
+  mcp?: ConnectMcpResult
+}> {
   const workspace = await loadWorkspace({
     cwd: opts.cwd,
     ensureDefaults: opts.ensureDefaults,
@@ -532,8 +559,34 @@ export async function createSessionFromWorkspace(
 
   // 全文注册表给 Skill 工具（catalog 已在 systemPromptSections）
   session.skills = workspace.skills
+  session.tools = createDefaultTools()
 
-  return { session, workspace }
+  let mcp: ConnectMcpResult | undefined
+  if (opts.connectMcp !== false && workspace.mcpServers.length > 0) {
+    mcp = await connectMcpServers({
+      servers: workspace.mcpServers,
+      cwd: opts.cwd,
+      timeoutMs: opts.mcpTimeoutMs,
+    })
+    for (const w of mcp.warnings) {
+      emit(session, { type: 'warning', message: w })
+      // eslint-disable-next-line no-console
+      console.warn(`[bolo mcp] ${w}`)
+    }
+    if (mcp.tools.length > 0) {
+      session.tools = [...session.tools, ...mcp.tools]
+      session.mcpConnections = mcp.servers
+    }
+  }
+
+  return { session, workspace, mcp }
+}
+
+/** 关闭 MCP 子进程（会话结束时调用） */
+export async function closeSessionMcp(session: BoloSession): Promise<void> {
+  if (!session.mcpConnections?.length) return
+  await closeMcpConnections(session.mcpConnections)
+  session.mcpConnections = []
 }
 
 /**
@@ -590,7 +643,7 @@ export async function submitPrompt(
     permissionMode: session.permissionMode,
     askPermission: session.askPermission,
     skills: session.skills,
-    tools: createDefaultTools(),
+    tools: session.tools ?? createDefaultTools(),
     maxTurns: options?.maxTurns ?? 8,
     querySource: options?.querySource ?? 'repl_main_thread',
     maxPtlRetries: session.maxPtlRetries,

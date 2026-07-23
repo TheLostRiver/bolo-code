@@ -101,7 +101,7 @@ defaults
 }
 ```
 
-（真 stdio 连接仍在 M3；此处负责**配置落盘与加载**。）
+（真 stdio：见 [MCP.md](./MCP.md)；`createSessionFromWorkspace` 默认连接。）
 
 ## 5. 环境变量
 
