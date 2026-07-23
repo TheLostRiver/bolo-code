@@ -14,7 +14,7 @@ import {
   type ChatMessage,
   type HooksConfig,
 } from '../../shared/src/index.ts'
-import { BUILTIN_TOOLS, type ToolSpec } from '../../tools/src/index.ts'
+import { createBuiltinTools, type BoloTool } from '../../tools/src/index.ts'
 import type { PermissionMode } from '../../permissions/src/index.ts'
 import type { LoadedSkill } from '../../skills/src/index.ts'
 import type { QueryDeps } from './deps.ts'
@@ -55,8 +55,8 @@ export type QueryLoopParams = {
   askPermission: AskPermissionFn
   maxTurns?: number
   querySource?: string
-  /** 默认内置工具集 */
-  tools?: ToolSpec[]
+  /** 默认内置工具集（HC buildTool 契约） */
+  tools?: readonly BoloTool[]
   /** 会话 skill 注册表（Skill 工具按需加载全文） */
   skills?: LoadedSkill[]
   onEvent?: (e: QueryLoopEvent) => void
@@ -70,7 +70,7 @@ function emit(params: QueryLoopParams, e: QueryLoopEvent) {
 export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
   const maxTurns = params.maxTurns ?? 8
   const querySource = params.querySource ?? 'repl_main_thread'
-  const tools = params.tools ?? BUILTIN_TOOLS
+  const tools = params.tools ?? createBuiltinTools()
   let turnCount = 0
 
   while (true) {
@@ -184,6 +184,8 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
       permissionMode: params.permissionMode,
       askPermission: params.askPermission,
       skills: params.skills,
+      tools,
+      signal: params.signal,
       onEvent: params.onEvent,
     })
 

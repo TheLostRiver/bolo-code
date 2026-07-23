@@ -1,6 +1,12 @@
 /**
  * 单 tool 执行 — 对照 HelsincyCode toolExecution.runToolUse
- * 顺序：resolve → PreToolUse → PermissionGate(mode) → hooks/UI → execute → PostToolUse
+ *
+ * 顺序：
+ *   findTool → inputSchema validate → validateInput?
+ *   → PreToolUse → PermissionGate(mode) + tool.checkPermissions
+ *   → hooks/UI → call → PostToolUse → tool_result
+ *
+ * 无遥测。
  */
 
 import {
@@ -9,8 +15,15 @@ import {
 } from '../../permissions/src/index.ts'
 import { runHooks } from '../../hooks/src/index.ts'
 import { nowIso, type ChatMessage, type HooksConfig } from '../../shared/src/index.ts'
-import { executeTool, getToolSpec } from '../../tools/src/index.ts'
 import type { LoadedSkill } from '../../skills/src/index.ts'
+import {
+  createBuiltinTools,
+  findToolByName,
+  formatToolUseError,
+  validateAgainstJsonSchema,
+  type BoloTool,
+  type ToolResult,
+} from '../../tools/src/index.ts'
 
 export type ToolUseBlock = {
   id: string
@@ -25,7 +38,14 @@ export type ToolExecutionEvent =
   | { type: 'permission_decision'; mode: string; behavior: string; reason: string }
   | { type: 'phase'; phase: 'awaiting_permission' | 'running' }
   | { type: 'tool_start'; id: string; name: string; input: unknown }
-  | { type: 'tool_end'; id: string; name: string; output: string; ok: boolean }
+  | {
+      type: 'tool_end'
+      id: string
+      name: string
+      output: string
+      ok: boolean
+      isError?: boolean
+    }
 
 export type AskPermissionFn = (req: {
   toolName: string
@@ -40,6 +60,9 @@ export type RunToolUseContext = {
   permissionMode: PermissionMode
   askPermission: AskPermissionFn
   skills?: LoadedSkill[]
+  /** 默认真内置工具集 */
+  tools?: readonly BoloTool[]
+  signal?: AbortSignal
   onEvent?: (e: ToolExecutionEvent) => void
 }
 
@@ -47,6 +70,8 @@ export type RunToolUseResult = {
   toolResultMessage: ChatMessage
   blocked: boolean
   denied: boolean
+  /** 工具声明可并发 */
+  concurrencySafe: boolean
 }
 
 function emit(ctx: RunToolUseContext, e: ToolExecutionEvent) {
@@ -65,29 +90,46 @@ function parseInput(block: ToolUseBlock): unknown {
   return {}
 }
 
-function denyResult(
+function toolResultMessage(
   toolUseId: string,
   name: string,
   content: string,
+  isError?: boolean,
+): ChatMessage {
+  return {
+    role: 'tool',
+    tool_call_id: toolUseId,
+    name,
+    content,
+  }
+}
+
+function endResult(
   ctx: RunToolUseContext,
-  flags: { blocked: boolean; denied: boolean },
+  toolUseId: string,
+  name: string,
+  content: string,
+  flags: {
+    blocked: boolean
+    denied: boolean
+    ok: boolean
+    isError?: boolean
+    concurrencySafe?: boolean
+  },
 ): RunToolUseResult {
   emit(ctx, {
     type: 'tool_end',
     id: toolUseId,
     name,
     output: content,
-    ok: false,
+    ok: flags.ok,
+    isError: flags.isError,
   })
   return {
     blocked: flags.blocked,
     denied: flags.denied,
-    toolResultMessage: {
-      role: 'tool',
-      tool_call_id: toolUseId,
-      name,
-      content,
-    },
+    concurrencySafe: flags.concurrencySafe ?? false,
+    toolResultMessage: toolResultMessage(toolUseId, name, content, flags.isError),
   }
 }
 
@@ -95,9 +137,57 @@ export async function runToolUse(
   block: ToolUseBlock,
   ctx: RunToolUseContext,
 ): Promise<RunToolUseResult> {
-  const toolInput = parseInput(block)
+  const rawInput = parseInput(block)
   const { id: toolUseId, name } = block
-  const spec = getToolSpec(name)
+  const tools = ctx.tools ?? createBuiltinTools()
+  const tool = findToolByName(tools, name)
+
+  // --- Unknown tool（对照 HC）---
+  if (!tool) {
+    const content = formatToolUseError(`Error: No such tool available: ${name}`)
+    return endResult(ctx, toolUseId, name, content, {
+      blocked: false,
+      denied: false,
+      ok: false,
+      isError: true,
+    })
+  }
+
+  // --- Schema validate（对照 zod safeParse）---
+  const parsed = validateAgainstJsonSchema(tool.inputJSONSchema, rawInput)
+  if (!parsed.success) {
+    const content = formatToolUseError(parsed.error)
+    return endResult(ctx, toolUseId, name, content, {
+      blocked: false,
+      denied: false,
+      ok: false,
+      isError: true,
+      concurrencySafe: tool.isConcurrencySafe(rawInput),
+    })
+  }
+  let toolInput = parsed.data
+
+  // --- validateInput ---
+  if (tool.validateInput) {
+    const v = await tool.validateInput(toolInput, {
+      cwd: ctx.cwd,
+      sessionId: ctx.sessionId,
+      signal: ctx.signal,
+      extras: { skills: ctx.skills },
+    })
+    if (!v.ok) {
+      const content = formatToolUseError(v.message)
+      return endResult(ctx, toolUseId, name, content, {
+        blocked: false,
+        denied: false,
+        ok: false,
+        isError: true,
+        concurrencySafe: tool.isConcurrencySafe(toolInput),
+      })
+    }
+  }
+
+  const concurrencySafe = tool.isConcurrencySafe(toolInput)
 
   // --- PreToolUse ---
   const pre = await runHooks(
@@ -122,22 +212,28 @@ export async function runToolUse(
     })
   }
   if (pre.blocked) {
-    return denyResult(
+    return endResult(
+      ctx,
       toolUseId,
       name,
-      `blocked by PreToolUse: ${pre.blockReason}`,
-      ctx,
-      { blocked: true, denied: false },
+      formatToolUseError(`blocked by PreToolUse: ${pre.blockReason}`),
+      {
+        blocked: true,
+        denied: false,
+        ok: false,
+        isError: true,
+        concurrencySafe,
+      },
     )
   }
 
-  // --- PermissionGate (mode) — 对照 HC 模式层 ---
+  // --- 全局 PermissionGate + tool.checkPermissions ---
   const gate = decidePermission({
     mode: ctx.permissionMode,
     toolName: name,
     toolInput,
     cwd: ctx.cwd,
-    requiresPermission: spec?.requiresPermission,
+    requiresPermission: tool.requiresPermission,
   })
   emit(ctx, {
     type: 'permission_decision',
@@ -148,11 +244,34 @@ export async function runToolUse(
 
   let finalBehavior = gate.behavior
 
+  const toolPerm = await tool.checkPermissions(toolInput, {
+    cwd: ctx.cwd,
+    sessionId: ctx.sessionId,
+    signal: ctx.signal,
+  })
+  if (toolPerm.behavior === 'deny') {
+    finalBehavior = 'deny'
+  } else if (toolPerm.behavior === 'ask' && finalBehavior === 'allow') {
+    // 工具要求 ask 时不能比全局更松
+    finalBehavior = 'ask'
+  }
+
   if (finalBehavior === 'deny') {
-    return denyResult(toolUseId, name, `permission denied (${gate.reason})`, ctx, {
-      blocked: false,
-      denied: true,
-    })
+    return endResult(
+      ctx,
+      toolUseId,
+      name,
+      formatToolUseError(
+        `permission denied (${toolPerm.reason ?? gate.reason})`,
+      ),
+      {
+        blocked: false,
+        denied: true,
+        ok: false,
+        isError: true,
+        concurrencySafe,
+      },
+    )
   }
 
   if (finalBehavior === 'ask') {
@@ -198,26 +317,71 @@ export async function runToolUse(
     }
 
     if (finalBehavior === 'deny') {
-      return denyResult(toolUseId, name, 'permission denied (user/hook)', ctx, {
-        blocked: false,
-        denied: true,
-      })
+      return endResult(
+        ctx,
+        toolUseId,
+        name,
+        formatToolUseError('permission denied (user/hook)'),
+        {
+          blocked: false,
+          denied: true,
+          ok: false,
+          isError: true,
+          concurrencySafe,
+        },
+      )
     }
   }
 
   // --- Execute ---
+  if (ctx.signal?.aborted) {
+    return endResult(
+      ctx,
+      toolUseId,
+      name,
+      formatToolUseError('Error: tool cancelled'),
+      {
+        blocked: false,
+        denied: false,
+        ok: false,
+        isError: true,
+        concurrencySafe,
+      },
+    )
+  }
+
   emit(ctx, { type: 'phase', phase: 'running' })
   emit(ctx, { type: 'tool_start', id: toolUseId, name, input: toolInput })
-  const result = await executeTool(name, toolInput, {
-    cwd: ctx.cwd,
-    skills: ctx.skills,
-  })
+
+  let result: ToolResult
+  try {
+    result = await tool.call(toolInput, {
+      cwd: ctx.cwd,
+      sessionId: ctx.sessionId,
+      signal: ctx.signal,
+      extras: { skills: ctx.skills },
+    })
+  } catch (e) {
+    result = {
+      ok: false,
+      isError: true,
+      output: formatToolUseError(e instanceof Error ? e.message : String(e)),
+      errorCode: 'throw',
+    }
+  }
+
+  const content =
+    result.isError && !result.output.includes('tool_use_error')
+      ? formatToolUseError(result.output)
+      : result.output
+
   emit(ctx, {
     type: 'tool_end',
     id: toolUseId,
     name,
-    output: result.output,
+    output: content,
     ok: result.ok,
+    isError: result.isError,
   })
 
   // --- PostToolUse ---
@@ -242,11 +406,12 @@ export async function runToolUse(
   return {
     blocked: false,
     denied: false,
-    toolResultMessage: {
-      role: 'tool',
-      tool_call_id: toolUseId,
+    concurrencySafe,
+    toolResultMessage: toolResultMessage(
+      toolUseId,
       name,
-      content: result.output,
-    },
+      content,
+      result.isError,
+    ),
   }
 }

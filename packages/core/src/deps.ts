@@ -10,12 +10,12 @@ import {
 } from '../../compact/src/index.ts'
 import type { LlmProvider, ProviderStreamEvent } from '../../providers/src/index.ts'
 import type { ChatMessage } from '../../shared/src/index.ts'
-import type { ToolSpec } from '../../tools/src/index.ts'
+import type { BoloTool, ToolSpec } from '../../tools/src/index.ts'
 
 export type CallModelFn = (req: {
   messages: ChatMessage[]
   signal?: AbortSignal
-  tools?: ToolSpec[]
+  tools?: readonly BoloTool[] | ToolSpec[]
   disableTools?: boolean
 }) => AsyncIterable<ProviderStreamEvent>
 

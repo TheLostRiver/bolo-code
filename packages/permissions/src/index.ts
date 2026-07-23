@@ -80,7 +80,7 @@ export function getNextPermissionMode(mode: PermissionMode): PermissionMode {
   }
 }
 
-const READ_TOOLS = new Set(['Read', 'Glob', 'Grep'])
+const READ_TOOLS = new Set(['Read', 'Glob', 'Grep', 'Skill'])
 const EDIT_TOOLS = new Set(['Write', 'apply_patch', 'Edit'])
 const SHELL_TOOLS = new Set(['Bash'])
 

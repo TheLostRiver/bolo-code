@@ -6,6 +6,7 @@
 
 import type { ChatMessage } from '../../shared/src/index.ts'
 import type { ToolSpec } from '../../tools/src/index.ts'
+import { toolsToOpenAI as toolsToOpenAIImpl } from '../../tools/src/providerSchema.ts'
 import type {
   CompleteStreamOptions,
   LlmProvider,
@@ -30,76 +31,9 @@ type OaiToolCall = {
   function: { name: string; arguments: string }
 }
 
-function defaultToolParameters(name: string): Record<string, unknown> {
-  switch (name) {
-    case 'Bash':
-      return {
-        type: 'object',
-        properties: {
-          command: { type: 'string', description: 'Shell command to run' },
-        },
-        required: ['command'],
-      }
-    case 'Read':
-      return {
-        type: 'object',
-        properties: {
-          path: { type: 'string', description: 'File path relative to cwd' },
-        },
-        required: ['path'],
-      }
-    case 'Write':
-    case 'apply_patch':
-      return {
-        type: 'object',
-        properties: {
-          path: { type: 'string' },
-          content: { type: 'string' },
-        },
-        required: ['path', 'content'],
-      }
-    case 'Glob':
-      return {
-        type: 'object',
-        properties: {
-          pattern: { type: 'string' },
-        },
-        required: ['pattern'],
-      }
-    case 'Grep':
-      return {
-        type: 'object',
-        properties: {
-          pattern: { type: 'string' },
-          path: { type: 'string' },
-        },
-        required: ['pattern'],
-      }
-    case 'Skill':
-      return {
-        type: 'object',
-        properties: {
-          skill: {
-            type: 'string',
-            description: 'Skill id from the Available Skills catalog',
-          },
-        },
-        required: ['skill'],
-      }
-    default:
-      return { type: 'object', properties: {} }
-  }
-}
-
-export function toolsToOpenAI(tools: ToolSpec[]) {
-  return tools.map((t) => ({
-    type: 'function' as const,
-    function: {
-      name: t.name,
-      description: t.description,
-      parameters: defaultToolParameters(t.name),
-    },
-  }))
+/** 转发到 packages/tools providerSchema，避免双份 schema */
+export function toolsToOpenAI(tools: ToolSpec[] | Parameters<typeof toolsToOpenAIImpl>[0]) {
+  return toolsToOpenAIImpl(tools as Parameters<typeof toolsToOpenAIImpl>[0])
 }
 
 export function toOpenAIMessages(messages: ChatMessage[]): OaiMessage[] {

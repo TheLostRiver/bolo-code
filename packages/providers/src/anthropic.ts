@@ -6,6 +6,7 @@
 
 import type { ChatMessage } from '../../shared/src/index.ts'
 import type { ToolSpec } from '../../tools/src/index.ts'
+import { toolsToAnthropic as toolsToAnthropicImpl } from '../../tools/src/providerSchema.ts'
 import type {
   CompleteStreamOptions,
   LlmProvider,
@@ -43,71 +44,9 @@ type AnthropicMessage = {
   content: string | AnthropicContentBlock[]
 }
 
-function defaultToolParameters(name: string): Record<string, unknown> {
-  switch (name) {
-    case 'Bash':
-      return {
-        type: 'object',
-        properties: {
-          command: { type: 'string', description: 'Shell command to run' },
-        },
-        required: ['command'],
-      }
-    case 'Read':
-      return {
-        type: 'object',
-        properties: {
-          path: { type: 'string', description: 'File path relative to cwd' },
-        },
-        required: ['path'],
-      }
-    case 'Write':
-    case 'apply_patch':
-      return {
-        type: 'object',
-        properties: {
-          path: { type: 'string' },
-          content: { type: 'string' },
-        },
-        required: ['path', 'content'],
-      }
-    case 'Glob':
-      return {
-        type: 'object',
-        properties: { pattern: { type: 'string' } },
-        required: ['pattern'],
-      }
-    case 'Grep':
-      return {
-        type: 'object',
-        properties: {
-          pattern: { type: 'string' },
-          path: { type: 'string' },
-        },
-        required: ['pattern'],
-      }
-    case 'Skill':
-      return {
-        type: 'object',
-        properties: {
-          skill: {
-            type: 'string',
-            description: 'Skill id from the Available Skills catalog',
-          },
-        },
-        required: ['skill'],
-      }
-    default:
-      return { type: 'object', properties: {} }
-  }
-}
-
-export function toolsToAnthropic(tools: ToolSpec[]) {
-  return tools.map((t) => ({
-    name: t.name,
-    description: t.description,
-    input_schema: defaultToolParameters(t.name),
-  }))
+/** 转发到 packages/tools providerSchema，避免双份 schema */
+export function toolsToAnthropic(tools: ToolSpec[] | Parameters<typeof toolsToAnthropicImpl>[0]) {
+  return toolsToAnthropicImpl(tools as Parameters<typeof toolsToAnthropicImpl>[0])
 }
 
 /**

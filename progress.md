@@ -1,11 +1,15 @@
 # Progress Log
 
+## Session: tool-calling align (HC Tool.ts)
+
+- `packages/tools`: types.buildTool, builtins, providerSchema
+- `packages/core`: toolExecution / toolOrchestration partition
+- Glob fix: `**/` → `(?:.*/)?` 使 `**/*.ts` 命中根目录
+- providers 去掉重复 defaultToolParameters，转发 toolsToOpenAI/Anthropic
+- tests: test-tool-calling / test-provider-unit / smoke-turn PASS
+
 ## Session: dual providers (OpenAI + Anthropic)
 
-- packages/providers/anthropic.ts — Messages API SSE
-- fromEnv: BOLO_PROVIDER anthropic|claude|openai-compatible
-- config.provider.kind supports anthropic
-- docs/PROVIDERS.md 双协议
-- test-provider-unit / test-config / smoke-turn PASS
-
-*Done dual protocol.*
+- anthropic Messages SSE + openai-compatible
+- docs/PROVIDERS.md
+- *Done dual protocol.*
