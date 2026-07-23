@@ -1,23 +1,13 @@
 # Progress Log
 
-## Session: system prompt + BOLO.md
+## Session: roadmap 增补 CLI TUI / 品牌
 
-- `packages/core/src/systemPrompt.ts`：身份/规则/任务/工具/环境 + BOLO.md + skill catalog
-- Session：`systemPromptSections`；queryLoop：`prepareModelMessages` 每轮前缀
-- `createSessionFromWorkspace` 走统一组装；SessionStart inject 进 sections
-- docs：`SYSTEM_PROMPT.md`；CONFIG / ROADMAP 更新
-- tests：`test-system-prompt`；smoke-turn 显式 `systemPrompt: false`
+- `docs/ROADMAP.md`：新增 **M-TUI**、§2.5 TUI 行、§5c、轨道 E
+- 约定：`bolo` 启动欢迎；字标 **大写 BOLO**；原创吉祥物候选 Bolot / Nyxkit / Pipkin / Glim
+- 对照 HC 欢迎/REPL **布局**；不抄商标与 IP
+- 切片 T0–T10；依赖新建会话 + 协同 slash
 
-## Session: tool-calling align (HC Tool.ts)
+## 前序
 
-- `packages/tools`: types.buildTool, builtins, providerSchema
-- `packages/core`: toolExecution / toolOrchestration partition
-- Glob fix: `**/` → `(?:.*/)?` 使 `**/*.ts` 命中根目录
-- providers 去掉重复 defaultToolParameters，转发 toolsToOpenAI/Anthropic
-- tests: test-tool-calling / test-provider-unit / smoke-turn PASS
-
-## Session: dual providers (OpenAI + Anthropic)
-
-- anthropic Messages SSE + openai-compatible
-- docs/PROVIDERS.md
-- *Done dual protocol.*
+- Subagent / Rules / creators / effort / M-Cost 已在详细版 ROADMAP
+- 会话 JSONL：`docs/TODO_SESSION_JSONL.md`

@@ -1,36 +1,22 @@
 # Task Plan: Bolo Code
 
 ## Goal
-系统提示词中心组装 + BOLO.md 加载；session/queryLoop 以 system 为一等公民。
+路线图纳入 CLI TUI：`bolo` 启动欢迎、大写 BOLO 字标、原创吉祥物、会话壳（贴 HC 布局语义）。
 
-## Next Step
-M2 compact auto-hooks + real summarizer；或 MCP 真连接；有 key 时 smoke-live。
+## Next Step（文档已钉 · 待开工）
+1. M-TUI T0–T2（BRAND 定稿 + banner + 无参启动）
+2. M-Slash P0 / M-Rules / M-Subagent / M-Cost / JSONL / MCP
 
 ## Current Phase
-system-prompt + BOLO.md — complete
+roadmap updated — M-TUI + mascot — docs only
 
-## Phases
+## M-TUI 最小完成线
+- [ ] T0 docs/TUI.md + BRAND.md（吉祥物择一）
+- [ ] T1 renderWelcomeBanner：BOLO + mascot
+- [ ] T2 `bolo` TTY 新会话 + banner
+- [ ] T3–T6 状态行 / 流式 / 权限 / slash
+- [ ] T8 Ink 可选升级
 
-### Phase dual-provider [complete]
-- [x] openai-compatible
-- [x] anthropic Messages
-- [x] fromEnv / config kind
-- **Status:** complete
-
-### Phase tool-calling [complete]
-- [x] `buildTool` + fail-closed defaults
-- [x] `inputJSONSchema` + validate
-- [x] `runToolUse` 顺序对齐 HC
-- [x] `partitionToolCalls` 只读并发 / 写串行
-- [x] Glob/Grep 真实现（`**/` 匹配 0+ 层）
-- [x] provider 转发 `providerSchema`
-- [x] `scripts/test-tool-calling.ts` PASS
-- **Status:** complete
-
-### Phase system-prompt [complete]
-- [x] `packages/core/src/systemPrompt.ts`：loadBoloMd / getSystemPrompt / buildEffective / prepareModelMessages
-- [x] `session.systemPromptSections` + queryLoop 每轮前缀
-- [x] createSessionFromWorkspace 统一组装（不再只 unshift catalog）
-- [x] `docs/SYSTEM_PROMPT.md` + CONFIG / ROADMAP
-- [x] `scripts/test-system-prompt.ts`
-- **Status:** complete
+## Notes
+- 不抄 Claude/第三方 IP；NO_COLOR / --plain 降级
+- 第一刀可零依赖 ASCII，不强制 Ink
