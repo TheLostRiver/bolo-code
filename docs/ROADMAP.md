@@ -4,8 +4,8 @@
 
 - [x] 仓库骨架 monorepo
 - [x] 架构 / Hook / 参考文档
-- [ ] git remote → `https://github.com/TheLostRiver/bolo-code.git`
-- [ ] 共享类型：`HookEvent`、Message、Session、ToolSpec
+- [x] git remote → `https://github.com/TheLostRiver/bolo-code.git`（本地 `main` @ `e204fc1`，未 push）
+- [x] 共享类型骨架：`HookEvent` 十事件 + Session/Tool/Plugin 占位
 
 ## Phase 1 — Headless Core 骨架
 
