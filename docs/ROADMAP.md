@@ -1,7 +1,8 @@
 # Bolo Code 整体路线图（详细版）
 
-> 更新：**产品级执行轨 `docs/TODO_PRODUCT.md`**（整盘 headless 后续）。  
-> AUTORUN 余量小轨已收口（非整盘）。**勾选以 `TODO.md` + `TODO_PRODUCT.md` 为准**。  
+> 更新：**整盘后续轨 `docs/TODO_FULL.md`**（除 Electron 外大缺口均要做）。  
+> 小轨 `TODO_PRODUCT` / `TODO_AUTORUN` 已收口，**≠** 整盘完成。  
+> **勾选以 `TODO.md` + `TODO_FULL.md` 为准**。  
 > 原则：无遥测；状态按代码行为。
 
 ---
@@ -54,8 +55,10 @@
 21. ~~**扩展三层** — Skill 可移植 → MCP 通用 → Bolo 插件规范~~ ✅（**`docs/TODO_SKILL_MCP_PLUGIN.md`**）  
 22. ~~**跨会话 Memory 最小**~~ ✅（MEM-0…5；**`docs/TODO_MEMORY.md`** / **`docs/MEMORY.md`**）  
 23. ~~**AUTORUN 余量小轨**~~ ✅（Memory/IMPORT/可观测；**非**整盘）  
-24. ~~**整盘产品轨**~~ ✅（**`docs/TODO_PRODUCT.md`** — zip · SA 帽 · doctor · 窄 TUI · 收口）  
-25. **OUT（另令）：** Electron · T8 完整 Ink · OAuth · 官方市场 · worktree · 企业 YOLO · cached MC  
+24. ~~**产品小轨 PRODUCT**~~ ✅（zip · SA 帽 · doctor · 窄 TUI；**子集**）  
+25. **整盘后续轨（进行中）：** **`docs/TODO_FULL.md`** — TUI(Ink) → Compact/Cache → worktree → OAuth/自有市场/WS → Y5+ → MEM-8 → 收口  
+26. **后置：** **Electron / M4**（不急）  
+27. **永不：** 遥测 · Claude/Codex **官方市场 API**  
 
 ---
 
@@ -461,7 +464,7 @@ flowchart TB
 | H 韧性 | 错误分类 + model 退避 + PTL | 🟡 最小 |
 | I 权限 auto | Y0–Y4 最小 + Y3.6 审计 note | ✅ 最小（HC auto 语义 ~85–90%；UI/企业 ⬜） |
 
-**默认下一刀：** 无强制默认；OUT 见 `docs/TODO.md` §8（需用户点名）。
+**默认下一刀：** 见 **`docs/TODO_FULL.md`**（第一刀 **F-T8-INK**；Electron 不实现）。
 
 ---
 
@@ -486,9 +489,10 @@ flowchart TB
 |------|------|
 | **本文件** | 里程碑 / 能力矩阵 / 验收 |
 | **`TODO.md`** | **执行入口 + 下一刀** |
+| **`TODO_FULL.md`** | **整盘后续执行轨（当前；无 Electron）** |
 | **`TODO_AUTO_PERMISSIONS.md`** | **Auto/YOLO 分类器专项（Y0–Y4）** |
 | **`TODO_SKILL_MCP_PLUGIN.md`** | **Skill 可移植 · MCP 通用 · Bolo 插件规范** |
-| **`TODO_PRODUCT.md`** | **整盘产品后续执行轨（当前）** |
+| **`TODO_PRODUCT.md`** | 历史产品小轨（已收口） |
 | **`TODO_AUTORUN.md`** | 历史余量小轨（已收口） |
 | **`TODO_MEMORY.md`** | Memory 专册 |
 | `PERMISSIONS.md` | 规则门控 + **auto 分类器路径**（与 YOLO 企业层正交） |
