@@ -100,7 +100,7 @@
 | **`.bolo/rules/**/*.md`** | ⬜ | 项目级约束；对齐 Antigravity「agent 目录下 rules」+ HC `.claude/rules/` 语义 |
 | 用户级 `~/.bolo/rules/` | ⬜ | 可选全局规则 |
 | 启动/每轮装载进 system 或 userContext | ⬜ | 与 BOLO.md **分层**：BOLO.md=项目说明；rules=可拆分约束包 |
-| frontmatter：`paths` 作用域（仅匹配文件时注入） | ⬜ | HC init 文案有 paths 作用域；Bolo P1 |
+| frontmatter：`paths` 作用域（仅匹配文件时注入） | ✅ | HC 语义最小版：`alwaysApply:false` + globs × `activePaths`；见 `docs/RULES.md` |
 | `/rules` 列表 · 开/关 · 预览 | ⬜ | 斜杠入口 |
 | 与 prompt cache 协同 | ⬜ | rules 变更会 cache break；稳定排序 |
 
@@ -216,7 +216,7 @@
 |---|------|------|
 | R1 | 发现 `.bolo/rules/**/*.md` + 可选 `~/.bolo/rules` | 单测临时目录 |
 | R2 | 注入 system/userContext + 字符预算 | `test-rules`；与 BOLO.md 并存 |
-| R3 | frontmatter：`disabled` / `alwaysApply`；P1：`paths` | 文档 + 测 |
+| R3 | frontmatter：`disabled` / `alwaysApply` / `paths`（activePaths 匹配） | ✅ |
 | R4 | `/rules` `[list\|show\|enable\|disable]` | 依赖 M-Slash |
 | R5 | `bolo-init` 创建空 `rules/` + 示例 README | CONFIG 更新 |
 | R6 | 文档 `docs/RULES.md` | 与 Antigravity/HC 差异说明 |
