@@ -34,7 +34,10 @@ import {
   type McpToolRegistration,
   type McpTransportKind,
 } from './types.ts'
-import { validateMcpServerConfig } from './validate.ts'
+import {
+  formatMcpServerConfigSummary,
+  validateMcpServerConfig,
+} from './validate.ts'
 
 /** list_changed 刷新面（对照 tools|prompts|resources list_changed） */
 export type McpListChangedKind = 'tools' | 'resources' | 'prompts'
@@ -62,6 +65,19 @@ export type ConnectedMcpServer = {
     resources: boolean
     prompts: boolean
   }
+  /** 脱敏 endpoint/command 摘要（/mcp · /doctor） */
+  endpointSummary?: string
+  /** 最近一次连接/list 错误（若 status 曾为 error） */
+  lastError?: string
+}
+
+/** 连接失败、未进入 connected 列表的 server（M-GEN-2 诊断） */
+export type McpConnectFailure = {
+  name: string
+  transport?: McpTransportKind | 'unknown'
+  error: string
+  /** 脱敏配置摘要 */
+  endpointSummary?: string
 }
 
 export type ConnectMcpResult = {
@@ -70,6 +86,8 @@ export type ConnectMcpResult = {
   registrations: McpToolRegistration[]
   /** 连接/list 失败信息（不抛） */
   warnings: string[]
+  /** 结构化失败项（与 warnings 同源，便于 /mcp） */
+  failures?: McpConnectFailure[]
 }
 
 export type ConnectMcpOptions = {
@@ -598,6 +616,7 @@ export async function connectMcpServers(
   options: ConnectMcpOptions,
 ): Promise<ConnectMcpResult> {
   const warnings: string[] = []
+  const failures: McpConnectFailure[] = []
   const servers: ConnectedMcpServer[] = []
   const tools: BoloTool[] = []
   const registrations: McpToolRegistration[] = []
@@ -615,6 +634,12 @@ export async function connectMcpServers(
     const errors = issues.filter((i) => i.level === 'error')
     if (errors.length) {
       for (const e of errors) warnings.push(e.message)
+      failures.push({
+        name: cfg.name,
+        transport: resolveMcpTransport(cfg) ?? 'unknown',
+        error: errors.map((e) => e.message).join('; '),
+        endpointSummary: formatMcpServerConfigSummary(cfg),
+      })
       continue
     }
     for (const w of issues.filter((i) => i.level === 'warning')) {
@@ -623,11 +648,18 @@ export async function connectMcpServers(
 
     const transport = resolveMcpTransport(cfg)
     if (!transport) {
-      warnings.push(
-        `skip MCP server "${cfg.name}": need command (stdio) or url (http/sse)`,
-      )
+      const msg = `skip MCP server "${cfg.name}": need command (stdio) or url (http/sse)`
+      warnings.push(msg)
+      failures.push({
+        name: cfg.name,
+        transport: 'unknown',
+        error: msg,
+        endpointSummary: formatMcpServerConfigSummary(cfg),
+      })
       continue
     }
+
+    const endpointSummary = formatMcpServerConfigSummary(cfg)
 
     let client: McpClient
     try {
@@ -635,6 +667,12 @@ export async function connectMcpServers(
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       warnings.push(`MCP server "${cfg.name}" failed: ${msg}`)
+      failures.push({
+        name: cfg.name,
+        transport,
+        error: msg,
+        endpointSummary,
+      })
       continue
     }
 
@@ -663,6 +701,7 @@ export async function connectMcpServers(
           resources: client.supportsResources,
           prompts: client.supportsPrompts,
         },
+        endpointSummary,
       })
 
       for (const t of listed) {
@@ -681,6 +720,12 @@ export async function connectMcpServers(
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       warnings.push(`MCP server "${cfg.name}" failed: ${msg}`)
+      failures.push({
+        name: cfg.name,
+        transport,
+        error: msg,
+        endpointSummary,
+      })
       try {
         await client.close()
       } catch {
@@ -743,7 +788,13 @@ export async function connectMcpServers(
   // 热刷新：再 list + 回调；会话层通常再 mergeSessionToolsWithMcp
   attachMcpListChangedHandlers(servers, options.onListChanged)
 
-  return { servers, tools, registrations, warnings }
+  return {
+    servers,
+    tools,
+    registrations,
+    warnings,
+    ...(failures.length ? { failures } : {}),
+  }
 }
 
 export async function closeMcpConnections(

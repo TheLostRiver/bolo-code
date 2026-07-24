@@ -163,16 +163,60 @@ async function main() {
   session.mcpConnections = [
     {
       name: 'echo',
+      transport: 'stdio',
+      status: 'connected',
+      endpointSummary: 'echo [stdio] node server.js',
       tools: [{ name: 'ping', description: 'Ping tool' }],
+      capabilities: { tools: true },
     },
   ]
+  session.mcpDiagnostics = {
+    failures: [
+      {
+        name: 'dead',
+        transport: 'http',
+        error: 'ECONNREFUSED 127.0.0.1:1',
+        endpointSummary: 'dead [http] http://127.0.0.1:1/mcp',
+      },
+    ],
+    configWarnings: ['project mcp: sample warning'],
+  }
   const mcpList = await submitUserInput(session, '/mcp')
   assert(mcpList.type === 'slash' && mcpList.message.includes('echo'), 'mcp list server')
+  assert(
+    mcpList.type === 'slash' && mcpList.message.includes('FAILED'),
+    'mcp list shows failure',
+  )
+  const mcpStatus = await submitUserInput(session, '/mcp status')
+  assert(
+    mcpStatus.type === 'slash' &&
+      mcpStatus.message.includes('status=') &&
+      mcpStatus.message.includes('dead') &&
+      mcpStatus.message.includes('ECONNREFUSED'),
+    'mcp status diagnostics',
+  )
   const mcpTools = await submitUserInput(session, '/mcp tools')
   assert(
     mcpTools.type === 'slash' &&
       mcpTools.message.includes('mcp__echo__ping'),
     'mcp tools namespaced',
+  )
+  session.mcpConnections = []
+  session.mcpDiagnostics = undefined
+
+  // /doctor shows mcp summary
+  session.mcpConnections = [
+    {
+      name: 'echo',
+      transport: 'stdio',
+      status: 'connected',
+      tools: [{ name: 'ping' }],
+    },
+  ]
+  const doctor2 = await submitUserInput(session, '/doctor')
+  assert(
+    doctor2.type === 'slash' && doctor2.message.includes('echo'),
+    'doctor lists mcp server',
   )
   session.mcpConnections = []
 

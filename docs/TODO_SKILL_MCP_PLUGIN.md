@@ -292,7 +292,7 @@ PL-SPEC 出口 ────────► IMPORT-*（可选）
 
 > **Skill 先做成可移植内容标准；MCP 做成稳、可诊、无秘钥泄漏的协议客户端；插件始终以 `bolo.*` 为一等规范。官方市场与外来完整运行时兼容从长计议，且永不绑 Claude/Codex 商店。**
 
-**默认下一刀：** **M-GEN-2**（`/mcp` / `/doctor` 诊断加深）。  
+**默认下一刀：** **M-GEN-4/5**（resources/prompts 加固 · list_changed 回归）或 **M-GEN-8**（插件 mcp 合并序）。  
 
 **Skill 专题：** S-PORT-0..8 最小出口 ✅。  
-**MCP：** M-GEN-0/1/3 最小 ✅（边界 + 配置校验 + headers 脱敏）。
+**MCP：** M-GEN-0/1/2/3 最小 ✅（边界 · 校验 · 诊断 · headers 脱敏）。

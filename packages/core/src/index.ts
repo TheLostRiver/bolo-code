@@ -552,6 +552,18 @@ export type BoloSession = {
   /** 已连接的 MCP stdio 进程；endSession 时关闭 */
   mcpConnections?: ConnectedMcpServer[]
   /**
+   * M-GEN-2：MCP 配置 warnings + 连接失败项（/mcp · /doctor）。
+   */
+  mcpDiagnostics?: {
+    configWarnings?: string[]
+    failures?: Array<{
+      name: string
+      transport?: string
+      error: string
+      endpointSummary?: string
+    }>
+  }
+  /**
    * workspace 发现的插件列表（PL1/PL2）；供 /plugins。
    * PL2：`/plugins reload` 可热刷新列表与贡献点。
    */
@@ -900,6 +912,9 @@ export async function createSessionFromWorkspace(
       // eslint-disable-next-line no-console
       console.warn(`[bolo mcp] ${w}`)
     }
+    session.mcpDiagnostics = {
+      configWarnings: [...workspace.mcpConfigWarnings],
+    }
   }
   if (opts.connectMcp !== false && workspace.mcpServers.length > 0) {
     mcp = await connectMcpServers({
@@ -928,6 +943,15 @@ export async function createSessionFromWorkspace(
       emit(session, { type: 'warning', message: w })
       // eslint-disable-next-line no-console
       console.warn(`[bolo mcp] ${w}`)
+    }
+    // M-GEN-2：诊断切片挂会话（失败项 + 配置 warnings）
+    session.mcpDiagnostics = {
+      ...(session.mcpDiagnostics?.configWarnings?.length
+        ? { configWarnings: session.mcpDiagnostics.configWarnings }
+        : workspace.mcpConfigWarnings?.length
+          ? { configWarnings: [...workspace.mcpConfigWarnings] }
+          : {}),
+      ...(mcp.failures?.length ? { failures: [...mcp.failures] } : {}),
     }
     if (mcp.servers.length > 0) {
       session.mcpConnections = mcp.servers
@@ -1033,6 +1057,12 @@ export async function reloadSessionPlugins(
       for (const w of mcp.warnings) {
         warnings.push(w)
         emit(session, { type: 'warning', message: w })
+      }
+      session.mcpDiagnostics = {
+        ...(workspace.mcpConfigWarnings?.length
+          ? { configWarnings: [...workspace.mcpConfigWarnings] }
+          : {}),
+        ...(mcp.failures?.length ? { failures: [...mcp.failures] } : {}),
       }
       if (mcp.servers.length > 0) {
         session.mcpConnections = mcp.servers

@@ -79,6 +79,7 @@ export {
   type ConnectedMcpServer,
   type ConnectMcpResult,
   type ConnectMcpOptions,
+  type McpConnectFailure,
   type McpListChangedKind,
   type McpListChangedEvent,
 } from './host.ts'

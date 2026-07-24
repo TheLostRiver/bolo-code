@@ -26,8 +26,8 @@
 | `/compact [note]` | `compactSession`；成功后报告 messages token 前后与节省量；无 summarizer 时错误文案 |
 | `/autocompact [on\|off]` | 会话级 auto compact 开关；无参显示 on/off + summarizer + 环境熔断；重挂 prepare 链 |
 | `/context` | 消息数、字符粗算、**tokens 分拆（messages + system）**、**window / auto threshold / pressure**、permissionMode、model、effort、cwd、id、**各 system section 标签·长度·token**、**cache + prepare 顺序**、usage 一行；提示 `/autocompact` |
-| `/doctor` · `/status` | 本地诊断：node/platform、cwd/id/**provider**/mode/model/effort、messages/sections、tools/skills/agent types、**mcp 连接数**、usage、autoCompact/maxPtlRetries、`getBoloHomeDir()` 是否存在；无遥测；`/status` 为隐藏别名 |
-| `/mcp` · `/mcp tools` | 列出已连接 MCP 服务器；`tools` 列出 `mcp__server__tool` 名 |
+| `/doctor` · `/status` | 本地诊断：node/platform、cwd/id/**provider**/mode/model/effort、messages/sections、tools/skills/agent types、**mcp 连接数 + 失败摘要**、usage、autoCompact/maxPtlRetries、`getBoloHomeDir()` 是否存在；无遥测；`/status` 为隐藏别名 |
+| `/mcp` · `/mcp status` · `/mcp tools` | 已连接 MCP：**transport / status / live / caps / 脱敏 endpoint**；`status` 含 **failures + configWarnings**；`tools` 列 `mcp__server__tool` |
 | `/plugins` · `/plugins commands` · `/plugins reload` | 列本地插件；插件 slash；热重载（PL2） |
 | `/plugins market` · `search` · `install` · `uninstall` | **PL-MKT 最小市场**：注册清单 / 搜索 / 安装到 plugins 目录（见 `docs/PLUGINS.md`） |
 | `/hooks` · `/hooks <Event>` | 列出已配置 hook 事件与命令数；指定事件打印 matcher/command |

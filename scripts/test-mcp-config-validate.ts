@@ -155,6 +155,14 @@ const conn = await connectMcpServers({
 })
 assert(conn.servers.length === 0, 'no connections')
 assert(conn.warnings.length >= 2, 'connect warnings')
+assert(
+  (conn.failures?.length ?? 0) >= 2,
+  'connect failures structured',
+)
+assert(
+  conn.failures?.some((f) => f.name === 'missing-bits' && f.error),
+  'failure has error text',
+)
 await closeMcpConnections(conn.servers)
 
 const dups = validateMcpServerConfigs([

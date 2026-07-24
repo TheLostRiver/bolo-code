@@ -90,6 +90,9 @@ export type SlashSession = {
     transport?: string
     /** connected | error | closed */
     status?: string
+    /** 脱敏 endpoint/command 摘要 */
+    endpointSummary?: string
+    lastError?: string
     tools?: Array<{ name: string; description?: string }>
     resources?: Array<{
       uri: string
@@ -107,7 +110,22 @@ export type SlashSession = {
       resources?: boolean
       prompts?: boolean
     }
+    /** live client 可选；slash 诊断用 isConnected */
+    client?: { isConnected?: boolean; transport?: string }
   }>
+  /**
+   * M-GEN-2：连接失败项 + 配置层 warnings（供 /mcp · /doctor）。
+   * 不阻断会话。
+   */
+  mcpDiagnostics?: {
+    configWarnings?: string[]
+    failures?: Array<{
+      name: string
+      transport?: string
+      error: string
+      endpointSummary?: string
+    }>
+  }
   /** workspace 插件；/plugins · /doctor */
   plugins?: Array<{
     manifest: { id: string; name?: string; version?: string }
@@ -738,7 +756,10 @@ function cmdDoctor(session: SlashSession, _args: string): SlashDispatchResult {
   const agentTypesCount = session.agentDefinitions
     ? Object.keys(session.agentDefinitions).length
     : 0
-  const mcpCount = session.mcpConnections?.length ?? 0
+  const conns = session.mcpConnections ?? []
+  const mcpCount = conns.length
+  const mcpFail = session.mcpDiagnostics?.failures?.length ?? 0
+  const mcpCfgW = session.mcpDiagnostics?.configWarnings?.length ?? 0
   const pluginsCount = session.plugins?.length ?? 0
   const autoCompact =
     session.autoCompactEnabled === true ? 'on' : 'off'
@@ -764,28 +785,120 @@ function cmdDoctor(session: SlashSession, _args: string): SlashDispatchResult {
     `agent types:     ${agentTypesCount}`,
     `plugins:         ${pluginsCount}`,
   ]
-  lines.push(`mcp connections: ${mcpCount}`)
+  lines.push(
+    `mcp connections: ${mcpCount}` +
+      (mcpFail ? `  failures=${mcpFail}` : '') +
+      (mcpCfgW ? `  configWarnings=${mcpCfgW}` : ''),
+  )
+  if (conns.length) {
+    for (const s of conns.slice(0, 8)) {
+      const live =
+        s.client && typeof s.client.isConnected === 'boolean'
+          ? s.client.isConnected
+            ? 'live'
+            : 'dead'
+          : s.status ?? '?'
+      lines.push(
+        `  · ${s.name}  ${s.transport ?? '?'}  ${live}` +
+          `  t=${s.tools?.length ?? 0} r=${s.resources?.length ?? 0} p=${s.prompts?.length ?? 0}`,
+      )
+    }
+    if (conns.length > 8) lines.push(`  · … +${conns.length - 8} more`)
+  }
+  if (mcpFail) {
+    for (const f of (session.mcpDiagnostics?.failures ?? []).slice(0, 5)) {
+      const err =
+        f.error.length > 80 ? f.error.slice(0, 79) + '…' : f.error
+      lines.push(`  ✗ ${f.name}: ${err}`)
+    }
+  }
   lines.push(
     formatUsageOneLiner(session.usage),
     `autoCompact:     ${autoCompact}`,
     `maxPtlRetries:   ${maxPtl}`,
     `~/.bolo:         ${boloHome} (${boloHomeExists ? 'exists' : 'missing'})`,
-    'Tip: /context for token estimate + section labels; /help for commands.',
+    'Tip: /mcp for MCP detail; /context for tokens; /help for commands.',
   )
   return { ok: true, message: lines.join('\n') }
 }
 
 function cmdMcp(session: SlashSession, args: string): SlashDispatchResult {
   const conns = session.mcpConnections ?? []
+  const diag = session.mcpDiagnostics
+  const failures = diag?.failures ?? []
+  const configWarnings = diag?.configWarnings ?? []
   const sub = args.trim().toLowerCase()
-  if (!conns.length) {
+
+  if (!conns.length && !failures.length && !configWarnings.length) {
     return {
       ok: true,
       message:
-        'mcp: (none connected)\nConfigure ~/.bolo/mcp.json or .bolo/mcp.json and createSessionFromWorkspace({ connectMcp: true }).',
+        'mcp: (none connected)\nConfigure ~/.bolo/mcp.json or .bolo/mcp.json and createSessionFromWorkspace({ connectMcp: true }).\nTip: /mcp status for diagnostics when partially failed.',
     }
   }
+
+  if (sub === 'status' || sub === 'diag' || sub === 'diagnostics') {
+    const lines: string[] = ['mcp status:']
+    lines.push(
+      `  connected: ${conns.length}  failures: ${failures.length}  configWarnings: ${configWarnings.length}`,
+    )
+    for (const s of conns) {
+      const live =
+        s.client && typeof s.client.isConnected === 'boolean'
+          ? s.client.isConnected
+            ? 'live'
+            : 'dead'
+          : s.status ?? 'connected'
+      const n = s.tools?.length ?? 0
+      const nr = s.resources?.length ?? 0
+      const np = s.prompts?.length ?? 0
+      const caps: string[] = []
+      if (s.capabilities?.tools || n > 0) caps.push('tools')
+      if (s.capabilities?.resources) caps.push('resources')
+      if (s.capabilities?.prompts) caps.push('prompts')
+      lines.push(
+        `  ✓ ${s.name}  transport=${s.transport ?? '?'}  status=${s.status ?? 'connected'}  live=${live}`,
+      )
+      lines.push(
+        `      tools=${n} resources=${nr} prompts=${np}  caps=[${caps.join('+') || '—'}]`,
+      )
+      if (s.endpointSummary) {
+        lines.push(`      ${s.endpointSummary}`)
+      }
+      if (s.lastError) {
+        lines.push(`      lastError: ${s.lastError}`)
+      }
+    }
+    for (const f of failures) {
+      lines.push(
+        `  ✗ ${f.name}  transport=${f.transport ?? '?'}  FAILED`,
+      )
+      lines.push(`      error: ${f.error}`)
+      if (f.endpointSummary) lines.push(`      ${f.endpointSummary}`)
+    }
+    if (configWarnings.length) {
+      lines.push('  config warnings:')
+      for (const w of configWarnings.slice(0, 12)) {
+        lines.push(`    · ${w}`)
+      }
+      if (configWarnings.length > 12) {
+        lines.push(`    · … +${configWarnings.length - 12} more`)
+      }
+    }
+    if (!conns.length && !failures.length) {
+      lines.push('  (no servers attempted this session)')
+    }
+    return { ok: true, message: lines.join('\n') }
+  }
+
   if (sub === 'tools' || sub.startsWith('tools ')) {
+    if (!conns.length) {
+      return {
+        ok: true,
+        message:
+          'mcp tools: (no connected servers)\nUse /mcp status if connections failed.',
+      }
+    }
     const lines: string[] = [`mcp tools (${conns.length} server(s)):`]
     for (const s of conns) {
       const tools = s.tools ?? []
@@ -801,6 +914,12 @@ function cmdMcp(session: SlashSession, args: string): SlashDispatchResult {
     return { ok: true, message: lines.join('\n') }
   }
   if (sub === 'resources' || sub.startsWith('resources ')) {
+    if (!conns.length) {
+      return {
+        ok: true,
+        message: 'mcp resources: (no connected servers)',
+      }
+    }
     const lines: string[] = [`mcp resources (${conns.length} server(s)):`]
     let any = false
     for (const s of conns) {
@@ -827,6 +946,12 @@ function cmdMcp(session: SlashSession, args: string): SlashDispatchResult {
     return { ok: true, message: lines.join('\n') }
   }
   if (sub === 'prompts' || sub.startsWith('prompts ')) {
+    if (!conns.length) {
+      return {
+        ok: true,
+        message: 'mcp prompts: (no connected servers)',
+      }
+    }
     const lines: string[] = [`mcp prompts (${conns.length} server(s)):`]
     let any = false
     for (const s of conns) {
@@ -851,7 +976,11 @@ function cmdMcp(session: SlashSession, args: string): SlashDispatchResult {
     }
     return { ok: true, message: lines.join('\n') }
   }
-  const lines = [`mcp servers (${conns.length}):`]
+
+  // default list
+  const lines = [
+    `mcp servers: connected=${conns.length} failures=${failures.length}`,
+  ]
   for (const s of conns) {
     const n = s.tools?.length ?? 0
     const nr = s.resources?.length ?? 0
@@ -863,12 +992,29 @@ function cmdMcp(session: SlashSession, args: string): SlashDispatchResult {
     const capStr = caps.length ? caps.join('+') : 'unknown'
     const transport = s.transport ?? 'stdio'
     const status = s.status ?? 'connected'
+    const live =
+      s.client && typeof s.client.isConnected === 'boolean'
+        ? s.client.isConnected
+          ? 'live'
+          : 'dead'
+        : status
     lines.push(
-      `  ${s.name}  transport=${transport}  status=${status}  tools=${n} resources=${nr} prompts=${np}  [${capStr}]`,
+      `  ✓ ${s.name}  transport=${transport}  status=${status}  live=${live}  tools=${n} resources=${nr} prompts=${np}  [${capStr}]`,
     )
+    if (s.endpointSummary) {
+      lines.push(`      ${s.endpointSummary}`)
+    }
+  }
+  for (const f of failures) {
+    lines.push(`  ✗ ${f.name}  transport=${f.transport ?? '?'}  FAILED`)
+    const err = f.error.length > 100 ? f.error.slice(0, 99) + '…' : f.error
+    lines.push(`      ${err}`)
+  }
+  if (configWarnings.length && !failures.length) {
+    lines.push(`  configWarnings: ${configWarnings.length} (see /mcp status)`)
   }
   lines.push(
-    'Use /mcp tools | /mcp resources | /mcp prompts for details.',
+    'Use /mcp status | tools | resources | prompts for details.',
   )
   return { ok: true, message: lines.join('\n') }
 }
@@ -1968,8 +2114,8 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
   },
   {
     name: 'mcp',
-    summary: 'List connected MCP servers, tools, resources, or prompts',
-    usage: '[tools|resources|prompts]',
+    summary: 'List MCP servers, status/diagnostics, tools, resources, prompts',
+    usage: '[status|tools|resources|prompts]',
     group: 'extensions',
     run: cmdMcp,
   },
