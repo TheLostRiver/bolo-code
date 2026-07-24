@@ -62,6 +62,7 @@ import {
 } from './systemPrompt.ts'
 import {
   applySnapshotToSession,
+  getSessionPersistMeta,
   loadSession,
   maybeAutoSaveSession,
   resolveJsonPathFromTranscript,
@@ -76,6 +77,7 @@ import {
 import {
   loadTranscriptMessages,
   resolveTranscriptPathFromJson,
+  writeTranscriptAfterCompact,
 } from './sessionTranscript.ts'
 
 export type { AskPermissionFn, Terminal }
@@ -188,6 +190,7 @@ export {
   recordSessionMessages,
   appendCompactBoundary,
   dualWriteSessionTranscript,
+  writeTranscriptAfterCompact,
   resolveTranscriptPathFromJson,
   resolveTranscriptFilePath,
   sessionTranscriptFileName,
@@ -977,6 +980,23 @@ export async function compactSession(
   )
   for (const r of post.results) {
     emit(session, { type: 'hook', event: 'PostCompact', exitCode: r.exitCode })
+  }
+
+  // 旁路 jsonl：rewrite 并写入 compact_boundary（不改 JSON 快照）
+  try {
+    const meta = getSessionPersistMeta(session)
+    await writeTranscriptAfterCompact(session, {
+      summary: outcome.result.summaryText,
+      filePath: meta?.filePath,
+      sessionsDir: meta?.sessionsDir,
+      createdAt: meta?.createdAt,
+    })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    emit(session, {
+      type: 'error',
+      message: `compact transcript boundary failed: ${message}`,
+    })
   }
 
   setPhase(session, 'ready')

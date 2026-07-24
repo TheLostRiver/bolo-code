@@ -24,7 +24,7 @@
 |------|------|
 | `meta` | 文件首行：id / cwd / permissionMode / model / createdAt |
 | `message` | 包裹现有 `ChatMessage` |
-| `compact_boundary` | full compact 边界（API 已备；compact 接线见后续 Phase） |
+| `compact_boundary` | full compact 边界（`compactSession` 成功后 rewrite jsonl 写入；不改 JSON 快照） |
 
 `saveSession` 仍原子写 JSON 快照，并按上次 `messages.length` **增量 append** 新消息到 `.jsonl`；messages 变短时 rewrite 整份 jsonl。详见 `docs/TODO_SESSION_JSONL.md`。
 
@@ -87,7 +87,7 @@ const session = await createSession({
 | `saveSession` / `persistSession` | 原子写（temp + rename）+ 旁路 jsonl 双写 |
 | `loadSession` | 读 JSON → `SessionSnapshot`（不改） |
 | `loadTranscriptFile` / `loadTranscriptMessages` | 读 jsonl → entries / 线性 messages（J-C） |
-| `listProjectSessions` | 扫项目 `.bolo/sessions/*.json`（mtime/updatedAt 降序；坏文件跳过） |
+| `listProjectSessions` | 扫 `*.json` + `*.jsonl`（同 id 优先 JSON 元数据；仅 jsonl 用 mtime；去重；坏文件跳过） |
 | `resumeSession` | load JSON；缺失则 jsonl 回退 + `createSession` + 恢复 messages/配置 |
 | `resolveSessionFilePath` | 仅解析路径 |
 

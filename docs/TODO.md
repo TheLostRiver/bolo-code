@@ -59,7 +59,7 @@ P3  GUI / 打磨 / 后置
 | **RS4** | 非 TTY：打印列表，要求显式 id，exit≠0 | 测 | ✅ |
 | **RS5** | 空列表提示新建 `bolo` | | ✅ |
 | **RS6** | 列表字段：id · mtime · preview · 消息数 | | ✅ |
-| RS7 | JSONL 双格式列表 | 随 JSONL P1 | ⬜ |
+| **RS7** | JSONL 双格式列表 | `*.json`+`*.jsonl` 去重 | ✅ |
 | RS8 | 箭头键 / 美化 picker | 随 M-TUI P1 | ⬜ |
 | RS9 | `--continue` 最近一条 | P1 捷径 | ✅ |
 
@@ -120,7 +120,7 @@ P3  GUI / 打磨 / 后置
 | PL1 | Plugins 真加载（本地发现 + skills/hooks/mcp 合并；非市场） | ✅ 最小 |
 | S7 | `.bolo/agents` 目录定义（frontmatter + 覆盖内置 + `/agents`） | ✅ |
 | S7+ | 侧链 transcript · 权限细化 | ⬜ |
-| J-C+ | JSONL resume 主路径优先 · list 增强（RS7） | 部分（messages 回退已有） |
+| J-C+ | JSONL resume 主路径优先 · list 增强（RS7） | 部分（RS7 列表双格式 ✅；resume 优先 jsonl 未切） |
 
 ---
 

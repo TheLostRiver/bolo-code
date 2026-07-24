@@ -543,8 +543,64 @@ export function sessionPreviewFromMessages(
   return ''
 }
 
+/** 从 jsonl 粗提列表字段（坏行跳过；不依赖完整 loadTranscript） */
+async function sessionListItemFromJsonl(
+  filePath: string,
+  idFromFile: string,
+  mtime: Date,
+): Promise<SessionListItem | null> {
+  const raw = await fs.readFile(filePath, 'utf8')
+  let id = idFromFile
+  let cwd: string | undefined
+  let model: string | undefined
+  let messageCount = 0
+  const messages: unknown[] = []
+  let lastTs: string | undefined
+
+  for (const line of raw.split(/\r?\n/)) {
+    const t = line.trim()
+    if (!t) continue
+    try {
+      const o = JSON.parse(t) as Record<string, unknown>
+      if (!o || typeof o.type !== 'string') continue
+      if (typeof o.timestamp === 'string' && o.timestamp.trim()) {
+        lastTs = o.timestamp
+      }
+      if (o.type === 'meta') {
+        if (typeof o.sessionId === 'string' && o.sessionId.trim()) {
+          id = o.sessionId.trim()
+        }
+        if (typeof o.cwd === 'string') cwd = o.cwd
+        if (typeof o.model === 'string') model = o.model
+        continue
+      }
+      if (o.type === 'message') {
+        messageCount++
+        if (o.message && typeof o.message === 'object') {
+          messages.push(o.message)
+        }
+      }
+    } catch {
+      // 坏行跳过
+    }
+  }
+
+  const mtimeIso = mtime.toISOString()
+  return {
+    id,
+    filePath,
+    // 仅 jsonl：优先文件 mtime（列表新鲜度），无 mtime 时回退末行 timestamp
+    updatedAt: mtimeIso || lastTs || new Date(0).toISOString(),
+    messageCount,
+    preview: sessionPreviewFromMessages(messages),
+    cwd,
+    model,
+  }
+}
+
 /**
- * 列出当前项目 `.bolo/sessions/*.json`（可覆盖 sessionsDir）。
+ * 列出当前项目 `.bolo/sessions` 下 `*.json` 与 `*.jsonl`（可覆盖 sessionsDir）。
+ * 同 id 去重：优先 JSON 快照元数据；仅有 jsonl 时用 mtime / 行内字段。
  * 按 updatedAt / mtime 降序；坏文件跳过。
  */
 export async function listProjectSessions(opts: {
@@ -565,46 +621,69 @@ export async function listProjectSessions(opts: {
     throw err
   }
 
-  const items: SessionListItem[] = []
+  /** id → item；JSON 优先于 jsonl */
+  const byId = new Map<string, SessionListItem & { fromJson?: boolean }>()
 
   for (const name of names) {
-    if (!name.endsWith('.json') || name.startsWith('.')) continue
+    if (name.startsWith('.')) continue
+    const isJson = name.endsWith('.json')
+    const isJsonl = name.endsWith('.jsonl')
+    if (!isJson && !isJsonl) continue
+
     const filePath = path.join(sessionsDir, name)
     try {
       const st = await fs.stat(filePath)
       if (!st.isFile()) continue
-      const raw = await fs.readFile(filePath, 'utf8')
-      let parsed: unknown
-      try {
-        parsed = JSON.parse(raw) as unknown
-      } catch {
+
+      if (isJson) {
+        const raw = await fs.readFile(filePath, 'utf8')
+        let parsed: unknown
+        try {
+          parsed = JSON.parse(raw) as unknown
+        } catch {
+          continue
+        }
+        if (!parsed || typeof parsed !== 'object') continue
+        const o = parsed as Record<string, unknown>
+        const idFromFile = name.slice(0, -'.json'.length)
+        const id =
+          typeof o.id === 'string' && o.id.trim() ? o.id.trim() : idFromFile
+        const messages = Array.isArray(o.messages) ? o.messages : []
+        const mtimeIso = st.mtime.toISOString()
+        const updatedAt =
+          typeof o.updatedAt === 'string' && o.updatedAt.trim()
+            ? o.updatedAt
+            : mtimeIso
+        byId.set(id, {
+          id,
+          filePath,
+          updatedAt,
+          messageCount: messages.length,
+          preview: sessionPreviewFromMessages(messages),
+          cwd: typeof o.cwd === 'string' ? o.cwd : undefined,
+          model: typeof o.model === 'string' ? o.model : undefined,
+          fromJson: true,
+        })
         continue
       }
-      if (!parsed || typeof parsed !== 'object') continue
-      const o = parsed as Record<string, unknown>
-      const idFromFile = name.slice(0, -'.json'.length)
-      const id =
-        typeof o.id === 'string' && o.id.trim() ? o.id.trim() : idFromFile
-      const messages = Array.isArray(o.messages) ? o.messages : []
-      const mtimeIso = st.mtime.toISOString()
-      const updatedAt =
-        typeof o.updatedAt === 'string' && o.updatedAt.trim()
-          ? o.updatedAt
-          : mtimeIso
-      items.push({
-        id,
-        filePath,
-        updatedAt,
-        messageCount: messages.length,
-        preview: sessionPreviewFromMessages(messages),
-        cwd: typeof o.cwd === 'string' ? o.cwd : undefined,
-        model: typeof o.model === 'string' ? o.model : undefined,
-      })
+
+      // *.jsonl
+      const idFromFile = name.slice(0, -'.jsonl'.length)
+      const item = await sessionListItemFromJsonl(filePath, idFromFile, st.mtime)
+      if (!item) continue
+      const prev = byId.get(item.id)
+      // 同 id：已有 JSON 元数据则保留 JSON，不覆盖
+      if (prev?.fromJson) continue
+      byId.set(item.id, item)
     } catch {
       // 坏文件 / 不可读：跳过
       continue
     }
   }
+
+  const items: SessionListItem[] = [...byId.values()].map(
+    ({ fromJson: _f, ...rest }) => rest,
+  )
 
   items.sort((a, b) => {
     const ta = Date.parse(a.updatedAt)

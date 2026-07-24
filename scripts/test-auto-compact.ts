@@ -2,6 +2,9 @@
  * auto compact 挂 prepareMessages + compactSession 接线（fake summarizer，无网络）
  * 运行：npx tsx scripts/test-auto-compact.ts
  */
+import { promises as fs } from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import {
   getAutoCompactThreshold,
   estimateTokens,
@@ -11,6 +14,7 @@ import {
   createSession,
   submitPrompt,
   compactSession,
+  saveSession,
 } from '../packages/core/src/index.ts'
 import { createAutoCompactPrepare } from '../packages/core/src/deps.ts'
 import type { LlmProvider } from '../packages/providers/src/index.ts'
@@ -164,6 +168,52 @@ async function main() {
     sessManual.messages.some((m) => String(m.content).includes('manual ok')),
     'manual summary',
   )
+
+  // ── 5) compact 成功后 jsonl 含 compact_boundary（不破坏 JSON 快照）──
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'bolo-compact-jsonl-'))
+  const sessionsDir = path.join(tmpRoot, 'sessions')
+  await fs.mkdir(sessionsDir, { recursive: true })
+  const sessDisk = await createSession({
+    cwd: tmpRoot,
+    sessionId: 'sess_boundary',
+    systemPrompt: false,
+    autoSave: { sessionsDir, scope: 'project' },
+    provider: textOnlyProvider(),
+    compactSummarizer: async () => ({
+      text: `<summary>\n1. Primary Request and Intent:\n   Boundary test.\n</summary>`,
+    }),
+  })
+  sessDisk.messages.push({ role: 'user', content: 'hello boundary' })
+  sessDisk.messages.push({ role: 'assistant', content: 'ack boundary' })
+  await saveSession(sessDisk, { sessionsDir })
+  const jsonPath = path.join(sessionsDir, 'sess_boundary.json')
+  const jsonlPath = path.join(sessionsDir, 'sess_boundary.jsonl')
+  const jsonBefore = await fs.readFile(jsonPath, 'utf8')
+  const rBound = await compactSession(sessDisk, 'manual')
+  assert(rBound.ok === true, 'boundary compact ok')
+  const jsonAfter = await fs.readFile(jsonPath, 'utf8')
+  assert(jsonAfter === jsonBefore, 'JSON snapshot unchanged by compact boundary write')
+  const jsonlRaw = await fs.readFile(jsonlPath, 'utf8')
+  const boundaryLines = jsonlRaw
+    .split(/\r?\n/)
+    .filter((l) => l.trim())
+    .map((l) => JSON.parse(l) as { type?: string; summary?: string })
+  assert(
+    boundaryLines.some((e) => e.type === 'compact_boundary'),
+    'jsonl has compact_boundary line',
+  )
+  const b = boundaryLines.find((e) => e.type === 'compact_boundary')!
+  assert(
+    typeof b.summary === 'string' && b.summary.includes('Boundary test'),
+    'boundary summary text',
+  )
+  assert(boundaryLines[0]?.type === 'meta', 'jsonl still starts with meta')
+  assert(
+    boundaryLines.some((e) => e.type === 'message'),
+    'jsonl still has message entries after compact',
+  )
+
+  await fs.rm(tmpRoot, { recursive: true, force: true })
 
   console.log('AUTO COMPACT TESTS PASS')
 }

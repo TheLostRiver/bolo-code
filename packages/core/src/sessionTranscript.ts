@@ -198,13 +198,13 @@ export function setTranscriptWriteState(
 }
 
 /**
- * 从 messages 全量重建 jsonl（meta + 全部 message）。
+ * 从 messages 全量重建 jsonl（meta + 可选 compact_boundary + 全部 message）。
  * 用于 compact 后 messages 变短等无法纯 append 的情况。
  */
 export async function rewriteTranscriptFromMessages(
   file: string,
   session: PersistableSession,
-  opts?: { createdAt?: string },
+  opts?: { createdAt?: string; compactBoundarySummary?: string },
 ): Promise<void> {
   const filePath = path.resolve(file)
   await fs.mkdir(path.dirname(filePath), { recursive: true })
@@ -219,6 +219,15 @@ export async function rewriteTranscriptFromMessages(
     createdAt: opts?.createdAt ?? nowIso(),
   }
   lines.push(JSON.stringify(meta))
+  if (opts && 'compactBoundarySummary' in opts) {
+    const boundary: TranscriptCompactBoundaryEntry = {
+      type: 'compact_boundary',
+      sessionId: session.id,
+      timestamp: nowIso(),
+      summary: opts.compactBoundarySummary,
+    }
+    lines.push(JSON.stringify(boundary))
+  }
   for (const m of session.messages) {
     const entry: TranscriptMessageEntry = {
       type: 'message',
@@ -382,16 +391,53 @@ export async function loadTranscriptMessages(
 }
 
 /**
+ * full compact 成功后写 jsonl：meta + compact_boundary + 当前 messages。
+ * 不改 JSON 快照；同步 WeakMap 计数，避免后续 dualWrite 再 rewrite 抹掉 boundary。
+ */
+export async function writeTranscriptAfterCompact(
+  session: PersistableSession,
+  opts: {
+    summary?: string
+    filePath?: string
+    sessionsDir?: string
+    createdAt?: string
+  },
+): Promise<{ transcriptPath: string } | null> {
+  let transcriptPath: string | undefined
+  if (opts.filePath) {
+    transcriptPath = resolveTranscriptPathFromJson(opts.filePath)
+  } else if (opts.sessionsDir) {
+    transcriptPath = resolveTranscriptFilePath(session.id, {
+      sessionsDir: opts.sessionsDir,
+    })
+  } else {
+    const prev = transcriptState.get(session)
+    if (prev?.filePath) transcriptPath = prev.filePath
+  }
+  if (!transcriptPath) return null
+
+  await rewriteTranscriptFromMessages(transcriptPath, session, {
+    createdAt: opts.createdAt,
+    compactBoundarySummary: opts.summary,
+  })
+  setTranscriptWriteState(session, {
+    filePath: transcriptPath,
+    appendedMessageCount: session.messages.length,
+  })
+  return { transcriptPath }
+}
+
+/**
  * T1 双写：在 JSON 快照旁增量 append `{id}.jsonl`。
  * - 新文件：meta + 全部 messages
  * - 增量：只 append messages[lastCount..]
- * - messages 变短（compact）：全量 rewrite（不先写 boundary 到旧尾再 rewrite，避免噪音）
+ * - messages 变短（compact）：全量 rewrite，并写入 compact_boundary（摘要可选）
  * - 冷启动（无 WeakMap）：按磁盘已有 message 行数作基线，避免 resume 后重复 append
  */
 export async function dualWriteSessionTranscript(
   session: PersistableSession,
   jsonFilePath: string,
-  opts?: { createdAt?: string },
+  opts?: { createdAt?: string; compactBoundarySummary?: string },
 ): Promise<{ transcriptPath: string; appended: number; rewritten: boolean }> {
   const transcriptPath = resolveTranscriptPathFromJson(jsonFilePath)
   const prev = transcriptState.get(session)
@@ -401,10 +447,13 @@ export async function dualWriteSessionTranscript(
   }
   const total = session.messages.length
 
-  // messages 变短：全量重建（内存已是 compact 后链）
+  // messages 变短：全量重建（内存已是 compact 后链）；仅显式传入时写 compact_boundary
   if (lastCount > 0 && total < lastCount) {
     await rewriteTranscriptFromMessages(transcriptPath, session, {
       createdAt: opts?.createdAt,
+      ...(opts && 'compactBoundarySummary' in opts
+        ? { compactBoundarySummary: opts.compactBoundarySummary }
+        : {}),
     })
     setTranscriptWriteState(session, {
       filePath: transcriptPath,

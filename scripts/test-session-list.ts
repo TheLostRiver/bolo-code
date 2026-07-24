@@ -96,8 +96,76 @@ async function main() {
   assert(listed[0]!.model === 'm2', 'model field')
   assert(listed[0]!.filePath.endsWith('sess_new.json'), 'filePath')
 
+  // ── RS7：jsonl-only + 同 id 去重（JSON 优先）──
+  const jsonlOnlyId = 'sess_jsonl_only'
+  const jsonlOnlyPath = path.join(sessionsDir, `${jsonlOnlyId}.jsonl`)
+  await fs.writeFile(
+    jsonlOnlyPath,
+    [
+      JSON.stringify({
+        type: 'meta',
+        sessionId: jsonlOnlyId,
+        timestamp: '2020-01-01T00:00:00.000Z',
+        model: 'm-jsonl',
+        cwd,
+      }),
+      JSON.stringify({
+        type: 'message',
+        sessionId: jsonlOnlyId,
+        timestamp: '2020-01-01T00:00:01.000Z',
+        message: { role: 'user', content: 'jsonl only preview text' },
+      }),
+      '',
+    ].join('\n'),
+    'utf8',
+  )
+  // 抬高 mtime，应排在列表前部
+  const future = new Date(Date.now() + 60_000)
+  await fs.utimes(jsonlOnlyPath, future, future)
+
+  // 与 sess_old 同 id 的 jsonl 不应多出一项（JSON 优先）
+  await fs.writeFile(
+    path.join(sessionsDir, 'sess_old.jsonl'),
+    JSON.stringify({
+      type: 'meta',
+      sessionId: 'sess_old',
+      timestamp: '2020-06-01T00:00:00.000Z',
+    }) +
+      '\n' +
+      JSON.stringify({
+        type: 'message',
+        sessionId: 'sess_old',
+        timestamp: '2020-06-01T00:00:01.000Z',
+        message: { role: 'user', content: 'should not replace json meta' },
+      }) +
+      '\n',
+    'utf8',
+  )
+
+  const listed2 = await listProjectSessions({ cwd, sessionsDir })
+  assert(listed2.length === 3, `list dual-format length 3 got ${listed2.length}`)
+  const ids = listed2.map((x) => x.id)
+  assert(new Set(ids).size === 3, 'ids unique')
+  assert(ids.includes(jsonlOnlyId), 'jsonl-only listed')
+  assert(ids.includes('sess_old') && ids.includes('sess_new'), 'json still listed')
+  const only = listed2.find((x) => x.id === jsonlOnlyId)!
+  assert(only.filePath.endsWith('.jsonl'), 'jsonl-only filePath')
+  assert(only.messageCount === 1, 'jsonl messageCount')
+  assert(only.preview.includes('jsonl only'), `jsonl preview: ${only.preview}`)
+  assert(only.model === 'm-jsonl', 'jsonl model from meta')
+  const oldItem = listed2.find((x) => x.id === 'sess_old')!
+  assert(oldItem.filePath.endsWith('.json'), 'same id prefers json path')
+  assert(
+    oldItem.preview.includes('first session'),
+    'same id keeps json preview not jsonl',
+  )
+
   const limited = await listProjectSessions({ cwd, sessionsDir, limit: 1 })
-  assert(limited.length === 1 && limited[0]!.id === 'sess_new', 'limit 1')
+  assert(limited.length === 1, 'limit 1')
+  assert(
+    limited[0]!.id === jsonlOnlyId || limited[0]!.id === 'sess_new',
+    'limit 1 is newest',
+  )
 
   const empty = await listProjectSessions({
     cwd: path.join(tmpRoot, 'empty'),
@@ -143,8 +211,9 @@ async function main() {
   )
 
   // ── formatSessionList ──
-  const listText = formatSessionList(listed)
+  const listText = formatSessionList(listed2)
   assert(listText.includes('sess_new'), 'format list id')
+  assert(listText.includes(jsonlOnlyId), 'format list jsonl id')
   assert(listText.includes('1.'), 'format numbered')
 
   // ── non-TTY picker ──
@@ -192,20 +261,24 @@ async function main() {
   assert(emptyCode === 1, `empty exit 1 got ${emptyCode}`)
 
   // ── TTY pick via readChoice ──
+  // listed2 降序：[jsonl_only, sess_new, sess_old] → 选 #3 = sess_old
+  const pickIdx = String(listed2.findIndex((x) => x.id === 'sess_old') + 1)
   const picked = await pickProjectSessionId({
     cwd,
     sessionsDir,
     isTty: true,
     writeOut: () => {},
     writeErr: () => {},
-    readChoice: async () => '2',
+    readChoice: async () => pickIdx,
   })
-  assert(picked === 'sess_old', `pick #2 → sess_old got ${picked}`)
+  assert(picked === 'sess_old', `pick #${pickIdx} → sess_old got ${picked}`)
 
   // ── --continue：list 第一条 = 最新 ──
   const contId = await resolveContinueSessionId({ cwd, sessionsDir })
-  assert(contId === 'sess_new', `continue → newest sess_new got ${contId}`)
-  assert(contId === listed[0]!.id, 'continue matches list[0]')
+  assert(
+    contId === listed2[0]!.id,
+    `continue → list[0] ${listed2[0]!.id} got ${contId}`,
+  )
 
   let contEmptyCode: number | undefined
   try {
