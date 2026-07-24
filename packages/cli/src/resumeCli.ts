@@ -372,6 +372,11 @@ export function createCliOnEvent(opts: {
   writeErr: (s: string) => void
   onSessionEvent?: (e: SessionEvent) => void
   onEvent?: (line: string) => void
+  /**
+   * 是否渲染 thinking；默认 true。
+   * 可传函数以绑定 session.showThinking（/thinking off）。
+   */
+  showThinking?: boolean | (() => boolean)
 }): {
   printer: SessionEventPrinter
   onEvent: (e: SessionEvent) => void
@@ -379,6 +384,7 @@ export function createCliOnEvent(opts: {
   const printer = createSessionEventPrinter({
     writeOut: opts.writeOut,
     writeErr: opts.writeErr,
+    showThinking: opts.showThinking,
   })
   return {
     printer,
@@ -403,11 +409,14 @@ export async function resumeFromIdOrPath(
   const writeErr = opts.writeErr ?? ((s) => process.stderr.write(s))
   const isTty = opts.isTty ?? process.stdin.isTTY === true
 
+  // 打印机创建早于 session；绑定后读 session.showThinking（/thinking）
+  const thinkingGate: { session: BoloSession | null } = { session: null }
   const { printer, onEvent } = createCliOnEvent({
     writeOut,
     writeErr,
     onSessionEvent: opts.onSessionEvent,
     onEvent: opts.onEvent,
+    showThinking: () => thinkingGate.session?.showThinking !== false,
   })
 
   const askPermission = createTtyAskPermission({
@@ -429,6 +438,7 @@ export async function resumeFromIdOrPath(
     askPermission,
   })
 
+  thinkingGate.session = session
   attachSessionEventPrinter(session, printer)
 
   // 快照加载成功后再提示无 key（callModel 时才会失败）

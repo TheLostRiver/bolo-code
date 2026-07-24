@@ -240,6 +240,54 @@ function num(v: unknown): number | undefined {
 }
 
 /**
+ * 从 Responses SSE 抽 reasoning / thinking 文本（纯函数）。
+ * 对照 HC codex-fetch-adapter：`response.reasoning.delta` → thinking_delta；
+ * 另兼容 OpenAI 官方 summary 事件名与部分网关别名。无字段则零输出（不伪造）。
+ */
+export function extractResponsesReasoningText(
+  json: Record<string, unknown>,
+): string | null {
+  const kind = String(json.type ?? '')
+  const reasoningKinds = new Set([
+    'response.reasoning.delta',
+    'response.reasoning_text.delta',
+    'response.reasoning_summary_text.delta',
+    'response.reasoning_summary_part.delta',
+  ])
+  if (reasoningKinds.has(kind)) {
+    if (typeof json.delta === 'string' && json.delta) return json.delta
+    if (json.delta && typeof json.delta === 'object') {
+      const d = json.delta as Record<string, unknown>
+      if (typeof d.text === 'string' && d.text) return d.text
+      if (typeof d.summary === 'string' && d.summary) return d.summary
+    }
+    if (typeof (json as { text?: string }).text === 'string') {
+      const t = (json as { text: string }).text
+      if (t) return t
+    }
+    return null
+  }
+  // content_part 上偶发 reasoning 摘要
+  if (
+    kind === 'response.content_part.delta' &&
+    json.delta &&
+    typeof json.delta === 'object'
+  ) {
+    const d = json.delta as Record<string, unknown>
+    const partType = String(d.type ?? json.part_type ?? '')
+    if (
+      partType.includes('reasoning') ||
+      partType.includes('thinking') ||
+      partType === 'summary_text'
+    ) {
+      if (typeof d.text === 'string' && d.text) return d.text
+      if (typeof d.summary === 'string' && d.summary) return d.summary
+    }
+  }
+  return null
+}
+
+/**
  * 解析单条 SSE JSON（data: 后的对象）→ 零或多个 ProviderStreamEvent
  * 供单测与 stream 循环共用。
  */
@@ -247,6 +295,8 @@ export function processResponsesSseJson(
   json: Record<string, unknown>,
   state: {
     toolAcc: Map<string, { id: string; name: string; arguments: string }>
+    /** 当前是否在 reasoning 块内（用于 reasoning_end） */
+    inReasoning?: boolean
   },
 ): {
   events: ProviderStreamEvent[]
@@ -257,7 +307,18 @@ export function processResponsesSseJson(
   const events: ProviderStreamEvent[] = []
   const kind = String(json.type ?? '')
 
+  const reasoningText = extractResponsesReasoningText(json)
+  if (reasoningText) {
+    state.inReasoning = true
+    events.push({ type: 'reasoning_delta', text: reasoningText })
+    return { events }
+  }
+
   if (kind === 'response.output_text.delta' || kind === 'response.text.delta') {
+    if (state.inReasoning) {
+      state.inReasoning = false
+      events.push({ type: 'reasoning_end' })
+    }
     const delta =
       typeof json.delta === 'string'
         ? json.delta
@@ -268,7 +329,7 @@ export function processResponsesSseJson(
     return { events }
   }
 
-  // 部分网关用 content_part delta
+  // 部分网关用 content_part delta（文本；reasoning 已在 extract 处理）
   if (
     kind === 'response.content_part.delta' &&
     json.delta &&
@@ -276,6 +337,10 @@ export function processResponsesSseJson(
   ) {
     const d = json.delta as Record<string, unknown>
     if (typeof d.text === 'string' && d.text) {
+      if (state.inReasoning) {
+        state.inReasoning = false
+        events.push({ type: 'reasoning_end' })
+      }
       events.push({ type: 'text_delta', text: d.text })
     }
     return { events }
@@ -304,6 +369,18 @@ export function processResponsesSseJson(
     const item = json.item as Record<string, unknown> | undefined
     if (item && typeof item === 'object') {
       const t = String(item.type ?? '')
+      // reasoning 输出项结束：关块；done 时若无流式 delta 则从 summary 补一段（不重复刷全文若已有流）
+      if (t === 'reasoning') {
+        if (kind === 'response.output_item.done') {
+          if (state.inReasoning) {
+            state.inReasoning = false
+            events.push({ type: 'reasoning_end' })
+          }
+        } else {
+          state.inReasoning = true
+        }
+        return { events }
+      }
       if (t === 'function_call' || t === 'custom_tool_call') {
         const callId = String(item.call_id ?? item.id ?? '')
         const name = String(item.name ?? '')
@@ -406,6 +483,7 @@ export function createOpenAIResponsesProvider(
 
     const state = {
       toolAcc: new Map<string, { id: string; name: string; arguments: string }>(),
+      inReasoning: false,
     }
     let streamUsage: ProviderUsage | undefined
 

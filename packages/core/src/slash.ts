@@ -52,6 +52,11 @@ export type SlashSession = {
   permissionRules?: SessionPermissionRules
   model?: string
   effortLevel?: string
+  /**
+   * 是否在 CLI 渲染思考链（默认 true）。
+   * false 时仍解析 provider 事件，仅不显示。
+   */
+  showThinking?: boolean
   compactSummarizer?: CompactSummarizer
   /** 会话 skill 全文表；供 /skills 与 /<skill-id> 回落 */
   skills?: LoadedSkill[]
@@ -437,6 +442,7 @@ function cmdContext(session: SlashSession, _args: string): SlashDispatchResult {
     `permissionMode:  ${session.permissionMode}`,
     `model:           ${session.model ?? '(unset)'}`,
     `effort:          ${session.effortLevel ?? 'auto'}`,
+    `thinking:        ${session.showThinking === false ? 'off' : 'on'}  (display only; /thinking)`,
     `system sections: ${sections.length}`,
   ]
   if (sections.length) {
@@ -486,6 +492,7 @@ function cmdDoctor(session: SlashSession, _args: string): SlashDispatchResult {
     `permissionMode:  ${session.permissionMode}`,
     `model:           ${session.model ?? '(unset)'}`,
     `effort:          ${session.effortLevel ?? 'auto'}`,
+    `thinking:        ${session.showThinking === false ? 'off' : 'on'}`,
     `messages:        ${session.messages.length}`,
     `system sections: ${session.systemPromptSections.length}`,
     `tools:           ${toolsCount}`,
@@ -855,6 +862,34 @@ function cmdEffort(session: SlashSession, args: string): SlashDispatchResult {
   }
   session.effortLevel = raw
   return { ok: true, message: `effort set to ${raw}` }
+}
+
+/**
+ * /thinking [on|off] — 仅控制 CLI 是否渲染 reasoning 事件。
+ * 默认 on。off 时 provider 仍解析并转发 SessionEvent.reasoning，打印机跳过渲染。
+ * 不回灌 ChatMessage；不改请求侧 budget。
+ */
+function cmdThinking(session: SlashSession, args: string): SlashDispatchResult {
+  const raw = args.trim().toLowerCase()
+  if (!raw) {
+    const on = session.showThinking !== false
+    return {
+      ok: true,
+      message: `thinking display: ${on ? 'on' : 'off'} (default on; does not affect API parse)`,
+    }
+  }
+  if (raw === 'on' || raw === 'true' || raw === '1' || raw === 'yes') {
+    session.showThinking = true
+    return { ok: true, message: 'thinking display: on' }
+  }
+  if (raw === 'off' || raw === 'false' || raw === '0' || raw === 'no') {
+    session.showThinking = false
+    return { ok: true, message: 'thinking display: off (events still parsed, not rendered)' }
+  }
+  return {
+    ok: false,
+    message: `Invalid thinking mode "${args.trim()}". Usage: /thinking [on|off]`,
+  }
 }
 
 function cmdPlan(session: SlashSession, _args: string): SlashDispatchResult {
@@ -1295,6 +1330,13 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     usage: '[low|medium|high|max|auto]',
     group: 'model',
     run: cmdEffort,
+  },
+  {
+    name: 'thinking',
+    summary: 'Show or hide streaming thinking/reasoning in CLI',
+    usage: '[on|off]',
+    group: 'model',
+    run: cmdThinking,
   },
   {
     name: 'plan',

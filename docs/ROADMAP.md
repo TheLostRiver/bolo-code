@@ -38,8 +38,9 @@
 5. ~~**MCP 远程 transport**（`McpClient` 抽象 + Streamable HTTP）~~ ✅ 最小  
 6. ~~**PL2 插件深化**（热加载 · commands · `/plugins reload`）~~ ✅ 最小  
 7. ~~**Usage+**（`/cost` cache + by-model breakdown · 本地可观测）~~ ✅ 最小  
-8. **下一刀 P1：** RC2 ·（可选）经典 SSE 长连接  
-9. **后置：** OR6 WS · cache TTL · cached MC · T8 Ink · Electron · TP/CP 余量 · 插件市场  
+8. ~~**RC2**（Responses reasoning SSE · `/thinking` 显示开关）~~ ✅ 最小  
+9. **下一刀 P1 余量：** 经典 SSE 长连接 · CP/TP 余量  
+10. **后置：** 思考回灌 · Anthropic budget · OR6 WS · cache TTL · cached MC · T8 Ink · Electron · 插件市场  
 
 ---
 
@@ -63,7 +64,7 @@
   → Loop 韧性（分类 + 退避）+ Tool/Permission 日用
   → 斜杠 + Rules + Creators + Cache 标记
   → Skills / MCP / Plugins / Subagent
-  → 扩展深度（HTTP MCP ✅ · PL2 ✅ · Usage+ ✅ · RC2 / SSE 长连接可选）
+  → 扩展深度（HTTP MCP ✅ · PL2 ✅ · Usage+ ✅ · RC2 ✅ · SSE 长连接可选）
   → Electron · 完整 Ink · 生产化打磨
 ```
 
@@ -83,7 +84,7 @@
 | buildTool + 分区并发 + 常用工具 | ✅/🟡 | **Edit** ✅ 最小；真 apply_patch；Write；schema → tool_use_error |
 | tool 中段 AbortSignal | 🟡 最小 | Bash/Read/Write/Edit/apply_patch 尊重 abort |
 | Provider：OpenAI 兼容 / Anthropic / **openai-responses** / mock | ✅ | Responses：**HTTP SSE** ✅；WS ⬜ |
-| **思考链流式显示**（reasoning / thinking） | 🟡 最小 | `reasoning_delta`→SessionEvent→CLI dim；不回灌 ChatMessage；budget/Responses reasoning ⬜ |
+| **思考链流式显示**（reasoning / thinking） | 🟡 最小 | RC1+RC2：`reasoning_delta`→CLI dim；Responses reasoning SSE；`/thinking` 开关；**不**回灌 ChatMessage；budget ⬜ |
 | System prompt + BOLO.md + Rules | ✅ | |
 | Skill catalog + Skill 工具 + slash 调 skill | ✅ | 远程 skill ⬜ |
 
@@ -439,7 +440,7 @@ flowchart TB
 | G 协议 | Responses HTTP | ✅；WS 后置 |
 | H 韧性 | 错误分类 + model 退避 + PTL | 🟡 最小（本刀） |
 
-**默认下一刀：** 见 **`docs/TODO.md` §7**（**P1：RC2**；经典 SSE 长连接可选）。
+**默认下一刀：** 见 **`docs/TODO.md` §7**（**P1 余量：经典 SSE / CP·TP**）。
 
 ---
 
@@ -517,5 +518,5 @@ flowchart TB
 
 **一句话：**  
 Headless **主路径可日用**，相对参考实现约 **40–55%**（文档不再写 ~70% 乐观数）。  
-**P0 切片** LR / TP / CP 日用均 🟡 最小；**MCP HTTP · PL2 · Usage+ 🟡 最小**；**下一刀 P1：RC2 ·（可选）经典 SSE**。  
+**P0 切片** LR / TP / CP 日用均 🟡 最小；**MCP HTTP · PL2 · Usage+ · RC2 🟡 最小**；**下一刀：经典 SSE ·（或）CP/TP 余量**。  
 执行序 → **`docs/TODO.md`**。

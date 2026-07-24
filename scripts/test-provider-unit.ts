@@ -294,6 +294,58 @@ assert(
   'responses text delta',
 )
 
+// RC2: Responses reasoning SSE → reasoning_delta（对照 HC response.reasoning.delta）
+const reasonState = {
+  toolAcc: new Map<string, { id: string; name: string; arguments: string }>(),
+  inReasoning: false,
+}
+const reasonEv = processResponsesSseJson(
+  { type: 'response.reasoning.delta', delta: 'ponder' },
+  reasonState,
+)
+assert(
+  reasonEv.events.some(
+    (e) => e.type === 'reasoning_delta' && e.text === 'ponder',
+  ),
+  'responses reasoning.delta → reasoning_delta',
+)
+assert(reasonState.inReasoning === true, 'responses inReasoning after delta')
+
+const reasonSum = processResponsesSseJson(
+  { type: 'response.reasoning_summary_text.delta', delta: 'sum' },
+  reasonState,
+)
+assert(
+  reasonSum.events.some(
+    (e) => e.type === 'reasoning_delta' && e.text === 'sum',
+  ),
+  'responses reasoning_summary_text.delta',
+)
+
+const afterText = processResponsesSseJson(
+  { type: 'response.output_text.delta', delta: 'out' },
+  reasonState,
+)
+assert(
+  afterText.events.some((e) => e.type === 'reasoning_end') &&
+    afterText.events.some((e) => e.type === 'text_delta' && e.text === 'out'),
+  'responses text after reasoning → reasoning_end + text',
+)
+assert(reasonState.inReasoning === false, 'responses inReasoning cleared')
+
+// 无 reasoning 字段 → 不伪造
+const noFake = processResponsesSseJson(
+  { type: 'response.output_text.delta', delta: 'only' },
+  {
+    toolAcc: new Map(),
+    inReasoning: false,
+  },
+)
+assert(
+  !noFake.events.some((e) => e.type === 'reasoning_delta'),
+  'responses no fake reasoning',
+)
+
 const toolDone = processResponsesSseJson(
   {
     type: 'response.output_item.done',

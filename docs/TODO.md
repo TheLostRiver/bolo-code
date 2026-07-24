@@ -32,6 +32,7 @@
   · Loop 韧性最小 · Tool+Permission 日用最小
   · Compact 日用加深（加权 token 估 · 压力 · /context·/compact · 熔断）
   · Usage+ 本地 breakdown（cache · byModel · /cost）
+  · RC2 思考链二期（Responses reasoning SSE · /thinking 显示开关）
 
 相对参考实现 headless 约 40–55%（勿再写 ~70% 乐观数）。
 P0 抬水位：
@@ -42,14 +43,15 @@ P1：
   4. ~~MCP 远程 transport（HTTP + 抽象）~~ ✅ 最小
   5. ~~思考链流式显示~~ ✅ 最小
   6. ~~PL2 插件深化~~ ✅ 最小
-  7. ~~Usage+ 本地 breakdown~~ ✅ 最小（本刀）
-  下一刀：RC2 ·（可选）经典 SSE 长连接
+  7. ~~Usage+ 本地 breakdown~~ ✅ 最小
+  8. ~~RC2 思考链二期~~ ✅ 最小（本刀）
+  下一刀：经典 SSE 长连接 ·（或）CP/TP 余量 / C6+
 ```
 
 | 优先级 | 含义（当前） |
 |--------|----------------|
 | **P0** | 抬 headless 水位：韧性 / TP / **CP 日用** 已 🟡 |
-| **P1** | 扩展深度（**MCP HTTP ✅** · **Reasoning 显示 ✅** · **PL2 ✅** · **Usage+ ✅** · RC2）— **默认下一刀区：RC2** |
+| **P1** | 扩展深度（**MCP HTTP ✅** · **RC1+RC2 ✅** · **PL2 ✅** · **Usage+ ✅**）— **默认下一刀区：经典 SSE / 余量** |
 | **P2** | 未做或仅最小的子项 |
 | **P3** | GUI / 完整 Ink / 后置协议 |
 
@@ -169,9 +171,9 @@ P1：
 |----|------|------|------|
 | **MCP2 余量** | 远程 transport | **Streamable HTTP + 抽象** 已接 host；经典 SSE 长连接后置 | ✅ 最小 |
 | **RC1** | 思考链流式显示 | provider 解析 → queryLoop → CLI dim；不持久化回灌 | ✅ 最小 |
-| **RC2** | Reasoning 加深 | openai-responses reasoning；ChatMessage 安全回灌；budget/slash 开关 | ⬜ 二期 |
+| **RC2** | Reasoning 加深 | openai-responses reasoning SSE；`/thinking` 显示开关；**跳过** ChatMessage 回灌 | ✅ 最小（本刀） |
 | **PL2** | plugins 深度 | 热加载 / commands 贡献 / `/plugins reload` | ✅ 最小 |
-| **Usage+** | 本地 usage 展示 | cache 字段 + byModel + `/cost` breakdown；快照/meta 持久化 | ✅ 最小（本刀） |
+| **Usage+** | 本地 usage 展示 | cache 字段 + byModel + `/cost` breakdown；快照/meta 持久化 | ✅ 最小 |
 | **J-D 余量** | entry / CLI | 更多 entry 类型；CLI `migrate-session` 包装 | 🟡 可选支线 |
 | **C6+** | Cache 后置 | 1h TTL / global scope / break detection / cached MC | ⬜ **后置** |
 | **TP 余量** | permission 深度 | 完整分类器 / StreamingToolExecutor / 更强 apply_patch | ⬜ 后置 |
@@ -212,11 +214,11 @@ P1：
   RS* · SL* · SL-polish · T0–T7 · R* · C1–C5 · J-A/B/C · J-D(+T3)
   · K* · S0–S7 · MCP1 · MCP2(stdio + list_changed + HTTP 最小) · PL1 · OR1–OR5
   · LR* · TP* · CP* 长会话 compact 日用最小 · RC1 思考链显示最小 · PL2 插件热加载最小
-  · Usage+ 本地 breakdown 最小
+  · Usage+ 本地 breakdown 最小 · RC2 思考链二期最小
 
 下一阶段：
-  ① RC2 思考链二期（或经典 SSE）  ← 默认主刀（P1）
-  ② 经典 SSE 长连接 / CP 余量 / TP 余量 / C6+ / OR6 / T8 / Electron  （后置）
+  ① 经典 SSE 长连接 / CP 余量 / TP 余量   ← 默认主刀区（P1 余量）
+  ② C6+ / OR6 / T8 / Electron  （后置）
 ```
 
 ---
@@ -225,13 +227,13 @@ P1：
 
 若只开一刀（**非 Electron**）：
 
-> **主推：RC2**（思考链二期：openai-responses reasoning · 安全回灌 · slash 开关）（P1）  
+> **主推：经典 SSE 长连接**（MCP `type: sse` 真实现）或 **CP/TP 余量**（P1 余量）  
 > - 勿一口做完整市场 / OAuth MCP / 完整 Ink  
 >
-> **本刀已勾选：** **Usage+**（provider cache 字段 · byModel · `/cost` breakdown · 持久化 · 无遥测）。  
-> **明确后置：** 插件市场 · 经典 SSE · OAuth · cached MC · snip · 默认开 auto · OR6 · C6+ · T8 · Electron · 完整 permission 分类器 · 远程 USD 账单。
+> **本刀已勾选：** **RC2**（openai-responses reasoning SSE · `/thinking` 显示开关 · 不回灌 ChatMessage · 无遥测）。  
+> **明确后置：** 思考链安全回灌 · Anthropic thinking budget · 插件市场 · OAuth · cached MC · snip · 默认开 auto · OR6 · C6+ · T8 · Electron · 完整 permission 分类器 · 远程 USD 账单。
 
-**已齐摘要：** resume · slash · BOLO TUI 最小 · rules · C1–C5 · JSONL 主路径 · creators · Subagent · MCP stdio+HTTP 最小 · **plugins PL1+PL2 最小** · Responses HTTP · Loop 韧性最小 · Tool+Permission 日用最小 · Compact 日用加深最小 · 思考链显示最小 · **Usage+ 最小**。
+**已齐摘要：** resume · slash · BOLO TUI 最小 · rules · C1–C5 · JSONL 主路径 · creators · Subagent · MCP stdio+HTTP 最小 · **plugins PL1+PL2 最小** · Responses HTTP · Loop 韧性最小 · Tool+Permission 日用最小 · Compact 日用加深最小 · **RC1+RC2 思考链** · **Usage+ 最小**。
 
 ---
 
@@ -247,6 +249,7 @@ P1：
 | R* | M-Rules ✅ |
 | C* | M-Cost（C1–C5 ✅；C6+ 后置） |
 | **Usage+** | 本地 usage breakdown ✅ 最小 |
+| **RC1 · RC2** | 思考链流式 + Responses reasoning + `/thinking` ✅ 最小 |
 | J* | M5.1 / `TODO_SESSION_JSONL`（J-D T3 ✅） |
 | K* | M-Creators ✅ |
 | S* | M-Subagent（S0–S7 ✅；S12 partial） |
@@ -269,4 +272,4 @@ P1：
 ---
 
 **一句话：**  
-Usage+ 本地 breakdown（cache · byModel · `/cost`）已落地；**下一刀 P1：RC2**；市场 / 经典 SSE / cached MC / snip 勿抢。
+RC2（Responses reasoning · `/thinking`）已落地；**下一刀：经典 SSE 或 CP/TP 余量**；市场 / cached MC / snip / 回灌勿抢。

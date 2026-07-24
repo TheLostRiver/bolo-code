@@ -68,6 +68,7 @@ async function main() {
   if (help.type === 'slash') {
     assert(help.message.includes('/clear'), 'help lists clear')
     assert(help.message.includes('/effort'), 'help lists effort')
+    assert(help.message.includes('/thinking'), 'help lists thinking')
     assert(help.message.includes('Session:'), 'help group Session')
     assert(help.message.includes('Model & permissions:'), 'help group Model')
     assert(help.message.includes('Extensions:'), 'help group Extensions')
@@ -308,6 +309,30 @@ async function main() {
   assert(e1.ok && session.effortLevel === 'high', 'effort high')
   const e2 = await dispatchSlashCommand(session, 'effort', 'auto')
   assert(e2.ok && session.effortLevel === undefined, 'effort auto clears')
+
+  // /thinking
+  const t0 = await dispatchSlashCommand(session, 'thinking', '')
+  assert(
+    t0.ok && t0.message.includes('on'),
+    'thinking default show on',
+  )
+  const t1 = await dispatchSlashCommand(session, 'thinking', 'off')
+  assert(
+    t1.ok && session.showThinking === false,
+    'thinking off sets showThinking false',
+  )
+  const t2 = await dispatchSlashCommand(session, 'thinking', '')
+  assert(t2.message.includes('off'), 'thinking show off')
+  const t3 = await dispatchSlashCommand(session, 'thinking', 'on')
+  assert(
+    t3.ok && session.showThinking === true,
+    'thinking on restores',
+  )
+  const tBad = await dispatchSlashCommand(session, 'thinking', 'maybe')
+  assert(
+    !tBad.ok && tBad.message.includes('/thinking'),
+    'thinking validation',
+  )
 
   // /plan
   const plan = await dispatchSlashCommand(session, 'plan', '')

@@ -344,6 +344,11 @@ export type CreateSessionOptions = {
    */
   effortLevel?: string
   /**
+   * 是否在 CLI 显示思考链（/thinking）；默认 true。
+   * resume 时由快照恢复；仅影响渲染，不影响 provider 解析。
+   */
+  showThinking?: boolean
+  /**
    * 会话本地 token 累计种子；默认全 0。
    * resume 时由快照恢复（无遥测）。
    */
@@ -433,6 +438,12 @@ export type BoloSession = {
    * `undefined` 视为 auto（默认 base maxTokens）。
    */
   effortLevel?: string
+  /**
+   * 是否在 CLI 渲染思考链（/thinking）。默认 true。
+   * false 时 provider 仍解析并转发 reasoning 事件，仅打印机不渲染。
+   * 不回灌 ChatMessage。
+   */
+  showThinking?: boolean
   /** 会话级 auto compact 开关（prepareMessages） */
   autoCompactEnabled: boolean
   contextWindowTokens: number
@@ -583,6 +594,7 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
       typeof opts.effortLevel === 'string' && opts.effortLevel.trim()
         ? opts.effortLevel.trim()
         : undefined,
+    showThinking: opts.showThinking === false ? false : true,
     autoCompactEnabled: opts.autoCompactEnabled === true,
     contextWindowTokens: opts.contextWindowTokens ?? 128_000,
     maxPtlRetries:
@@ -1129,6 +1141,9 @@ export async function resumeSession(
     permissionRules:
       opts.create?.permissionRules ?? snapshot.permissionRules,
     effortLevel: opts.create?.effortLevel ?? snapshot.effortLevel,
+    showThinking:
+      opts.create?.showThinking ??
+      (snapshot.showThinking === false ? false : true),
     usage: opts.create?.usage ?? snapshot.usage,
     provider: opts.provider ?? opts.create?.provider,
     hooks: opts.hooks ?? opts.create?.hooks,

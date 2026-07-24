@@ -54,6 +54,11 @@ export type PersistableSession = {
   permissionRules?: SessionPermissionRules
   /** 会话 effort 档位；可选落盘 */
   effortLevel?: string
+  /**
+   * 思考链 CLI 显示开关；可选落盘。
+   * undefined / true = on；false = off。
+   */
+  showThinking?: boolean
   /** 本地 token 累计；可选落盘，无遥测 */
   usage?: SessionUsage
   onEvent?: (e: { type: 'error'; message: string }) => void
@@ -86,6 +91,8 @@ export type SessionSnapshot = {
   permissionRules?: SessionPermissionRules
   /** 会话 effort 档位（可选） */
   effortLevel?: string
+  /** 思考链显示（可选；缺省视为 on） */
+  showThinking?: boolean
   /** 本地 token 累计（可选；无遥测） */
   usage?: SessionUsage
 }
@@ -371,6 +378,8 @@ export function toSnapshot(
     typeof session.effortLevel === 'string' && session.effortLevel.trim()
       ? session.effortLevel.trim()
       : undefined
+  // 仅显式 false 落盘；默认 on 不写字段，兼容旧快照
+  const showThinkingOff = session.showThinking === false
   return {
     version: SESSION_SNAPSHOT_VERSION,
     id: session.id,
@@ -387,6 +396,7 @@ export function toSnapshot(
     phase: session.phase,
     ...(permissionRules ? { permissionRules } : {}),
     ...(effort ? { effortLevel: effort } : {}),
+    ...(showThinkingOff ? { showThinking: false } : {}),
     ...(usage ? { usage } : {}),
   }
 }
@@ -437,6 +447,8 @@ export function parseSessionSnapshot(raw: unknown): SessionSnapshot {
     typeof o.effortLevel === 'string' && o.effortLevel.trim()
       ? o.effortLevel.trim()
       : undefined
+  const showThinking =
+    o.showThinking === false ? false : o.showThinking === true ? true : undefined
 
   return {
     version: SESSION_SNAPSHOT_VERSION,
@@ -463,6 +475,7 @@ export function parseSessionSnapshot(raw: unknown): SessionSnapshot {
         : undefined,
     ...(permissionRules ? { permissionRules } : {}),
     ...(effortLevel ? { effortLevel } : {}),
+    ...(showThinking === false ? { showThinking: false } : {}),
     ...(usage ? { usage } : {}),
   }
 }
@@ -638,6 +651,7 @@ export async function migrateSessionToJsonl(
     phase: snapshot.phase,
     permissionRules: snapshot.permissionRules,
     effortLevel: snapshot.effortLevel,
+    showThinking: snapshot.showThinking,
     usage: snapshot.usage,
   }
 
@@ -756,6 +770,7 @@ async function snapshotFromTranscriptOnly(
     ...(meta?.phase ? { phase: meta.phase as SessionPhase } : {}),
     ...(permissionRules ? { permissionRules } : {}),
     ...(meta?.effortLevel ? { effortLevel: meta.effortLevel } : {}),
+    ...(meta?.showThinking === false ? { showThinking: false } : {}),
     ...(usage ? { usage } : {}),
   }
 }
@@ -924,6 +939,9 @@ export function applySnapshotToSession(
   }
   if (snapshot.effortLevel !== undefined) {
     session.effortLevel = snapshot.effortLevel
+  }
+  if (snapshot.showThinking !== undefined) {
+    session.showThinking = snapshot.showThinking
   }
   if (snapshot.usage) {
     session.usage = cloneUsage(snapshot.usage)

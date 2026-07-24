@@ -62,10 +62,12 @@ export async function runNewSessionCli(
     )
   }
 
+  const thinkingGate: { session: BoloSession | null } = { session: null }
   const { printer, onEvent } = createCliOnEvent({
     writeOut,
     writeErr,
     onSessionEvent: opts.onSessionEvent,
+    showThinking: () => thinkingGate.session?.showThinking !== false,
   })
 
   const askPermission = createTtyAskPermission({
@@ -81,6 +83,7 @@ export async function runNewSessionCli(
     onEvent,
   })
 
+  thinkingGate.session = session
   attachSessionEventPrinter(session, printer)
 
   // CLI 控制 provider：forceMock / 无 key 时覆盖 workspace 装配结果

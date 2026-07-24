@@ -135,12 +135,14 @@ npx tsx scripts/smoke-live.ts
 | OpenAI-compatible（DeepSeek 等） | `delta.reasoning_content` | `reasoning_delta` | `reasoning` | dim + 前缀 `thinking` |
 | Anthropic | `content_block` type `thinking` + `thinking_delta` | `reasoning_delta`（可选 `reasoning_end`） | 同上 | 同上 |
 | Anthropic | `redacted_thinking` | 单次占位 `[redacted thinking]` | 同上 | 同上 |
+| openai-responses | `response.reasoning.delta` / `reasoning_text` / `reasoning_summary_text` 等 | `reasoning_delta`（切到正文时 `reasoning_end`） | 同上 | 同上 |
 | 无字段 / 不支持 | — | **不发** | **不发** | 零输出 |
 
 - 内部类型：`ProviderStreamEvent` 含 `reasoning_delta` | `reasoning_end`
-- `queryLoop` 转发为 `{ type: 'reasoning', text }`；**不**并入 `ChatMessage.content`（避免签名/回灌坑；持久化二期）
-- 请求侧 thinking budget / adaptive thinking：**本刀不做**；`/effort` 仍只映射 `max_tokens`
-- openai-responses 的 reasoning summary：**二期**
+- `queryLoop` 转发为 `{ type: 'reasoning', text }`；**不**并入 `ChatMessage.content`（避免签名/回灌坑；**安全回灌刻意跳过**）
+- 显示开关：`session.showThinking` + `/thinking on|off`（默认 **on**）；**off 时仍解析并转发事件，CLI 不渲染**
+- 请求侧 thinking budget / adaptive thinking：**后置**；`/effort` 仍只映射 `max_tokens`
+- openai-responses：HTTP SSE 已解析 reasoning 相关 delta；请求侧 `reasoning` 参数 / WS：**后置**
 
 ### Prompt cache 字段（C5）
 

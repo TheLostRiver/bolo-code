@@ -30,6 +30,7 @@ export {
   toolsToResponses,
   buildResponsesRequest,
   processResponsesSseJson,
+  extractResponsesReasoningText,
   parseResponsesUsage,
   type OpenAIResponsesConfig,
 } from './openaiResponses.ts'

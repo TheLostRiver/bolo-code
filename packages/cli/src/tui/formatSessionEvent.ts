@@ -92,13 +92,24 @@ export type SessionEventPrinter = {
 /**
  * 会话 onEvent 打印机：流式 text + thinking 弱样式 + 工具简行；不刷 phase/hook 等噪声。
  * 思考链与正文分离：thinking 用 dim；首段加 `thinking ` 前缀；切到 text 时换行。
+ * showThinking=false 时仍可收到 reasoning 事件，但不写终端（对照 session.showThinking / /thinking）。
  */
 export function createSessionEventPrinter(opts: {
   writeOut: (s: string) => void
   writeErr?: (s: string) => void
+  /**
+   * 是否渲染 reasoning；默认 true。
+   * 可传函数以便读取 session.showThinking 的最新值。
+   */
+  showThinking?: boolean | (() => boolean)
 }): SessionEventPrinter {
   const writeOut = opts.writeOut
   const writeErr = opts.writeErr ?? ((s: string) => process.stderr.write(s))
+  const isShowThinking = (): boolean => {
+    if (opts.showThinking === undefined) return true
+    if (typeof opts.showThinking === 'function') return opts.showThinking() !== false
+    return opts.showThinking !== false
+  }
   let openTextLine = false
   let openReasoningLine = false
   let streamedText = false
@@ -135,6 +146,7 @@ export function createSessionEventPrinter(opts: {
         typeof e.text === 'string' &&
         e.text.length > 0
       ) {
+        if (!isShowThinking()) return
         if (openTextLine) {
           writeOut('\n')
           openTextLine = false

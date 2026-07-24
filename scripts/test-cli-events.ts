@@ -157,6 +157,36 @@ async function main() {
     'no fake thinking when absent',
   )
 
+  // showThinking=false：不渲染 reasoning，正文仍出
+  const outOff: string[] = []
+  const pOff = createSessionEventPrinter({
+    writeOut: (s) => outOff.push(s),
+    showThinking: false,
+  })
+  pOff.beginTurn()
+  pOff.onEvent({ type: 'reasoning', text: 'secret-think' })
+  pOff.onEvent({ type: 'text', text: 'visible' })
+  pOff.endTurn()
+  const joinedOff = outOff.join('')
+  assert(!joinedOff.includes('thinking'), 'off: no thinking prefix')
+  assert(!joinedOff.includes('secret-think'), 'off: no reasoning body')
+  assert(joinedOff.includes('visible'), 'off: text still shown')
+
+  // showThinking 函数门控
+  let gate = true
+  const outGate: string[] = []
+  const pGate = createSessionEventPrinter({
+    writeOut: (s) => outGate.push(s),
+    showThinking: () => gate,
+  })
+  pGate.beginTurn()
+  pGate.onEvent({ type: 'reasoning', text: 'shown' })
+  gate = false
+  pGate.onEvent({ type: 'reasoning', text: 'hidden' })
+  pGate.endTurn()
+  assert(outGate.join('').includes('shown'), 'gate on shows')
+  assert(!outGate.join('').includes('hidden'), 'gate off hides')
+
   // ── permission parse ──
   assert(parsePermissionAnswer('y') === 'allow', 'y allow')
   assert(parsePermissionAnswer('YES') === 'allow', 'YES allow')
