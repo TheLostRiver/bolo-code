@@ -304,5 +304,5 @@ P1：
 ---
 
 **一句话：**  
-规则权限已可用；**auto/YOLO 按 `docs/TODO_AUTO_PERMISSIONS.md` 专册推进**（目标：HC auto **语义** ~90%，非权限 UI 全家桶）。**PL-MKT 插件市场最小**已落地；**下一刀：完整 YOLO / auto 权限分类器（需确认）**。  
-完整官方市场深度 / OAuth / Electron 仍后置。
+规则权限已可用；**auto/YOLO 按 `docs/TODO_AUTO_PERMISSIONS.md` 专册推进**（Y2 首发可用，Y4 冲 HC auto 语义 ~90%）。  
+PL-MKT 最小已齐；完整官方市场 / Electron 后置。
