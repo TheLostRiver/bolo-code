@@ -17,7 +17,7 @@
 | **项目规则 Rules** | **~90%** | 装载 + `paths` + submitPrompt 刷新 + `/rules`；enable/disable 持久化可加深 |
 | **内置元技能 Creators** | **~85%** | skill-creator / plugin-creator bundled + slash 回落 |
 | **成本与缓存** | **~70–75%** | C1–C5 ✅；TTL / break detection / cached MC 后置 |
-| **斜杠命令** | **~75–80%** | 总线 + 日用命令齐；工程类 slash 部分后置 |
+| **斜杠命令** | **~85%** | 总线 + 日用命令 + SL-polish（分组 help / 建议 / context）；工程类 slash 部分后置 |
 | **CLI TUI** | **~60–65%** | T0–T7 最小可用；完整 Ink（T8）⬜ |
 | **Electron GUI** | **~5%** | 占位 |
 | **产品整体（可日用 headless agent）** | **~65–70%** | 脚本/CLI 可日用；非成熟 GUI agent |
@@ -26,7 +26,7 @@
 
 1. ~~斜杠总线~~ ✅ · ~~Rules~~ ✅ · ~~Creators~~ ✅ · ~~C1–C5~~ ✅  
 2. ~~resume 列表 / TUI 最小 / JSONL 双写 / Subagent / MCP / plugins / Responses HTTP~~ ✅  
-3. **下一刀候选：** JSONL 细化 · MCP/plugins 深度 · slash 打磨（**非 Electron**）  
+3. **下一刀候选：** JSONL 细化 · MCP/plugins 深度（**非 Electron**）；slash 体验打磨 ✅  
 4. **后置：** OR6 WS · cache TTL/break · T8 Ink · Electron  
 
 ---
@@ -124,6 +124,7 @@
 | 模型与推理 | `/model` **`/effort`** `/plan` `/permissions` `/allow` | ✅ |
 | 扩展 | `/skills` `/mcp` `/plugins` `/hooks` **`/rules`** `/agents` `/bg` | ✅ |
 | 诊断脚手架 | `/doctor` `/status` `/init` | ✅ |
+| 体验打磨 | `/help` 分组 · 未知建议 · `/context` 加深 · 别名隐藏 | ✅ SL-polish |
 | 元技能 | `/skill-creator` `/plugin-creator`（skill 回落） | ✅ |
 | 工程 | `/diff` `/commit` `/review`… | ⬜ 后置 |
 | 产品周边 | login/theme/vim/remote… | 🚫 或后置 |
@@ -173,9 +174,9 @@
 
 Effort：`/effort` + provider 映射 ✅。
 
-### M2.10 / M-Slash — 斜杠命令 ✅（最小日用）
+### M2.10 / M-Slash — 斜杠命令 ✅（最小日用 + SL-polish）
 
-总线 + P0/P1 日用命令已落地（见 §2.6、`docs/SLASH_COMMANDS.md`）。工程类 slash 后置。
+总线 + P0/P1 日用命令 + 体验打磨（分组 `/help`、未知命令建议、`/context` token/sections/cache、参数 Usage、隐藏别名）已落地（见 §2.6、`docs/SLASH_COMMANDS.md`）。工程类 slash 后置。
 
 ### M2.11 / M-Rules — 项目规则 ✅
 

@@ -78,7 +78,7 @@
 | ID | 主题 | 说明 | 状态 |
 |----|------|------|------|
 | **J-D** | JSONL 主路径细化 | entry 类型、列表 lite、compact_boundary 体验、与 `TODO_SESSION_JSONL` 后续 Phase | 🟡 |
-| **SL-polish** | 斜杠打磨 | help 分组、未知命令提示、少数 UX 缺口（非新总线） | 🟡 |
+| **SL-polish** | 斜杠打磨 | help 分组、未知命令建议、`/context` token/sections/cache、参数 Usage、别名隐藏 | ✅ |
 | **C6+** | Cache 后置 | 1h TTL / global scope / break detection / cached MC | ⬜ 后置 |
 | **Usage+** | 本地 usage 展示 | 已有累计；可加深 breakdown | 🟡 |
 
@@ -114,12 +114,12 @@
 
 ```text
 已完成主线（勿回退当 P0）：
-  RS* · SL* · T0–T7 · R* · C1–C5 · J-A/B/C · K* · S0–S7 · MCP1 · PL1 · OR1–OR5
+  RS* · SL* · SL-polish · T0–T7 · R* · C1–C5 · J-A/B/C · K* · S0–S7 · MCP1 · PL1 · OR1–OR5
 
 下一阶段串行候选（择一为主刀）：
   ① J-D          JSONL 深化（见 TODO_SESSION_JSONL）
   ② MCP2 / PL2   扩展面深度（真能力，非 mock）
-  ③ SL-polish    斜杠与 doctor 体验
+  ③ Usage+       本地 usage breakdown（可选）
   ④ T8           Ink TUI（可选，不挡 headless）
   ⑤ C6+ / OR6    cache 后置 / Responses WS —— 明确后置
   ⑥ M4           Electron —— 门禁后置
@@ -131,14 +131,14 @@
 
 若只开一刀（**非 Electron**）：
 
-> **主推候选（三选一，按收益选）：**  
+> **主推候选（二选一，按收益选）：**  
 > 1. **J-D** — JSONL transcript 主路径/列表/边界细化（`TODO_SESSION_JSONL.md`）  
 > 2. **MCP2 / PL2** — MCP 传输面或 plugins 深度（禁止 mock 冒充）  
-> 3. **SL-polish** — 斜杠/help/doctor 日用打磨  
 >
+> **可选支线：** Usage+ 本地 breakdown。  
 > **明确后置：** OR6 WebSocket · C6+ cache TTL/break · T8 Ink · Electron。
 
-已齐：resume / slash / BOLO TUI 最小 / rules（含 path-scoped 刷新）/ cache C1–C5 / JSONL 双写+最小 resume / creators / Subagent / MCP stdio / plugins 最小 / usage+effort / always-allow / apply_patch / **openai-responses HTTP SSE**。
+已齐：resume / slash（含 **SL-polish**）/ BOLO TUI 最小 / rules（含 path-scoped 刷新）/ cache C1–C5 / JSONL 双写+最小 resume / creators / Subagent / MCP stdio / plugins 最小 / usage+effort / always-allow / apply_patch / **openai-responses HTTP SSE**。
 
 ---
 
@@ -170,4 +170,4 @@
 ---
 
 **一句话：**  
-可日用 headless 主路径已齐；下一刀做 **JSONL 深化 / MCP·plugins 深度 / slash 打磨** 之一；**Electron · Ink · Responses WS · cache TTL** 后置。
+可日用 headless 主路径已齐；**SL-polish** 已交付；下一刀做 **JSONL 深化 / MCP·plugins 深度** 之一；**Electron · Ink · Responses WS · cache TTL** 后置。

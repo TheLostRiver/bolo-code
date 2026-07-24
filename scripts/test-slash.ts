@@ -62,15 +62,26 @@ async function main() {
   )
   const sysKeep = [...session.systemPromptSections]
 
-  // /help
+  // /help（分组 + 隐藏别名）
   const help = await submitUserInput(session, '/help')
   assert(help.type === 'slash', 'help is slash')
   if (help.type === 'slash') {
     assert(help.message.includes('/clear'), 'help lists clear')
     assert(help.message.includes('/effort'), 'help lists effort')
+    assert(help.message.includes('Session:'), 'help group Session')
+    assert(help.message.includes('Model & permissions:'), 'help group Model')
+    assert(help.message.includes('Extensions:'), 'help group Extensions')
+    assert(help.message.includes('Diagnostics:'), 'help group Diagnostics')
+    assert(help.message.includes('/status → /doctor'), 'help aliases line')
+    assert(!/\n\s*\/status\b/.test(help.message), 'help hides /status row')
+    assert(!/\n\s*\/usage\b/.test(help.message), 'help hides /usage row')
   }
 
-  // /context
+  // /context（token 估计 · sections · cache 提示）
+  session.systemPromptSections = [
+    '# Environment\nstable prefix',
+    '# Project rules\nvolatile',
+  ]
   const ctx = await submitUserInput(session, '/context')
   assert(ctx.type === 'slash', 'context slash')
   if (ctx.type === 'slash') {
@@ -78,7 +89,18 @@ async function main() {
     assert(ctx.message.includes('messages:'), 'context msgs')
     assert(ctx.message.includes('mock-a'), 'context model')
     assert(ctx.message.includes('usage:'), 'context has usage line')
+    assert(ctx.message.includes('tokens (est):'), 'context token est')
+    assert(ctx.message.includes('Environment'), 'context section label')
+    assert(ctx.message.includes('Project rules'), 'context section label 2')
+    assert(
+      ctx.message.includes('cache:') &&
+        (ctx.message.includes('cache_control') ||
+          ctx.message.includes('prompt_cache_key')),
+      'context cache tip',
+    )
   }
+  // 恢复供 /clear 断言的 system 快照
+  session.systemPromptSections = [...sysKeep]
 
   // /doctor · /status（极简本地诊断）
   const doctor = await submitUserInput(session, '/doctor')
@@ -328,12 +350,36 @@ async function main() {
     )
   }
 
-  // 未知命令
+  // 未知命令 + 建议
   const unk = await submitUserInput(session, '/nope')
   assert(unk.type === 'slash', 'unknown is slash not LLM')
   if (unk.type === 'slash') {
     assert(unk.message.toLowerCase().includes('unknown'), 'unknown msg')
+    assert(unk.message.includes('/help'), 'unknown tips help')
   }
+  const unkClose = await submitUserInput(session, '/helpp')
+  assert(unkClose.type === 'slash', 'typo is slash')
+  if (unkClose.type === 'slash') {
+    assert(
+      unkClose.message.includes('Did you mean') &&
+        unkClose.message.includes('/help'),
+      'unknown suggests /help',
+    )
+  }
+  const badEffort = await dispatchSlashCommand(session, 'effort', 'nope')
+  assert(
+    !badEffort.ok &&
+      badEffort.message.includes('Invalid effort') &&
+      badEffort.message.includes('/effort'),
+    'effort validation message',
+  )
+  const badPerm = await dispatchSlashCommand(session, 'permissions', 'nope')
+  assert(
+    !badPerm.ok &&
+      badPerm.message.includes('Invalid mode') &&
+      badPerm.message.includes('/permissions'),
+    'permissions validation message',
+  )
 
   // skill 回落：/skill-creator（挂 mock skill）
   session.skills = [

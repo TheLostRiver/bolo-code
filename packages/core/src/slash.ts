@@ -92,10 +92,38 @@ export type SubmitUserInputResult =
   | { type: 'prompt'; terminal: Terminal }
   | { type: 'empty' }
 
+/** /help 分组（展示顺序固定） */
+export type SlashCommandGroup =
+  | 'session'
+  | 'model'
+  | 'extensions'
+  | 'diagnostics'
+  | 'other'
+
+export const SLASH_GROUP_LABELS: Record<SlashCommandGroup, string> = {
+  session: 'Session',
+  model: 'Model & permissions',
+  extensions: 'Extensions',
+  diagnostics: 'Diagnostics',
+  other: 'Other',
+}
+
+export const SLASH_GROUP_ORDER: SlashCommandGroup[] = [
+  'session',
+  'model',
+  'extensions',
+  'diagnostics',
+  'other',
+]
+
 export type SlashCommandDef = {
   name: string
   summary: string
   usage?: string
+  /** /help 分组；缺省归 other */
+  group?: SlashCommandGroup
+  /** 隐藏别名不单独占 help 行（如 status→doctor）；仍可 dispatch */
+  hidden?: boolean
   run: (
     session: SlashSession,
     args: string,
@@ -151,15 +179,107 @@ function approxChars(session: SlashSession): number {
   return n
 }
 
-function formatHelp(): string {
-  const lines = ['Slash commands:', '']
-  for (const c of SLASH_COMMANDS) {
-    const usage = c.usage ? ` ${c.usage}` : ''
-    lines.push(`  /${c.name}${usage}`)
-    lines.push(`    ${c.summary}`)
+/** 粗算 token：chars/4（本地估计，非计费真值） */
+export function approxTokensFromChars(chars: number): number {
+  return Math.max(0, Math.ceil(chars / 4))
+}
+
+/** section 首行标签（去 # 前缀），供 /context */
+export function sectionLabel(section: string, maxLen = 48): string {
+  const first = (section.split(/\r?\n/).find((l) => l.trim()) ?? '').trim()
+  const bare = first.replace(/^#+\s*/, '')
+  if (!bare) return '(empty)'
+  return bare.length > maxLen ? `${bare.slice(0, maxLen - 1)}…` : bare
+}
+
+/** 编辑距离（小串；未知命令建议用） */
+export function editDistance(a: string, b: string): number {
+  const s = a.toLowerCase()
+  const t = b.toLowerCase()
+  if (s === t) return 0
+  if (!s.length) return t.length
+  if (!t.length) return s.length
+  const prev = new Array<number>(t.length + 1)
+  const cur = new Array<number>(t.length + 1)
+  for (let j = 0; j <= t.length; j++) prev[j] = j
+  for (let i = 1; i <= s.length; i++) {
+    cur[0] = i
+    for (let j = 1; j <= t.length; j++) {
+      const cost = s[i - 1] === t[j - 1] ? 0 : 1
+      cur[j] = Math.min(
+        (prev[j] ?? 0) + 1,
+        (cur[j - 1] ?? 0) + 1,
+        (prev[j - 1] ?? 0) + cost,
+      )
+    }
+    for (let j = 0; j <= t.length; j++) prev[j] = cur[j] ?? 0
   }
-  lines.push('')
+  return prev[t.length] ?? t.length
+}
+
+/** 为未知命令挑 1–3 个相近内置名（不含 hidden 别名重复感时可仍含） */
+export function suggestSlashCommands(
+  name: string,
+  limit = 3,
+): string[] {
+  const needle = name.toLowerCase()
+  const candidates = SLASH_COMMANDS.filter((c) => !c.hidden).map((c) => c.name)
+  const scored = candidates
+    .map((n) => {
+      let score = editDistance(needle, n)
+      if (n.startsWith(needle) || needle.startsWith(n)) score = Math.min(score, 1)
+      if (n.includes(needle) || needle.includes(n)) score = Math.min(score, 2)
+      return { n, score }
+    })
+    .filter((x) => x.score <= 3)
+    .sort((a, b) => a.score - b.score || a.n.localeCompare(b.n))
+  const out: string[] = []
+  for (const x of scored) {
+    if (out.includes(x.n)) continue
+    out.push(x.n)
+    if (out.length >= limit) break
+  }
+  return out
+}
+
+function formatUnknownCommand(name: string): string {
+  const tips = [
+    `Unknown command /${name}.`,
+    'Type /help for grouped list, or /skills for skill ids.',
+  ]
+  const suggestions = suggestSlashCommands(name)
+  if (suggestions.length) {
+    tips.push(`Did you mean: ${suggestions.map((s) => `/${s}`).join(', ')}?`)
+  }
+  return tips.join(' ')
+}
+
+function formatHelp(): string {
+  const visible = SLASH_COMMANDS.filter((c) => !c.hidden)
+  const byGroup = new Map<SlashCommandGroup, SlashCommandDef[]>()
+  for (const g of SLASH_GROUP_ORDER) byGroup.set(g, [])
+  for (const c of visible) {
+    const g = c.group ?? 'other'
+    const list = byGroup.get(g) ?? []
+    list.push(c)
+    byGroup.set(g, list)
+  }
+
+  const lines = ['Slash commands:', '']
+  for (const g of SLASH_GROUP_ORDER) {
+    const list = byGroup.get(g) ?? []
+    if (!list.length) continue
+    lines.push(`${SLASH_GROUP_LABELS[g]}:`)
+    for (const c of list) {
+      const usage = c.usage ? ` ${c.usage}` : ''
+      lines.push(`  /${c.name}${usage}`)
+      lines.push(`    ${c.summary}`)
+    }
+    lines.push('')
+  }
+  lines.push('Aliases: /status → /doctor · /usage → /cost')
   lines.push('Tip: lines starting with // are normal prompts, not commands.')
+  lines.push('Skills: /skills · invoke /<skill-id> or /skill <id>')
   return lines.join('\n')
 }
 
@@ -212,17 +332,30 @@ async function cmdCompact(
 }
 
 function cmdContext(session: SlashSession, _args: string): SlashDispatchResult {
+  const chars = approxChars(session)
+  const tokensEst = approxTokensFromChars(chars)
+  const sections = session.systemPromptSections
   const lines = [
     `id:              ${session.id}`,
     `cwd:             ${session.cwd}`,
     `messages:        ${session.messages.length}`,
-    `chars (approx):  ${approxChars(session)}`,
+    `chars (approx):  ${chars}`,
+    `tokens (est):    ~${tokensEst}  (chars/4; local only, not billing)`,
     `permissionMode:  ${session.permissionMode}`,
     `model:           ${session.model ?? '(unset)'}`,
     `effort:          ${session.effortLevel ?? 'auto'}`,
-    `system sections: ${session.systemPromptSections.length}`,
-    formatUsageOneLiner(session.usage),
+    `system sections: ${sections.length}`,
   ]
+  if (sections.length) {
+    for (let i = 0; i < sections.length; i++) {
+      const s = sections[i] ?? ''
+      lines.push(`  [${i + 1}] ${sectionLabel(s)}  (${s.length} chars)`)
+    }
+  }
+  lines.push(
+    'cache:           stable system prefix first; providers may send cache_control / prompt_cache_key (see docs/PROMPT_CACHE.md)',
+    formatUsageOneLiner(session.usage),
+  )
   return { ok: true, message: lines.join('\n') }
 }
 
@@ -256,6 +389,8 @@ function cmdDoctor(session: SlashSession, _args: string): SlashDispatchResult {
     `permissionMode:  ${session.permissionMode}`,
     `model:           ${session.model ?? '(unset)'}`,
     `effort:          ${session.effortLevel ?? 'auto'}`,
+    `messages:        ${session.messages.length}`,
+    `system sections: ${session.systemPromptSections.length}`,
     `tools:           ${toolsCount}`,
     `skills:          ${skillsCount}`,
     `agent types:     ${agentTypesCount}`,
@@ -267,6 +402,7 @@ function cmdDoctor(session: SlashSession, _args: string): SlashDispatchResult {
     `autoCompact:     ${autoCompact}`,
     `maxPtlRetries:   ${maxPtl}`,
     `~/.bolo:         ${boloHome} (${boloHomeExists ? 'exists' : 'missing'})`,
+    'Tip: /context for token estimate + section labels; /help for commands.',
   )
   return { ok: true, message: lines.join('\n') }
 }
@@ -466,7 +602,7 @@ function cmdEffort(session: SlashSession, args: string): SlashDispatchResult {
   if (!isEffortLevel(raw)) {
     return {
       ok: false,
-      message: `unknown effort "${args.trim()}". Use: ${EFFORT_LEVELS.join('|')}`,
+      message: `Invalid effort "${args.trim()}". Usage: /effort [low|medium|high|max|auto]`,
     }
   }
   if (raw === 'auto') {
@@ -501,7 +637,7 @@ function cmdPermissions(
   if (!isPermissionMode(raw)) {
     return {
       ok: false,
-      message: `unknown mode "${raw}". Use: ${PERMISSION_MODES.join('|')}`,
+      message: `Invalid mode "${raw}". Usage: /permissions [${PERMISSION_MODES.join('|')}]`,
     }
   }
   session.permissionMode = raw
@@ -766,128 +902,152 @@ export function invokeSkillBySlash(
   }
 }
 
-/** 内置注册表（顺序即 /help 列表顺序） */
+/** 内置注册表（组内顺序即 /help 组内列表顺序） */
 export const SLASH_COMMANDS: SlashCommandDef[] = [
   {
     name: 'help',
-    summary: 'List slash commands',
+    summary: 'List slash commands (grouped)',
+    group: 'diagnostics',
     run: cmdHelp,
   },
   {
     name: 'clear',
     summary: 'Clear conversation messages (keep id/cwd/system)',
+    group: 'session',
     run: cmdClear,
   },
   {
     name: 'compact',
     summary: 'Summarize conversation (needs CompactSummarizer)',
     usage: '[note]',
+    group: 'session',
     run: cmdCompact,
   },
   {
     name: 'context',
-    summary: 'Show message count, chars, mode, model, cwd, id, usage',
+    summary: 'Context stats: msgs, chars, token est, sections, cache tip, usage',
+    group: 'session',
     run: cmdContext,
+  },
+  {
+    name: 'cost',
+    summary: 'Show session token usage (local only)',
+    group: 'session',
+    run: cmdCost,
+  },
+  {
+    name: 'usage',
+    summary: 'Alias of /cost',
+    group: 'session',
+    hidden: true,
+    run: cmdCost,
   },
   {
     name: 'doctor',
     summary: 'Local diagnostics (node, cwd, mode, tools, usage, ~/.bolo)',
+    group: 'diagnostics',
     run: cmdDoctor,
   },
   {
     name: 'status',
     summary: 'Alias of /doctor',
+    group: 'diagnostics',
+    hidden: true,
     run: cmdDoctor,
   },
   {
     name: 'mcp',
     summary: 'List connected MCP servers or tools',
     usage: '[tools]',
+    group: 'extensions',
     run: cmdMcp,
   },
   {
     name: 'plugins',
     summary: 'List loaded local plugins (PL1)',
+    group: 'extensions',
     run: cmdPlugins,
   },
   {
     name: 'hooks',
     summary: 'List configured hooks or details for one event',
     usage: '[EventName]',
+    group: 'extensions',
     run: cmdHooks,
   },
   {
     name: 'init',
     summary: 'Ensure ~/.bolo and project .bolo layout (scaffold)',
     usage: '[all|user|project]',
+    group: 'diagnostics',
     run: cmdInit,
-  },
-  {
-    name: 'cost',
-    summary: 'Show session token usage (local only)',
-    run: cmdCost,
-  },
-  {
-    name: 'usage',
-    summary: 'Alias of /cost',
-    run: cmdCost,
   },
   {
     name: 'model',
     summary: 'Show or set session.model',
     usage: '[name]',
+    group: 'model',
     run: cmdModel,
   },
   {
     name: 'effort',
     summary: 'Show or set session effortLevel',
     usage: '[low|medium|high|max|auto]',
+    group: 'model',
     run: cmdEffort,
   },
   {
     name: 'plan',
     summary: 'Set permissionMode to plan',
+    group: 'model',
     run: cmdPlan,
   },
   {
     name: 'permissions',
     summary: 'Show or set permission mode (four tiers)',
     usage: '[mode]',
+    group: 'model',
     run: cmdPermissions,
   },
   {
     name: 'allow',
     summary: 'List or add session always-allow tool names',
     usage: '[ToolName]',
+    group: 'model',
     run: cmdAllow,
   },
   {
     name: 'rules',
     summary: 'List or show loaded .bolo/rules',
     usage: '[list|show <name>]',
+    group: 'extensions',
     run: cmdRules,
   },
   {
     name: 'skills',
     summary: 'List loaded skills (catalog)',
     usage: '[filter]',
+    group: 'extensions',
     run: cmdSkills,
   },
   {
     name: 'agents',
     summary: 'List active subagent types; status for background runs',
     usage: '[status]',
+    group: 'extensions',
     run: cmdAgents,
   },
   {
     name: 'bg',
     summary: 'List background subagent running/done results',
+    group: 'extensions',
     run: (session) => cmdBg(session),
   },
   {
     name: 'skill',
     summary: 'Load a skill body into the conversation by id',
     usage: '<id>',
+    group: 'extensions',
     run: cmdSkill,
   },
 ]
@@ -916,7 +1076,7 @@ export async function dispatchSlashCommand(
 
   return {
     ok: false,
-    message: `Unknown command /${name}. Type /help for list, or /skills for skill ids.`,
+    message: formatUnknownCommand(name),
   }
 }
 

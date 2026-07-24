@@ -19,22 +19,28 @@
 
 | 命令 | 行为 |
 |------|------|
-| `/help` | 列出命令 |
+| `/help` | **分组**列出命令（Session / Model & permissions / Extensions / Diagnostics）；隐藏别名行；提示 aliases 与 skill 调用 |
 | `/clear` | 清空 `messages`；保留 id / cwd / config / `systemPromptSections` |
 | `/compact [note]` | `compactSession`；无 summarizer 时返回错误文案 |
-| `/context` | 消息数、字符粗算、permissionMode、model、effort、cwd、id、usage 一行 |
-| `/doctor` · `/status` | 本地诊断：node/platform、cwd/id/**provider**/mode/model/effort、tools/skills/agent types、**mcp 连接数**、usage、autoCompact/maxPtlRetries、`getBoloHomeDir()` 是否存在；无遥测 |
+| `/context` | 消息数、字符粗算、**tokens 估计（chars/4）**、permissionMode、model、effort、cwd、id、**各 system section 标签与长度**、**cache 提示**、usage 一行 |
+| `/doctor` · `/status` | 本地诊断：node/platform、cwd/id/**provider**/mode/model/effort、messages/sections、tools/skills/agent types、**mcp 连接数**、usage、autoCompact/maxPtlRetries、`getBoloHomeDir()` 是否存在；无遥测；`/status` 为隐藏别名 |
 | `/mcp` · `/mcp tools` | 列出已连接 MCP 服务器；`tools` 列出 `mcp__server__tool` 名 |
 | `/plugins` | 列出 workspace 已发现的本地插件（PL1；非市场） |
 | `/hooks` · `/hooks <Event>` | 列出已配置 hook 事件与命令数；指定事件打印 matcher/command |
 | `/init` · `/init all\|user\|project` | 确保 `~/.bolo` / 项目 `.bolo` 布局（skills/plugins/sessions/rules/agents + 默认 json） |
-| `/cost` · `/usage` | 会话内本地 token 累计（`session.usage`）；无遥测、不上报 |
+| `/cost` · `/usage` | 会话内本地 token 累计（`session.usage`）；无遥测、不上报；`/usage` 为隐藏别名 |
 | `/model [name]` | 无参显示；有参设 `session.model` |
-| `/effort [low\|medium\|high\|max\|auto]` | 会话字段 `effortLevel`；`auto` 清除覆盖；经 `mapEffort` 映射为 `max_tokens` |
+| `/effort [low\|medium\|high\|max\|auto]` | 会话字段 `effortLevel`；`auto` 清除覆盖；非法参数返回 **Usage** 文案 |
 | `/plan` | `permissionMode = plan` |
-| `/permissions [mode]` | 无参列出四档；有参切换 |
+| `/permissions [mode]` | 无参列出四档；有参切换；非法参数返回 **Usage** 文案 |
 
 REPL 额外：`/exit` `/quit` 由 CLI 处理（退出循环，不进总线）。
+
+## 体验打磨（SL-polish）
+
+- **未知命令**：提示 `/help`、`/skills`；对相近内置名给出 `Did you mean: /x, /y?`（编辑距离 / 前缀）。
+- **参数错误**：`/effort`、`/permissions` 等返回明确 Usage，而非含糊 “unknown”。
+- **别名**：`/status`→`/doctor`，`/usage`→`/cost`；`/help` 不单独占行，脚注说明。
 
 ## 本地 usage（`/cost`）
 
@@ -49,6 +55,6 @@ REPL 额外：`/exit` `/quit` 由 CLI 处理（退出循环，不进总线）。
 
 ## 非目标（本切片）
 
-- skill 回落 `/skills`、插件命令、远程/账号类命令
+- 插件贡献 slash 市场、远程/账号类命令
 - effort → thinking / reasoning 强度（目前仅 max_tokens）
 - 遥测 / 远程 cost 账单
