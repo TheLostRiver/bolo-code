@@ -19,6 +19,10 @@ import {
   isSkillUserInvocable,
   skillModelInvokeBlockReason,
   skillUserInvokeBlockReason,
+  formatSkillCatalogWithStats,
+  formatSkillCatalogStatsLine,
+  getSkillCatalogCharBudget,
+  DEFAULT_SKILL_CATALOG_CHAR_BUDGET,
   SKILL_SOURCE_PRECEDENCE,
   SKILL_FRONTMATTER_ALIASES,
   type LoadedSkill,
@@ -620,6 +624,87 @@ const extraOverBundled = await discoverSkills({
 assert(
   findSkillById(extraOverBundled, 'shared-id')?.body.includes('EXTRA WINS'),
   'extra overrides bundled',
+)
+
+// ── S-PORT-5 catalog 预算可观测 ──
+assert(
+  getSkillCatalogCharBudget({ maxChars: 1234 }) === 1234,
+  'maxChars budget',
+)
+assert(
+  getSkillCatalogCharBudget({
+    env: { BOLO_SKILL_CATALOG_CHAR_BUDGET: '5000' } as NodeJS.ProcessEnv,
+  }) === 5000,
+  'env budget',
+)
+assert(
+  getSkillCatalogCharBudget({ contextWindowTokens: 100_000 }) ===
+    Math.min(12_000, Math.floor(100_000 * 4 * 0.01)),
+  'window budget 1%',
+)
+assert(
+  getSkillCatalogCharBudget({}) === DEFAULT_SKILL_CATALOG_CHAR_BUDGET,
+  'default budget',
+)
+
+const big: LoadedSkill[] = Array.from({ length: 30 }, (_, i) => ({
+  meta: {
+    id: `big${i}`,
+    name: `Big${i}`,
+    description: 'y'.repeat(100),
+    path: `/tmp/big${i}/SKILL.md`,
+  },
+  source: 'user' as const,
+  body: 'b',
+  frontmatter: {},
+}))
+const { text: bigText, stats: bigStats } = formatSkillCatalogWithStats(big, {
+  maxChars: 500,
+})
+assert(bigStats.truncated, 'stats truncated')
+assert(bigStats.omitted > 0, 'stats omitted count')
+assert(bigStats.listed + bigStats.omitted === bigStats.modelInvocable, 'listed+omitted')
+assert(bigStats.budgetChars === 500, 'stats budget')
+assert(bigStats.usedChars <= 500 + 80, 'used near budget') // omit line may slightly exceed mid-loop
+assert(bigText.includes('omitted'), 'text has omit line')
+assert(bigStats.budgetSource === 'maxChars', 'budget source maxChars')
+
+const line = formatSkillCatalogStatsLine(bigStats)
+assert(line.includes('listed'), 'stats line listed')
+assert(line.includes('chars'), 'stats line chars')
+assert(line.includes('omitted'), 'stats line omitted')
+
+const emptyStats = formatSkillCatalogWithStats([], { maxChars: 1000 })
+assert(emptyStats.text === '', 'empty catalog text')
+assert(emptyStats.stats.listed === 0 && emptyStats.stats.totalSkills === 0, 'empty stats')
+
+const withDisabled = formatSkillCatalogWithStats(
+  [
+    {
+      meta: {
+        id: 'a',
+        name: 'a',
+        path: '/a',
+        disableModelInvocation: true,
+      },
+      source: 'user',
+      body: 'x',
+      frontmatter: {},
+    },
+    {
+      meta: { id: 'b', name: 'b', path: '/b', description: 'bb' },
+      source: 'user',
+      body: 'y',
+      frontmatter: {},
+    },
+  ],
+  { maxChars: 50_000 },
+)
+assert(withDisabled.stats.modelDisabled === 1, 'count disabled')
+assert(withDisabled.stats.listed === 1, 'list only model-visible')
+assert(
+  formatSkillCatalogStatsLine(withDisabled.stats).includes('no-model'),
+  'line shows no-model',
 )
 
 console.log('SKILL CATALOG TESTS PASS')

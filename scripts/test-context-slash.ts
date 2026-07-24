@@ -72,6 +72,29 @@ async function main() {
   assert(ctx.message.includes('autoCompact:     on'), 'context auto on')
   assert(ctx.message.includes('~'), 'token estimates present')
   assert(ctx.message.includes('/autocompact'), 'context points to toggle')
+  assert(
+    ctx.message.includes('skill catalog:     (no skills loaded)'),
+    'context skill catalog empty line',
+  )
+
+  session.skills = [
+    {
+      meta: {
+        id: 'ctx-skill',
+        name: 'ctx',
+        description: 'for context line',
+        path: '/tmp/ctx-skill/SKILL.md',
+      },
+      source: 'user',
+      body: 'body',
+      frontmatter: {},
+    },
+  ]
+  const ctxSkills = await dispatchSlashCommand(session, 'context', '')
+  assert(ctxSkills.ok, 'context with skills ok')
+  assert(ctxSkills.message.includes('skill catalog:'), 'context skill catalog stats')
+  assert(ctxSkills.message.includes('listed'), 'context catalog listed')
+  assert(ctxSkills.message.includes('chars'), 'context catalog chars')
 
   const thr = getAutoCompactThreshold(8_000)
   const pad = 'p'.repeat((thr + 200) * 4)

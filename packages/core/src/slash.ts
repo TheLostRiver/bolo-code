@@ -36,6 +36,8 @@ import {
 import {
   findSkillById,
   formatSkillBodyForInjection,
+  formatSkillCatalogWithStats,
+  formatSkillCatalogStatsLine,
   skillUserInvokeBlockReason,
   type LoadedSkill,
 } from '../../skills/src/index.ts'
@@ -645,6 +647,16 @@ function cmdContext(session: SlashSession, _args: string): SlashDispatchResult {
         `  [${i + 1}] ${sectionLabel(s)}  (${s.length} chars, ~${secTok} tok)`,
       )
     }
+  }
+  // S-PORT-5：skill catalog 预算可观测
+  const skills = session.skills ?? []
+  if (skills.length) {
+    const { stats } = formatSkillCatalogWithStats(skills, {
+      contextWindowTokens: window,
+    })
+    lines.push(formatSkillCatalogStatsLine(stats))
+  } else {
+    lines.push('skill catalog:     (no skills loaded)')
   }
   lines.push(
     'cache:           stable system prefix first; providers may send cache_control / prompt_cache_key (see docs/PROMPT_CACHE.md)',
@@ -1795,6 +1807,16 @@ function cmdSkills(session: SlashSession, args: string): SlashDispatchResult {
     }
   }
 
+  const window =
+    typeof session.contextWindowTokens === 'number' &&
+    session.contextWindowTokens > 0
+      ? session.contextWindowTokens
+      : 128_000
+  // 统计用全表；列表可按 filter 缩小显示
+  const { stats } = formatSkillCatalogWithStats(skills, {
+    contextWindowTokens: window,
+  })
+
   const lines = ['Skills (catalog):', '']
   for (const s of list) {
     const flags: string[] = []
@@ -1811,6 +1833,7 @@ function cmdSkills(session: SlashSession, args: string): SlashDispatchResult {
     lines.push(`    ${desc}${when}`)
   }
   lines.push('')
+  lines.push(formatSkillCatalogStatsLine(stats))
   lines.push(
     'Flags: no-model = disable-model-invocation; no-user = user-invocable:false',
   )

@@ -332,8 +332,15 @@ export function skillsToCatalog(skills: LoadedSkill[]): SkillCatalogEntry[] {
   return skills.map(toCatalogEntry)
 }
 
-/** 对照 HC MAX_LISTING_DESC_CHARS */
+/** 对照 HC SkillTool/prompt.ts */
 export const MAX_LISTING_DESC_CHARS = 250
+/** 对照 HC SKILL_BUDGET_CONTEXT_PERCENT */
+export const SKILL_BUDGET_CONTEXT_PERCENT = 0.01
+export const CHARS_PER_TOKEN = 4
+/** 对照 HC DEFAULT_CHAR_BUDGET（约 1% of 200k×4） */
+export const DEFAULT_SKILL_CATALOG_CHAR_BUDGET = 8_000
+/** Bolo 上限，避免超大窗口把 catalog 撑爆 */
+export const MAX_SKILL_CATALOG_CHAR_BUDGET = 12_000
 
 function clip(s: string, max = MAX_LISTING_DESC_CHARS): string {
   if (s.length <= max) return s
@@ -341,31 +348,134 @@ function clip(s: string, max = MAX_LISTING_DESC_CHARS): string {
 }
 
 /**
+ * catalog 字符预算（对照 HC getCharBudget）。
+ * 环境变量 `BOLO_SKILL_CATALOG_CHAR_BUDGET` 可覆盖（正整数）。
+ */
+export function getSkillCatalogCharBudget(opts?: {
+  contextWindowTokens?: number
+  maxChars?: number
+  env?: NodeJS.ProcessEnv
+}): number {
+  if (typeof opts?.maxChars === 'number' && opts.maxChars > 0) {
+    return Math.floor(opts.maxChars)
+  }
+  const env = opts?.env ?? process.env
+  const fromEnv = Number(env.BOLO_SKILL_CATALOG_CHAR_BUDGET)
+  if (Number.isFinite(fromEnv) && fromEnv > 0) {
+    return Math.floor(fromEnv)
+  }
+  const ctx = opts?.contextWindowTokens
+  if (typeof ctx === 'number' && ctx > 0) {
+    const raw = Math.floor(ctx * CHARS_PER_TOKEN * SKILL_BUDGET_CONTEXT_PERCENT)
+    return Math.min(MAX_SKILL_CATALOG_CHAR_BUDGET, Math.max(1_000, raw))
+  }
+  return DEFAULT_SKILL_CATALOG_CHAR_BUDGET
+}
+
+export type SkillCatalogFormatOptions = {
+  contextWindowTokens?: number
+  /** 直接指定预算（优先于窗口推算） */
+  maxChars?: number
+  env?: NodeJS.ProcessEnv
+}
+
+/** S-PORT-5：catalog 格式化可观测统计 */
+export type SkillCatalogStats = {
+  /** 会话内 skill 总数（含 disable-model） */
+  totalSkills: number
+  /** 可进模型 catalog 的数量 */
+  modelInvocable: number
+  /** disable-model-invocation 数量 */
+  modelDisabled: number
+  /** 实际写入 listing 的条数 */
+  listed: number
+  /** 因预算省略的 model-invocable 条数 */
+  omitted: number
+  /** 字符预算 */
+  budgetChars: number
+  /** 最终 catalog 字符串长度（含标题） */
+  usedChars: number
+  /** 是否发生省略 */
+  truncated: boolean
+  /** 预算来源说明 */
+  budgetSource: 'maxChars' | 'env' | 'contextWindow' | 'default'
+}
+
+export type FormatSkillCatalogResult = {
+  text: string
+  stats: SkillCatalogStats
+}
+
+function resolveBudgetSource(opts?: SkillCatalogFormatOptions): {
+  budget: number
+  budgetSource: SkillCatalogStats['budgetSource']
+} {
+  if (typeof opts?.maxChars === 'number' && opts.maxChars > 0) {
+    return { budget: Math.floor(opts.maxChars), budgetSource: 'maxChars' }
+  }
+  const env = opts?.env ?? process.env
+  const fromEnv = Number(env.BOLO_SKILL_CATALOG_CHAR_BUDGET)
+  if (Number.isFinite(fromEnv) && fromEnv > 0) {
+    return { budget: Math.floor(fromEnv), budgetSource: 'env' }
+  }
+  if (
+    typeof opts?.contextWindowTokens === 'number' &&
+    opts.contextWindowTokens > 0
+  ) {
+    return {
+      budget: getSkillCatalogCharBudget({
+        contextWindowTokens: opts.contextWindowTokens,
+      }),
+      budgetSource: 'contextWindow',
+    }
+  }
+  return {
+    budget: DEFAULT_SKILL_CATALOG_CHAR_BUDGET,
+    budgetSource: 'default',
+  }
+}
+
+/**
  * 仅索引进上下文（给模型发现用，不是全文）
  * 对照 HC skill_listing + SkillTool prompt 的「目录预算」思路
  *
  * disable-model-invocation: 不进模型 catalog（仍可 /skills 列出，见 slash）。
+ * S-PORT-5：返回 stats 供 /skills · /context 观测。
  */
-export function formatSkillCatalog(
+export function formatSkillCatalogWithStats(
   skills: LoadedSkill[] | SkillCatalogEntry[],
-  options?: { contextWindowTokens?: number; maxChars?: number },
-): string {
+  options?: SkillCatalogFormatOptions,
+): FormatSkillCatalogResult {
   const entries = skills.map((s) =>
     'meta' in s ? toCatalogEntry(s as LoadedSkill) : (s as SkillCatalogEntry),
   )
+  const modelDisabled = entries.filter((e) => !isSkillModelInvocable(e)).length
   const invocable = entries.filter((e) => isSkillModelInvocable(e))
-  if (!invocable.length) return ''
+  const { budget, budgetSource } = resolveBudgetSource(options)
 
-  const ctx = options?.contextWindowTokens ?? 128_000
-  const budget =
-    options?.maxChars ??
-    Math.min(12_000, Math.floor(ctx * 4 * 0.01) || 8_000)
+  if (!invocable.length) {
+    return {
+      text: '',
+      stats: {
+        totalSkills: entries.length,
+        modelInvocable: 0,
+        modelDisabled,
+        listed: 0,
+        omitted: 0,
+        budgetChars: budget,
+        usedChars: 0,
+        truncated: false,
+        budgetSource,
+      },
+    }
+  }
 
-  const lines: string[] = [
+  const header = [
     '## Available Skills (catalog only — invoke via Skill tool to load full instructions)',
     'Do NOT assume skill body is already in context. Call tool Skill with skill id when needed.',
     '',
   ]
+  const lines: string[] = [...header]
 
   let used = lines.join('\n').length
   let listed = 0
@@ -378,14 +488,70 @@ export function formatSkillCatalog(
       lines.push(
         `- … (${omitted} more skills omitted; use Skill tool with exact id if known)`,
       )
-      break
+      used = lines.join('\n').length
+      return {
+        text: lines.join('\n'),
+        stats: {
+          totalSkills: entries.length,
+          modelInvocable: invocable.length,
+          modelDisabled,
+          listed,
+          omitted,
+          budgetChars: budget,
+          usedChars: used,
+          truncated: true,
+          budgetSource,
+        },
+      }
     }
     lines.push(line)
     listed += 1
     used += line.length + 1
   }
 
-  return lines.join('\n')
+  const text = lines.join('\n')
+  return {
+    text,
+    stats: {
+      totalSkills: entries.length,
+      modelInvocable: invocable.length,
+      modelDisabled,
+      listed,
+      omitted: 0,
+      budgetChars: budget,
+      usedChars: text.length,
+      truncated: false,
+      budgetSource,
+    },
+  }
+}
+
+/**
+ * 仅索引进上下文（字符串）。需要统计时用 `formatSkillCatalogWithStats`。
+ */
+export function formatSkillCatalog(
+  skills: LoadedSkill[] | SkillCatalogEntry[],
+  options?: SkillCatalogFormatOptions,
+): string {
+  return formatSkillCatalogWithStats(skills, options).text
+}
+
+/** 一行人类可读预算摘要（/skills · /context） */
+export function formatSkillCatalogStatsLine(stats: SkillCatalogStats): string {
+  const omit =
+    stats.omitted > 0
+      ? ` · omitted ${stats.omitted}`
+      : stats.truncated
+        ? ' · truncated'
+        : ''
+  const dis =
+    stats.modelDisabled > 0 ? ` · no-model ${stats.modelDisabled}` : ''
+  return (
+    `skill catalog: listed ${stats.listed}/${stats.modelInvocable} model-visible` +
+    ` · total ${stats.totalSkills}${dis}` +
+    ` · ${stats.usedChars}/${stats.budgetChars} chars` +
+    ` (${stats.budgetSource})${omit}`
+  )
 }
 
 /**

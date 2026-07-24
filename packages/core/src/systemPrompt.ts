@@ -196,6 +196,8 @@ export type GetSystemPromptOptions = SystemPromptEnv & {
   skills?: LoadedSkill[] | SkillCatalogEntry[]
   /** 已格式化的 catalog；优先于 skills */
   skillCatalog?: string
+  /** skill catalog 字符预算（对照 HC getCharBudget）；透传 formatSkillCatalog */
+  contextWindowTokens?: number
   /** 已加载的 BOLO.md 文本 */
   boloMd?: string
   /** 是否在组装时加载 BOLO.md（默认 true） */
@@ -455,7 +457,11 @@ export async function getVolatileSections(
 
   const catalog =
     opts.skillCatalog ??
-    (opts.skills?.length ? formatSkillCatalog(opts.skills) : '')
+    (opts.skills?.length
+      ? formatSkillCatalog(opts.skills, {
+          contextWindowTokens: opts.contextWindowTokens,
+        })
+      : '')
   if (catalog?.trim()) {
     sections.push(catalog.trim())
   }

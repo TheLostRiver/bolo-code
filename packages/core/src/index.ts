@@ -67,8 +67,13 @@ import {
 import {
   createEmptyPermissionRules,
   parsePermissionMode,
+  createAutoModeState,
+  stripDangerousAllowsForAuto,
+  createAutoClassifyFromCompleteText,
   type PermissionMode,
   type SessionPermissionRules,
+  type AutoModeState,
+  type AutoClassifyFn,
 } from '../../permissions/src/index.ts'
 import {
   assembleSessionSystemPrompt,
@@ -625,6 +630,7 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
       model: opts.model ?? extra.model,
       skills: extra.skills ?? skills,
       skillCatalog: extra.skillCatalog,
+      contextWindowTokens: opts.contextWindowTokens ?? 128_000,
       boloMd: extra.boloMd,
       loadInstructions: extra.loadInstructions,
       boloRules: extra.boloRules,
