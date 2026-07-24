@@ -104,6 +104,10 @@ export function createBashTool(): BoloTool {
       type: 'object',
       properties: {
         command: { type: 'string', description: 'Shell command to run' },
+        timeout: {
+          type: 'number',
+          description: 'Timeout in ms (default 30000, max 600000)',
+        },
       },
       required: ['command'],
     },
@@ -112,13 +116,25 @@ export function createBashTool(): BoloTool {
       if (!command.trim()) {
         return { ok: false, isError: true, output: 'empty command', errorCode: 'empty' }
       }
+      if (ctx.signal?.aborted) {
+        return {
+          ok: false,
+          isError: true,
+          output: 'Error: tool cancelled',
+          errorCode: 'aborted',
+        }
+      }
+      const rawTimeout = Number(input.timeout)
+      const timeoutMs = Number.isFinite(rawTimeout)
+        ? Math.min(600_000, Math.max(1, Math.floor(rawTimeout)))
+        : 30_000
       try {
         const shell = process.platform === 'win32' ? 'cmd.exe' : 'sh'
         const args =
           process.platform === 'win32' ? ['/c', command] : ['-c', command]
         const { stdout, stderr } = await execFileAsync(shell, args, {
           cwd: ctx.cwd,
-          timeout: 30_000,
+          timeout: timeoutMs,
           maxBuffer: 2 * 1024 * 1024,
           windowsHide: true,
           signal: ctx.signal,
@@ -126,12 +142,37 @@ export function createBashTool(): BoloTool {
         const out = [stdout, stderr].filter(Boolean).join('\n').trim()
         return { ok: true, output: out || '(no output)' }
       } catch (e) {
-        const err = e as { stdout?: string; stderr?: string; message?: string }
+        const err = e as {
+          stdout?: string
+          stderr?: string
+          message?: string
+          name?: string
+          code?: string | number
+          killed?: boolean
+        }
+        if (
+          ctx.signal?.aborted ||
+          err.name === 'AbortError' ||
+          err.code === 'ABORT_ERR'
+        ) {
+          return {
+            ok: false,
+            isError: true,
+            output: 'Error: tool cancelled',
+            errorCode: 'aborted',
+          }
+        }
+        const timedOut =
+          err.killed === true ||
+          err.code === 'ETIMEDOUT' ||
+          /timed?\s*out/i.test(err.message ?? '')
         return {
           ok: false,
           isError: true,
-          output: [err.stdout, err.stderr, err.message].filter(Boolean).join('\n'),
-          errorCode: 'exec_failed',
+          output: [err.stdout, err.stderr, err.message]
+            .filter(Boolean)
+            .join('\n'),
+          errorCode: timedOut ? 'timeout' : 'exec_failed',
         }
       }
     },

@@ -31,6 +31,8 @@
     "test:slash": "tsx scripts/test-slash.ts",
     "test:mcp": "tsx scripts/test-mcp-stdio.ts",
     "test": "tsx scripts/test-compact.ts && tsx scripts/test-permissions.ts && tsx scripts/test-provider-unit.ts && tsx scripts/test-config.ts && tsx scripts/test-skill-catalog.ts && tsx scripts/test-system-prompt.ts && tsx scripts/test-prompt-cache.ts && tsx scripts/test-rules.ts && tsx scripts/test-auto-compact.ts && tsx scripts/test-session-persist.ts && tsx scripts/test-cli-resume.ts && tsx scripts/test-session-list.ts && tsx scripts/test-slash.ts && tsx scripts/test-mcp-stdio.ts && tsx scripts/smoke-turn.ts",
+    "test:ptl": "tsx scripts/test-ptl-retry.ts",
+    "test:model-retry": "tsx scripts/test-model-retry.ts",
     "test:permissions": "tsx scripts/test-permissions.ts"
   },
   "devDependencies": {

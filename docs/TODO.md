@@ -1,7 +1,7 @@
 # Bolo Code 总任务清单（TODO）
 
 > **执行入口**：勾选与优先级以本文为准；里程碑/能力矩阵见 `docs/ROADMAP.md`；专项细节见各 `docs/*.md`。  
-> 更新：对齐 **已交付代码**（含 SL-polish、J-D T3、MCP2 resources/prompts + list_changed、C1–C5、Responses HTTP、Subagent、plugins 最小）。  
+> 更新：对齐 **Loop 韧性切片** + 已交付主路径；完成度按 **主路径 vs 相对 HC** 诚实口径。  
 > 原则：无遥测；对照 HelsincyCode 语义再实现；不把 stub 当完成；**状态按代码行为写**，不按错误 commit subject。
 
 ---
@@ -12,6 +12,7 @@
 |------|------|
 | **本文 `TODO.md`** | **P0→P3 总序**、跨模块依赖、**本周默认下一刀** |
 | `ROADMAP.md` | 里程碑、能力矩阵、验收表（不重复长篇勾选） |
+| `AGENT_LOOP.md` | loop / 错误分类 / model·PTL 重试 |
 | `TODO_SESSION_JSONL.md` | JSONL 存盘专项（主路径已齐；余量 entry/CLI） |
 | 其它 `docs/*.md` | 契约真源 |
 
@@ -22,25 +23,27 @@
 ## 1. 一句话现状
 
 ```text
-日用 headless CLI agent 主路径已齐：
-  bolo / --resume / --continue · 斜杠总线 + SL-polish · rules（path-scoped）
-  · prompt cache C1–C5 · JSONL 默认写（J-D T3）· Subagent
-  · MCP stdio tools + resources/prompts + list_changed · plugins 最小
-  · openai-responses HTTP SSE
+主路径可跑（脚本/CLI）：
+  bolo / --resume / --continue · 斜杠 + rules · C1–C5 · JSONL 默认写
+  · Subagent · MCP stdio 面 · plugins 最小 · Responses HTTP
+  · Loop 韧性最小：错误分类 + 429/5xx 有限退避（与 PTL 正交）
 
-缺口偏「扩展深度与后置」：
-  MCP SSE/HTTP · PL2 · Usage+ breakdown · entry 类型加深
-  · C6+ cache · OR6 WS · T8 Ink · Electron
+相对 HelsincyCode headless 约 40–55%（勿再写 ~70% 乐观数）。
+真正抬水位的 P0 余量：
+  1. ~~Loop 韧性~~ ✅ 最小（本刀）
+  2. Tool+Permission 日用  ← 默认下一刀
+  3. 长会话 compact 加深
+P1：MCP SSE/HTTP · PL2 · Usage+
 ```
 
 | 优先级 | 含义（当前） |
 |--------|----------------|
-| **P0** | 主路径已 ✅；仅回归/验收意识，**不占默认下一刀** |
-| **P1** | 扩展深度 / 体验加深（**可选主刀**） |
+| **P0** | 抬 headless 水位：韧性已 🟡；**Tool+Permission** / compact 仍缺口 |
+| **P1** | 扩展深度（MCP SSE · PL2 · Usage+） |
 | **P2** | 未做或仅最小的子项 |
 | **P3** | GUI / 完整 Ink / 后置协议 |
 
-粗估（可日用 headless agent）：**~68–72%**（脚本/CLI 可日用；非成熟 GUI）。
+粗估（相对 HC headless）：**~40–55%**。主路径可日用 ≠ 产品完成。
 
 ---
 
@@ -81,21 +84,43 @@
 | **OR1–OR5** | OpenAI Responses HTTP SSE 直连 | ✅ |
 | 其它 | 真 `apply_patch` 最小 · usage 本地 `/cost` · always-allow · tool_result 预算 · 快照/meta 中 permissionRules/effort/usage | ✅ / 🟡 |
 
+### 2.4 Loop 韧性（本刀）
+
+| ID | 内容 | 状态 |
+|----|------|------|
+| **LR1** | 统一错误分类 `retryable` / `fatal` / `user_abort`（`errorClassify.ts`） | ✅ 最小 |
+| **LR2** | `wrapCallModelWithRetry`：默认 3 次指数退避；尊重 AbortSignal；仅 retryable | ✅ 最小 |
+| **LR3** | `productionDeps` / `createCallModelFromProvider` 默认包装；可关 | ✅ |
+| **LR4** | queryLoop：`model_retry` 事件；user_abort → `aborted`；与 **PTL** 正交 | ✅ |
+| **LR5** | 测试 `scripts/test-model-retry.ts`（429→成功、abort/fatal/PTL 不重试） | ✅ |
+| **LR6** | Bash：可选 `timeout` + abort 错误码加固 | ✅ 小加分 |
+| **LR-doc** | `AGENT_LOOP.md` / `ROADMAP` / `TODO` 诚实口径 + 分区并发描述 | ✅ |
+
 ---
 
-## 3. P1 — 紧随（扩展深度与体验）
+## 3. P0 — 抬 headless 水位（默认主刀区）
 
 | ID | 主题 | 说明 | 状态 |
 |----|------|------|------|
-| **MCP2 余量** | 远程 transport | **SSE / HTTP（streamable）** 接同一 host 语义；stdio 面已齐 | ⬜ 主候选 |
-| **PL2** | plugins 深度 | 热加载 / 贡献 slash 深化 /（若做）市场 | ⬜ 主候选 |
+| **LR*** | Loop 韧性 | 分类 + model 退避 + 与 PTL 分工 | ✅ 最小（本刀） |
+| **TP*** | **Tool+Permission 日用** | Edit/Write 深度、权限体验、中段 abort 一致、常用工具契约 | ⬜ **默认下一刀** |
+| **CP*** | 长会话 compact | auto 策略、boundary 体验、大上下文日用 | 🟡 / ⬜ |
+
+---
+
+## 4. P1 — 紧随（扩展深度与体验）
+
+| ID | 主题 | 说明 | 状态 |
+|----|------|------|------|
+| **MCP2 余量** | 远程 transport | **SSE / HTTP（streamable）** 接同一 host 语义；stdio 面已齐 | ⬜ |
+| **PL2** | plugins 深度 | 热加载 / 贡献 slash 深化 /（若做）市场 | ⬜ |
 | **Usage+** | 本地 usage 展示 | 已有累计与 `/cost`；可加深 breakdown | 🟡 可选 |
 | **J-D 余量** | entry / CLI | 更多 entry 类型；CLI `migrate-session` 包装 | 🟡 可选支线 |
 | **C6+** | Cache 后置 | 1h TTL / global scope / break detection / cached MC | ⬜ **后置** |
 
 ---
 
-## 4. P2 — 扩展与协议
+## 5. P2 — 扩展与协议
 
 | ID | 主题 | 状态 |
 |----|------|------|
@@ -106,7 +131,7 @@
 
 ---
 
-## 5. P3 — 后置
+## 6. P3 — 后置
 
 | ID | 主题 | 状态 |
 |----|------|------|
@@ -120,60 +145,59 @@
 
 ---
 
-## 6. 推荐执行顺序（当前）
+## 7. 推荐执行顺序（当前）
 
 ```text
-已完成主线（勿回退当 P0）：
+已完成主线：
   RS* · SL* · SL-polish · T0–T7 · R* · C1–C5 · J-A/B/C · J-D(+T3)
-  · K* · S0–S7 · MCP1 · MCP2(stdio resources/prompts + list_changed)
-  · PL1 · OR1–OR5
+  · K* · S0–S7 · MCP1 · MCP2(stdio + list_changed) · PL1 · OR1–OR5
+  · LR* Loop 韧性最小
 
-下一阶段串行候选（择一为主刀，非 Electron）：
-  ① MCP2 SSE/HTTP     远程 transport（stdio 面 + list_changed 已交付）
-  ② PL2               plugins 热加载 / slash 贡献深化
-  ③ Usage+            本地 usage breakdown（可选）
-  ④ J-D 余量          entry 类型 / migrate-session CLI（支线）
-  ⑤ T8                Ink TUI（可选，不挡 headless）
-  ⑥ C6+ / OR6         cache 后置 / Responses WS —— 明确后置
-  ⑦ M4                Electron —— 门禁后置
+下一阶段：
+  ① TP* Tool+Permission 日用   ← 默认主刀（抬水位）
+  ② CP* 长会话 compact 加深
+  ③ MCP2 SSE/HTTP · PL2 · Usage+   （P1）
+  ④ T8 / C6+ / OR6 / Electron      （后置）
 ```
 
 ---
 
-## 7. 本周默认「下一刀」
+## 8. 本周默认「下一刀」
 
 若只开一刀（**非 Electron**）：
 
-> **主推（按序择一）：**  
-> 1. **MCP2 SSE/HTTP** — 远程 transport，复用现有 tools/resources/prompts/list_changed 语义（禁止 mock 冒充）  
-> 2. **PL2** — plugins 热加载 / 贡献 slash 深化  
-> 3. **Usage+** — 本地 usage breakdown（可选）  
+> **主推：Tool+Permission 日用（TP*）**  
+> - Edit/Write（或等价）契约加深、权限 always-allow / ask 体验  
+> - tool 中段 AbortSignal 一致  
+> - 禁止假装「完整 StreamingToolExecutor」  
 >
-> **可选支线：** JSONL entry 类型 / CLI `migrate-session` 包装。  
-> **明确后置：** OR6 WebSocket · C6+ cache TTL/break · T8 Ink · Electron。
+> **本刀已勾选：** Loop 韧性 LR1–LR6 + 文档诚实化。  
+> **明确后置：** MCP SSE/HTTP · PL2（P1）· OR6 · C6+ · T8 · Electron。
 
-**已齐摘要：** resume · slash（含 SL-polish）· BOLO TUI 最小 · rules（path-scoped 刷新）· C1–C5 · **JSONL 默认写（J-D T3）** + R1/list/migrate/meta · creators · Subagent · **MCP stdio + resources/prompts + list_changed** · plugins 最小 · usage/effort · always-allow · apply_patch · **openai-responses HTTP SSE**。
+**已齐摘要：** resume · slash · BOLO TUI 最小 · rules · C1–C5 · JSONL 主路径 · creators · Subagent · MCP stdio 面 · plugins 最小 · Responses HTTP · **Loop 韧性最小**。
 
 ---
 
-## 8. 与 ROADMAP 里程碑映射
+## 9. 与 ROADMAP 里程碑映射
 
 | TODO | ROADMAP |
 |------|---------|
+| LR* | M-Loop 韧性 🟡 |
+| TP* | 运行时 permission / tools 日用 |
 | RS* · T* | M5.2 / M-TUI（T0–T7 ✅；T8 ⬜） |
 | SL* · SL-polish | M-Slash ✅ |
 | R* | M-Rules ✅ |
 | C* | M-Cost（C1–C5 ✅；C6+ 后置） |
-| J* | M5.1 / `TODO_SESSION_JSONL`（J-D T3 ✅；entry 余量可选） |
+| J* | M5.1 / `TODO_SESSION_JSONL`（J-D T3 ✅） |
 | K* | M-Creators ✅ |
 | S* | M-Subagent（S0–S7 ✅；S12 partial） |
-| MCP* · PL* | M3（stdio 面 + list_changed ✅；SSE/HTTP · PL2 ⬜） |
+| MCP* · PL* | M3（stdio 面 ✅；SSE/HTTP · PL2 ⬜） |
 | **OR*** | Responses：HTTP SSE ✅；WS 后置 |
 | M4 | Electron ⬜ |
 
 ---
 
-## 9. 检查清单（开 PR 前）
+## 10. 检查清单（开 PR 前）
 
 - [ ] 无遥测  
 - [ ] 文档无本机绝对路径  
@@ -181,8 +205,9 @@
 - [ ] 更新本文对应 ⬜→✅，并扫一眼 `ROADMAP` 总览是否仍一致  
 - [ ] stub / mock 未勾成「完成」  
 - [ ] commit message 与 tree 一致（勿复用旧 `COMMITMSG`）  
+- [ ] 完成度区分主路径 vs 相对 HC  
 
 ---
 
 **一句话：**  
-可日用 headless 主路径已齐；**下一刀优先 MCP SSE/HTTP 或 PL2（其次 Usage+）**；Electron · Ink · Responses WS · cache TTL 后置。
+Loop 韧性最小已落地；**下一刀 Tool+Permission 日用**；MCP SSE/PL2 为 P1，勿抢 P0。

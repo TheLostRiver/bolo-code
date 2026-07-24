@@ -88,13 +88,23 @@ import {
 import type { SessionUsage } from './sessionUsage.ts'
 
 export type { AskPermissionFn, Terminal }
-export type { QueryDeps, PrepareMessagesFn } from './deps.ts'
+export type {
+  QueryDeps,
+  PrepareMessagesFn,
+  CallModelFn,
+  ModelRetryInfo,
+  ModelRetryOptions,
+} from './deps.ts'
 export {
   productionDeps,
+  createCallModelFromProvider,
   createAutoCompactPrepare,
   createMicrocompactPrepare,
   composePrepareMessages,
   identityPrepareMessages,
+  wrapCallModelWithRetry,
+  DEFAULT_MAX_MODEL_RETRIES,
+  DEFAULT_MODEL_RETRY_BASE_DELAY_MS,
 } from './deps.ts'
 export type { MicrocompactOptions } from '../../compact/src/index.ts'
 export {
@@ -107,6 +117,14 @@ export {
   DEFAULT_MAX_PTL_RETRIES,
   PTL_RETRY_MARKER,
 } from '../../compact/src/index.ts'
+export {
+  classifyError,
+  isRetryableError,
+  extractHttpStatus,
+  errorMessageOf,
+  type ErrorClass,
+  type ClassifiedError,
+} from './errorClassify.ts'
 export { queryLoop } from './queryLoop.ts'
 export {
   createEmptySessionUsage,
@@ -267,6 +285,15 @@ export type SessionEvent =
       attempt: number
       maxRetries: number
       droppedMessageCount: number
+    }
+  | {
+      type: 'model_retry'
+      attempt: number
+      maxRetries: number
+      delayMs: number
+      message: string
+      reason: string
+      status?: number
     }
   | { type: 'done'; terminal?: Terminal }
 

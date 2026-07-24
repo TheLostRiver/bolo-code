@@ -4,6 +4,7 @@
  * while true:
  *   prepareMessages（默认链：microcompact → auto full compact）
  *   callModel stream (+ tools)
+ *     若 429/5xx/timeout：wrapCallModelWithRetry 退避（deps 默认包装）
  *     若 PTL：截断最旧 API 轮次 → 写回 session → 再 prepare → 重试（有限次）
  *   if tool_use → runTools → continue
  *   else → Stop hooks → terminal
@@ -15,6 +16,8 @@ import {
   truncateHeadForPtlRetry,
   DEFAULT_MAX_PTL_RETRIES,
 } from '../../compact/src/index.ts'
+import { classifyError } from './errorClassify.ts'
+import type { ModelRetryInfo } from './modelRetry.ts'
 import {
   nowIso,
   type ChatMessage,
@@ -64,6 +67,15 @@ export type QueryLoopEvent =
       attempt: number
       maxRetries: number
       droppedMessageCount: number
+    }
+  | {
+      type: 'model_retry'
+      attempt: number
+      maxRetries: number
+      delayMs: number
+      message: string
+      reason: string
+      status?: number
     }
   | { type: 'done'; terminal: Terminal }
   | ToolExecutionEvent
@@ -225,6 +237,17 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
           signal: params.signal,
           tools,
           effort: params.effortLevel,
+          onModelRetry: (info: ModelRetryInfo) => {
+            emit(params, {
+              type: 'model_retry',
+              attempt: info.attempt,
+              maxRetries: info.maxRetries,
+              delayMs: info.delayMs,
+              message: info.message,
+              reason: info.reason,
+              status: info.status,
+            })
+          },
         })) {
           if (ev.type === 'text_delta') {
             assistantText += ev.text
@@ -255,6 +278,12 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
+        const classified = classifyError(e, { signal: params.signal })
+        if (classified.class === 'user_abort' || params.signal?.aborted) {
+          const terminal: Terminal = { reason: 'aborted', detail: msg }
+          emit(params, { type: 'done', terminal })
+          return terminal
+        }
         const recovered = tryPtlRecover(
           params,
           msg,
@@ -272,6 +301,17 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
       }
 
       if (modelError && !assistantText && toolBlocks.length === 0) {
+        const classified = classifyError(modelError, {
+          signal: params.signal,
+        })
+        if (classified.class === 'user_abort' || params.signal?.aborted) {
+          const terminal: Terminal = {
+            reason: 'aborted',
+            detail: modelError,
+          }
+          emit(params, { type: 'done', terminal })
+          return terminal
+        }
         const recovered = tryPtlRecover(
           params,
           modelError,

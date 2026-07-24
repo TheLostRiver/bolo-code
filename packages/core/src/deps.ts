@@ -5,6 +5,7 @@
  * prepareMessages 链顺序（对照 HC query.ts）：
  *   microcompact → auto full compact → callModel
  * callModel 若 PTL：truncate → 再 prepare → 重试（queryLoop）
+ * callModel 若 429/5xx/timeout：wrapCallModelWithRetry 退避（与 PTL 正交）
  */
 
 import {
@@ -17,6 +18,11 @@ import {
 import type { LlmProvider, ProviderStreamEvent } from '../../providers/src/index.ts'
 import type { ChatMessage } from '../../shared/src/index.ts'
 import type { BoloTool, ToolSpec } from '../../tools/src/index.ts'
+import {
+  wrapCallModelWithRetry,
+  type ModelRetryInfo,
+  type ModelRetryOptions,
+} from './modelRetry.ts'
 
 export type CallModelFn = (req: {
   messages: ChatMessage[]
@@ -26,6 +32,8 @@ export type CallModelFn = (req: {
   /** session.effortLevel；透传 provider mapEffort → max_tokens */
   effort?: string
   maxTokens?: number
+  /** wrapCallModelWithRetry 退避前回调 */
+  onModelRetry?: (info: ModelRetryInfo) => void
 }) => AsyncIterable<ProviderStreamEvent>
 
 export type PrepareMessagesResult = {
@@ -46,8 +54,11 @@ export type QueryDeps = {
   uuid: () => string
 }
 
-export function createCallModelFromProvider(provider: LlmProvider): CallModelFn {
-  return async function* ({
+export function createCallModelFromProvider(
+  provider: LlmProvider,
+  retry?: ModelRetryOptions | false,
+): CallModelFn {
+  const base: CallModelFn = async function* ({
     messages,
     signal,
     tools,
@@ -63,6 +74,8 @@ export function createCallModelFromProvider(provider: LlmProvider): CallModelFn 
       maxTokens,
     })
   }
+  if (retry === false) return base
+  return wrapCallModelWithRetry(base, retry === undefined ? {} : retry)
 }
 
 export const identityPrepareMessages: PrepareMessagesFn = async ({ messages }) => ({
@@ -139,12 +152,22 @@ export function createAutoCompactPrepare(opts: {
   }
 }
 
-export function productionDeps(provider: LlmProvider): QueryDeps {
+export function productionDeps(
+  provider: LlmProvider,
+  opts?: { modelRetry?: ModelRetryOptions | false },
+): QueryDeps {
   return {
-    callModel: createCallModelFromProvider(provider),
+    callModel: createCallModelFromProvider(provider, opts?.modelRetry),
     // 默认挂 micro（便宜、无 LLM）；auto full 由 createSession 按配置叠加
     prepareMessages: createMicrocompactPrepare(),
     uuid: () =>
       `id_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`,
   }
 }
+
+export type { ModelRetryInfo, ModelRetryOptions } from './modelRetry.ts'
+export {
+  wrapCallModelWithRetry,
+  DEFAULT_MAX_MODEL_RETRIES,
+  DEFAULT_MODEL_RETRY_BASE_DELAY_MS,
+} from './modelRetry.ts'

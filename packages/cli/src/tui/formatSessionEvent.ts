@@ -55,6 +55,17 @@ export function formatSessionEventChunks(
   if (e.type === 'warning' && typeof e.message === 'string') {
     return [{ stream: 'err', text: `warn: ${e.message}\n` }]
   }
+  if (e.type === 'model_retry') {
+    const attempt = typeof e.attempt === 'number' ? e.attempt : '?'
+    const max = typeof e.maxRetries === 'number' ? e.maxRetries : '?'
+    const reason = typeof e.reason === 'string' ? e.reason : 'retry'
+    return [
+      {
+        stream: 'err',
+        text: `retry ${attempt}/${max} (${reason})\n`,
+      },
+    ]
+  }
   return []
 }
 
@@ -119,6 +130,14 @@ export function createSessionEventPrinter(opts: {
       if (e.type === 'warning' && typeof e.message === 'string') {
         ensureToolLineBreak()
         writeErr(`warn: ${e.message}\n`)
+        return
+      }
+      if (e.type === 'model_retry') {
+        ensureToolLineBreak()
+        const attempt = typeof e.attempt === 'number' ? e.attempt : '?'
+        const max = typeof e.maxRetries === 'number' ? e.maxRetries : '?'
+        const reason = typeof e.reason === 'string' ? e.reason : 'retry'
+        writeErr(`retry ${attempt}/${max} (${reason})\n`)
       }
     },
   }
