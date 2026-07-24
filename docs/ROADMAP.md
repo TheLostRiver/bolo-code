@@ -11,7 +11,7 @@
 | 层 | 粗估 | 说明 |
 |----|------|------|
 | **Headless 核心**（loop / tools / provider / compact / prompt） | **~85–90%** | M0–M2 齐；effort、apply_patch 最小、权限 always-allow 已接 |
-| **会话与 CLI** | **~80–85%** | JSON 快照 + JSONL 双写；`--resume` 无 id 列表；`--continue`；无参 `bolo` REPL |
+| 会话与 CLI | **~85–90%** | JSONL 默认写（T3）；旧 JSON 只读；`--resume` 列表；`--continue`；无参 `bolo` REPL |
 | **扩展面（MCP / Plugins / Skills）** | **~70–75%** | Skills catalog + bundled creators；MCP stdio tools+resources/prompts ✅；plugins 本地最小 ✅ |
 | **Subagent** | **~75–80%** | S0–S7 真 loop + Agent + `.bolo/agents`；async/fork/侧链最小；worktree ⬜ |
 | **项目规则 Rules** | **~90%** | 装载 + `paths` + submitPrompt 刷新 + `/rules`；enable/disable 持久化可加深 |
@@ -26,7 +26,7 @@
 
 1. ~~斜杠总线~~ ✅ · ~~Rules~~ ✅ · ~~Creators~~ ✅ · ~~C1–C5~~ ✅  
 2. ~~resume 列表 / TUI 最小 / JSONL 双写 / Subagent / MCP / plugins / Responses HTTP~~ ✅  
-3. **下一刀候选：** J-D 余量 · MCP SSE/PL2（stdio resources/prompts 已交付）；slash 体验打磨 ✅  
+3. **下一刀候选：** MCP SSE/PL2 · Usage+（J-D T3 默认 jsonl 已交付）；slash 体验打磨 ✅  
 4. **后置：** OR6 WS · cache TTL/break · T8 Ink · Electron  
 
 ---
@@ -109,7 +109,7 @@
 | **`bolo --resume` 无 id → 项目列表选择** | ✅ |
 | `listProjectSessions`（json + jsonl 去重） | ✅ |
 | `bolo --continue` | ✅ |
-| JSONL 双写 + 最小 resume（messages 优先 jsonl；R1 boundary） | ✅ 最小 + J-D 部分 |
+| JSONL **默认写** + resume（messages 优先 jsonl；R1；meta 配置切片；旧 JSON 只读） | ✅ J-D T3 |
 | **无参 `bolo` TTY 新会话 + banner** | ✅ |
 | 状态行 / 流式工具行 / 权限 y/n / slash | ✅ |
 | 完整 Ink 级 TUI | ⬜ T8 |
@@ -225,7 +225,7 @@ K1–K2 + slash 回落 ✅；rule-creator 可选 ⬜。
 
 | # | 切片 | 状态 |
 |---|------|------|
-| 5.1 会话持久化 | 🟡 JSON ✅ + JSONL 双写/最小 resume ✅；entry 深化见专项 |
+| 5.1 会话持久化 | ✅ JSON 只读兼容 + JSONL 默认写（T3）+ migrate + R1 resume |
 | 5.2 CLI 入口 | ✅ resume 无 id / continue / 无参新建 |
 | 5.3 多平台构建 | ⬜（GUI 后；CLI 已跨平台可用） |
 | 5.4 micro + PTL | ✅ |
@@ -377,7 +377,7 @@ flowchart TB
 | skill-creator / plugin-creator | ✅ |
 | Subagent 真 loop / Agent | ✅；worktree ⬜ |
 | Prompt cache C1–C5 | ✅ |
-| JSONL 双写 + 最小 resume + R1/list 冲突策略 | ✅；J-D 仍可再深 🟡 |
+| JSONL 默认写 + 最小 resume + R1/list + migrate + meta 切片 | ✅ J-D T3 |
 | Usage 本地记账 | ✅ 最小 |
 | openai-responses HTTP SSE | ✅；WS ⬜ |
 | MCP stdio / resources·prompts 最小 / plugins 最小 | ✅ |
@@ -406,13 +406,13 @@ flowchart TB
 |------|------|------|
 | A 交互 | 斜杠 · rules · skills · creators | ✅ |
 | B 成本 | C1–C5 | ✅；C6+ 后置 |
-| C 存盘 | JSONL A+B+C 最小 + J-D R1/冲突 | ✅；J-D 其余 🟡 |
+| C 存盘 | JSONL A–D + J-D T3（默认 jsonl / migrate / meta） | ✅ |
 | D 扩展 | Subagent · MCP（含 resources/prompts）· plugins | ✅ 最小；SSE/热重载 🟡 |
 | E TUI | T0–T7 | ✅；T8 ⬜ |
 | F GUI | Electron | ⬜ 后置 |
 | G 协议 | Responses HTTP | ✅；WS 后置 |
 
-**默认下一刀：** 见 **`docs/TODO.md` §7**（J-D 余量 / MCP SSE·PL2 / Usage+）。
+**默认下一刀：** 见 **`docs/TODO.md` §7**（MCP SSE·PL2 / Usage+）。
 
 ---
 
@@ -472,11 +472,11 @@ flowchart TB
 | **M-TUI** | 🟡 | T0–T7 ✅；T8 Ink ⬜ |
 | **M-Cost** | 🟡 | C1–C5 ✅；TTL/break 后置 |
 | **M3** | 🟡 | MCP stdio+resources/prompts 最小；SSE/PL2 未完 |
-| **M5** | 🟡 | 会话/CLI 日用齐；JSONL 可再深 |
+| **M5** | 🟡 | 会话/CLI 日用齐；JSONL 主路径 T3 ✅；entry 可选再深 |
 | **Responses** | 🟡 | HTTP SSE ✅；WS ⬜ |
 | M4–M6 | ⬜ | Electron 与体验打磨 |
 
 **一句话：**  
 **可日用 headless coding agent 主路径已齐**（CLI + slash + rules + cache 标记 + 会话 + 扩展最小 + Subagent + Responses HTTP）。  
-下一刀优先 **J-D 余量(T3) / MCP SSE·PL2 / Usage+**；**Electron · 完整 Ink · Responses WS · cache TTL** 后置。  
+下一刀优先 **MCP SSE·PL2 / Usage+**；**Electron · 完整 Ink · Responses WS · cache TTL** 后置。  
 执行序 → **`docs/TODO.md`**。

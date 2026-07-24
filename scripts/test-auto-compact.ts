@@ -169,7 +169,7 @@ async function main() {
     'manual summary',
   )
 
-  // ── 5) compact 成功后 jsonl 含 compact_boundary（不破坏 JSON 快照）──
+  // ── 5) compact 成功后 jsonl 含 compact_boundary ──
   const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'bolo-compact-jsonl-'))
   const sessionsDir = path.join(tmpRoot, 'sessions')
   await fs.mkdir(sessionsDir, { recursive: true })
@@ -185,7 +185,8 @@ async function main() {
   })
   sessDisk.messages.push({ role: 'user', content: 'hello boundary' })
   sessDisk.messages.push({ role: 'assistant', content: 'ack boundary' })
-  await saveSession(sessDisk, { sessionsDir })
+  // opt-in JSON 以验证 compact 不改 JSON 快照
+  await saveSession(sessDisk, { sessionsDir, writeJsonSnapshot: true })
   const jsonPath = path.join(sessionsDir, 'sess_boundary.json')
   const jsonlPath = path.join(sessionsDir, 'sess_boundary.jsonl')
   const jsonBefore = await fs.readFile(jsonPath, 'utf8')

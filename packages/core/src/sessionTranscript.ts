@@ -1,15 +1,20 @@
 /**
- * 会话 JSONL transcript（T1 双写：append-only）
+ * 会话 JSONL transcript（T3：默认主路径只写 jsonl）
  *
  * 对照 HelsincyCode sessionStorage 的 JSONL 追加语义；无遥测。
- * T1：与 JSON 快照并行写入；J-C+：同 id 有 jsonl 时 resume/load messages 优先 jsonl。
+ * T1 曾双写 JSON+jsonl；J-C+/J-D：resume messages 优先 jsonl；
+ * T3：save 默认停写 JSON，meta 承载配置切片，旧 JSON 只读兼容。
  */
 
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { nowIso, type ChatMessage } from '../../shared/src/index.ts'
-import type { PermissionMode } from '../../permissions/src/index.ts'
+import type {
+  PermissionMode,
+  SessionPermissionRules,
+} from '../../permissions/src/index.ts'
 import type { PersistableSession } from './sessionPersist.ts'
+import type { SessionUsage } from './sessionUsage.ts'
 
 /** 公共头字段（线性 transcript，不强制 parentUuid） */
 export type TranscriptEntryBase = {
@@ -18,12 +23,23 @@ export type TranscriptEntryBase = {
   uuid?: string
 }
 
+/** meta 首行：id + 配置切片（T3 无 JSON 时 resume 依赖此） */
 export type TranscriptMetaEntry = TranscriptEntryBase & {
   type: 'meta'
   cwd?: string
   permissionMode?: PermissionMode | string
   model?: string
   createdAt?: string
+  /** 配置切片（可选；旧 jsonl 可能无） */
+  systemPromptSections?: string[]
+  autoCompactEnabled?: boolean
+  contextWindowTokens?: number
+  maxPtlRetries?: number
+  permissionRules?: SessionPermissionRules
+  effortLevel?: string
+  usage?: SessionUsage
+  phase?: string
+  updatedAt?: string
 }
 
 export type TranscriptMessageEntry = TranscriptEntryBase & {
@@ -48,6 +64,15 @@ export type TranscriptMetaInput = {
   permissionMode?: PermissionMode | string
   model?: string
   createdAt?: string
+  systemPromptSections?: string[]
+  autoCompactEnabled?: boolean
+  contextWindowTokens?: number
+  maxPtlRetries?: number
+  permissionRules?: SessionPermissionRules
+  effortLevel?: string
+  usage?: SessionUsage
+  phase?: string
+  updatedAt?: string
 }
 
 /** 由 JSON 快照路径推导同目录 `{id}.jsonl` */
@@ -94,6 +119,96 @@ function cloneMessage(m: ChatMessage): ChatMessage {
   return out
 }
 
+function clonePermissionRules(
+  rules: SessionPermissionRules | undefined,
+): SessionPermissionRules | undefined {
+  if (!rules) return undefined
+  const out: SessionPermissionRules = {
+    alwaysAllowToolNames: [...rules.alwaysAllowToolNames],
+  }
+  if (rules.alwaysAllowPrefixes?.length) {
+    out.alwaysAllowPrefixes = [...rules.alwaysAllowPrefixes]
+  }
+  return out
+}
+
+function cloneUsage(usage: SessionUsage | undefined): SessionUsage | undefined {
+  if (!usage) return undefined
+  const out: SessionUsage = {
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    totalTokens: usage.totalTokens,
+    calls: usage.calls,
+  }
+  if (usage.estimated) out.estimated = true
+  return out
+}
+
+/** 从 live session 构造 meta 输入（配置切片进首行，供 T3 无 JSON resume） */
+export function metaInputFromSession(
+  session: PersistableSession,
+  opts?: { createdAt?: string; updatedAt?: string },
+): TranscriptMetaInput {
+  const permissionRules = clonePermissionRules(session.permissionRules)
+  const usage = cloneUsage(session.usage)
+  const effort =
+    typeof session.effortLevel === 'string' && session.effortLevel.trim()
+      ? session.effortLevel.trim()
+      : undefined
+  return {
+    sessionId: session.id,
+    cwd: session.cwd,
+    permissionMode: session.permissionMode,
+    model: session.model,
+    createdAt: opts?.createdAt,
+    updatedAt: opts?.updatedAt ?? nowIso(),
+    systemPromptSections: [...session.systemPromptSections],
+    autoCompactEnabled: session.autoCompactEnabled,
+    contextWindowTokens: session.contextWindowTokens,
+    maxPtlRetries: session.maxPtlRetries,
+    phase: session.phase,
+    ...(permissionRules ? { permissionRules } : {}),
+    ...(effort ? { effortLevel: effort } : {}),
+    ...(usage ? { usage } : {}),
+  }
+}
+
+/** 将 meta 输入编成 entry（省略 undefined 字段） */
+export function buildMetaEntry(meta: TranscriptMetaInput): TranscriptMetaEntry {
+  const permissionRules = clonePermissionRules(meta.permissionRules)
+  const usage = cloneUsage(meta.usage)
+  const effort =
+    typeof meta.effortLevel === 'string' && meta.effortLevel.trim()
+      ? meta.effortLevel.trim()
+      : undefined
+  return {
+    type: 'meta',
+    sessionId: meta.sessionId,
+    timestamp: nowIso(),
+    cwd: meta.cwd,
+    permissionMode: meta.permissionMode,
+    model: meta.model,
+    createdAt: meta.createdAt ?? nowIso(),
+    ...(meta.updatedAt ? { updatedAt: meta.updatedAt } : {}),
+    ...(meta.systemPromptSections
+      ? { systemPromptSections: [...meta.systemPromptSections] }
+      : {}),
+    ...(meta.autoCompactEnabled !== undefined
+      ? { autoCompactEnabled: meta.autoCompactEnabled }
+      : {}),
+    ...(meta.contextWindowTokens !== undefined
+      ? { contextWindowTokens: meta.contextWindowTokens }
+      : {}),
+    ...(meta.maxPtlRetries !== undefined
+      ? { maxPtlRetries: meta.maxPtlRetries }
+      : {}),
+    ...(meta.phase ? { phase: meta.phase } : {}),
+    ...(permissionRules ? { permissionRules } : {}),
+    ...(effort ? { effortLevel: effort } : {}),
+    ...(usage ? { usage } : {}),
+  }
+}
+
 /** UTF-8 一行 JSON + `\n`；确保目录存在 */
 export async function appendTranscriptLine(
   file: string,
@@ -122,16 +237,7 @@ export async function ensureTranscriptFile(
     if (code !== 'ENOENT') throw err
   }
 
-  const entry: TranscriptMetaEntry = {
-    type: 'meta',
-    sessionId: meta.sessionId,
-    timestamp: nowIso(),
-    cwd: meta.cwd,
-    permissionMode: meta.permissionMode,
-    model: meta.model,
-    createdAt: meta.createdAt ?? nowIso(),
-  }
-  await appendTranscriptLine(filePath, entry)
+  await appendTranscriptLine(filePath, buildMetaEntry(meta))
   return true
 }
 
@@ -209,16 +315,13 @@ export async function rewriteTranscriptFromMessages(
   const filePath = path.resolve(file)
   await fs.mkdir(path.dirname(filePath), { recursive: true })
   const lines: string[] = []
-  const meta: TranscriptMetaEntry = {
-    type: 'meta',
-    sessionId: session.id,
-    timestamp: nowIso(),
-    cwd: session.cwd,
-    permissionMode: session.permissionMode,
-    model: session.model,
-    createdAt: opts?.createdAt ?? nowIso(),
-  }
-  lines.push(JSON.stringify(meta))
+  lines.push(
+    JSON.stringify(
+      buildMetaEntry(
+        metaInputFromSession(session, { createdAt: opts?.createdAt }),
+      ),
+    ),
+  )
   if (opts && 'compactBoundarySummary' in opts) {
     const boundary: TranscriptCompactBoundaryEntry = {
       type: 'compact_boundary',
@@ -330,7 +433,93 @@ export async function loadTranscriptFile(
       if (!o || typeof o.type !== 'string') continue
       if (o.type === 'meta') {
         if (typeof o.sessionId !== 'string') continue
-        entries.push(o as TranscriptMetaEntry)
+        const meta: TranscriptMetaEntry = {
+          type: 'meta',
+          sessionId: o.sessionId,
+          timestamp:
+            typeof o.timestamp === 'string' ? o.timestamp : nowIso(),
+        }
+        if (typeof o.cwd === 'string') meta.cwd = o.cwd
+        if (typeof o.permissionMode === 'string') {
+          meta.permissionMode = o.permissionMode
+        }
+        if (typeof o.model === 'string') meta.model = o.model
+        if (typeof o.createdAt === 'string') meta.createdAt = o.createdAt
+        if (typeof o.updatedAt === 'string') meta.updatedAt = o.updatedAt
+        if (Array.isArray(o.systemPromptSections)) {
+          meta.systemPromptSections = o.systemPromptSections.filter(
+            (s): s is string => typeof s === 'string',
+          )
+        }
+        if (typeof o.autoCompactEnabled === 'boolean') {
+          meta.autoCompactEnabled = o.autoCompactEnabled
+        }
+        if (
+          typeof o.contextWindowTokens === 'number' &&
+          Number.isFinite(o.contextWindowTokens)
+        ) {
+          meta.contextWindowTokens = Math.max(
+            0,
+            Math.floor(o.contextWindowTokens),
+          )
+        }
+        if (
+          typeof o.maxPtlRetries === 'number' &&
+          Number.isFinite(o.maxPtlRetries)
+        ) {
+          meta.maxPtlRetries = Math.max(0, Math.floor(o.maxPtlRetries))
+        }
+        if (typeof o.phase === 'string') meta.phase = o.phase
+        if (typeof o.effortLevel === 'string' && o.effortLevel.trim()) {
+          meta.effortLevel = o.effortLevel.trim()
+        }
+        if (o.permissionRules && typeof o.permissionRules === 'object') {
+          const pr = o.permissionRules as Record<string, unknown>
+          if (Array.isArray(pr.alwaysAllowToolNames)) {
+            const names = pr.alwaysAllowToolNames.filter(
+              (n): n is string => typeof n === 'string' && n.trim().length > 0,
+            )
+            const rules: SessionPermissionRules = {
+              alwaysAllowToolNames: names,
+            }
+            if (Array.isArray(pr.alwaysAllowPrefixes)) {
+              const prefixes = pr.alwaysAllowPrefixes.filter(
+                (p): p is string => typeof p === 'string' && p.length > 0,
+              )
+              if (prefixes.length) rules.alwaysAllowPrefixes = prefixes
+            }
+            meta.permissionRules = rules
+          }
+        }
+        if (o.usage && typeof o.usage === 'object') {
+          const u = o.usage as Record<string, unknown>
+          const num = (v: unknown): number | undefined =>
+            typeof v === 'number' && Number.isFinite(v)
+              ? Math.max(0, Math.floor(v))
+              : undefined
+          const inputTokens = num(u.inputTokens)
+          const outputTokens = num(u.outputTokens)
+          const totalTokens = num(u.totalTokens)
+          const calls = num(u.calls)
+          if (
+            inputTokens !== undefined ||
+            outputTokens !== undefined ||
+            totalTokens !== undefined ||
+            calls !== undefined
+          ) {
+            const usage: SessionUsage = {
+              inputTokens: inputTokens ?? 0,
+              outputTokens: outputTokens ?? 0,
+              totalTokens:
+                totalTokens ?? (inputTokens ?? 0) + (outputTokens ?? 0),
+              calls: calls ?? 0,
+            }
+            if (u.estimated === true) usage.estimated = true
+            meta.usage = usage
+          }
+        }
+        if (typeof o.uuid === 'string') meta.uuid = o.uuid
+        entries.push(meta)
         continue
       }
       if (o.type === 'message') {
@@ -457,8 +646,8 @@ export async function writeTranscriptAfterCompact(
 }
 
 /**
- * T1 双写：在 JSON 快照旁增量 append `{id}.jsonl`。
- * - 新文件：meta + 全部 messages
+ * T3 主写路径：只写 `{id}.jsonl`（增量 append / shrink rewrite）。
+ * - 新文件：meta（含配置切片）+ 全部 messages
  * - 增量：只 append messages[lastCount..]
  * - messages 变短（compact）：全量 rewrite，并写入 compact_boundary（摘要可选）
  * - 冷启动（无 WeakMap）：按磁盘已有 message 行数作基线，避免 resume 后重复 append
@@ -475,6 +664,9 @@ export async function dualWriteSessionTranscript(
     lastCount = await countTranscriptMessageEntries(transcriptPath)
   }
   const total = session.messages.length
+  const metaBase = metaInputFromSession(session, {
+    createdAt: opts?.createdAt,
+  })
 
   // messages 变短：全量重建（内存已是 compact 后链）；仅显式传入时写 compact_boundary
   if (lastCount > 0 && total < lastCount) {
@@ -491,13 +683,7 @@ export async function dualWriteSessionTranscript(
     return { transcriptPath, appended: total, rewritten: true }
   }
 
-  await ensureTranscriptFile(transcriptPath, {
-    sessionId: session.id,
-    cwd: session.cwd,
-    permissionMode: session.permissionMode,
-    model: session.model,
-    createdAt: opts?.createdAt,
-  })
+  await ensureTranscriptFile(transcriptPath, metaBase)
 
   // 磁盘 message 数已 ≥ 内存：视为已同步（resume 后无新消息再 save）
   if (lastCount >= total) {

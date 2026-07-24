@@ -95,7 +95,7 @@ async function main() {
   const msgCount = await countTranscriptMessageEntries(file)
   assert(msgCount === 3, `message count ignores bad lines: ${msgCount}`)
 
-  // ── 5) saveSession 双写增量 ──
+  // ── 5) saveSession T3：默认只写 jsonl 增量 ──
   const session = await createSession({
     cwd,
     sessionId: 'sess_dual_01',
@@ -105,17 +105,37 @@ async function main() {
     { role: 'user', content: 'hello' },
     { role: 'assistant', content: 'world' },
   )
-  const { path: jsonPath, transcriptPath } = await saveSession(session, {
+  const { path: savedPath, transcriptPath } = await saveSession(session, {
     sessionsDir,
   })
-  assert(jsonPath.endsWith('.json'), 'json path')
+  assert(savedPath.endsWith('.jsonl'), 'T3 path is jsonl')
   assert(
-    transcriptPath === resolveTranscriptPathFromJson(jsonPath),
+    transcriptPath === resolveTranscriptPathFromJson(
+      savedPath.endsWith('.jsonl')
+        ? savedPath.slice(0, -'.jsonl'.length) + '.json'
+        : savedPath,
+    ),
     'transcript path paired',
   )
   assert((await fs.stat(transcriptPath!)).isFile(), 'jsonl exists')
+  const pairedJson = path.join(sessionsDir, 'sess_dual_01.json')
+  try {
+    await fs.stat(pairedJson)
+    assert(false, 'no JSON by default')
+  } catch (e) {
+    assert((e as NodeJS.ErrnoException).code === 'ENOENT', 'json absent')
+  }
   const tLines1 = await readLines(transcriptPath!)
   assert(tLines1.length === 3, `meta+2: ${tLines1.length}`)
+  const metaLine = JSON.parse(tLines1[0]!) as {
+    type: string
+    autoCompactEnabled?: boolean
+  }
+  assert(metaLine.type === 'meta', 'meta first')
+  assert(
+    typeof metaLine.autoCompactEnabled === 'boolean',
+    'meta carries config slice',
+  )
   assert(getTranscriptWriteState(session)?.appendedMessageCount === 2, 'state 2')
 
   // 再加一条，应只 append 1 行
@@ -131,9 +151,10 @@ async function main() {
   assert(tLines3.length === 4, 'no-op save no append')
 
   // ── 6) dualWrite 直接 API：messages 变短 → rewrite ──
+  const jsonPathForDual = pairedJson
   session.messages.length = 0
   session.messages.push({ role: 'user', content: 'compacted' })
-  const r = await dualWriteSessionTranscript(session, jsonPath)
+  const r = await dualWriteSessionTranscript(session, jsonPathForDual)
   assert(r.rewritten === true, 'rewritten after shrink')
   const tLines4 = await readLines(r.transcriptPath)
   assert(tLines4.length === 2, `rewrite meta+1: ${tLines4.length}`)
@@ -150,7 +171,7 @@ async function main() {
     systemPrompt: false,
   })
   session2.messages.push({ role: 'user', content: 'compacted' })
-  const r2 = await dualWriteSessionTranscript(session2, jsonPath)
+  const r2 = await dualWriteSessionTranscript(session2, jsonPathForDual)
   assert(r2.appended === 0, 'cold start no re-append')
   const tLines5 = await readLines(r2.transcriptPath)
   assert(tLines5.length === 2, 'still 2 lines after cold save')

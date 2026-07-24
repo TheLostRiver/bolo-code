@@ -114,15 +114,27 @@ async function main() {
     'usage roundtrip',
   )
 
-  // ── 2) save / load ──
-  const { path: savedPath, snapshot: saved } = await saveSession(session, {
-    sessionsDir,
-  })
-  assert(
-    savedPath === resolveSessionFilePath(session.id, { sessionsDir }),
-    `path=${savedPath}`,
+  // ── 2) save / load（T3：默认只写 jsonl）──
+  const { path: savedPath, snapshot: saved, transcriptPath } = await saveSession(
+    session,
+    { sessionsDir },
   )
-  assert((await fs.stat(savedPath)).isFile(), 'file exists')
+  assert(transcriptPath?.endsWith('.jsonl'), 'T3 writes jsonl')
+  assert(
+    savedPath === transcriptPath,
+    `T3 return path is jsonl: ${savedPath}`,
+  )
+  assert((await fs.stat(savedPath)).isFile(), 'jsonl file exists')
+  const pairedJson = resolveSessionFilePath(session.id, { sessionsDir })
+  try {
+    await fs.stat(pairedJson)
+    assert(false, 'T3 should not write JSON by default')
+  } catch (err) {
+    assert(
+      (err as NodeJS.ErrnoException).code === 'ENOENT',
+      'JSON missing expected',
+    )
+  }
 
   const { snapshot: loaded } = await loadSession(session.id, { sessionsDir })
   assert(loaded.id === saved.id, 'load id')
@@ -135,6 +147,10 @@ async function main() {
   )
   assert(loaded.effortLevel === 'high', 'load effortLevel')
   assert(deepEqual(loaded.usage, session.usage), 'load usage')
+  assert(
+    deepEqual(loaded.systemPromptSections, ['section-a', 'section-b']),
+    'load system from meta',
+  )
 
   // 再 save：createdAt 保留，updatedAt 变
   await new Promise((r) => setTimeout(r, 5))
@@ -147,7 +163,15 @@ async function main() {
   )
   assert(deepEqual(saved2.usage, session.usage), 'save2 usage')
 
-  // ── 3) resume by id ──
+  // 可选双写：writeJsonSnapshot 仍可用
+  const { path: dualJson } = await saveSession(session, {
+    sessionsDir,
+    writeJsonSnapshot: true,
+  })
+  assert(dualJson.endsWith('.json'), 'opt-in JSON path')
+  assert((await fs.stat(dualJson)).isFile(), 'opt-in JSON exists')
+
+  // ── 3) resume by id（双文件时 path 为 JSON；messages 仍优先 jsonl）──
   const { session: resumed, path: resumePath } = await resumeSession({
     idOrPath: session.id,
     sessionsDir,
@@ -155,7 +179,7 @@ async function main() {
     reassembleSystem: false,
     systemPrompt: false,
   })
-  assert(resumePath === savedPath, 'resume path')
+  assert(resumePath === dualJson, 'resume path prefers json when both exist')
   assert(resumed.id === session.id, 'resume id')
   assert(deepEqual(resumed.messages, messages), 'resume messages')
   assert(resumed.permissionMode === 'acceptEdits', 'resume mode')
@@ -187,7 +211,7 @@ async function main() {
 
   // ── 4) resume by absolute path ──
   const { session: r2 } = await resumeSession({
-    idOrPath: savedPath,
+    idOrPath: dualJson,
     reassembleSystem: false,
     systemPrompt: false,
   })
@@ -195,7 +219,18 @@ async function main() {
   assert(r2.effortLevel === 'high', 'resume by path effort')
   assert(deepEqual(r2.usage, session.usage), 'resume by path usage')
 
-  // ── 5) autoSave 接线 + resume 保留 always-allow / usage ──
+  // 仅 jsonl resume path
+  await fs.unlink(dualJson)
+  const { path: resumeJsonlOnly } = await resumeSession({
+    idOrPath: session.id,
+    sessionsDir,
+    cwd,
+    reassembleSystem: false,
+    systemPrompt: false,
+  })
+  assert(resumeJsonlOnly === savedPath, 'resume path is jsonl when only jsonl')
+
+  // ── 5) autoSave 接线 + resume 保留 always-allow / usage（T3 jsonl）──
   const autoDir = path.join(tmpRoot, 'auto')
   await fs.mkdir(autoDir, { recursive: true })
   const sAuto = await createSession({
@@ -216,16 +251,13 @@ async function main() {
     calls: 1,
   }
   // 直接调 maybe 路径：submitPrompt 内部会调；这里用 save 验证 meta 后手动
-  const { maybeAutoSaveSession, getSessionPersistMeta } = await import(
-    '../packages/core/src/sessionPersist.ts'
-  )
+  const { maybeAutoSaveSession, getSessionPersistMeta, migrateSessionToJsonl } =
+    await import('../packages/core/src/sessionPersist.ts')
   const meta = getSessionPersistMeta(sAuto)
   assert(meta?.autoSave === true, 'autoSave meta')
   await maybeAutoSaveSession(sAuto)
-  const autoFile = resolveSessionFilePath('sess_auto_save_01', {
-    sessionsDir: autoDir,
-  })
-  assert((await fs.stat(autoFile)).isFile(), 'autoSave wrote file')
+  const autoJsonl = path.join(autoDir, 'sess_auto_save_01.jsonl')
+  assert((await fs.stat(autoJsonl)).isFile(), 'autoSave wrote jsonl')
   const autoLoaded = await loadSession('sess_auto_save_01', {
     sessionsDir: autoDir,
   })
@@ -261,6 +293,55 @@ async function main() {
   assert(autoResumed.effortLevel === 'low', 'autoSave resume effort')
   assert(autoResumed.usage?.calls === 1, 'autoSave resume usage calls')
   assert(autoResumed.usage?.totalTokens === 15, 'autoSave resume usage total')
+
+  // ── 6) migrateSessionToJsonl（D2）：旧 JSON → 旁路 jsonl ──
+  const migDir = path.join(tmpRoot, 'mig')
+  await fs.mkdir(migDir, { recursive: true })
+  const migId = 'sess_migrate_01'
+  const migJson = path.join(migDir, `${migId}.json`)
+  await fs.writeFile(
+    migJson,
+    JSON.stringify(
+      {
+        version: 1,
+        id: migId,
+        cwd,
+        permissionMode: 'default',
+        messages: [
+          { role: 'user', content: 'migrate-me' },
+          { role: 'assistant', content: 'ok' },
+        ],
+        systemPromptSections: ['sec'],
+        autoCompactEnabled: false,
+        contextWindowTokens: 64000,
+        maxPtlRetries: 1,
+        createdAt: '2021-01-01T00:00:00.000Z',
+        updatedAt: '2021-01-02T00:00:00.000Z',
+        model: 'mig-model',
+        effortLevel: 'medium',
+      },
+      null,
+      2,
+    ) + '\n',
+    'utf8',
+  )
+  const mig1 = await migrateSessionToJsonl(migId, { sessionsDir: migDir })
+  assert(mig1.wrote === true, 'migrate wrote')
+  assert(mig1.messageCount === 2, 'migrate count')
+  assert((await fs.stat(mig1.transcriptPath)).isFile(), 'migrate jsonl exists')
+  assert((await fs.stat(migJson)).isFile(), 'migrate keeps json by default')
+  const migSkip = await migrateSessionToJsonl(migId, { sessionsDir: migDir })
+  assert(migSkip.wrote === false, 'migrate skip when jsonl has messages')
+  const { session: migResumed } = await resumeSession({
+    idOrPath: migId,
+    sessionsDir: migDir,
+    cwd,
+    reassembleSystem: false,
+    systemPrompt: false,
+  })
+  assert(migResumed.messages[0]?.content === 'migrate-me', 'migrate resume msg')
+  assert(migResumed.model === 'mig-model', 'migrate model')
+  assert(migResumed.effortLevel === 'medium', 'migrate effort')
 
   // 清理
   await fs.rm(tmpRoot, { recursive: true, force: true })

@@ -96,9 +96,13 @@ async function main() {
     `preview old: ${listed[1]!.preview}`,
   )
   assert(listed[0]!.model === 'm2', 'model field')
-  assert(listed[0]!.filePath.endsWith('sess_new.json'), 'filePath')
+  assert(
+    listed[0]!.filePath.endsWith('sess_new.jsonl') ||
+      listed[0]!.filePath.endsWith('sess_new.json'),
+    `filePath T3 jsonl or json: ${listed[0]!.filePath}`,
+  )
 
-  // ── RS7：jsonl-only + 同 id 去重（JSON 优先）──
+  // ── RS7：jsonl-only + 同 id 去重 ──
   const jsonlOnlyId = 'sess_jsonl_only'
   const jsonlOnlyPath = path.join(sessionsDir, `${jsonlOnlyId}.jsonl`)
   await fs.writeFile(
@@ -125,7 +129,30 @@ async function main() {
   const future = new Date(Date.now() + 60_000)
   await fs.utimes(jsonlOnlyPath, future, future)
 
-  // 与 sess_old 同 id 的 jsonl 不应多出一项（JSON 优先）
+  // 与 sess_old 同 id：补一份 JSON 旁路，验证双文件策略
+  const oldJsonPath = path.join(sessionsDir, 'sess_old.json')
+  await fs.writeFile(
+    oldJsonPath,
+    JSON.stringify(
+      {
+        version: 1,
+        id: 'sess_old',
+        cwd,
+        permissionMode: 'default',
+        messages: [{ role: 'user', content: 'from-json-only-should-lose' }],
+        systemPromptSections: [],
+        autoCompactEnabled: true,
+        contextWindowTokens: 128000,
+        maxPtlRetries: 3,
+        createdAt: '2020-01-01T00:00:00.000Z',
+        updatedAt: '2020-01-01T00:00:00.000Z',
+        model: 'm1',
+      },
+      null,
+      2,
+    ) + '\n',
+    'utf8',
+  )
   await fs.writeFile(
     path.join(sessionsDir, 'sess_old.jsonl'),
     JSON.stringify({

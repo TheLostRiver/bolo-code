@@ -1,37 +1,38 @@
 # 会话持久化与 Resume（最小可用）
 
 > 对照 HelsincyCode `sessionStorage`：有 session id、落盘、resume。  
-> Bolo：**单文件 JSON 快照**为主路径；**T1 双写**旁路 JSONL append（`sessionTranscript.ts`），**无遥测**。  
-> **`loadSession` / `resumeSession`（J-C+ / J-D）**：同 id 同时存在 `.json` 与 `.jsonl` 时，**messages 优先 jsonl**（须有至少一条有效 message；空/全坏行回退 JSON）；配置切片可从 JSON 补。仅有其一则用其一。  
+> Bolo：**T3 默认只写 `.jsonl`**（`sessionTranscript.ts`）；旧 `.json` **只读兼容**；`writeJsonSnapshot: true` 可双写。  
+> **`loadSession` / `resumeSession`（J-C+ / J-D）**：同 id 同时存在 `.json` 与 `.jsonl` 时，**messages 优先 jsonl**（须有至少一条有效 message；空/全坏行回退 JSON）；配置切片优先 JSON，仅 jsonl 时从 **meta 扩展字段**恢复。仅有其一则用其一。  
 > **compact R1：** `loadTranscriptMessages` 只重建**最后一个** `compact_boundary` 之后的 message 链。
 
 ## 1. 路径约定
 
 | Scope | 路径 |
 |-------|------|
-| **project**（默认） | `<cwd>/.bolo/sessions/<sessionId>.json` |
-| **user** | `~/.bolo/sessions/<sessionId>.json`（或 `$BOLO_CONFIG_DIR/sessions/`） |
-| **transcript（T1 旁路）** | 同目录 `<sessionId>.jsonl`（`saveSession` / autoSave 增量 append） |
+| **project**（默认写） | `<cwd>/.bolo/sessions/<sessionId>.jsonl` |
+| **user** | `~/.bolo/sessions/<sessionId>.jsonl`（或 `$BOLO_CONFIG_DIR/sessions/`） |
+| **旧 JSON（只读）** | 同目录 `<sessionId>.json`（resume / list 仍识别） |
+| **可选双写** | `saveSession(..., { writeJsonSnapshot: true })` 仍写 JSON 快照 |
 
 - 目录由 `ensureUserLayout` / `ensureProjectLayout` 创建。
 - 项目 `.bolo/sessions/` 已在仓库 `.gitignore` 中。
 - 也可传入绝对 `filePath` / `sessionsDir`（测试或自定义）。
 
-### 1.1 目标格式 v2：JSONL（T1 双写中）
+### 1.1 格式 v2：JSONL（T3 主路径）
 
 每行一个 JSON entry（线性，无 parentUuid）：
 
 | type | 用途 |
 |------|------|
-| `meta` | 文件首行：id / cwd / permissionMode / model / createdAt |
+| `meta` | 文件首行：id / cwd / permissionMode / model / createdAt + **配置切片**（systemPromptSections、autoCompact、contextWindow、maxPtlRetries、permissionRules、effortLevel、usage…） |
 | `message` | 包裹现有 `ChatMessage` |
-| `compact_boundary` | full compact 边界（`compactSession` 成功后 rewrite jsonl 写入；不改 JSON 快照） |
+| `compact_boundary` | full compact 边界（`compactSession` 成功后 rewrite jsonl 写入） |
 
-`saveSession` 仍原子写 JSON 快照，并按上次 `messages.length` **增量 append** 新消息到 `.jsonl`；messages 变短时 rewrite 整份 jsonl。详见 `docs/TODO_SESSION_JSONL.md`。
+`saveSession` **默认**只增量 append / rewrite `.jsonl`；不再默认原子写 JSON。`migrateSessionToJsonl` 可将旧 JSON 旁路写出 jsonl（默认不删 JSON）。详见 `docs/TODO_SESSION_JSONL.md`。
 
-## 2. 快照格式（version 1）
+## 2. 快照格式（version 1，只读兼容）
 
-单文件 JSON，字段包括：
+单文件 JSON（旧路径 / `writeJsonSnapshot`），字段包括：
 
 | 字段 | 说明 |
 |------|------|
@@ -58,24 +59,33 @@ import {
   listProjectSessions,
   resumeSession,
   persistSession,
+  migrateSessionToJsonl,
 } from '../packages/core/src/index.ts'
 
-// 显式保存
-const { path, snapshot } = await saveSession(session, { scope: 'project' })
+// 显式保存（T3：默认只写 jsonl）
+const { path, snapshot, transcriptPath } = await saveSession(session, {
+  scope: 'project',
+})
 
-// 读快照
+// 可选：仍双写 JSON
+await saveSession(session, { writeJsonSnapshot: true })
+
+// 读快照（json + jsonl 配对）
 const loaded = await loadSession(session.id, { cwd: session.cwd })
+
+// 旧 JSON → 旁路 jsonl（默认不删 json）
+await migrateSessionToJsonl(session.id, { cwd: session.cwd })
 
 // 恢复 live session（SessionStart source=resume）
 const { session: s2 } = await resumeSession({
-  idOrPath: session.id, // 或绝对 .json 路径
+  idOrPath: session.id, // 或绝对 .json / .jsonl 路径
   cwd: session.cwd,
-  reassembleSystem: true, // 默认 true：重建 system；false 用快照
+  reassembleSystem: true, // 默认 true：重建 system；false 用快照/meta
   provider: createMockProvider(), // 重新注入
   systemPrompt: false, // 测试可关
 })
 
-// 每轮 query 结束后自动写盘
+// 每轮 query 结束后自动写盘（T3：jsonl）
 const session = await createSession({
   cwd,
   autoSave: true, // 或 { scope: 'user', sessionsDir }
@@ -85,27 +95,29 @@ const session = await createSession({
 
 | API | 作用 |
 |-----|------|
-| `toSnapshot` / `parseSessionSnapshot` | 序列化 / 校验 |
-| `saveSession` / `persistSession` | 原子写（temp + rename）+ 旁路 jsonl 双写 |
+| `toSnapshot` / `parseSessionSnapshot` | 序列化 / 校验（JSON 形状） |
+| `saveSession` / `persistSession` | **默认只写 jsonl**；`writeJsonSnapshot` 可选 JSON |
 | `loadSession` | 读 JSON+旁路 jsonl → `SessionSnapshot`（双文件：jsonl messages 非空则优先；否则 JSON） |
 | `loadTranscriptFile` / `loadTranscriptMessages` | 读 jsonl → entries / **R1** 线性 messages（最后 boundary 之后） |
+| `migrateSessionToJsonl` | 旧 JSON 旁路写出 jsonl（D2；可选 `deleteJson` / `force`） |
 | `listProjectSessions` | 扫 `*.json` + `*.jsonl`（path/配置优先 JSON；messageCount/preview 跟可用 jsonl；updatedAt 取较新；去重；坏文件跳过） |
 | `resumeSession` | `loadSession` + `createSession` + 恢复 messages/配置 |
-| `resolveSessionFilePath` | 仅解析路径 |
+| `resolveSessionFilePath` | 解析「逻辑 JSON」路径（配对用） |
 
 ## 4. 与 HC 的差异
 
-| HelsincyCode | Bolo（本轮 / T1） |
-|--------------|------------------|
-| JSONL 追加 transcript | JSON 快照 + 旁路 `.jsonl` 增量 append |
-| 项目哈希目录 + 多类 entry | 固定 `.bolo/sessions/<id>.json` + `<id>.jsonl` |
-| 丰富元数据 / 侧链 agent | 仅主会话 messages + 配置切片；entry 最小集 meta/message/boundary |
+| HelsincyCode | Bolo（T3） |
+|--------------|------------|
+| JSONL 追加 transcript | **默认只写** `.jsonl` 增量 append；旧 JSON 只读 |
+| 项目哈希目录 + 多类 entry | 固定 `.bolo/sessions/<id>.jsonl`（+ 可选旧 `.json`） |
+| 丰富元数据 / 侧链 agent | 主会话 messages + meta 配置切片；entry 最小集 meta/message/boundary |
 
-Resume 主路径：`loadSessionPair` — **messages 以 jsonl 为准**（有效 message 非空时），JSON 提供 meta/配置；jsonl 仅 meta/坏行时回退 JSON messages；仅 JSON 或仅 jsonl 均可恢复。
+Resume 主路径：`loadSessionPair` — **messages 以 jsonl 为准**（有效 message 非空时），JSON 提供 meta/配置；仅 jsonl 时 meta 扩展字段恢复配置；jsonl 仅 meta/坏行时回退 JSON messages。
 
 ```bash
 npx tsx scripts/test-transcript-append.ts
 npx tsx scripts/test-transcript-load.ts
+npx tsx scripts/test-session-persist.ts
 ```
 
 ## 5. CLI：`bolo --resume`
@@ -124,6 +136,7 @@ npx bolo --resume <sessionId>
 npx bolo --resume=<sessionId>
 npx bolo -r <sessionId>
 npx bolo --resume path/to/session.json
+npx bolo --resume path/to/session.jsonl
 
 # 恢复后只打印摘要（非交互）
 npx bolo --resume <id> --print
@@ -152,9 +165,9 @@ npx bolo --resume <id> --cwd /path/to/project
 
 ### 查找顺序（纯 id）
 
-1. `<cwd>/.bolo/sessions/<id>.json`（project）
-2. `~/.bolo/sessions/<id>.json` 或 `$BOLO_CONFIG_DIR/sessions/`（user）
-3. 含路径分隔符或 `.json` 后缀 → 当作文件路径
+1. `<cwd>/.bolo/sessions/<id>.jsonl` / `.json`（project，`loadSessionPair`）
+2. `~/.bolo/sessions/<id>.*` 或 `$BOLO_CONFIG_DIR/sessions/`（user）
+3. 含路径分隔符或 `.json` / `.jsonl` 后缀 → 当作文件路径
 
 与 `loadSession` / `resumeSession` 一致。
 

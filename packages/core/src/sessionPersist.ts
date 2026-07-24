@@ -2,12 +2,12 @@
  * 会话 transcript 持久化（最小可用）
  *
  * 对照 HelsincyCode sessionStorage：有 session id、落盘、resume。
- * Bolo v1：单文件 JSON 快照；T1 双写旁路 JSONL append（见 sessionTranscript.ts）。
+ * Bolo：**T3 默认只写 `.jsonl`**；旧 `.json` 快照只读兼容。
  * J-C+：同 id 同时有 `.json` + `.jsonl` 时 messages 优先 jsonl，meta 可从 json 补；无遥测。
  *
  * 路径：
- * - 项目：`<cwd>/.bolo/sessions/<id>.json`（默认）+ 旁路 `<id>.jsonl`
- * - 用户：`~/.bolo/sessions/<id>.json`（或 BOLO_CONFIG_DIR）
+ * - 项目：`<cwd>/.bolo/sessions/<id>.jsonl`（默认写）+ 可选旁路旧 `<id>.json`（只读）
+ * - 用户：`~/.bolo/sessions/<id>.jsonl`（或 BOLO_CONFIG_DIR）
  */
 
 import { promises as fs } from 'node:fs'
@@ -32,6 +32,8 @@ import {
   loadTranscriptMessages,
   messagesFromTranscriptEntries,
   resolveTranscriptPathFromJson,
+  rewriteTranscriptFromMessages,
+  setTranscriptWriteState,
 } from './sessionTranscript.ts'
 import type { SessionUsage } from './sessionUsage.ts'
 
@@ -92,8 +94,19 @@ export type SaveSessionOptions = {
   scope?: SessionScope
   /** 覆盖 sessions 目录（测试用） */
   sessionsDir?: string
-  /** 直接指定文件路径（优先于 id/scope） */
+  /** 直接指定文件路径（优先于 id/scope；可为 .json 或 .jsonl） */
   filePath?: string
+  /**
+   * 是否仍写 JSON 快照。
+   * - 默认 false（T3：只写 jsonl）
+   * - true：兼容旧双写（json + jsonl）
+   */
+  writeJsonSnapshot?: boolean
+  /**
+   * 是否写 jsonl（默认 true）。
+   * 仅当 writeJsonSnapshot=true 时，设 false 可只写 JSON（测试/逃生）。
+   */
+  writeTranscript?: boolean
 }
 
 export type LoadSessionOptions = {
@@ -442,17 +455,24 @@ export async function saveSession(
   session: PersistableSession,
   options?: SaveSessionOptions & {
     previous?: Partial<SessionSnapshot>
-    /** 关闭旁路 JSONL 双写（默认开启 T1 双写） */
+    /**
+     * @deprecated 使用 writeTranscript；默认 true。false 时关闭 jsonl 写入。
+     */
     dualWriteTranscript?: boolean
   },
 ): Promise<{ path: string; snapshot: SessionSnapshot; transcriptPath?: string }> {
-  const filePath = options?.filePath
+  // 解析「逻辑 JSON 路径」用于配对 jsonl；T3 默认可不存在该文件
+  const rawFilePath = options?.filePath
     ? path.resolve(options.filePath)
     : resolveSessionFilePath(session.id, {
         scope: options?.scope,
         cwd: session.cwd,
         sessionsDir: options?.sessionsDir,
       })
+  const filePath = rawFilePath.endsWith('.jsonl')
+    ? resolveJsonPathFromTranscript(rawFilePath)
+    : rawFilePath
+  const transcriptPath = resolveTranscriptPathFromJson(filePath)
 
   let previous = options?.previous
   if (!previous) {
@@ -460,22 +480,35 @@ export async function saveSession(
       const existing = await loadSessionSnapshotFromPath(filePath)
       previous = existing
     } catch {
-      previous = undefined
+      // T3：无 JSON 时从 jsonl meta 取 createdAt
+      try {
+        const { meta } = await loadTranscriptMessages(transcriptPath)
+        if (meta?.createdAt) previous = { createdAt: meta.createdAt }
+      } catch {
+        previous = undefined
+      }
     }
   }
 
   const snapshot = toSnapshot(session, previous)
-  await atomicWriteJson(filePath, snapshot)
+  const writeJson = options?.writeJsonSnapshot === true
+  const writeTranscript =
+    options?.writeTranscript !== false && options?.dualWriteTranscript !== false
 
-  // T1 双写：JSON 快照保留；旁路增量 append .jsonl（失败不阻断 JSON 写成功）
-  let transcriptPath: string | undefined
-  if (options?.dualWriteTranscript !== false) {
+  if (writeJson) {
+    await atomicWriteJson(filePath, snapshot)
+  }
+
+  // T3 默认：只写 jsonl；失败在仅 jsonl 模式下抛出，双写兼容时不阻断 JSON
+  let outTranscript: string | undefined
+  if (writeTranscript) {
     try {
       const tw = await dualWriteSessionTranscript(session, filePath, {
         createdAt: snapshot.createdAt,
       })
-      transcriptPath = tw.transcriptPath
+      outTranscript = tw.transcriptPath
     } catch (err) {
+      if (!writeJson) throw err
       const message = err instanceof Error ? err.message : String(err)
       session.onEvent?.({
         type: 'error',
@@ -484,7 +517,104 @@ export async function saveSession(
     }
   }
 
-  return { path: filePath, snapshot, transcriptPath }
+  // 返回 path：有 JSON 则 JSON；否则 jsonl（便于调用方展示真实落盘）
+  const returnPath =
+    writeJson || !outTranscript ? filePath : outTranscript
+
+  return {
+    path: returnPath,
+    snapshot,
+    transcriptPath: outTranscript,
+  }
+}
+
+export type MigrateSessionOptions = LoadSessionOptions & {
+  /** 默认 false：不删旧 .json；true 则旁路写出 jsonl 后 unlink JSON */
+  deleteJson?: boolean
+  /** 已有非空 jsonl 时是否强制 rewrite */
+  force?: boolean
+}
+
+/**
+ * 将旧 JSON 快照旁路写出为 jsonl（D2）。
+ * - 不删旧 json（除非 deleteJson）
+ * - 已有 jsonl 且含 message 时默认跳过 rewrite（除非 force）
+ */
+export async function migrateSessionToJsonl(
+  idOrPath: string,
+  options?: MigrateSessionOptions,
+): Promise<{
+  jsonPath: string
+  transcriptPath: string
+  wrote: boolean
+  deletedJson: boolean
+  messageCount: number
+}> {
+  const { path: loadedPath, snapshot } = await loadSession(idOrPath, options)
+  const jsonPath = loadedPath.endsWith('.jsonl')
+    ? resolveJsonPathFromTranscript(loadedPath)
+    : path.resolve(loadedPath)
+  const transcriptPath = resolveTranscriptPathFromJson(jsonPath)
+
+  let existingMessages = 0
+  try {
+    const t = await loadTranscriptMessages(transcriptPath)
+    existingMessages = t.messages.length
+  } catch {
+    existingMessages = 0
+  }
+
+  if (existingMessages > 0 && !options?.force) {
+    return {
+      jsonPath,
+      transcriptPath,
+      wrote: false,
+      deletedJson: false,
+      messageCount: existingMessages,
+    }
+  }
+
+  const session: PersistableSession = {
+    id: snapshot.id,
+    cwd: snapshot.cwd,
+    permissionMode: snapshot.permissionMode,
+    messages: snapshot.messages.map((m) => ({ ...m })),
+    systemPromptSections: [...snapshot.systemPromptSections],
+    model: snapshot.model,
+    autoCompactEnabled: snapshot.autoCompactEnabled,
+    contextWindowTokens: snapshot.contextWindowTokens,
+    maxPtlRetries: snapshot.maxPtlRetries,
+    phase: snapshot.phase,
+    permissionRules: snapshot.permissionRules,
+    effortLevel: snapshot.effortLevel,
+    usage: snapshot.usage,
+  }
+
+  await rewriteTranscriptFromMessages(transcriptPath, session, {
+    createdAt: snapshot.createdAt,
+  })
+  setTranscriptWriteState(session, {
+    filePath: transcriptPath,
+    appendedMessageCount: session.messages.length,
+  })
+
+  let deletedJson = false
+  if (options?.deleteJson) {
+    try {
+      await fs.unlink(jsonPath)
+      deletedJson = true
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') throw err
+    }
+  }
+
+  return {
+    jsonPath,
+    transcriptPath,
+    wrote: true,
+    deletedJson,
+    messageCount: snapshot.messages.length,
+  }
 }
 
 async function loadSessionSnapshotFromPath(
@@ -502,7 +632,7 @@ function isMissingFileError(err: unknown): boolean {
 }
 
 /**
- * 从 `.jsonl` 建最小快照（无 JSON 时）；meta 行提供配置切片。
+ * 从 `.jsonl` 建最小快照（无 JSON 时）；meta 行提供配置切片（T3 扩展字段）。
  */
 async function snapshotFromTranscriptOnly(
   transcriptPath: string,
@@ -521,19 +651,53 @@ async function snapshotFromTranscriptOnly(
   const mode = parsePermissionMode(
     typeof meta?.permissionMode === 'string' ? meta.permissionMode : 'default',
   )
+  const permissionRules = meta?.permissionRules
+    ? {
+        alwaysAllowToolNames: [...meta.permissionRules.alwaysAllowToolNames],
+        ...(meta.permissionRules.alwaysAllowPrefixes?.length
+          ? {
+              alwaysAllowPrefixes: [
+                ...meta.permissionRules.alwaysAllowPrefixes,
+              ],
+            }
+          : {}),
+      }
+    : undefined
+  const usage = meta?.usage
+    ? {
+        inputTokens: meta.usage.inputTokens,
+        outputTokens: meta.usage.outputTokens,
+        totalTokens: meta.usage.totalTokens,
+        calls: meta.usage.calls,
+        ...(meta.usage.estimated ? { estimated: true as const } : {}),
+      }
+    : undefined
   return {
     version: SESSION_SNAPSHOT_VERSION,
     id,
     cwd: meta?.cwd ?? opts?.cwd ?? process.cwd(),
     permissionMode: mode,
     messages,
-    systemPromptSections: [],
+    systemPromptSections: meta?.systemPromptSections
+      ? [...meta.systemPromptSections]
+      : [],
     model: meta?.model,
-    autoCompactEnabled: true,
-    contextWindowTokens: 128_000,
-    maxPtlRetries: 3,
+    autoCompactEnabled:
+      typeof meta?.autoCompactEnabled === 'boolean'
+        ? meta.autoCompactEnabled
+        : true,
+    contextWindowTokens:
+      typeof meta?.contextWindowTokens === 'number'
+        ? meta.contextWindowTokens
+        : 128_000,
+    maxPtlRetries:
+      typeof meta?.maxPtlRetries === 'number' ? meta.maxPtlRetries : 3,
     createdAt: meta?.createdAt ?? now,
-    updatedAt: now,
+    updatedAt: meta?.updatedAt ?? now,
+    ...(meta?.phase ? { phase: meta.phase as SessionPhase } : {}),
+    ...(permissionRules ? { permissionRules } : {}),
+    ...(meta?.effortLevel ? { effortLevel: meta.effortLevel } : {}),
+    ...(usage ? { usage } : {}),
   }
 }
 
@@ -591,7 +755,8 @@ export async function loadSessionPair(
       idHint: opts?.idHint,
       cwd: opts?.cwd,
     })
-    return { path: resolvedJson, snapshot, fromTranscript: true }
+    // T3：仅有 jsonl 时 path 指向真实文件，便于 CLI/autoSave 展示与回写
+    return { path: transcriptPath, snapshot, fromTranscript: true }
   }
 
   throw new Error(`session not found: ${resolvedJson} (json and jsonl)`)

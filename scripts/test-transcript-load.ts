@@ -9,6 +9,7 @@ import {
   createSession,
   saveSession,
   loadTranscriptMessages,
+  loadTranscriptFile,
   resumeSession,
   resolveTranscriptPathFromJson,
 } from '../packages/core/src/index.ts'
@@ -55,11 +56,17 @@ async function main() {
   session.model = 'mock-model'
   session.permissionMode = 'default'
 
-  const { path: jsonPath, transcriptPath } = await saveSession(session, {
+  const { path: savedPath, transcriptPath } = await saveSession(session, {
     sessionsDir,
   })
   assert(transcriptPath, 'has transcriptPath')
   const jsonl = transcriptPath!
+  // 配对 JSON 路径（T3 默认不写；下面删测用 opt-in 再造）
+  const jsonPath = resolveTranscriptPathFromJson(jsonl).endsWith('.jsonl')
+    ? jsonl.slice(0, -'.jsonl'.length) + '.json'
+    : savedPath.endsWith('.json')
+      ? savedPath
+      : jsonl.slice(0, -'.jsonl'.length) + '.json'
 
   // ── 1) loadTranscriptMessages 与内存一致 ──
   const loaded = await loadTranscriptMessages(jsonl)
@@ -81,7 +88,9 @@ async function main() {
     '3 message entries',
   )
 
-  // ── 4) JSON 删除后 resume 走 jsonl ──
+  // ── 4) JSON 删除后 resume 走 jsonl（先 opt-in 写 JSON 再删）──
+  await saveSession(session, { sessionsDir, writeJsonSnapshot: true })
+  assert((await fs.stat(jsonPath)).isFile(), 'opt-in json exists')
   await fs.unlink(jsonPath)
   assert(
     resolveTranscriptPathFromJson(jsonPath) === path.resolve(jsonl),
