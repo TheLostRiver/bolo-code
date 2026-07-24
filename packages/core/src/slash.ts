@@ -23,7 +23,12 @@ import {
 } from '../../permissions/src/index.ts'
 import type { ChatMessage, HooksConfig, HookEvent } from '../../shared/src/index.ts'
 import { HOOK_EVENTS } from '../../shared/src/index.ts'
-import type { CompactSummarizer } from '../../compact/src/index.ts'
+import {
+  estimateSystemSectionsTokens,
+  estimateTokens,
+  getContextPressure,
+  type CompactSummarizer,
+} from '../../compact/src/index.ts'
 import {
   findSkillById,
   formatSkillBodyForInjection,
@@ -60,8 +65,10 @@ export type SlashSession = {
   tools?: { name: string }[]
   /** provider id；/doctor */
   provider?: { id?: string }
-  /** auto compact 开关；/doctor */
+  /** auto compact 开关；/doctor · /context */
   autoCompactEnabled?: boolean
+  /** 上下文窗口（token 粗估基准）；/context 压力 */
+  contextWindowTokens?: number
   /** PTL 重试上限；/doctor */
   maxPtlRetries?: number
   /** 已连接 MCP；/doctor · /mcp */
@@ -197,9 +204,31 @@ function approxChars(session: SlashSession): number {
   return n
 }
 
-/** 粗算 token：chars/4（本地估计，非计费真值） */
+/**
+ * 粗算 token（本地估计，非计费真值）。
+ * 与 compact `estimateTextTokens` 正文默认一致（≈chars/4）；
+ * 完整 messages 请用 `estimateTokens`（含 tool_calls / 密文权重）。
+ */
 export function approxTokensFromChars(chars: number): number {
   return Math.max(0, Math.ceil(chars / 4))
+}
+
+/** 会话对话 + system 段 token 粗估（/context 真源） */
+export function estimateSessionContextTokens(session: {
+  messages: ChatMessage[]
+  systemPromptSections: string[]
+}): {
+  messagesTokens: number
+  systemTokens: number
+  totalTokens: number
+} {
+  const messagesTokens = estimateTokens(session.messages)
+  const systemTokens = estimateSystemSectionsTokens(session.systemPromptSections)
+  return {
+    messagesTokens,
+    systemTokens,
+    totalTokens: messagesTokens + systemTokens,
+  }
 }
 
 /** section 首行标签（去 # 前缀），供 /context */
@@ -328,6 +357,7 @@ async function cmdCompact(
         'compact failed: no summarizer on session (inject CompactSummarizer; see docs/COMPACTION.md).',
     }
   }
+  const before = estimateSessionContextTokens(session)
   // 延迟导入，避免与 core/index 循环依赖
   const { compactSession } = await import('./index.ts')
   const note = args.trim() || undefined
@@ -341,24 +371,44 @@ async function cmdCompact(
       message: `compact failed: ${r.reason ?? 'unknown'}`,
     }
   }
+  const after = estimateSessionContextTokens(session)
+  const saved = Math.max(0, before.messagesTokens - after.messagesTokens)
+  const notePart = note ? ` note=${JSON.stringify(note)}` : ''
   return {
     ok: true,
-    message: note
-      ? `Compacted conversation (note: ${note}).`
-      : 'Compacted conversation.',
+    message: [
+      `Compacted conversation.${notePart}`,
+      `messages tokens: ~${before.messagesTokens} → ~${after.messagesTokens} (saved ~${saved})`,
+      `system tokens:   ~${after.systemTokens} (unchanged by compact)`,
+      `total est:       ~${after.totalTokens}  (local heuristic; not billing)`,
+    ].join('\n'),
   }
 }
 
 function cmdContext(session: SlashSession, _args: string): SlashDispatchResult {
   const chars = approxChars(session)
-  const tokensEst = approxTokensFromChars(chars)
+  const est = estimateSessionContextTokens(session)
+  const window =
+    typeof session.contextWindowTokens === 'number' &&
+    session.contextWindowTokens > 0
+      ? session.contextWindowTokens
+      : 128_000
+  const pressure = getContextPressure({
+    tokenCount: est.totalTokens,
+    contextWindowTokens: window,
+  })
+  const autoOn = session.autoCompactEnabled === true
   const sections = session.systemPromptSections
   const lines = [
     `id:              ${session.id}`,
     `cwd:             ${session.cwd}`,
     `messages:        ${session.messages.length}`,
     `chars (approx):  ${chars}`,
-    `tokens (est):    ~${tokensEst}  (chars/4; local only, not billing)`,
+    `tokens (est):    ~${est.totalTokens}  (messages ~${est.messagesTokens} + system ~${est.systemTokens})`,
+    `  heuristic:     text≈chars/4; dense JSON≈chars/2; tool_calls counted (local only, not billing)`,
+    `window:          ${window}  (effective ~${pressure.effectiveWindow}; auto threshold ~${pressure.autoThreshold})`,
+    `pressure:        ${pressure.level}  (~${pressure.percentOfWindow}% of window; ~${pressure.percentOfThreshold}% of auto threshold)`,
+    `autoCompact:     ${autoOn ? 'on' : 'off'}${autoOn && pressure.aboveAutoThreshold ? '  (would trigger on next prepare)' : ''}`,
     `permissionMode:  ${session.permissionMode}`,
     `model:           ${session.model ?? '(unset)'}`,
     `effort:          ${session.effortLevel ?? 'auto'}`,
@@ -367,11 +417,15 @@ function cmdContext(session: SlashSession, _args: string): SlashDispatchResult {
   if (sections.length) {
     for (let i = 0; i < sections.length; i++) {
       const s = sections[i] ?? ''
-      lines.push(`  [${i + 1}] ${sectionLabel(s)}  (${s.length} chars)`)
+      const secTok = estimateSystemSectionsTokens([s])
+      lines.push(
+        `  [${i + 1}] ${sectionLabel(s)}  (${s.length} chars, ~${secTok} tok)`,
+      )
     }
   }
   lines.push(
     'cache:           stable system prefix first; providers may send cache_control / prompt_cache_key (see docs/PROMPT_CACHE.md)',
+    'prepare order:   microcompact → auto full compact → callModel (PTL truncate is fallback)',
     formatUsageOneLiner(session.usage),
   )
   return { ok: true, message: lines.join('\n') }

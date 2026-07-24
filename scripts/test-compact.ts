@@ -117,6 +117,70 @@ async function main() {
     'no recurse',
   )
 
+  // ── token 启发式：正文 chars/4；JSON 密文更密 ──
+  const {
+    estimateTextTokens,
+    estimateMessageTokens,
+    estimateTokens,
+    getContextPressure,
+    getAutoCompactThreshold,
+    getEffectiveContextWindow,
+    AUTOCOMPACT_BUFFER_TOKENS,
+  } = await import('../packages/compact/src/index.ts')
+
+  assert(estimateTextTokens('abcd') === 1, 'plain text chars/4')
+  assert(estimateTextTokens('abcdefgh') === 2, 'plain 8 chars → 2')
+  const jsonish = '{"a":1,"b":2,"c":3,"d":4,"e":5,"f":6,"g":7,"h":8}'
+  assert(
+    estimateTextTokens(jsonish) > Math.ceil(jsonish.length / 4),
+    'dense JSON counts higher than chars/4',
+  )
+  const withTools: ChatMessage = {
+    role: 'assistant',
+    content: '',
+    tool_calls: [
+      {
+        id: 'c1',
+        name: 'Bash',
+        arguments: JSON.stringify({ command: 'echo hi' }),
+      },
+    ],
+  }
+  assert(
+    estimateMessageTokens(withTools) >
+      estimateMessageTokens({ role: 'assistant', content: '' }),
+    'tool_calls add tokens',
+  )
+  assert(estimateTokens([withTools]) === estimateMessageTokens(withTools), 'sum')
+
+  const thr = getAutoCompactThreshold(128_000)
+  const eff = getEffectiveContextWindow(128_000)
+  assert(eff === 128_000 - Math.min(20_000, Math.floor(128_000 * 0.15)), 'effective')
+  assert(thr === Math.max(1_000, eff - AUTOCOMPACT_BUFFER_TOKENS), 'threshold formula')
+  assert(thr < 128_000 - 10_000, 'threshold near window, not mid-session')
+
+  const mid = getContextPressure({
+    tokenCount: Math.floor(thr * 0.5),
+    contextWindowTokens: 128_000,
+  })
+  assert(mid.level === 'ok', 'half threshold → ok')
+  const near = getContextPressure({
+    tokenCount: thr - 1,
+    contextWindowTokens: 128_000,
+  })
+  assert(near.level === 'warn' || near.level === 'ok', 'just under threshold')
+  const at = getContextPressure({
+    tokenCount: thr,
+    contextWindowTokens: 128_000,
+  })
+  assert(at.level === 'critical', 'at threshold → critical')
+  assert(at.aboveAutoThreshold === true, 'aboveAutoThreshold')
+  const over = getContextPressure({
+    tokenCount: 128_000,
+    contextWindowTokens: 128_000,
+  })
+  assert(over.level === 'over', 'full window → over')
+
   console.log('COMPACT TESTS PASS')
 }
 

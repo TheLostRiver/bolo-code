@@ -214,6 +214,78 @@ async function main() {
     'jsonl still has message entries after compact',
   )
 
+  // ── 6) full compact 不碰 systemPromptSections 稳定前缀 ──
+  const sessSys = await createSession({
+    cwd: process.cwd(),
+    systemPrompt: false,
+    autoCompactEnabled: false,
+    provider: textOnlyProvider(),
+    compactSummarizer: async () => ({
+      text: `<summary>\n1. Primary Request and Intent:\n   Keep system.\n</summary>`,
+    }),
+  })
+  sessSys.systemPromptSections = [
+    '# Stable prefix\nDO NOT TOUCH',
+    '# Project rules\nvolatile ok',
+  ]
+  const sysSnap = [...sessSys.systemPromptSections]
+  sessSys.messages.push({ role: 'user', content: 'work' })
+  sessSys.messages.push({ role: 'assistant', content: 'done' })
+  const rSys = await compactSession(sessSys, 'manual')
+  assert(rSys.ok === true, 'system prefix compact ok')
+  assert(
+    sessSys.systemPromptSections.length === sysSnap.length &&
+      sessSys.systemPromptSections.every((s, i) => s === sysSnap[i]),
+    'systemPromptSections unchanged after compact',
+  )
+  assert(
+    sessSys.messages[0]?.content === 'Conversation compacted',
+    'boundary is conversation message, not system section',
+  )
+
+  // ── 7) auto 失败不拖垮 prepare / turn ──
+  let failCalls = 0
+  const prepFail = createAutoCompactPrepare({
+    enabled: true,
+    contextWindowTokens: 8_000,
+    runAutoCompact: async () => {
+      failCalls += 1
+      throw new Error('summarizer boom')
+    },
+  })
+  const fatFail: ChatMessage[] = [
+    {
+      role: 'user',
+      content: 'z'.repeat((getAutoCompactThreshold(8_000) + 50) * 4),
+    },
+  ]
+  const rf = await prepFail({
+    messages: fatFail,
+    querySource: 'repl_main_thread',
+    tokenCount: 0,
+  })
+  assert(rf.didCompact !== true, 'failure → no didCompact')
+  assert(rf.messages === fatFail || rf.messages[0]?.content === fatFail[0]?.content, 'messages preserved on fail')
+  assert(failCalls === 1, 'one fail attempt')
+  // 连续失败熔断：再两次后停止调用
+  await prepFail({
+    messages: fatFail,
+    querySource: 'repl_main_thread',
+    tokenCount: 0,
+  })
+  await prepFail({
+    messages: fatFail,
+    querySource: 'repl_main_thread',
+    tokenCount: 0,
+  })
+  const beforeBreaker = failCalls
+  await prepFail({
+    messages: fatFail,
+    querySource: 'repl_main_thread',
+    tokenCount: 0,
+  })
+  assert(failCalls === beforeBreaker, 'circuit breaker stops after 3 failures')
+
   await fs.rm(tmpRoot, { recursive: true, force: true })
 
   console.log('AUTO COMPACT TESTS PASS')

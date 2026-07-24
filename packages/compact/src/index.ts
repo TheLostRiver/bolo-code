@@ -61,10 +61,84 @@ export function mergeHookInstructions(
   return `${u}\n\n${h}`
 }
 
-/** 粗估：≈ chars/4，P1 可换模型 tokenizer */
+/**
+ * 本地启发式 token 估计（非计费、非模型 tokenizer）。
+ * 对照参考 roughTokenCountEstimation：正文默认 ≈chars/4；
+ * JSON/高标点密文 ≈chars/2；tool_calls 计入 name+arguments。
+ */
+export const DEFAULT_BYTES_PER_TOKEN = 4
+/** JSON 类密文：单字符 token 更多，低估会拖晚 auto compact */
+export const DENSE_BYTES_PER_TOKEN = 2
+export const ROLE_OVERHEAD_TOKENS = 4
+export const TOOL_CALL_OVERHEAD_TOKENS = 8
+
+/** 是否按「密文」估（JSON / 高标点） */
+export function looksDenseTokenText(text: string): boolean {
+  const t = text.trimStart()
+  if (t.startsWith('{') || t.startsWith('[')) return true
+  if (text.length < 40) return false
+  const sample = Math.min(text.length, 400)
+  let punct = 0
+  for (let i = 0; i < sample; i++) {
+    const c = text[i]!
+    if (
+      c === '{' ||
+      c === '}' ||
+      c === '[' ||
+      c === ']' ||
+      c === '"' ||
+      c === "'" ||
+      c === ':' ||
+      c === ',' ||
+      c === '\\' ||
+      c === ';'
+    ) {
+      punct += 1
+    }
+  }
+  return punct / sample > 0.12
+}
+
+/** 单段文本粗估 */
+export function estimateTextTokens(text: string): number {
+  if (!text) return 0
+  const bpt = looksDenseTokenText(text)
+    ? DENSE_BYTES_PER_TOKEN
+    : DEFAULT_BYTES_PER_TOKEN
+  return Math.ceil(text.length / bpt)
+}
+
+/** 单条消息（含 tool_calls / tool_call_id 开销） */
+export function estimateMessageTokens(m: ChatMessage): number {
+  let n = ROLE_OVERHEAD_TOKENS + estimateTextTokens(m.content ?? '')
+  if (m.tool_call_id) n += 2
+  if (m.name) n += estimateTextTokens(m.name)
+  if (m.tool_calls?.length) {
+    for (const tc of m.tool_calls) {
+      n += TOOL_CALL_OVERHEAD_TOKENS
+      n += estimateTextTokens(tc.name ?? '')
+      // arguments 多为 JSON → 密文权重
+      n += estimateTextTokens(tc.arguments ?? '')
+    }
+  }
+  return n
+}
+
+/** 对话 messages 粗估（auto compact / PTL / boundary 共用） */
 export function estimateTokens(messages: ChatMessage[]): number {
   let n = 0
-  for (const m of messages) n += Math.ceil((m.content?.length ?? 0) / 4) + 4
+  for (const m of messages) n += estimateMessageTokens(m)
+  return n
+}
+
+/** systemPromptSections 粗估（/context 与 messages 合计压力） */
+export function estimateSystemSectionsTokens(
+  sections: readonly string[],
+): number {
+  let n = 0
+  for (const s of sections) {
+    n += estimateTextTokens(s) + 2
+  }
   return n
 }
 
@@ -299,12 +373,91 @@ export async function runFullCompact(
   }
 }
 
-/** Auto 阈值纯函数（无遥测） */
+/**
+ * Auto 阈值纯函数（无遥测）。
+ * 对照参考 autoCompact：
+ *   effectiveWindow = contextWindow - reservedForSummary
+ *   autoThreshold   = effectiveWindow - AUTOCOMPACT_BUFFER
+ * 仅在「临近窗口」才触发，避免过早 full compact。
+ */
+export const AUTOCOMPACT_BUFFER_TOKENS = 13_000
+/** 为摘要输出预留的上限（与窗口 15% 取 min） */
+export const RESERVED_SUMMARY_TOKENS_CAP = 20_000
+export const RESERVED_SUMMARY_FRACTION = 0.15
+/** 距 auto 阈值还差这么多时进入 warn（UI /context；不强制 compact） */
+export const WARNING_BUFFER_TOKENS = 20_000
+/** 连续 auto 失败熔断默认 */
+export const DEFAULT_MAX_AUTOCOMPACT_FAILURES = 3
+
+/** 扣掉摘要预留后的有效窗口 */
+export function getEffectiveContextWindow(contextWindowTokens: number): number {
+  const w = Math.max(1, Math.floor(contextWindowTokens))
+  const reserved = Math.min(
+    RESERVED_SUMMARY_TOKENS_CAP,
+    Math.floor(w * RESERVED_SUMMARY_FRACTION),
+  )
+  return Math.max(1, w - reserved)
+}
+
 export function getAutoCompactThreshold(contextWindowTokens: number): number {
-  const reserved = Math.min(20_000, Math.floor(contextWindowTokens * 0.15))
-  const effective = contextWindowTokens - reserved
-  const buffer = 13_000
-  return Math.max(1_000, effective - buffer)
+  const effective = getEffectiveContextWindow(contextWindowTokens)
+  return Math.max(1_000, effective - AUTOCOMPACT_BUFFER_TOKENS)
+}
+
+export type ContextPressureLevel = 'ok' | 'warn' | 'critical' | 'over'
+
+export type ContextPressure = {
+  tokenCount: number
+  contextWindowTokens: number
+  effectiveWindow: number
+  autoThreshold: number
+  /** 相对配置窗口 0–100+ */
+  percentOfWindow: number
+  /** 相对 auto 阈值 0–100+ */
+  percentOfThreshold: number
+  level: ContextPressureLevel
+  /** 仅阈值，不含 enabled / 熔断 / querySource */
+  aboveAutoThreshold: boolean
+}
+
+/**
+ * 上下文压力（/context、诊断用；无遥测）。
+ * level：ok → warn（接近阈值）→ critical（达 auto 阈值）→ over（≥ 配置窗口）
+ */
+export function getContextPressure(opts: {
+  tokenCount: number
+  contextWindowTokens: number
+}): ContextPressure {
+  const contextWindowTokens = Math.max(1, Math.floor(opts.contextWindowTokens))
+  const tokenCount = Math.max(0, Math.floor(opts.tokenCount))
+  const effectiveWindow = getEffectiveContextWindow(contextWindowTokens)
+  const autoThreshold = getAutoCompactThreshold(contextWindowTokens)
+  const percentOfWindow = Math.round(
+    (tokenCount / contextWindowTokens) * 100,
+  )
+  const percentOfThreshold = Math.round(
+    (tokenCount / Math.max(1, autoThreshold)) * 100,
+  )
+  // 小窗口时 20k buffer 会盖住阈值；用 max(阈值-buffer, 80%阈值)
+  const warnLine = Math.max(
+    autoThreshold - WARNING_BUFFER_TOKENS,
+    Math.floor(autoThreshold * 0.8),
+  )
+  let level: ContextPressureLevel = 'ok'
+  if (tokenCount >= contextWindowTokens) level = 'over'
+  else if (tokenCount >= autoThreshold) level = 'critical'
+  else if (tokenCount >= warnLine) level = 'warn'
+
+  return {
+    tokenCount,
+    contextWindowTokens,
+    effectiveWindow,
+    autoThreshold,
+    percentOfWindow,
+    percentOfThreshold,
+    level,
+    aboveAutoThreshold: tokenCount >= autoThreshold,
+  }
 }
 
 export function shouldAutoCompact(opts: {
@@ -317,7 +470,7 @@ export function shouldAutoCompact(opts: {
 }): boolean {
   if (!opts.enabled) return false
   if (opts.querySource === 'compact') return false
-  const maxFail = opts.maxConsecutiveFailures ?? 3
+  const maxFail = opts.maxConsecutiveFailures ?? DEFAULT_MAX_AUTOCOMPACT_FAILURES
   if (opts.consecutiveFailures >= maxFail) return false
   return opts.tokenCount >= getAutoCompactThreshold(opts.contextWindowTokens)
 }
@@ -564,7 +717,7 @@ export type MicrocompactResult = {
   messages: ChatMessage[]
   clearedToolUseIds: string[]
   truncatedToolUseIds: string[]
-  /** 粗估节省 tokens（chars/4） */
+  /** 粗估节省 tokens（与 estimateTextTokens 一致） */
   tokensSavedEstimate: number
 }
 
@@ -672,7 +825,11 @@ export function microcompactMessages(
 
     if (!keepSet.has(i)) {
       if (isClearedPlaceholder(content)) return m
-      tokensSavedEstimate += Math.ceil(content.length / 4)
+      tokensSavedEstimate += Math.max(
+        0,
+        estimateTextTokens(content) -
+          estimateTextTokens(TOOL_RESULT_CLEARED_MESSAGE),
+      )
       clearedToolUseIds.push(id)
       changed = true
       return {
@@ -684,7 +841,10 @@ export function microcompactMessages(
     // 最近 N 条：可选按字符截断
     if (maxChars > 0 && content.length > maxChars && !isClearedPlaceholder(content)) {
       const truncated = truncateToolContent(content, maxChars)
-      tokensSavedEstimate += Math.ceil((content.length - truncated.length) / 4)
+      tokensSavedEstimate += Math.max(
+        0,
+        estimateTextTokens(content) - estimateTextTokens(truncated),
+      )
       truncatedToolUseIds.push(id)
       changed = true
       return { ...m, content: truncated }

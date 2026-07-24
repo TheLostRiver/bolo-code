@@ -1,7 +1,7 @@
 # Bolo Code 总任务清单（TODO）
 
 > **执行入口**：勾选与优先级以本文为准；里程碑/能力矩阵见 `docs/ROADMAP.md`；专项细节见各 `docs/*.md`。  
-> 更新：对齐 **Tool+Permission 日用切片** + 已交付主路径；完成度按 **主路径 vs 相对 HC** 诚实口径。  
+> 更新：对齐 **CP* 长会话 compact 加深** + 已交付主路径；完成度按 **主路径 vs 相对 HC** 诚实口径。  
 > 原则：无遥测；对照参考实现语义再实现；不把 stub 当完成；**状态按代码行为写**，不按错误 commit subject。
 
 ---
@@ -13,6 +13,7 @@
 | **本文 `TODO.md`** | **P0→P3 总序**、跨模块依赖、**本周默认下一刀** |
 | `ROADMAP.md` | 里程碑、能力矩阵、验收表（不重复长篇勾选） |
 | `AGENT_LOOP.md` | loop / 错误分类 / model·PTL 重试 |
+| `COMPACTION.md` | compact 管道 · auto 阈值 · micro · token 启发式 |
 | `TOOL_CALLING.md` / `PERMISSIONS.md` | 工具管道 · 权限门控 · always-allow |
 | `TODO_SESSION_JSONL.md` | JSONL 存盘专项（主路径已齐；余量 entry/CLI） |
 | 其它 `docs/*.md` | 契约真源 |
@@ -27,20 +28,21 @@
 主路径可跑（脚本/CLI）：
   bolo / --resume / --continue · 斜杠 + rules · C1–C5 · JSONL 默认写
   · Subagent · MCP stdio 面 · plugins 最小 · Responses HTTP
-  · Loop 韧性最小 · Tool+Permission 日用最小（Edit / path·bash allow / abort）
+  · Loop 韧性最小 · Tool+Permission 日用最小
+  · Compact 日用加深（加权 token 估 · 压力 · /context·/compact · 熔断）
 
 相对参考实现 headless 约 40–55%（勿再写 ~70% 乐观数）。
 真正抬水位的 P0 余量：
   1. ~~Loop 韧性~~ ✅ 最小
-  2. ~~Tool+Permission 日用~~ ✅ 最小（本刀）
-  3. 长会话 compact 加深  ← 默认下一刀
+  2. ~~Tool+Permission 日用~~ ✅ 最小
+  3. ~~长会话 compact 加深~~ ✅ 最小（本刀）
 P1：MCP SSE/HTTP · PL2 · Usage+
 ```
 
 | 优先级 | 含义（当前） |
 |--------|----------------|
-| **P0** | 抬 headless 水位：韧性 / TP 已 🟡；**compact** 仍缺口 |
-| **P1** | 扩展深度（MCP SSE · PL2 · Usage+） |
+| **P0** | 抬 headless 水位：韧性 / TP / **CP 日用** 已 🟡 |
+| **P1** | 扩展深度（MCP SSE · PL2 · Usage+）— **默认下一刀区** |
 | **P2** | 未做或仅最小的子项 |
 | **P3** | GUI / 完整 Ink / 后置协议 |
 
@@ -67,7 +69,7 @@ P1：MCP SSE/HTTP · PL2 · Usage+
 |----|------|------|
 | **SL0–SL5** | 总线 + `/help` `/compact` `/clear` `/context` `/model` `/effort` `/plan` `/permissions`…；`/skills` + `/<skill-id>` 回落 | ✅ |
 | 扩展 slash | `/doctor` `/status` `/mcp` `/plugins` `/hooks` `/init` `/cost` `/usage` `/rules` `/agents` `/bg` `/allow` | ✅ |
-| **SL-polish** | `/help` 分组 · 未知命令建议 · `/context` token/sections/cache · 参数 Usage · 别名隐藏 | ✅ |
+| **SL-polish** | `/help` 分组 · 未知建议 · `/context` token/sections/cache · 参数 Usage · 别名隐藏 | ✅ |
 | **R1–R4 / R3b** | `.bolo/rules` + 用户 rules；`paths` 作用域；submitPrompt 刷新；`/rules` | ✅ |
 | **C1–C5** | 稳定前缀布局 + Anthropic `cache_control` + OpenAI/Responses `prompt_cache_key` | ✅ |
 | **K1–K2** | bundled `skill-creator` / `plugin-creator` | ✅ |
@@ -91,7 +93,7 @@ P1：MCP SSE/HTTP · PL2 · Usage+
 |----|------|------|
 | **LR1–LR6** | 错误分类 + model 退避 + Bash timeout/abort；与 PTL 正交 | ✅ 最小 |
 
-### 2.5 Tool + Permission 日用（本刀）
+### 2.5 Tool + Permission 日用
 
 | ID | 内容 | 状态 |
 |----|------|------|
@@ -102,6 +104,18 @@ P1：MCP SSE/HTTP · PL2 · Usage+
 | **TP5** | schema 校验失败 → `<tool_use_error>`（既有，测试覆盖） | ✅ |
 | **TP-doc** | `TOOL_CALLING.md` / `PERMISSIONS.md` / ROADMAP / TODO | ✅ |
 
+### 2.6 Compact 日用加深（本刀）
+
+| ID | 内容 | 状态 |
+|----|------|------|
+| **CP1** | 加权 token 启发式：正文≈chars/4；密文 JSON≈chars/2；**tool_calls** 计入；与 `/context` 同源 | ✅ 最小 |
+| **CP2** | auto 阈值常量显式化 + `getContextPressure`（ok/warn/critical/over）；临近窗口才 critical | ✅ 最小 |
+| **CP3** | auto 失败熔断加固（连续失败不拖垮 turn）；compact **不改** `systemPromptSections` | ✅ |
+| **CP4** | `/context`：messages/system 分拆、window/threshold/pressure、prepare 顺序；`/compact` 报告前后 token | ✅ 最小 |
+| **CP-doc** | `COMPACTION.md` / `AGENT_LOOP.md` / ROADMAP / TODO；`test-context-slash` | ✅ |
+
+**明确后置（CP 余量）：** cached microcompact / snip 全管线 / 默认开 `autoCompactEnabled` / 真 tokenizer。
+
 ---
 
 ## 3. P0 — 抬 headless 水位（默认主刀区）
@@ -109,21 +123,22 @@ P1：MCP SSE/HTTP · PL2 · Usage+
 | ID | 主题 | 说明 | 状态 |
 |----|------|------|------|
 | **LR*** | Loop 韧性 | 分类 + model 退避 + 与 PTL 分工 | ✅ 最小 |
-| **TP*** | **Tool+Permission 日用** | Edit、path/bash always-allow、中段 abort | ✅ 最小（本刀） |
-| **CP*** | 长会话 compact | auto 策略、boundary 体验、大上下文日用 | 🟡 / ⬜ **默认下一刀** |
+| **TP*** | Tool+Permission 日用 | Edit、path/bash always-allow、中段 abort | ✅ 最小 |
+| **CP*** | 长会话 compact | 加权估 · 压力 · boundary 前缀 · `/context`·`/compact` | ✅ 最小（本刀） |
 
 ---
 
-## 4. P1 — 紧随（扩展深度与体验）
+## 4. P1 — 紧随（扩展深度与体验）— **默认下一刀区**
 
 | ID | 主题 | 说明 | 状态 |
 |----|------|------|------|
-| **MCP2 余量** | 远程 transport | **SSE / HTTP（streamable）** 接同一 host 语义；stdio 面已齐 | ⬜ |
+| **MCP2 余量** | 远程 transport | **SSE / HTTP（streamable）** 接同一 host 语义；stdio 面已齐 | ⬜ **主推下一刀** |
 | **PL2** | plugins 深度 | 热加载 / 贡献 slash 深化 /（若做）市场 | ⬜ |
 | **Usage+** | 本地 usage 展示 | 已有累计与 `/cost`；可加深 breakdown | 🟡 可选 |
 | **J-D 余量** | entry / CLI | 更多 entry 类型；CLI `migrate-session` 包装 | 🟡 可选支线 |
 | **C6+** | Cache 后置 | 1h TTL / global scope / break detection / cached MC | ⬜ **后置** |
 | **TP 余量** | permission 深度 | 完整分类器 / StreamingToolExecutor / 更强 apply_patch | ⬜ 后置 |
+| **CP 余量** | compact 再深 | 默认开 auto · snip · cached MC · 真 tokenizer | ⬜ 后置 |
 
 ---
 
@@ -158,12 +173,11 @@ P1：MCP SSE/HTTP · PL2 · Usage+
 已完成主线：
   RS* · SL* · SL-polish · T0–T7 · R* · C1–C5 · J-A/B/C · J-D(+T3)
   · K* · S0–S7 · MCP1 · MCP2(stdio + list_changed) · PL1 · OR1–OR5
-  · LR* Loop 韧性最小 · TP* Tool+Permission 日用最小
+  · LR* · TP* · CP* 长会话 compact 日用最小
 
 下一阶段：
-  ① CP* 长会话 compact 加深   ← 默认主刀（抬水位）
-  ② MCP2 SSE/HTTP · PL2 · Usage+   （P1）
-  ③ T8 / C6+ / OR6 / Electron / TP 余量  （后置）
+  ① MCP2 SSE/HTTP（或 PL2 / Usage+）  ← 默认主刀（P1）
+  ② CP 余量 / TP 余量 / C6+ / OR6 / T8 / Electron  （后置）
 ```
 
 ---
@@ -172,14 +186,13 @@ P1：MCP SSE/HTTP · PL2 · Usage+
 
 若只开一刀（**非 Electron**）：
 
-> **主推：长会话 compact 加深（CP*）**  
-> - auto 策略、boundary 体验、大上下文日用  
-> - 禁止假装「完整 StreamingToolExecutor」  
+> **主推：MCP SSE/HTTP（MCP2 余量）** 或 **PL2 / Usage+**（P1 任选一条）  
+> - 接同一 host 语义；勿一口做完整市场  
 >
-> **本刀已勾选：** TP1–TP5 + 文档（Edit / path·bash always-allow / abort）。  
-> **明确后置：** MCP SSE/HTTP · PL2（P1）· OR6 · C6+ · T8 · Electron · 完整 permission 分类器。
+> **本刀已勾选：** CP1–CP4 + 文档（加权 token · 压力 · `/context`·`/compact` · 熔断/前缀）。  
+> **明确后置：** cached MC · snip 全管线 · 默认开 auto · OR6 · C6+ · T8 · Electron · 完整 permission 分类器。
 
-**已齐摘要：** resume · slash · BOLO TUI 最小 · rules · C1–C5 · JSONL 主路径 · creators · Subagent · MCP stdio 面 · plugins 最小 · Responses HTTP · Loop 韧性最小 · **Tool+Permission 日用最小**。
+**已齐摘要：** resume · slash · BOLO TUI 最小 · rules · C1–C5 · JSONL 主路径 · creators · Subagent · MCP stdio 面 · plugins 最小 · Responses HTTP · Loop 韧性最小 · Tool+Permission 日用最小 · **Compact 日用加深最小**。
 
 ---
 
@@ -189,7 +202,7 @@ P1：MCP SSE/HTTP · PL2 · Usage+
 |------|---------|
 | LR* | M-Loop 韧性 🟡 |
 | TP* | M-Tool+Permission 🟡 |
-| CP* | 长会话 compact |
+| CP* | 长会话 compact 🟡 最小 |
 | RS* · T* | M5.2 / M-TUI（T0–T7 ✅；T8 ⬜） |
 | SL* · SL-polish | M-Slash ✅ |
 | R* | M-Rules ✅ |
@@ -216,4 +229,4 @@ P1：MCP SSE/HTTP · PL2 · Usage+
 ---
 
 **一句话：**  
-Tool+Permission 日用最小已落地；**下一刀长会话 compact 加深**；MCP SSE/PL2 为 P1，勿抢 P0。
+CP* 日用最小已落地；**下一刀 P1：MCP SSE/HTTP（或 PL2 / Usage+）**；cached MC / snip 勿抢。

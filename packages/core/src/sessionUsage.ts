@@ -29,7 +29,10 @@ export function createEmptySessionUsage(): SessionUsage {
   }
 }
 
-/** 字符粗算 token：chars/4 向上取整 */
+/**
+ * 字符粗算 token：默认 ≈chars/4（与 compact 正文启发式一致）。
+ * 完整 messages 请用 packages/compact 的 estimateTokens（含 tool_calls / 密文）。
+ */
 export function estimateTokensFromChars(chars: number): number {
   if (chars <= 0) return 0
   return Math.ceil(chars / 4)

@@ -49,7 +49,8 @@ Bolo **P0** 对齐：
 | 单 tool | `runToolUse` | `toolExecution.ts` |
 | 结束 | stop hooks / terminal | Stop hooks + `Terminal` |
 | micro compact | `microcompactMessages` | `createMicrocompactPrepare`（默认开） |
-| auto compact | `autoCompactIfNeeded` | `createAutoCompactPrepare`（需开关+summarizer） |
+| auto compact | `autoCompactIfNeeded` | `createAutoCompactPrepare`（需开关+summarizer；失败熔断） |
+| token 估 / 压力 | roughTokenEstimation / warning | `estimateTokens` 加权 + `getContextPressure`；`/context` 同源 |
 | PTL 重试 | compact 内 `truncateHeadForPTLRetry` | `isPromptTooLongError` + `truncateHeadForPtlRetry`；`maxPtlRetries` 默认 3 |
 | 遥测 logEvent | 遍地 | **不实现** |
 
@@ -121,4 +122,4 @@ type TerminalReason =
 - reactive compact / context collapse / snip  
 - 完整 Message 类型系统（assistant content blocks 数组）— v1 仍用简化 ChatMessage  
 
-后续 **Tool+Permission 日用** 加深时，优先改 `runToolUse` 内 permission 段与常用工具契约，不改 loop 骨架。
+后续 **P1 扩展面**（MCP SSE 等）优先不改 loop 骨架；compact 再深（cached MC / snip）见 `docs/COMPACTION.md` 后置项。

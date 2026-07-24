@@ -116,6 +116,17 @@ export {
   groupMessagesByApiRound,
   DEFAULT_MAX_PTL_RETRIES,
   PTL_RETRY_MARKER,
+  estimateTokens,
+  estimateTextTokens,
+  estimateMessageTokens,
+  estimateSystemSectionsTokens,
+  getAutoCompactThreshold,
+  getEffectiveContextWindow,
+  getContextPressure,
+  shouldAutoCompact,
+  AUTOCOMPACT_BUFFER_TOKENS,
+  WARNING_BUFFER_TOKENS,
+  DEFAULT_MAX_AUTOCOMPACT_FAILURES,
 } from '../../compact/src/index.ts'
 export {
   classifyError,
@@ -1095,6 +1106,9 @@ export async function compactSession(
   // 就地替换，避免 session.messages 与 queryLoop 引用脱节
   session.messages.length = 0
   session.messages.push(...outcome.apiMessages)
+
+  // full compact 只改对话 messages；systemPromptSections（含 BOLO / rules 稳定前缀）不动
+  // boundary 为 apiMessages[0] system「Conversation compacted」
 
   const post = await runHooks(
     'PostCompact',

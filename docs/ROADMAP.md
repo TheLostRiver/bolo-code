@@ -1,6 +1,6 @@
 # Bolo Code 整体路线图（详细版）
 
-> 更新：对齐 **Tool+Permission 日用切片**（Edit + path/bash always-allow + 中段 abort）与已交付主路径。  
+> 更新：对齐 **CP* 长会话 compact 日用加深** 与已交付主路径（含 TP / LR）。  
 > **勾选与「下一刀」以 `docs/TODO.md` 为准**；本文件回答：**做到哪 / 缺什么 / 验收 / 里程碑**。  
 > 原则：借鉴参考实现 **语义**再实现；**无遥测**；文档无本机绝对路径；**状态按代码行为**，不按错误 commit subject。
 
@@ -10,7 +10,7 @@
 
 | 层 | 粗估 | 说明 |
 |----|------|------|
-| **Headless 核心**（loop / tools / provider / compact / prompt） | **~55–65%** | 主路径可用；相对 HC 仍缺 StreamingToolExecutor、长会话 compact 深度、完整 permission 分类器 |
+| **Headless 核心**（loop / tools / provider / compact / prompt） | **~55–65%** | 主路径可用；compact 日用加深已 🟡；仍缺 StreamingToolExecutor、cached MC/snip、完整 permission 分类器 |
 | 会话与 CLI | **~70–80%** | JSONL 默认写（T3）；resume/continue；无参 REPL；非成熟 Ink |
 | **扩展面（MCP / Plugins / Skills）** | **~45–55%** | Skills + MCP stdio 面 + list_changed ✅；SSE/HTTP · PL2 ⬜ |
 | **Subagent** | **~50–60%** | 真 loop + Agent + 目录定义；async/fork 最小；worktree ⬜ |
@@ -34,9 +34,9 @@
 1. ~~斜杠总线 + SL-polish · Rules · Creators · C1–C5 · resume/TUI 最小 · JSONL · Subagent · MCP stdio · plugins 最小 · Responses HTTP~~ ✅  
 2. ~~**Loop 韧性**（错误分类 + 429/5xx 有限退避；与 PTL 正交）~~ ✅ 最小  
 3. ~~**Tool+Permission 日用**（Edit、path/bash always-allow、中段 abort）~~ ✅ 最小  
-4. **下一刀 P0：长会话 compact 加深**  
-5. **P1：** MCP SSE/HTTP · PL2 · Usage+  
-6. **后置：** OR6 WS · cache TTL · T8 Ink · Electron  
+4. ~~**长会话 compact 加深**（加权 token · 压力 · `/context`·`/compact` · 熔断）~~ ✅ 最小  
+5. **下一刀 P1：** MCP SSE/HTTP · PL2 · Usage+  
+6. **后置：** OR6 WS · cache TTL · cached MC · T8 Ink · Electron · TP/CP 余量  
 
 ---
 
@@ -87,12 +87,12 @@
 
 | 能力 | 状态 | 对资源的影响 |
 |------|------|----------------|
-| Full / auto / micro compact · PTL | ✅/🟡 | auto 默认策略可再调 |
+| Full / auto / micro compact · PTL | ✅/🟡 | 加权 token 估 + pressure；默认 `autoCompactEnabled: false`；cached MC 后置 |
 | Skill catalog-only | ✅ | 降输入 |
 | **Effort** low/medium/high/max/auto | ✅ | session + `/effort` → max_tokens |
 | Prompt Cache 布局 + **API 标记** | ✅ | C1–C5：`cache_control` / `prompt_cache_key` |
 | 大 tool_result 预算 | ✅ | 截断 + 可选 spill |
-| `/context` `/cost` 本地可见 | ✅ | 无遥测；Usage breakdown 可加深 |
+| `/context` `/cost` 本地可见 | ✅ | `/context`：分拆 tokens + pressure + threshold；Usage+ 可再深 |
 
 ### 2.3 项目规则 Rules
 
@@ -133,7 +133,7 @@
 | 簇 | 示例 | 状态 |
 |----|------|------|
 | 总线 | 解析 `/`、help、skill 回落 | ✅ |
-| 会话 | `/clear` `/compact` `/context` `/cost` | ✅ |
+| 会话 | `/clear` `/compact` `/context` `/cost` | ✅ | compact 报前后 token；context 含压力 |
 | 模型与推理 | `/model` **`/effort`** `/plan` `/permissions` `/allow` | ✅ |
 | 扩展 | `/skills` `/mcp` `/plugins` `/hooks` **`/rules`** `/agents` `/bg` | ✅ |
 | 诊断脚手架 | `/doctor` `/status` `/init` | ✅ |
@@ -495,6 +495,7 @@ flowchart TB
 | M0–M2 | ✅/🟡 | headless 主路径可跑；相对 HC 未满 |
 | **M-Loop 韧性** | 🟡 最小 | 分类 + 429/5xx 有限退避；PTL 正交 |
 | **M-Tool+Permission** | 🟡 最小 | Edit + path/bash always-allow + abort；非完整分类器 |
+| **M-Compact 日用** | 🟡 最小 | 加权 token · pressure · `/context`·`/compact`；cached MC/snip 后置 |
 | **M-Slash** | ✅ | 日用 `/` + SL-polish |
 | **M-Rules** | ✅ | `.bolo/rules` + path-scoped + `/rules` |
 | **M-Creators** | ✅ | bundled creators |
@@ -508,5 +509,5 @@ flowchart TB
 
 **一句话：**  
 Headless **主路径可日用**，相对参考实现约 **40–55%**（文档不再写 ~70% 乐观数）。  
-**P0 下一刀：长会话 compact 加深**；**P1** MCP SSE/HTTP · PL2。  
+**P0 切片** LR / TP / CP 日用均 🟡 最小；**下一刀 P1：MCP SSE/HTTP · PL2 · Usage+**。  
 执行序 → **`docs/TODO.md`**。

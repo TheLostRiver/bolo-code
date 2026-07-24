@@ -21,8 +21,8 @@
 |------|------|
 | `/help` | **分组**列出命令（Session / Model & permissions / Extensions / Diagnostics）；隐藏别名行；提示 aliases 与 skill 调用 |
 | `/clear` | 清空 `messages`；保留 id / cwd / config / `systemPromptSections` |
-| `/compact [note]` | `compactSession`；无 summarizer 时返回错误文案 |
-| `/context` | 消息数、字符粗算、**tokens 估计（chars/4）**、permissionMode、model、effort、cwd、id、**各 system section 标签与长度**、**cache 提示**、usage 一行 |
+| `/compact [note]` | `compactSession`；成功后报告 messages token 前后与节省量；无 summarizer 时错误文案 |
+| `/context` | 消息数、字符粗算、**tokens 分拆（messages + system）**、**window / auto threshold / pressure**、permissionMode、model、effort、cwd、id、**各 system section 标签·长度·token**、**cache + prepare 顺序**、usage 一行 |
 | `/doctor` · `/status` | 本地诊断：node/platform、cwd/id/**provider**/mode/model/effort、messages/sections、tools/skills/agent types、**mcp 连接数**、usage、autoCompact/maxPtlRetries、`getBoloHomeDir()` 是否存在；无遥测；`/status` 为隐藏别名 |
 | `/mcp` · `/mcp tools` | 列出已连接 MCP 服务器；`tools` 列出 `mcp__server__tool` 名 |
 | `/plugins` | 列出 workspace 已发现的本地插件（PL1；非市场） |
