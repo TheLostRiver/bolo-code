@@ -191,7 +191,37 @@ export function parseResponsesUsage(json: unknown): ProviderUsage | null {
   const output =
     num(u.output_tokens) ?? num(u.completion_tokens) ?? num(u.outputTokens)
   const total = num(u.total_tokens) ?? num(u.totalTokens)
-  if (input == null && output == null && total == null) return null
+  let cacheRead =
+    num(u.cache_read_input_tokens) ??
+    num(u.cacheReadInputTokens) ??
+    num(u.cache_read_tokens)
+  if (cacheRead == null) {
+    const details = u.input_tokens_details
+    if (details && typeof details === 'object') {
+      const d = details as Record<string, unknown>
+      cacheRead = num(d.cached_tokens) ?? num(d.cachedTokens)
+    }
+  }
+  if (cacheRead == null) {
+    const details = u.prompt_tokens_details
+    if (details && typeof details === 'object') {
+      const d = details as Record<string, unknown>
+      cacheRead = num(d.cached_tokens) ?? num(d.cachedTokens)
+    }
+  }
+  const cacheCreate =
+    num(u.cache_creation_input_tokens) ??
+    num(u.cacheCreationInputTokens) ??
+    num(u.cache_creation_tokens)
+  if (
+    input == null &&
+    output == null &&
+    total == null &&
+    cacheRead == null &&
+    cacheCreate == null
+  ) {
+    return null
+  }
   return {
     ...(input != null ? { inputTokens: input } : {}),
     ...(output != null ? { outputTokens: output } : {}),
@@ -200,6 +230,8 @@ export function parseResponsesUsage(json: unknown): ProviderUsage | null {
       : input != null || output != null
         ? { totalTokens: (input ?? 0) + (output ?? 0) }
         : {}),
+    ...(cacheRead != null ? { cacheReadInputTokens: cacheRead } : {}),
+    ...(cacheCreate != null ? { cacheCreationInputTokens: cacheCreate } : {}),
   }
 }
 

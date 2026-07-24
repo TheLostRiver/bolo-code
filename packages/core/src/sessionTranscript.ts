@@ -15,6 +15,7 @@ import type {
 } from '../../permissions/src/index.ts'
 import type { PersistableSession } from './sessionPersist.ts'
 import type { SessionUsage } from './sessionUsage.ts'
+import { cloneSessionUsage } from './sessionUsage.ts'
 
 /** 公共头字段（线性 transcript，不强制 parentUuid） */
 export type TranscriptEntryBase = {
@@ -139,15 +140,7 @@ function clonePermissionRules(
 }
 
 function cloneUsage(usage: SessionUsage | undefined): SessionUsage | undefined {
-  if (!usage) return undefined
-  const out: SessionUsage = {
-    inputTokens: usage.inputTokens,
-    outputTokens: usage.outputTokens,
-    totalTokens: usage.totalTokens,
-    calls: usage.calls,
-  }
-  if (usage.estimated) out.estimated = true
-  return out
+  return cloneSessionUsage(usage)
 }
 
 /** 从 live session 构造 meta 输入（配置切片进首行，供 T3 无 JSON resume） */
@@ -533,6 +526,54 @@ export async function loadTranscriptFile(
               calls: calls ?? 0,
             }
             if (u.estimated === true) usage.estimated = true
+            const cr = num(u.cacheReadInputTokens)
+            if (cr !== undefined && cr > 0) usage.cacheReadInputTokens = cr
+            const cc = num(u.cacheCreationInputTokens)
+            if (cc !== undefined && cc > 0) {
+              usage.cacheCreationInputTokens = cc
+            }
+            if (
+              u.byModel &&
+              typeof u.byModel === 'object' &&
+              !Array.isArray(u.byModel)
+            ) {
+              const by: NonNullable<SessionUsage['byModel']> = {}
+              for (const [k, v] of Object.entries(
+                u.byModel as Record<string, unknown>,
+              )) {
+                if (!v || typeof v !== 'object') continue
+                const b = v as Record<string, unknown>
+                const bi = num(b.inputTokens)
+                const bo = num(b.outputTokens)
+                const bt = num(b.totalTokens)
+                const bc = num(b.calls)
+                if (
+                  bi === undefined &&
+                  bo === undefined &&
+                  bt === undefined &&
+                  bc === undefined
+                ) {
+                  continue
+                }
+                const bucket: NonNullable<SessionUsage['byModel']>[string] = {
+                  inputTokens: bi ?? 0,
+                  outputTokens: bo ?? 0,
+                  totalTokens: bt ?? (bi ?? 0) + (bo ?? 0),
+                  calls: bc ?? 0,
+                }
+                if (b.estimated === true) bucket.estimated = true
+                const bcr = num(b.cacheReadInputTokens)
+                if (bcr !== undefined && bcr > 0) {
+                  bucket.cacheReadInputTokens = bcr
+                }
+                const bcc = num(b.cacheCreationInputTokens)
+                if (bcc !== undefined && bcc > 0) {
+                  bucket.cacheCreationInputTokens = bcc
+                }
+                by[k] = bucket
+              }
+              if (Object.keys(by).length > 0) usage.byModel = by
+            }
             meta.usage = usage
           }
         }

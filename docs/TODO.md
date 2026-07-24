@@ -31,6 +31,7 @@
   · Subagent · MCP stdio 面 + Streamable HTTP 最小 · plugins 最小 · Responses HTTP
   · Loop 韧性最小 · Tool+Permission 日用最小
   · Compact 日用加深（加权 token 估 · 压力 · /context·/compact · 熔断）
+  · Usage+ 本地 breakdown（cache · byModel · /cost）
 
 相对参考实现 headless 约 40–55%（勿再写 ~70% 乐观数）。
 P0 抬水位：
@@ -40,14 +41,15 @@ P0 抬水位：
 P1：
   4. ~~MCP 远程 transport（HTTP + 抽象）~~ ✅ 最小
   5. ~~思考链流式显示~~ ✅ 最小
-  6. ~~PL2 插件深化~~ ✅ 最小（本刀）
-  下一刀：Usage+ · RC2 ·（可选）经典 SSE 长连接
+  6. ~~PL2 插件深化~~ ✅ 最小
+  7. ~~Usage+ 本地 breakdown~~ ✅ 最小（本刀）
+  下一刀：RC2 ·（可选）经典 SSE 长连接
 ```
 
 | 优先级 | 含义（当前） |
 |--------|----------------|
 | **P0** | 抬 headless 水位：韧性 / TP / **CP 日用** 已 🟡 |
-| **P1** | 扩展深度（**MCP HTTP ✅** · **Reasoning 显示 ✅** · **PL2 ✅** · Usage+ · RC2）— **默认下一刀区：Usage+ / RC2** |
+| **P1** | 扩展深度（**MCP HTTP ✅** · **Reasoning 显示 ✅** · **PL2 ✅** · **Usage+ ✅** · RC2）— **默认下一刀区：RC2** |
 | **P2** | 未做或仅最小的子项 |
 | **P3** | GUI / 完整 Ink / 后置协议 |
 
@@ -92,7 +94,7 @@ P1：
 | **PL1** | 本地 plugins 发现 + skills/hooks/mcp 合并（非市场） | ✅ 最小 |
 | **PL2** | 热加载 + commands 贡献 + `/plugins` 深化 | ✅ 最小（本刀） |
 | **OR1–OR5** | OpenAI Responses HTTP SSE 直连 | ✅ |
-| 其它 | 真 `apply_patch` · usage 本地 `/cost` · tool_result 预算 · 快照/meta 中 permissionRules/effort/usage | ✅ / 🟡 |
+| 其它 | 真 `apply_patch` · **Usage+** 本地 `/cost`（cache·byModel）· tool_result 预算 · 快照/meta 中 permissionRules/effort/usage | ✅ |
 
 ### 2.4 Loop 韧性
 
@@ -168,8 +170,8 @@ P1：
 | **MCP2 余量** | 远程 transport | **Streamable HTTP + 抽象** 已接 host；经典 SSE 长连接后置 | ✅ 最小 |
 | **RC1** | 思考链流式显示 | provider 解析 → queryLoop → CLI dim；不持久化回灌 | ✅ 最小 |
 | **RC2** | Reasoning 加深 | openai-responses reasoning；ChatMessage 安全回灌；budget/slash 开关 | ⬜ 二期 |
-| **PL2** | plugins 深度 | 热加载 / commands 贡献 / `/plugins reload` | ✅ 最小（本刀） |
-| **Usage+** | 本地 usage 展示 | 已有累计与 `/cost`；可加深 breakdown | 🟡 **主推下一刀** |
+| **PL2** | plugins 深度 | 热加载 / commands 贡献 / `/plugins reload` | ✅ 最小 |
+| **Usage+** | 本地 usage 展示 | cache 字段 + byModel + `/cost` breakdown；快照/meta 持久化 | ✅ 最小（本刀） |
 | **J-D 余量** | entry / CLI | 更多 entry 类型；CLI `migrate-session` 包装 | 🟡 可选支线 |
 | **C6+** | Cache 后置 | 1h TTL / global scope / break detection / cached MC | ⬜ **后置** |
 | **TP 余量** | permission 深度 | 完整分类器 / StreamingToolExecutor / 更强 apply_patch | ⬜ 后置 |
@@ -210,9 +212,10 @@ P1：
   RS* · SL* · SL-polish · T0–T7 · R* · C1–C5 · J-A/B/C · J-D(+T3)
   · K* · S0–S7 · MCP1 · MCP2(stdio + list_changed + HTTP 最小) · PL1 · OR1–OR5
   · LR* · TP* · CP* 长会话 compact 日用最小 · RC1 思考链显示最小 · PL2 插件热加载最小
+  · Usage+ 本地 breakdown 最小
 
 下一阶段：
-  ① Usage+ 本地 breakdown（或 RC2）  ← 默认主刀（P1）
+  ① RC2 思考链二期（或经典 SSE）  ← 默认主刀（P1）
   ② 经典 SSE 长连接 / CP 余量 / TP 余量 / C6+ / OR6 / T8 / Electron  （后置）
 ```
 
@@ -222,13 +225,13 @@ P1：
 
 若只开一刀（**非 Electron**）：
 
-> **主推：Usage+**（本地 usage breakdown）或 **RC2**（思考链二期）（P1）  
+> **主推：RC2**（思考链二期：openai-responses reasoning · 安全回灌 · slash 开关）（P1）  
 > - 勿一口做完整市场 / OAuth MCP / 完整 Ink  
 >
-> **本刀已勾选：** **PL2 插件深化**（`/plugins reload` · commands 贡献 · skill catalog 热刷 · MCP 重连最小）。  
-> **明确后置：** 插件市场 · 经典 SSE · OAuth · cached MC · snip · 默认开 auto · OR6 · C6+ · T8 · Electron · 完整 permission 分类器。
+> **本刀已勾选：** **Usage+**（provider cache 字段 · byModel · `/cost` breakdown · 持久化 · 无遥测）。  
+> **明确后置：** 插件市场 · 经典 SSE · OAuth · cached MC · snip · 默认开 auto · OR6 · C6+ · T8 · Electron · 完整 permission 分类器 · 远程 USD 账单。
 
-**已齐摘要：** resume · slash · BOLO TUI 最小 · rules · C1–C5 · JSONL 主路径 · creators · Subagent · MCP stdio+HTTP 最小 · **plugins PL1+PL2 最小** · Responses HTTP · Loop 韧性最小 · Tool+Permission 日用最小 · Compact 日用加深最小 · 思考链显示最小。
+**已齐摘要：** resume · slash · BOLO TUI 最小 · rules · C1–C5 · JSONL 主路径 · creators · Subagent · MCP stdio+HTTP 最小 · **plugins PL1+PL2 最小** · Responses HTTP · Loop 韧性最小 · Tool+Permission 日用最小 · Compact 日用加深最小 · 思考链显示最小 · **Usage+ 最小**。
 
 ---
 
@@ -243,6 +246,7 @@ P1：
 | SL* · SL-polish | M-Slash ✅ |
 | R* | M-Rules ✅ |
 | C* | M-Cost（C1–C5 ✅；C6+ 后置） |
+| **Usage+** | 本地 usage breakdown ✅ 最小 |
 | J* | M5.1 / `TODO_SESSION_JSONL`（J-D T3 ✅） |
 | K* | M-Creators ✅ |
 | S* | M-Subagent（S0–S7 ✅；S12 partial） |
@@ -265,4 +269,4 @@ P1：
 ---
 
 **一句话：**  
-PL2 插件热加载 + commands 贡献已落地；**下一刀 P1：Usage+ 或 RC2**；市场 / 经典 SSE / cached MC / snip 勿抢。
+Usage+ 本地 breakdown（cache · byModel · `/cost`）已落地；**下一刀 P1：RC2**；市场 / 经典 SSE / cached MC / snip 勿抢。

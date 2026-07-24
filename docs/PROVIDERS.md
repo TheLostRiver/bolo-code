@@ -157,8 +157,10 @@ npx tsx scripts/smoke-live.ts
 
 ### Usage 事件（若 API 有）
 
-- OpenAI-compatible：请求带 `stream_options.include_usage`；SSE 末包 `usage.prompt_tokens` / `completion_tokens` → `yield { type:'usage' }`；无则 queryLoop 用 chars/4 估算。
-- Anthropic：`message_start` / `message_delta` 的 `usage` 合并后 yield；无则同样回落估算。
+- OpenAI-compatible：请求带 `stream_options.include_usage`；SSE 末包 `usage.prompt_tokens` / `completion_tokens` → `yield { type:'usage' }`；可选 `prompt_tokens_details.cached_tokens` → `cacheReadInputTokens`；无则 queryLoop 用 chars/4 估算。
+- Anthropic：`message_start` / `message_delta` 的 `usage` 合并后 yield；解析 `cache_read_input_tokens` / `cache_creation_input_tokens`。
+- OpenAI Responses：`usage.input_tokens_details.cached_tokens` → `cacheReadInputTokens`。
+- 会话侧：`session.usage` 累加总量 + cache + **by model**；`/cost` 本地展示（Usage+）；**无遥测**。
 
 ### Effort → max_tokens
 

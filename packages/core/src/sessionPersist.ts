@@ -36,6 +36,7 @@ import {
   setTranscriptWriteState,
 } from './sessionTranscript.ts'
 import type { SessionUsage } from './sessionUsage.ts'
+import { cloneSessionUsage } from './sessionUsage.ts'
 
 /** 可落盘的会话切片（避免与 index 循环依赖） */
 export type PersistableSession = {
@@ -257,15 +258,7 @@ function clonePermissionRules(
 }
 
 function cloneUsage(usage: SessionUsage | undefined): SessionUsage | undefined {
-  if (!usage) return undefined
-  const out: SessionUsage = {
-    inputTokens: usage.inputTokens,
-    outputTokens: usage.outputTokens,
-    totalTokens: usage.totalTokens,
-    calls: usage.calls,
-  }
-  if (usage.estimated) out.estimated = true
-  return out
+  return cloneSessionUsage(usage)
 }
 
 function parsePermissionRulesField(
@@ -323,6 +316,46 @@ function parseUsageField(raw: unknown): SessionUsage | undefined {
     calls: calls ?? 0,
   }
   if (o.estimated === true) out.estimated = true
+  const cacheRead = num(o.cacheReadInputTokens)
+  if (cacheRead !== undefined && cacheRead > 0) {
+    out.cacheReadInputTokens = cacheRead
+  }
+  const cacheCreate = num(o.cacheCreationInputTokens)
+  if (cacheCreate !== undefined && cacheCreate > 0) {
+    out.cacheCreationInputTokens = cacheCreate
+  }
+  if (o.byModel && typeof o.byModel === 'object' && !Array.isArray(o.byModel)) {
+    const by: NonNullable<SessionUsage['byModel']> = {}
+    for (const [k, v] of Object.entries(o.byModel as Record<string, unknown>)) {
+      if (!v || typeof v !== 'object') continue
+      const b = v as Record<string, unknown>
+      const bi = num(b.inputTokens)
+      const bo = num(b.outputTokens)
+      const bt = num(b.totalTokens)
+      const bc = num(b.calls)
+      if (
+        bi === undefined &&
+        bo === undefined &&
+        bt === undefined &&
+        bc === undefined
+      ) {
+        continue
+      }
+      const bucket: NonNullable<SessionUsage['byModel']>[string] = {
+        inputTokens: bi ?? 0,
+        outputTokens: bo ?? 0,
+        totalTokens: bt ?? (bi ?? 0) + (bo ?? 0),
+        calls: bc ?? 0,
+      }
+      if (b.estimated === true) bucket.estimated = true
+      const bcr = num(b.cacheReadInputTokens)
+      if (bcr !== undefined && bcr > 0) bucket.cacheReadInputTokens = bcr
+      const bcc = num(b.cacheCreationInputTokens)
+      if (bcc !== undefined && bcc > 0) bucket.cacheCreationInputTokens = bcc
+      by[k] = bucket
+    }
+    if (Object.keys(by).length > 0) out.byModel = by
+  }
   return out
 }
 
@@ -696,13 +729,7 @@ async function snapshotFromTranscriptOnly(
       }
     : undefined
   const usage = meta?.usage
-    ? {
-        inputTokens: meta.usage.inputTokens,
-        outputTokens: meta.usage.outputTokens,
-        totalTokens: meta.usage.totalTokens,
-        calls: meta.usage.calls,
-        ...(meta.usage.estimated ? { estimated: true as const } : {}),
-      }
+    ? cloneSessionUsage(meta.usage)
     : undefined
   return {
     version: SESSION_SNAPSHOT_VERSION,

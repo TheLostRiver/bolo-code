@@ -12,6 +12,10 @@ export type ProviderUsage = {
   inputTokens?: number
   outputTokens?: number
   totalTokens?: number
+  /** 缓存命中（读）token；Anthropic cache_read / OpenAI cached */
+  cacheReadInputTokens?: number
+  /** 缓存写入 token；Anthropic cache_creation */
+  cacheCreationInputTokens?: number
 }
 
 /**

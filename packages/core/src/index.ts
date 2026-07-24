@@ -93,6 +93,10 @@ import {
   writeTranscriptAfterCompact,
 } from './sessionTranscript.ts'
 import type { SessionUsage } from './sessionUsage.ts'
+import {
+  cloneSessionUsage,
+  createEmptySessionUsage,
+} from './sessionUsage.ts'
 
 export type { AskPermissionFn, Terminal }
 export type {
@@ -146,6 +150,7 @@ export {
 export { queryLoop } from './queryLoop.ts'
 export {
   createEmptySessionUsage,
+  cloneSessionUsage,
   accumulateSessionUsage,
   estimateTokensFromChars,
   estimateUsageFromCharCounts,
@@ -154,6 +159,7 @@ export {
   formatSessionUsage,
   formatUsageOneLiner,
   type SessionUsage,
+  type ModelUsageBucket,
   type UsageDelta,
 } from './sessionUsage.ts'
 export { runTools } from './toolOrchestration.ts'
@@ -587,19 +593,8 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
     backgroundAgents: createBackgroundAgentStore(),
     tools: createDefaultTools(agentDefinitions),
     usage: opts.usage
-      ? {
-          inputTokens: opts.usage.inputTokens,
-          outputTokens: opts.usage.outputTokens,
-          totalTokens: opts.usage.totalTokens,
-          calls: opts.usage.calls,
-          ...(opts.usage.estimated ? { estimated: true } : {}),
-        }
-      : {
-          inputTokens: 0,
-          outputTokens: 0,
-          totalTokens: 0,
-          calls: 0,
-        },
+      ? cloneSessionUsage(opts.usage)
+      : createEmptySessionUsage(),
     onEvent: opts.onEvent ?? (() => {}),
   }
 
@@ -1049,6 +1044,7 @@ export async function submitPrompt(
     querySource: options?.querySource ?? 'repl_main_thread',
     maxPtlRetries: session.maxPtlRetries,
     usage: session.usage,
+    model: session.model,
     effortLevel: session.effortLevel,
     onEvent: (e) => mapLoopEvent(session, e),
   })

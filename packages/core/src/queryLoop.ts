@@ -121,6 +121,10 @@ export type QueryLoopParams = {
    */
   usage?: SessionUsage
   /**
+   * 当前会话 model 标签；写入 usage.byModel 分桶（本地 breakdown）。
+   */
+  model?: string
+  /**
    * 会话 effort 档位（/effort）；透传 callModel → provider max_tokens 映射。
    */
   effortLevel?: string
@@ -230,6 +234,8 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
         inputTokens?: number
         outputTokens?: number
         totalTokens?: number
+        cacheReadInputTokens?: number
+        cacheCreationInputTokens?: number
       } | null = null
       let toolArgsChars = 0
 
@@ -278,6 +284,8 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
               inputTokens: ev.usage?.inputTokens,
               outputTokens: ev.usage?.outputTokens,
               totalTokens: ev.usage?.totalTokens,
+              cacheReadInputTokens: ev.usage?.cacheReadInputTokens,
+              cacheCreationInputTokens: ev.usage?.cacheCreationInputTokens,
             }
           } else if (ev.type === 'error') {
             modelError = ev.message
@@ -340,19 +348,26 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
 
       // 本地 usage 累计（无遥测）：provider usage 优先，否则 chars/4
       if (params.usage) {
+        const modelTag =
+          typeof params.model === 'string' && params.model.trim()
+            ? params.model.trim()
+            : undefined
         const fromProvider = streamUsage
           ? normalizeProviderUsage(streamUsage)
           : null
         if (fromProvider) {
-          accumulateSessionUsage(params.usage, fromProvider)
+          accumulateSessionUsage(params.usage, {
+            ...fromProvider,
+            ...(modelTag ? { model: modelTag } : {}),
+          })
         } else {
-          accumulateSessionUsage(
-            params.usage,
-            estimateUsageFromCharCounts({
+          accumulateSessionUsage(params.usage, {
+            ...estimateUsageFromCharCounts({
               inputChars: messageChars(messagesForQuery),
               outputChars: assistantText.length + toolArgsChars,
             }),
-          )
+            ...(modelTag ? { model: modelTag } : {}),
+          })
         }
       }
     }

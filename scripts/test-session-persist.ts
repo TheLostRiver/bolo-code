@@ -79,6 +79,19 @@ async function main() {
     totalTokens: 160,
     calls: 2,
     estimated: true,
+    cacheReadInputTokens: 30,
+    cacheCreationInputTokens: 5,
+    byModel: {
+      'mock-model': {
+        inputTokens: 120,
+        outputTokens: 40,
+        totalTokens: 160,
+        calls: 2,
+        estimated: true,
+        cacheReadInputTokens: 30,
+        cacheCreationInputTokens: 5,
+      },
+    },
   }
 
   // ── 1) toSnapshot / parse ──
@@ -103,16 +116,7 @@ async function main() {
     'permissionRules roundtrip',
   )
   assert(snap1b.effortLevel === 'high', 'effortLevel roundtrip')
-  assert(
-    deepEqual(snap1b.usage, {
-      inputTokens: 120,
-      outputTokens: 40,
-      totalTokens: 160,
-      calls: 2,
-      estimated: true,
-    }),
-    'usage roundtrip',
-  )
+  assert(deepEqual(snap1b.usage, session.usage), 'usage roundtrip')
 
   // ── 2) save / load（T3：默认只写 jsonl）──
   const { path: savedPath, snapshot: saved, transcriptPath } = await saveSession(
@@ -198,16 +202,7 @@ async function main() {
     'resume permissionRules',
   )
   assert(resumed.effortLevel === 'high', 'resume effortLevel')
-  assert(
-    deepEqual(resumed.usage, {
-      inputTokens: 120,
-      outputTokens: 40,
-      totalTokens: 160,
-      calls: 2,
-      estimated: true,
-    }),
-    'resume usage',
-  )
+  assert(deepEqual(resumed.usage, session.usage), 'resume usage')
 
   // ── 4) resume by absolute path ──
   const { session: r2 } = await resumeSession({

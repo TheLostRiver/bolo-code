@@ -37,8 +37,9 @@
 4. ~~**长会话 compact 加深**（加权 token · 压力 · `/context`·`/compact` · 熔断）~~ ✅ 最小  
 5. ~~**MCP 远程 transport**（`McpClient` 抽象 + Streamable HTTP）~~ ✅ 最小  
 6. ~~**PL2 插件深化**（热加载 · commands · `/plugins reload`）~~ ✅ 最小  
-7. **下一刀 P1：** Usage+ · RC2 ·（可选）经典 SSE 长连接  
-8. **后置：** OR6 WS · cache TTL · cached MC · T8 Ink · Electron · TP/CP 余量 · 插件市场  
+7. ~~**Usage+**（`/cost` cache + by-model breakdown · 本地可观测）~~ ✅ 最小  
+8. **下一刀 P1：** RC2 ·（可选）经典 SSE 长连接  
+9. **后置：** OR6 WS · cache TTL · cached MC · T8 Ink · Electron · TP/CP 余量 · 插件市场  
 
 ---
 
@@ -62,7 +63,7 @@
   → Loop 韧性（分类 + 退避）+ Tool/Permission 日用
   → 斜杠 + Rules + Creators + Cache 标记
   → Skills / MCP / Plugins / Subagent
-  → 扩展深度（HTTP MCP ✅ · PL2 ✅ · Usage+ / RC2 / SSE 长连接可选）
+  → 扩展深度（HTTP MCP ✅ · PL2 ✅ · Usage+ ✅ · RC2 / SSE 长连接可选）
   → Electron · 完整 Ink · 生产化打磨
 ```
 
@@ -95,7 +96,7 @@
 | **Effort** low/medium/high/max/auto | ✅ | session + `/effort` → max_tokens |
 | Prompt Cache 布局 + **API 标记** | ✅ | C1–C5：`cache_control` / `prompt_cache_key` |
 | 大 tool_result 预算 | ✅ | 截断 + 可选 spill |
-| `/context` `/cost` 本地可见 | ✅ | `/context`：分拆 tokens + pressure + threshold；Usage+ 可再深 |
+| `/context` `/cost` 本地可见 | ✅ | `/context` 分拆+pressure；`/cost` Usage+：cache + by-model |
 
 ### 2.3 项目规则 Rules
 
@@ -400,7 +401,7 @@ flowchart TB
 | Subagent 真 loop / Agent | ✅；worktree ⬜ |
 | Prompt cache C1–C5 | ✅ |
 | JSONL 默认写 + R1/list + migrate + meta 切片 | ✅ J-D T3 |
-| Usage 本地记账 | ✅ 最小；breakdown 🟡 |
+| Usage 本地记账 | ✅ Usage+ 最小（cache + byModel + `/cost`） |
 | openai-responses HTTP SSE | ✅；WS ⬜ |
 | MCP stdio + resources/prompts + list_changed | ✅ |
 | MCP Streamable HTTP + `McpClient` 抽象 | ✅ 最小；经典 SSE 长连接 ⬜ |
@@ -438,7 +439,7 @@ flowchart TB
 | G 协议 | Responses HTTP | ✅；WS 后置 |
 | H 韧性 | 错误分类 + model 退避 + PTL | 🟡 最小（本刀） |
 
-**默认下一刀：** 见 **`docs/TODO.md` §7**（**P1：Usage+ · RC2**；经典 SSE 长连接可选）。
+**默认下一刀：** 见 **`docs/TODO.md` §7**（**P1：RC2**；经典 SSE 长连接可选）。
 
 ---
 
@@ -516,5 +517,5 @@ flowchart TB
 
 **一句话：**  
 Headless **主路径可日用**，相对参考实现约 **40–55%**（文档不再写 ~70% 乐观数）。  
-**P0 切片** LR / TP / CP 日用均 🟡 最小；**MCP HTTP · PL2 热加载 🟡 最小**；**下一刀 P1：Usage+ · RC2 ·（可选）经典 SSE**。  
+**P0 切片** LR / TP / CP 日用均 🟡 最小；**MCP HTTP · PL2 · Usage+ 🟡 最小**；**下一刀 P1：RC2 ·（可选）经典 SSE**。  
 执行序 → **`docs/TODO.md`**。

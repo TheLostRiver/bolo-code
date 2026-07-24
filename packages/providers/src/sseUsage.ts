@@ -9,6 +9,45 @@ function num(v: unknown): number | undefined {
   return typeof v === 'number' && Number.isFinite(v) ? v : undefined
 }
 
+/** 从 usage 对象提取 cache 字段（多厂商别名） */
+function cacheFromRaw(u: Record<string, unknown>): {
+  cacheReadInputTokens?: number
+  cacheCreationInputTokens?: number
+} {
+  let cacheRead =
+    num(u.cache_read_input_tokens) ??
+    num(u.cacheReadInputTokens) ??
+    num(u.cache_read_tokens)
+
+  // OpenAI Chat Completions: prompt_tokens_details.cached_tokens
+  if (cacheRead == null) {
+    const details = u.prompt_tokens_details
+    if (details && typeof details === 'object') {
+      const d = details as Record<string, unknown>
+      cacheRead = num(d.cached_tokens) ?? num(d.cachedTokens)
+    }
+  }
+  // OpenAI Responses: input_tokens_details.cached_tokens
+  if (cacheRead == null) {
+    const details = u.input_tokens_details
+    if (details && typeof details === 'object') {
+      const d = details as Record<string, unknown>
+      cacheRead = num(d.cached_tokens) ?? num(d.cachedTokens)
+    }
+  }
+
+  const cacheCreate =
+    num(u.cache_creation_input_tokens) ??
+    num(u.cacheCreationInputTokens) ??
+    num(u.cache_creation_tokens) ??
+    num(u.cache_write_input_tokens)
+
+  return {
+    ...(cacheRead != null ? { cacheReadInputTokens: cacheRead } : {}),
+    ...(cacheCreate != null ? { cacheCreationInputTokens: cacheCreate } : {}),
+  }
+}
+
 /**
  * OpenAI-compatible chat.completions stream chunk。
  * 常见于末包：`{ usage: { prompt_tokens, completion_tokens, total_tokens }, choices: [] }`
@@ -26,15 +65,27 @@ export function parseOpenAIStreamUsage(chunk: unknown): ProviderUsage | null {
     (inputTokens != null || outputTokens != null
       ? (inputTokens ?? 0) + (outputTokens ?? 0)
       : undefined)
-  if (inputTokens == null && outputTokens == null && totalTokens == null) {
+  const cache = cacheFromRaw(u)
+  if (
+    inputTokens == null &&
+    outputTokens == null &&
+    totalTokens == null &&
+    cache.cacheReadInputTokens == null &&
+    cache.cacheCreationInputTokens == null
+  ) {
     return null
   }
-  return { inputTokens, outputTokens, totalTokens }
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens,
+    ...cache,
+  }
 }
 
 /**
  * Anthropic Messages SSE 事件：
- * - message_start.message.usage（input_tokens 等）
+ * - message_start.message.usage（input_tokens / cache_* 等）
  * - message_delta.usage（output_tokens 等）
  */
 export function parseAnthropicStreamUsage(evt: unknown): ProviderUsage | null {
@@ -64,10 +115,22 @@ export function parseAnthropicStreamUsage(evt: unknown): ProviderUsage | null {
     (inputTokens != null || outputTokens != null
       ? (inputTokens ?? 0) + (outputTokens ?? 0)
       : undefined)
-  if (inputTokens == null && outputTokens == null && totalTokens == null) {
+  const cache = cacheFromRaw(raw)
+  if (
+    inputTokens == null &&
+    outputTokens == null &&
+    totalTokens == null &&
+    cache.cacheReadInputTokens == null &&
+    cache.cacheCreationInputTokens == null
+  ) {
     return null
   }
-  return { inputTokens, outputTokens, totalTokens }
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens,
+    ...cache,
+  }
 }
 
 /** 合并多次 SSE usage（后写覆盖；Anthropic 常分 input / output 两包） */
@@ -85,5 +148,17 @@ export function mergeProviderUsage(
     inputTokens != null || outputTokens != null
       ? (inputTokens ?? 0) + (outputTokens ?? 0)
       : (b.totalTokens ?? a.totalTokens)
-  return { inputTokens, outputTokens, totalTokens }
+  const cacheReadInputTokens =
+    b.cacheReadInputTokens ?? a.cacheReadInputTokens
+  const cacheCreationInputTokens =
+    b.cacheCreationInputTokens ?? a.cacheCreationInputTokens
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens,
+    ...(cacheReadInputTokens != null ? { cacheReadInputTokens } : {}),
+    ...(cacheCreationInputTokens != null
+      ? { cacheCreationInputTokens }
+      : {}),
+  }
 }

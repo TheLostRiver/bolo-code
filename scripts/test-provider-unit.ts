@@ -105,6 +105,26 @@ assert(
   parseOpenAIStreamUsage({ choices: [{ delta: { content: 'hi' } }] }) === null,
   'oai no usage → null',
 )
+const oaiCached = parseOpenAIStreamUsage({
+  usage: {
+    prompt_tokens: 20,
+    completion_tokens: 2,
+    prompt_tokens_details: { cached_tokens: 8 },
+  },
+})
+assert(oaiCached?.cacheReadInputTokens === 8, 'oai prompt_tokens_details.cached')
+const antCache = parseAnthropicStreamUsage({
+  type: 'message_start',
+  message: {
+    usage: {
+      input_tokens: 10,
+      cache_read_input_tokens: 4,
+      cache_creation_input_tokens: 2,
+    },
+  },
+})
+assert(antCache?.cacheReadInputTokens === 4, 'ant cache_read_input_tokens')
+assert(antCache?.cacheCreationInputTokens === 2, 'ant cache_creation_input_tokens')
 
 // --- reasoning_content / thinking（mock SSE 片段，不联网）---
 const oaiReason = eventsFromOpenAIChatDelta({
