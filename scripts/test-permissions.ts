@@ -6,6 +6,7 @@
 import {
   decidePermission,
   getNextPermissionMode,
+  matchPathGlob,
   type PermissionMode,
 } from '../packages/permissions/src/index.ts'
 
@@ -42,11 +43,20 @@ async function main() {
   assert(d('default', 'Read').behavior === 'allow', 'default read')
   assert(d('default', 'Bash', { command: 'ls' }, true).behavior === 'ask', 'default bash ask')
   assert(d('default', 'Write', { path: 'a.ts' }, true).behavior === 'ask', 'default write ask')
+  assert(d('default', 'Edit', { path: 'a.ts', old_string: 'a', new_string: 'b' }, true).behavior === 'ask', 'default edit ask')
 
   // acceptEdits
   assert(
     d('acceptEdits', 'Write', { path: 'src/x.ts' }).behavior === 'allow',
     'accept write in cwd',
+  )
+  assert(
+    d('acceptEdits', 'Edit', {
+      path: 'src/x.ts',
+      old_string: 'a',
+      new_string: 'b',
+    }).behavior === 'allow',
+    'accept edit in cwd',
   )
   assert(
     d('acceptEdits', 'Bash', { command: 'rm -rf /' }).behavior === 'ask',
@@ -56,11 +66,13 @@ async function main() {
   // plan
   assert(d('plan', 'Read').behavior === 'allow', 'plan read')
   assert(d('plan', 'Write', { path: 'a.ts' }).behavior === 'deny', 'plan write deny')
+  assert(d('plan', 'Edit', { path: 'a.ts', old_string: 'a', new_string: 'b' }).behavior === 'deny', 'plan edit deny')
   assert(d('plan', 'Bash', { command: 'echo' }).behavior === 'deny', 'plan bash deny')
 
   // bypass
   assert(d('bypassPermissions', 'Bash').behavior === 'allow', 'bypass bash')
   assert(d('bypassPermissions', 'Write', { path: 'a' }).behavior === 'allow', 'bypass write')
+  assert(d('bypassPermissions', 'Edit', { path: 'a', old_string: 'x', new_string: 'y' }).behavior === 'allow', 'bypass edit')
 
   // mcp
   assert(d('default', 'mcp__x__y').behavior === 'ask', 'mcp default ask')
@@ -114,6 +126,120 @@ async function main() {
       rules,
     }).behavior === 'ask',
     'rules: unlisted tool still ask',
+  )
+
+  // path glob always-allow
+  assert(matchPathGlob('src/foo.ts', 'src/**'), 'glob src/** matches')
+  assert(matchPathGlob('a.ts', '**/*.ts'), 'glob **/*.ts root file')
+  assert(!matchPathGlob('src/foo.ts', 'docs/**'), 'glob docs no match')
+
+  const pathRules = {
+    alwaysAllowToolNames: [] as string[],
+    alwaysAllowPathGlobs: ['src/**', '**/*.md'],
+  }
+  assert(
+    decidePermission({
+      mode: 'default',
+      toolName: 'Write',
+      toolInput: { path: 'src/a.ts', content: 'x' },
+      cwd,
+      requiresPermission: true,
+      rules: pathRules,
+    }).behavior === 'allow',
+    'path glob: Write src/** allow',
+  )
+  assert(
+    decidePermission({
+      mode: 'default',
+      toolName: 'Edit',
+      toolInput: { path: 'readme.md', old_string: 'a', new_string: 'b' },
+      cwd,
+      requiresPermission: true,
+      rules: pathRules,
+    }).behavior === 'allow',
+    'path glob: Edit **/*.md allow',
+  )
+  assert(
+    decidePermission({
+      mode: 'default',
+      toolName: 'Write',
+      toolInput: { path: 'other/x.ts', content: 'x' },
+      cwd,
+      requiresPermission: true,
+      rules: pathRules,
+    }).behavior === 'ask',
+    'path glob: outside still ask',
+  )
+  assert(
+    decidePermission({
+      mode: 'plan',
+      toolName: 'Write',
+      toolInput: { path: 'src/a.ts', content: 'x' },
+      cwd,
+      requiresPermission: true,
+      rules: pathRules,
+    }).behavior === 'deny',
+    'path glob: plan still deny write',
+  )
+
+  // bash prefix always-allow
+  const bashRules = {
+    alwaysAllowToolNames: [] as string[],
+    alwaysAllowBashPrefixes: ['git ', 'npm test'],
+  }
+  assert(
+    decidePermission({
+      mode: 'default',
+      toolName: 'Bash',
+      toolInput: { command: 'git status' },
+      cwd,
+      requiresPermission: true,
+      rules: bashRules,
+    }).behavior === 'allow',
+    'bash prefix: git status allow',
+  )
+  assert(
+    decidePermission({
+      mode: 'default',
+      toolName: 'Bash',
+      toolInput: { command: 'npm test -- --watch' },
+      cwd,
+      requiresPermission: true,
+      rules: bashRules,
+    }).behavior === 'allow',
+    'bash prefix: npm test allow',
+  )
+  assert(
+    decidePermission({
+      mode: 'default',
+      toolName: 'Bash',
+      toolInput: { command: 'rm -rf /' },
+      cwd,
+      requiresPermission: true,
+      rules: bashRules,
+    }).behavior === 'ask',
+    'bash prefix: other still ask',
+  )
+  assert(
+    decidePermission({
+      mode: 'plan',
+      toolName: 'Bash',
+      toolInput: { command: 'git status' },
+      cwd,
+      requiresPermission: true,
+      rules: bashRules,
+    }).behavior === 'deny',
+    'bash prefix: plan still deny',
+  )
+  assert(
+    decidePermission({
+      mode: 'bypassPermissions',
+      toolName: 'Bash',
+      toolInput: { command: 'anything' },
+      cwd,
+      rules: bashRules,
+    }).behavior === 'allow',
+    'bypass still full open',
   )
 
   console.log('PERMISSION TESTS PASS')

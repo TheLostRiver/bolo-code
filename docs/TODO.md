@@ -1,8 +1,8 @@
 # Bolo Code 总任务清单（TODO）
 
 > **执行入口**：勾选与优先级以本文为准；里程碑/能力矩阵见 `docs/ROADMAP.md`；专项细节见各 `docs/*.md`。  
-> 更新：对齐 **Loop 韧性切片** + 已交付主路径；完成度按 **主路径 vs 相对 HC** 诚实口径。  
-> 原则：无遥测；对照 HelsincyCode 语义再实现；不把 stub 当完成；**状态按代码行为写**，不按错误 commit subject。
+> 更新：对齐 **Tool+Permission 日用切片** + 已交付主路径；完成度按 **主路径 vs 相对 HC** 诚实口径。  
+> 原则：无遥测；对照参考实现语义再实现；不把 stub 当完成；**状态按代码行为写**，不按错误 commit subject。
 
 ---
 
@@ -13,6 +13,7 @@
 | **本文 `TODO.md`** | **P0→P3 总序**、跨模块依赖、**本周默认下一刀** |
 | `ROADMAP.md` | 里程碑、能力矩阵、验收表（不重复长篇勾选） |
 | `AGENT_LOOP.md` | loop / 错误分类 / model·PTL 重试 |
+| `TOOL_CALLING.md` / `PERMISSIONS.md` | 工具管道 · 权限门控 · always-allow |
 | `TODO_SESSION_JSONL.md` | JSONL 存盘专项（主路径已齐；余量 entry/CLI） |
 | 其它 `docs/*.md` | 契约真源 |
 
@@ -26,19 +27,19 @@
 主路径可跑（脚本/CLI）：
   bolo / --resume / --continue · 斜杠 + rules · C1–C5 · JSONL 默认写
   · Subagent · MCP stdio 面 · plugins 最小 · Responses HTTP
-  · Loop 韧性最小：错误分类 + 429/5xx 有限退避（与 PTL 正交）
+  · Loop 韧性最小 · Tool+Permission 日用最小（Edit / path·bash allow / abort）
 
-相对 HelsincyCode headless 约 40–55%（勿再写 ~70% 乐观数）。
+相对参考实现 headless 约 40–55%（勿再写 ~70% 乐观数）。
 真正抬水位的 P0 余量：
-  1. ~~Loop 韧性~~ ✅ 最小（本刀）
-  2. Tool+Permission 日用  ← 默认下一刀
-  3. 长会话 compact 加深
+  1. ~~Loop 韧性~~ ✅ 最小
+  2. ~~Tool+Permission 日用~~ ✅ 最小（本刀）
+  3. 长会话 compact 加深  ← 默认下一刀
 P1：MCP SSE/HTTP · PL2 · Usage+
 ```
 
 | 优先级 | 含义（当前） |
 |--------|----------------|
-| **P0** | 抬 headless 水位：韧性已 🟡；**Tool+Permission** / compact 仍缺口 |
+| **P0** | 抬 headless 水位：韧性 / TP 已 🟡；**compact** 仍缺口 |
 | **P1** | 扩展深度（MCP SSE · PL2 · Usage+） |
 | **P2** | 未做或仅最小的子项 |
 | **P3** | GUI / 完整 Ink / 后置协议 |
@@ -82,19 +83,24 @@ P1：MCP SSE/HTTP · PL2 · Usage+
 | **MCP2 list_changed** | tools/resources/prompts 通知 → 再 list → 缓存 + `session.tools` 热刷新 | ✅ |
 | **PL1** | 本地 plugins 发现 + skills/hooks/mcp 合并（非市场） | ✅ 最小 |
 | **OR1–OR5** | OpenAI Responses HTTP SSE 直连 | ✅ |
-| 其它 | 真 `apply_patch` 最小 · usage 本地 `/cost` · always-allow · tool_result 预算 · 快照/meta 中 permissionRules/effort/usage | ✅ / 🟡 |
+| 其它 | 真 `apply_patch` · usage 本地 `/cost` · tool_result 预算 · 快照/meta 中 permissionRules/effort/usage | ✅ / 🟡 |
 
-### 2.4 Loop 韧性（本刀）
+### 2.4 Loop 韧性
 
 | ID | 内容 | 状态 |
 |----|------|------|
-| **LR1** | 统一错误分类 `retryable` / `fatal` / `user_abort`（`errorClassify.ts`） | ✅ 最小 |
-| **LR2** | `wrapCallModelWithRetry`：默认 3 次指数退避；尊重 AbortSignal；仅 retryable | ✅ 最小 |
-| **LR3** | `productionDeps` / `createCallModelFromProvider` 默认包装；可关 | ✅ |
-| **LR4** | queryLoop：`model_retry` 事件；user_abort → `aborted`；与 **PTL** 正交 | ✅ |
-| **LR5** | 测试 `scripts/test-model-retry.ts`（429→成功、abort/fatal/PTL 不重试） | ✅ |
-| **LR6** | Bash：可选 `timeout` + abort 错误码加固 | ✅ 小加分 |
-| **LR-doc** | `AGENT_LOOP.md` / `ROADMAP` / `TODO` 诚实口径 + 分区并发描述 | ✅ |
+| **LR1–LR6** | 错误分类 + model 退避 + Bash timeout/abort；与 PTL 正交 | ✅ 最小 |
+
+### 2.5 Tool + Permission 日用（本刀）
+
+| ID | 内容 | 状态 |
+|----|------|------|
+| **TP1** | 内置 **Edit**（`old_string`/`new_string`；默认唯一匹配；`replace_all`；清晰错误） | ✅ 最小 |
+| **TP2** | always-allow：**path glob** + **Bash 命令前缀**；`/allow path:…` `/allow bash:…`；快照兼容 | ✅ 最小 |
+| **TP3** | plan 仍 deny 写/壳；bypass 仍全开；工具名 always-allow 保留 | ✅ |
+| **TP4** | Bash/Read/Write/Edit/apply_patch 中段 **AbortSignal** → `Error: tool cancelled` | ✅ 最小 |
+| **TP5** | schema 校验失败 → `<tool_use_error>`（既有，测试覆盖） | ✅ |
+| **TP-doc** | `TOOL_CALLING.md` / `PERMISSIONS.md` / ROADMAP / TODO | ✅ |
 
 ---
 
@@ -102,9 +108,9 @@ P1：MCP SSE/HTTP · PL2 · Usage+
 
 | ID | 主题 | 说明 | 状态 |
 |----|------|------|------|
-| **LR*** | Loop 韧性 | 分类 + model 退避 + 与 PTL 分工 | ✅ 最小（本刀） |
-| **TP*** | **Tool+Permission 日用** | Edit/Write 深度、权限体验、中段 abort 一致、常用工具契约 | ⬜ **默认下一刀** |
-| **CP*** | 长会话 compact | auto 策略、boundary 体验、大上下文日用 | 🟡 / ⬜ |
+| **LR*** | Loop 韧性 | 分类 + model 退避 + 与 PTL 分工 | ✅ 最小 |
+| **TP*** | **Tool+Permission 日用** | Edit、path/bash always-allow、中段 abort | ✅ 最小（本刀） |
+| **CP*** | 长会话 compact | auto 策略、boundary 体验、大上下文日用 | 🟡 / ⬜ **默认下一刀** |
 
 ---
 
@@ -117,6 +123,7 @@ P1：MCP SSE/HTTP · PL2 · Usage+
 | **Usage+** | 本地 usage 展示 | 已有累计与 `/cost`；可加深 breakdown | 🟡 可选 |
 | **J-D 余量** | entry / CLI | 更多 entry 类型；CLI `migrate-session` 包装 | 🟡 可选支线 |
 | **C6+** | Cache 后置 | 1h TTL / global scope / break detection / cached MC | ⬜ **后置** |
+| **TP 余量** | permission 深度 | 完整分类器 / StreamingToolExecutor / 更强 apply_patch | ⬜ 后置 |
 
 ---
 
@@ -151,13 +158,12 @@ P1：MCP SSE/HTTP · PL2 · Usage+
 已完成主线：
   RS* · SL* · SL-polish · T0–T7 · R* · C1–C5 · J-A/B/C · J-D(+T3)
   · K* · S0–S7 · MCP1 · MCP2(stdio + list_changed) · PL1 · OR1–OR5
-  · LR* Loop 韧性最小
+  · LR* Loop 韧性最小 · TP* Tool+Permission 日用最小
 
 下一阶段：
-  ① TP* Tool+Permission 日用   ← 默认主刀（抬水位）
-  ② CP* 长会话 compact 加深
-  ③ MCP2 SSE/HTTP · PL2 · Usage+   （P1）
-  ④ T8 / C6+ / OR6 / Electron      （后置）
+  ① CP* 长会话 compact 加深   ← 默认主刀（抬水位）
+  ② MCP2 SSE/HTTP · PL2 · Usage+   （P1）
+  ③ T8 / C6+ / OR6 / Electron / TP 余量  （后置）
 ```
 
 ---
@@ -166,15 +172,14 @@ P1：MCP SSE/HTTP · PL2 · Usage+
 
 若只开一刀（**非 Electron**）：
 
-> **主推：Tool+Permission 日用（TP*）**  
-> - Edit/Write（或等价）契约加深、权限 always-allow / ask 体验  
-> - tool 中段 AbortSignal 一致  
+> **主推：长会话 compact 加深（CP*）**  
+> - auto 策略、boundary 体验、大上下文日用  
 > - 禁止假装「完整 StreamingToolExecutor」  
 >
-> **本刀已勾选：** Loop 韧性 LR1–LR6 + 文档诚实化。  
-> **明确后置：** MCP SSE/HTTP · PL2（P1）· OR6 · C6+ · T8 · Electron。
+> **本刀已勾选：** TP1–TP5 + 文档（Edit / path·bash always-allow / abort）。  
+> **明确后置：** MCP SSE/HTTP · PL2（P1）· OR6 · C6+ · T8 · Electron · 完整 permission 分类器。
 
-**已齐摘要：** resume · slash · BOLO TUI 最小 · rules · C1–C5 · JSONL 主路径 · creators · Subagent · MCP stdio 面 · plugins 最小 · Responses HTTP · **Loop 韧性最小**。
+**已齐摘要：** resume · slash · BOLO TUI 最小 · rules · C1–C5 · JSONL 主路径 · creators · Subagent · MCP stdio 面 · plugins 最小 · Responses HTTP · Loop 韧性最小 · **Tool+Permission 日用最小**。
 
 ---
 
@@ -183,7 +188,8 @@ P1：MCP SSE/HTTP · PL2 · Usage+
 | TODO | ROADMAP |
 |------|---------|
 | LR* | M-Loop 韧性 🟡 |
-| TP* | 运行时 permission / tools 日用 |
+| TP* | M-Tool+Permission 🟡 |
+| CP* | 长会话 compact |
 | RS* · T* | M5.2 / M-TUI（T0–T7 ✅；T8 ⬜） |
 | SL* · SL-polish | M-Slash ✅ |
 | R* | M-Rules ✅ |
@@ -210,4 +216,4 @@ P1：MCP SSE/HTTP · PL2 · Usage+
 ---
 
 **一句话：**  
-Loop 韧性最小已落地；**下一刀 Tool+Permission 日用**；MCP SSE/PL2 为 P1，勿抢 P0。
+Tool+Permission 日用最小已落地；**下一刀长会话 compact 加深**；MCP SSE/PL2 为 P1，勿抢 P0。

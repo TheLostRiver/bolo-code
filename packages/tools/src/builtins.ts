@@ -93,6 +93,15 @@ async function walkFiles(root: string, maxFiles = 5000): Promise<string[]> {
   return out
 }
 
+function abortedResult(): ToolResult {
+  return {
+    ok: false,
+    isError: true,
+    output: 'Error: tool cancelled',
+    errorCode: 'aborted',
+  }
+}
+
 export function createBashTool(): BoloTool {
   return buildTool({
     name: 'Bash',
@@ -117,12 +126,7 @@ export function createBashTool(): BoloTool {
         return { ok: false, isError: true, output: 'empty command', errorCode: 'empty' }
       }
       if (ctx.signal?.aborted) {
-        return {
-          ok: false,
-          isError: true,
-          output: 'Error: tool cancelled',
-          errorCode: 'aborted',
-        }
+        return abortedResult()
       }
       const rawTimeout = Number(input.timeout)
       const timeoutMs = Number.isFinite(rawTimeout)
@@ -139,6 +143,7 @@ export function createBashTool(): BoloTool {
           windowsHide: true,
           signal: ctx.signal,
         })
+        if (ctx.signal?.aborted) return abortedResult()
         const out = [stdout, stderr].filter(Boolean).join('\n').trim()
         return { ok: true, output: out || '(no output)' }
       } catch (e) {
@@ -155,12 +160,7 @@ export function createBashTool(): BoloTool {
           err.name === 'AbortError' ||
           err.code === 'ABORT_ERR'
         ) {
-          return {
-            ok: false,
-            isError: true,
-            output: 'Error: tool cancelled',
-            errorCode: 'aborted',
-          }
+          return abortedResult()
         }
         const timedOut =
           err.killed === true ||
@@ -194,11 +194,15 @@ export function createReadTool(): BoloTool {
       required: ['path'],
     },
     async call(input, ctx) {
+      if (ctx.signal?.aborted) return abortedResult()
       try {
         const p = resolveSafe(ctx.cwd, String(input.path ?? ''))
+        if (ctx.signal?.aborted) return abortedResult()
         const text = await fs.readFile(p, 'utf8')
+        if (ctx.signal?.aborted) return abortedResult()
         return { ok: true, output: text }
       } catch (e) {
+        if (ctx.signal?.aborted) return abortedResult()
         return { ok: false, isError: true, output: String(e), errorCode: 'read_failed' }
       }
     },
@@ -208,7 +212,7 @@ export function createReadTool(): BoloTool {
 export function createWriteTool(): BoloTool {
   return buildTool({
     name: 'Write',
-    description: 'Write a file relative to cwd',
+    description: 'Write a file relative to cwd (full replace)',
     requiresPermission: true,
     isConcurrencySafe: () => false,
     isReadOnly: () => false,
@@ -221,13 +225,158 @@ export function createWriteTool(): BoloTool {
       required: ['path', 'content'],
     },
     async call(input, ctx) {
+      if (ctx.signal?.aborted) return abortedResult()
       try {
         const p = resolveSafe(ctx.cwd, String(input.path ?? ''))
+        if (ctx.signal?.aborted) return abortedResult()
         await fs.mkdir(path.dirname(p), { recursive: true })
+        if (ctx.signal?.aborted) return abortedResult()
         await fs.writeFile(p, String(input.content ?? ''), 'utf8')
+        if (ctx.signal?.aborted) return abortedResult()
         return { ok: true, output: `wrote ${input.path}` }
       } catch (e) {
+        if (ctx.signal?.aborted) return abortedResult()
         return { ok: false, isError: true, output: String(e), errorCode: 'write_failed' }
+      }
+    },
+  })
+}
+
+/**
+ * 精确字符串替换编辑 — 对照 HC Edit 语义（old_string/new_string，默认唯一匹配）。
+ * 不抄 HC 实现；失败消息对模型友好。
+ */
+export function createEditTool(): BoloTool {
+  return buildTool({
+    name: 'Edit',
+    description:
+      'Replace exact text in a file under cwd. Uses old_string → new_string; by default old_string must match exactly once (set replace_all=true to replace all). Prefer Edit for small surgical changes; use Write for full-file rewrite; use apply_patch for multi-hunk patches.',
+    requiresPermission: true,
+    isConcurrencySafe: () => false,
+    isReadOnly: () => false,
+    inputJSONSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'File path relative to cwd' },
+        old_string: {
+          type: 'string',
+          description: 'Exact text to find (must be unique unless replace_all)',
+        },
+        new_string: {
+          type: 'string',
+          description: 'Replacement text',
+        },
+        replace_all: {
+          type: 'boolean',
+          description: 'If true, replace every occurrence (default false)',
+        },
+      },
+      required: ['path', 'old_string', 'new_string'],
+    },
+    async call(input, ctx) {
+      if (ctx.signal?.aborted) return abortedResult()
+      const filePath = String(input.path ?? '')
+      const oldStr = String(input.old_string ?? '')
+      const newStr = String(input.new_string ?? '')
+      const replaceAll = input.replace_all === true
+
+      if (!filePath.trim()) {
+        return {
+          ok: false,
+          isError: true,
+          output: 'Edit: path is required',
+          errorCode: 'invalid_input',
+        }
+      }
+      if (oldStr === '') {
+        return {
+          ok: false,
+          isError: true,
+          output:
+            'Edit: old_string is empty. Provide non-empty text to find, or use Write for full-file content.',
+          errorCode: 'invalid_input',
+        }
+      }
+      if (oldStr === newStr) {
+        return {
+          ok: false,
+          isError: true,
+          output: 'Edit: old_string and new_string are identical; nothing to change',
+          errorCode: 'no_change',
+        }
+      }
+
+      try {
+        const p = resolveSafe(ctx.cwd, filePath)
+        if (ctx.signal?.aborted) return abortedResult()
+        let text: string
+        try {
+          text = await fs.readFile(p, 'utf8')
+        } catch (e) {
+          const err = e as NodeJS.ErrnoException
+          if (err.code === 'ENOENT') {
+            return {
+              ok: false,
+              isError: true,
+              output: `Edit: file not found: ${filePath}`,
+              errorCode: 'not_found',
+            }
+          }
+          throw e
+        }
+        if (ctx.signal?.aborted) return abortedResult()
+
+        // 统计不重叠出现次数（indexOf 步进）
+        let count = 0
+        let from = 0
+        while (from <= text.length) {
+          const idx = text.indexOf(oldStr, from)
+          if (idx < 0) break
+          count += 1
+          from = idx + oldStr.length
+          if (!replaceAll && count > 1) break
+        }
+
+        if (count === 0) {
+          const preview =
+            oldStr.length > 120 ? oldStr.slice(0, 120) + '…' : oldStr
+          return {
+            ok: false,
+            isError: true,
+            output: `Edit: old_string not found in ${filePath}. Ensure exact match (including whitespace). Snippet: ${JSON.stringify(preview)}`,
+            errorCode: 'not_found',
+          }
+        }
+        if (!replaceAll && count > 1) {
+          return {
+            ok: false,
+            isError: true,
+            output: `Edit: old_string matched ${count} times in ${filePath}; expected unique match. Narrow old_string or set replace_all=true.`,
+            errorCode: 'not_unique',
+          }
+        }
+
+        const next = replaceAll
+          ? text.split(oldStr).join(newStr)
+          : text.replace(oldStr, newStr)
+
+        if (ctx.signal?.aborted) return abortedResult()
+        await fs.writeFile(p, next, 'utf8')
+        if (ctx.signal?.aborted) return abortedResult()
+
+        const n = replaceAll ? count : 1
+        return {
+          ok: true,
+          output: `edited ${filePath} (${n} replacement${n === 1 ? '' : 's'})`,
+        }
+      } catch (e) {
+        if (ctx.signal?.aborted) return abortedResult()
+        return {
+          ok: false,
+          isError: true,
+          output: e instanceof Error ? e.message : String(e),
+          errorCode: 'edit_failed',
+        }
       }
     },
   })
@@ -255,18 +404,22 @@ export function createApplyPatchTool(): BoloTool {
       },
     },
     async call(input, ctx) {
+      if (ctx.signal?.aborted) return abortedResult()
       try {
         const patch = input.patch != null ? String(input.patch) : ''
         if (patch.trim()) {
           const result = await applyPatchToCwd(ctx.cwd, patch)
+          if (ctx.signal?.aborted) return abortedResult()
           return { ok: true, output: result.output }
         }
         // legacy: full-file write via path + content
         const filePath = input.path != null ? String(input.path) : ''
         if (filePath && input.content != null) {
           const p = resolveSafe(ctx.cwd, filePath)
+          if (ctx.signal?.aborted) return abortedResult()
           await fs.mkdir(path.dirname(p), { recursive: true })
           await fs.writeFile(p, String(input.content), 'utf8')
+          if (ctx.signal?.aborted) return abortedResult()
           return { ok: true, output: `wrote ${filePath}` }
         }
         return {
@@ -276,6 +429,7 @@ export function createApplyPatchTool(): BoloTool {
           errorCode: 'invalid_input',
         }
       } catch (e) {
+        if (ctx.signal?.aborted) return abortedResult()
         return {
           ok: false,
           isError: true,
@@ -437,6 +591,7 @@ export function createBuiltinTools(): BoloTool[] {
     createBashTool(),
     createReadTool(),
     createWriteTool(),
+    createEditTool(),
     createApplyPatchTool(),
     createGlobTool(),
     createGrepTool(),

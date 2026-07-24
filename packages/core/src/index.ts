@@ -205,7 +205,10 @@ export {
   decidePermission,
   createEmptyPermissionRules,
   matchesAlwaysAllow,
+  matchPathGlob,
   addAlwaysAllowToolName,
+  addAlwaysAllowPathGlob,
+  addAlwaysAllowBashPrefix,
 } from '../../permissions/src/index.ts'
 export {
   SESSION_SNAPSHOT_VERSION,

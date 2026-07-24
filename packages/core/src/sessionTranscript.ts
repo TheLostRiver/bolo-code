@@ -129,6 +129,12 @@ function clonePermissionRules(
   if (rules.alwaysAllowPrefixes?.length) {
     out.alwaysAllowPrefixes = [...rules.alwaysAllowPrefixes]
   }
+  if (rules.alwaysAllowPathGlobs?.length) {
+    out.alwaysAllowPathGlobs = [...rules.alwaysAllowPathGlobs]
+  }
+  if (rules.alwaysAllowBashPrefixes?.length) {
+    out.alwaysAllowBashPrefixes = [...rules.alwaysAllowBashPrefixes]
+  }
   return out
 }
 
@@ -487,6 +493,18 @@ export async function loadTranscriptFile(
                 (p): p is string => typeof p === 'string' && p.length > 0,
               )
               if (prefixes.length) rules.alwaysAllowPrefixes = prefixes
+            }
+            if (Array.isArray(pr.alwaysAllowPathGlobs)) {
+              const globs = pr.alwaysAllowPathGlobs.filter(
+                (g): g is string => typeof g === 'string' && g.trim().length > 0,
+              )
+              if (globs.length) rules.alwaysAllowPathGlobs = globs
+            }
+            if (Array.isArray(pr.alwaysAllowBashPrefixes)) {
+              const bash = pr.alwaysAllowBashPrefixes.filter(
+                (p): p is string => typeof p === 'string' && p.length > 0,
+              )
+              if (bash.length) rules.alwaysAllowBashPrefixes = bash
             }
             meta.permissionRules = rules
           }

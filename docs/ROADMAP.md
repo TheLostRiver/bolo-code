@@ -1,8 +1,8 @@
 # Bolo Code 整体路线图（详细版）
 
-> 更新：对齐 **Loop 韧性切片**（错误分类 + callModel 有限退避）与已交付主路径。  
+> 更新：对齐 **Tool+Permission 日用切片**（Edit + path/bash always-allow + 中段 abort）与已交付主路径。  
 > **勾选与「下一刀」以 `docs/TODO.md` 为准**；本文件回答：**做到哪 / 缺什么 / 验收 / 里程碑**。  
-> 原则：借鉴 HelsincyCode / pi / Codex **语义**再实现；**无遥测**；文档无本机绝对路径；**状态按代码行为**，不按错误 commit subject。
+> 原则：借鉴参考实现 **语义**再实现；**无遥测**；文档无本机绝对路径；**状态按代码行为**，不按错误 commit subject。
 
 ---
 
@@ -10,7 +10,7 @@
 
 | 层 | 粗估 | 说明 |
 |----|------|------|
-| **Headless 核心**（loop / tools / provider / compact / prompt） | **~55–65%** | 主路径可用；相对 HC 仍缺 StreamingToolExecutor、完整 permission 日用、长会话 compact 深度 |
+| **Headless 核心**（loop / tools / provider / compact / prompt） | **~55–65%** | 主路径可用；相对 HC 仍缺 StreamingToolExecutor、长会话 compact 深度、完整 permission 分类器 |
 | 会话与 CLI | **~70–80%** | JSONL 默认写（T3）；resume/continue；无参 REPL；非成熟 Ink |
 | **扩展面（MCP / Plugins / Skills）** | **~45–55%** | Skills + MCP stdio 面 + list_changed ✅；SSE/HTTP · PL2 ⬜ |
 | **Subagent** | **~50–60%** | 真 loop + Agent + 目录定义；async/fork 最小；worktree ⬜ |
@@ -27,14 +27,14 @@
 | 口径 | 含义 |
 |------|------|
 | **主路径** | createSession → queryLoop → provider → tools → JSONL/CLI 可闭环 |
-| **相对 HC** | 对照 HelsincyCode 能力密度（loop 韧性、tool/permission 日用、compact、MCP 面） |
+| **相对 HC** | 对照参考实现能力密度（loop 韧性、tool/permission 日用、compact、MCP 面） |
 
 **当前主线（执行序见 `TODO.md`）：**
 
 1. ~~斜杠总线 + SL-polish · Rules · Creators · C1–C5 · resume/TUI 最小 · JSONL · Subagent · MCP stdio · plugins 最小 · Responses HTTP~~ ✅  
 2. ~~**Loop 韧性**（错误分类 + 429/5xx 有限退避；与 PTL 正交）~~ ✅ 最小  
-3. **下一刀 P0：Tool+Permission 日用**（Edit/Write 深度、always-allow 体验、中段 abort 一致）  
-4. **P0 余量：** 长会话 compact 加深  
+3. ~~**Tool+Permission 日用**（Edit、path/bash always-allow、中段 abort）~~ ✅ 最小  
+4. **下一刀 P0：长会话 compact 加深**  
 5. **P1：** MCP SSE/HTTP · PL2 · Usage+  
 6. **后置：** OR6 WS · cache TTL · T8 Ink · Electron  
 
@@ -74,10 +74,11 @@
 
 | 能力 | 状态 | 备注 |
 |------|------|------|
-| queryLoop / Hooks / 四档权限 | ✅/🟡 | always-allow 规则表 ✅ 最小；permission 日用仍 🟡 |
+| queryLoop / Hooks / 四档权限 | ✅/🟡 | always-allow：工具名/前缀 + **path glob** + **Bash 前缀**；plan 仍 deny 写 |
 | **Loop 韧性：错误分类 + model 退避** | 🟡 最小 | `errorClassify` + `wrapCallModelWithRetry`；默认 3 次；事件 `model_retry` |
 | PTL 截断重试 | ✅ | 与 model 退避正交 |
-| buildTool + 分区并发 + 常用工具 | ✅/🟡 | 真 apply_patch ✅ 最小；Edit 深度 ⬜ |
+| buildTool + 分区并发 + 常用工具 | ✅/🟡 | **Edit** ✅ 最小；真 apply_patch；Write；schema → tool_use_error |
+| tool 中段 AbortSignal | 🟡 最小 | Bash/Read/Write/Edit/apply_patch 尊重 abort |
 | Provider：OpenAI 兼容 / Anthropic / **openai-responses** / mock | ✅ | Responses：**HTTP SSE** ✅；WS ⬜ |
 | System prompt + BOLO.md + Rules | ✅ | |
 | Skill catalog + Skill 工具 + slash 调 skill | ✅ | 远程 skill ⬜ |
@@ -409,7 +410,7 @@ flowchart TB
 |----|--------|
 | `core` | loop · slash · rules · transcript · subagent · session |
 | `config` | layout（rules/agents/skills…）· workspace 加载 |
-| `tools` | builtins · Agent · apply_patch |
+| `tools` | builtins（含 Edit）· Agent · apply_patch |
 | `skills` | 发现 · catalog · bundled |
 | `plugins` / `mcp` | 本地加载 · stdio host（resources/prompts/list_changed） |
 | `cli` | banner · REPL · resume picker · `submitUserInput` |
@@ -471,7 +472,8 @@ flowchart TB
 
 | commit | 内容（代码行为） |
 |--------|------------------|
-| *(本刀)* | **Loop 韧性**：`errorClassify` + `wrapCallModelWithRetry`；queryLoop `model_retry`；文档口径诚实化 |
+| *(本刀)* | **TP* Tool+Permission**：Edit 工具；path/bash always-allow；Bash/Read/Write/Edit abort；文档 |
+| `3ec8b52` | **Loop 韧性**：`errorClassify` + `wrapCallModelWithRetry`；queryLoop `model_retry`；文档口径诚实化 |
 | `b7a4ccc` | **MCP2 list_changed 热刷新**（tools/resources/prompts → 缓存 + session.tools）；subject 曾误写为 J-D T3 |
 | `11ded88` | **J-D T3**：默认 JSONL 写、meta 配置切片、`migrateSessionToJsonl` |
 | `a8aed34` | MCP2 resources/prompts（stdio）+ meta 工具 + `/mcp` |
@@ -492,6 +494,7 @@ flowchart TB
 |--------|------|--------|
 | M0–M2 | ✅/🟡 | headless 主路径可跑；相对 HC 未满 |
 | **M-Loop 韧性** | 🟡 最小 | 分类 + 429/5xx 有限退避；PTL 正交 |
+| **M-Tool+Permission** | 🟡 最小 | Edit + path/bash always-allow + abort；非完整分类器 |
 | **M-Slash** | ✅ | 日用 `/` + SL-polish |
 | **M-Rules** | ✅ | `.bolo/rules` + path-scoped + `/rules` |
 | **M-Creators** | ✅ | bundled creators |
@@ -504,6 +507,6 @@ flowchart TB
 | M4–M6 | ⬜ | Electron 与体验打磨 |
 
 **一句话：**  
-Headless **主路径可日用**，相对 HelsincyCode 约 **40–55%**（文档不再写 ~70% 乐观数）。  
-**P0 下一刀：Tool+Permission 日用**；其后长会话 compact；**P1** MCP SSE/HTTP · PL2。  
+Headless **主路径可日用**，相对参考实现约 **40–55%**（文档不再写 ~70% 乐观数）。  
+**P0 下一刀：长会话 compact 加深**；**P1** MCP SSE/HTTP · PL2。  
 执行序 → **`docs/TODO.md`**。

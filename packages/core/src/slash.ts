@@ -11,6 +11,8 @@ import {
   ensureProjectLayout,
 } from '../../config/src/ensure.ts'
 import {
+  addAlwaysAllowBashPrefix,
+  addAlwaysAllowPathGlob,
   addAlwaysAllowToolName,
   createEmptyPermissionRules,
   isPermissionMode,
@@ -728,35 +730,83 @@ function ensurePermissionRules(session: SlashSession): SessionPermissionRules {
 }
 
 /**
- * /allow [ToolName] — 列出会话 always-allow，或添加工具名
+ * /allow [ToolName | path:glob | bash:prefix] — 会话 always-allow
+ * - 无参：列出当前规则
+ * - ToolName：精确工具名
+ * - path:GLOB：路径 glob（相对 cwd）
+ * - bash:PREFIX：Bash 命令前缀
  */
 function cmdAllow(session: SlashSession, args: string): SlashDispatchResult {
   const rules = ensurePermissionRules(session)
-  const name = args.trim()
-  if (!name) {
+  const raw = args.trim()
+  if (!raw) {
     const names = rules.alwaysAllowToolNames
     const prefixes = rules.alwaysAllowPrefixes ?? []
-    if (!names.length && !prefixes.length) {
+    const pathGlobs = rules.alwaysAllowPathGlobs ?? []
+    const bashPrefs = rules.alwaysAllowBashPrefixes ?? []
+    if (
+      !names.length &&
+      !prefixes.length &&
+      !pathGlobs.length &&
+      !bashPrefs.length
+    ) {
       return {
         ok: true,
         message:
-          'Session always-allow: (empty)\nUsage: /allow ToolName\nTip: at permission prompt, answer a = allow always this session.',
+          'Session always-allow: (empty)\n' +
+          'Usage:\n' +
+          '  /allow ToolName\n' +
+          '  /allow path:src' +
+          '/**\n' +
+          '  /allow bash:git\n' +
+          'Tip: at permission prompt, answer a = allow always this tool name this session.',
       }
     }
     const lines = ['Session always-allow:']
-    if (names.length) {
-      lines.push(`  tools: ${names.join(', ')}`)
-    }
-    if (prefixes.length) {
-      lines.push(`  prefixes: ${prefixes.join(', ')}`)
-    }
-    lines.push('Add: /allow ToolName')
+    if (names.length) lines.push(`  tools: ${names.join(', ')}`)
+    if (prefixes.length) lines.push(`  tool-prefixes: ${prefixes.join(', ')}`)
+    if (pathGlobs.length) lines.push(`  paths: ${pathGlobs.join(', ')}`)
+    if (bashPrefs.length) lines.push(`  bash: ${bashPrefs.join(', ')}`)
+    lines.push(
+      'Add: /allow ToolName | /allow path:GLOB | /allow bash:PREFIX',
+    )
     return { ok: true, message: lines.join('\n') }
   }
-  addAlwaysAllowToolName(rules, name)
+
+  const lower = raw.toLowerCase()
+  if (lower.startsWith('path:')) {
+    const glob = raw.slice(5).trim()
+    if (!glob) {
+      return {
+        ok: false,
+        message: 'Usage: /allow path:<glob>  (path glob relative to cwd)',
+      }
+    }
+    addAlwaysAllowPathGlob(rules, glob)
+    return {
+      ok: true,
+      message: `always-allow path glob: ${glob}\ncurrent paths: ${(rules.alwaysAllowPathGlobs ?? []).join(', ')}`,
+    }
+  }
+  if (lower.startsWith('bash:')) {
+    const pref = raw.slice(5).trim()
+    if (!pref) {
+      return {
+        ok: false,
+        message: 'Usage: /allow bash:git  (command prefix after bash:)',
+      }
+    }
+    addAlwaysAllowBashPrefix(rules, pref)
+    return {
+      ok: true,
+      message: `always-allow bash prefix: ${pref}\ncurrent bash: ${(rules.alwaysAllowBashPrefixes ?? []).join(', ')}`,
+    }
+  }
+
+  addAlwaysAllowToolName(rules, raw)
   return {
     ok: true,
-    message: `always-allow added for this session: ${name}\ncurrent: ${rules.alwaysAllowToolNames.join(', ')}`,
+    message: `always-allow added for this session: ${raw}\ncurrent tools: ${rules.alwaysAllowToolNames.join(', ')}`,
   }
 }
 
@@ -1087,8 +1137,8 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
   },
   {
     name: 'allow',
-    summary: 'List or add session always-allow tool names',
-    usage: '[ToolName]',
+    summary: 'List or add session always-allow (tool / path:glob / bash:prefix)',
+    usage: '[ToolName | path:GLOB | bash:PREFIX]',
     group: 'model',
     run: cmdAllow,
   },

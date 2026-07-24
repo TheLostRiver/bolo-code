@@ -320,7 +320,7 @@ function taskStyleSection(): string {
 function toolsSection(): string {
   return `# Tools
 - Call tools with valid JSON arguments matching each tool schema.
-- Read before write. Prefer specialized tools (Read/Write/Glob/Grep) over shell when equivalent.
+- Read before write. Prefer specialized tools (Read/Write/Edit/Glob/Grep) over shell when equivalent.
 - Skill catalog (if present) lists skill ids only — call the Skill tool to load full skill body when needed.
 - Do not claim a tool ran unless you actually received its result.`
 }

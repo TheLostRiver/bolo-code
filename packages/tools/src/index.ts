@@ -20,6 +20,7 @@ export {
   createBashTool,
   createReadTool,
   createWriteTool,
+  createEditTool,
   createApplyPatchTool,
   createGlobTool,
   createGrepTool,

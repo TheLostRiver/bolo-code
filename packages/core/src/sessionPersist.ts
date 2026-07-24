@@ -247,6 +247,12 @@ function clonePermissionRules(
   if (rules.alwaysAllowPrefixes?.length) {
     out.alwaysAllowPrefixes = [...rules.alwaysAllowPrefixes]
   }
+  if (rules.alwaysAllowPathGlobs?.length) {
+    out.alwaysAllowPathGlobs = [...rules.alwaysAllowPathGlobs]
+  }
+  if (rules.alwaysAllowBashPrefixes?.length) {
+    out.alwaysAllowBashPrefixes = [...rules.alwaysAllowBashPrefixes]
+  }
   return out
 }
 
@@ -277,6 +283,18 @@ function parsePermissionRulesField(
       (p): p is string => typeof p === 'string' && p.length > 0,
     )
     if (prefixes.length) out.alwaysAllowPrefixes = prefixes
+  }
+  if (Array.isArray(o.alwaysAllowPathGlobs)) {
+    const globs = o.alwaysAllowPathGlobs.filter(
+      (g): g is string => typeof g === 'string' && g.trim().length > 0,
+    )
+    if (globs.length) out.alwaysAllowPathGlobs = globs
+  }
+  if (Array.isArray(o.alwaysAllowBashPrefixes)) {
+    const bash = o.alwaysAllowBashPrefixes.filter(
+      (p): p is string => typeof p === 'string' && p.length > 0,
+    )
+    if (bash.length) out.alwaysAllowBashPrefixes = bash
   }
   return out
 }
@@ -658,6 +676,20 @@ async function snapshotFromTranscriptOnly(
           ? {
               alwaysAllowPrefixes: [
                 ...meta.permissionRules.alwaysAllowPrefixes,
+              ],
+            }
+          : {}),
+        ...(meta.permissionRules.alwaysAllowPathGlobs?.length
+          ? {
+              alwaysAllowPathGlobs: [
+                ...meta.permissionRules.alwaysAllowPathGlobs,
+              ],
+            }
+          : {}),
+        ...(meta.permissionRules.alwaysAllowBashPrefixes?.length
+          ? {
+              alwaysAllowBashPrefixes: [
+                ...meta.permissionRules.alwaysAllowBashPrefixes,
               ],
             }
           : {}),

@@ -25,7 +25,6 @@ function defaultToolParameters(name: string): JsonSchema {
         required: ['path'],
       }
     case 'Write':
-    case 'apply_patch':
       return {
         type: 'object',
         properties: {
@@ -33,6 +32,26 @@ function defaultToolParameters(name: string): JsonSchema {
           content: { type: 'string' },
         },
         required: ['path', 'content'],
+      }
+    case 'Edit':
+      return {
+        type: 'object',
+        properties: {
+          path: { type: 'string' },
+          old_string: { type: 'string' },
+          new_string: { type: 'string' },
+          replace_all: { type: 'boolean' },
+        },
+        required: ['path', 'old_string', 'new_string'],
+      }
+    case 'apply_patch':
+      return {
+        type: 'object',
+        properties: {
+          patch: { type: 'string' },
+          path: { type: 'string' },
+          content: { type: 'string' },
+        },
       }
     case 'Glob':
       return {
