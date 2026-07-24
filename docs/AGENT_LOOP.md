@@ -124,5 +124,5 @@ type TerminalReason =
 - reactive compact / context collapse / SnipTool·UUID 全管线  
 - 完整 Message 类型系统（assistant content blocks 数组）— v1 仍用简化 ChatMessage  
 
-**已接：** snip 最小（`snipMessagesIfNeeded` → prepare 链 snip→micro→auto）。  
-后续 **P1 余量**：J-D entry/CLI；完整 YOLO 后置；compact 再深见 `docs/COMPACTION.md`。
+**已接：** snip 最小（`snipMessagesIfNeeded` → prepare 链 snip→micro→auto）；J-D **title entry** + CLI list/migrate。  
+后续 **P1 余量**：其它 CP/TP；完整 YOLO 后置；compact 再深见 `docs/COMPACTION.md`。

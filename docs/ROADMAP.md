@@ -44,8 +44,9 @@
 11. ~~**TP 余量：StreamingToolExecutor 最小**~~ ✅ 最小  
 12. ~~**TP-PERM：permission 规则匹配小步**~~ ✅ 最小（always-deny + Bash 通配；非完整 YOLO）  
 13. ~~**CP-SNIP：snip 最小**~~ ✅ 最小（门槛裁前缀 · 安全 cut · prepare 写回）  
-14. **下一刀 P1 余量：** J-D 余量 · 其它 TP/CP 余量  
-15. **后置：** 思考回灌 · Anthropic budget · OR6 WS · cache TTL · cached MC · SnipTool/UUID · 完整 YOLO 分类器 · T8 Ink · Electron · 插件市场  
+14. ~~**J-D 余量：title entry + CLI list/migrate**~~ ✅ 最小  
+15. **下一刀 P1 余量：** 其它 TP/CP 余量 · system_note / lite 列表  
+16. **后置：** 思考回灌 · Anthropic budget · OR6 WS · cache TTL · cached MC · SnipTool/UUID · 完整 YOLO 分类器 · T8 Ink · Electron · 插件市场  
 
 ---
 
@@ -134,6 +135,7 @@
 | `listProjectSessions`（json + jsonl 去重；count/preview 跟 jsonl R1） | ✅ |
 | `bolo --continue` | ✅ |
 | JSONL **默认写** + R1 boundary + meta 配置切片 + migrate + 旧 JSON 只读 | ✅ J-D T3 |
+| **`title` entry** + `/title` + list title + CLI `--list` / `--migrate-session` | ✅ J-D 余量最小 |
 | **无参 `bolo` TTY 新会话 + banner** | ✅ |
 | 状态行 / 流式工具行 / 权限 y/n / slash | ✅ |
 | 完整 Ink 级 TUI | ⬜ T8 |
@@ -447,7 +449,7 @@ flowchart TB
 | G 协议 | Responses HTTP | ✅；WS 后置 |
 | H 韧性 | 错误分类 + model 退避 + PTL | 🟡 最小（本刀） |
 
-**默认下一刀：** 见 **`docs/TODO.md` §8**（**P1 余量：J-D / CP·TP**）。
+**默认下一刀：** 见 **`docs/TODO.md` §8**（**P1 余量：其它 CP·TP / system_note·lite**）。
 
 ---
 
@@ -488,7 +490,8 @@ flowchart TB
 
 | commit | 内容（代码行为） |
 |--------|------------------|
-| *(本刀)* | **CP-SNIP**：snip 最小（门槛裁前缀 · tool 安全 cut · `History snipped` · prepare 写回 · snip→micro→auto） |
+| *(本刀)* | **J-D 余量**：`title` entry last-wins · `/title` · list title · CLI `--list` / `--migrate-session` |
+| `08047b7` | **CP-SNIP**：snip 最小（门槛裁前缀 · tool 安全 cut · `History snipped` · prepare 写回 · snip→micro→auto） |
 | `bd99c95` | **TP-STE**：StreamingToolExecutor 最小（边流边跑 · 保序 · Bash 级联 · discard · queryLoop 接入） |
 | `19cf680` | **CP5**：默认 auto compact + 环境熔断 + `/autocompact` |
 | `3ec8b52` | **Loop 韧性**：`errorClassify` + `wrapCallModelWithRetry`；queryLoop `model_retry`；文档口径诚实化 |
@@ -521,11 +524,11 @@ flowchart TB
 | **M-TUI** | 🟡 | T0–T7 ✅；T8 Ink ⬜ |
 | **M-Cost** | 🟡 | C1–C5 ✅；TTL/break 后置 |
 | **M3** | 🟡 | MCP stdio + list_changed + **HTTP 最小** + **SSE 最小** + **PL2 热加载最小**；市场 ⬜ |
-| **M5** | 🟡 | 会话/CLI 可用；JSONL 主路径 T3 ✅ |
+| **M5** | 🟡 | 会话/CLI 可用；JSONL 主路径 T3 ✅；title/list/migrate 最小 ✅ |
 | **Responses** | 🟡 | HTTP SSE ✅；WS ⬜ |
 | M4–M6 | ⬜ | Electron 与体验打磨 |
 
 **一句话：**  
 Headless **主路径可日用**，相对参考实现约 **40–55%**（文档不再写 ~70% 乐观数）。  
-**P0 切片** LR / TP / CP 日用均 🟡 最小；**MCP HTTP+SSE · PL2 · Usage+ · RC2 · CP5 · STE · TP-PERM · CP-SNIP 🟡 最小**；**下一刀：J-D 余量 / 其它 CP·TP 余量**。  
+**P0 切片** LR / TP / CP 日用均 🟡 最小；**MCP HTTP+SSE · PL2 · Usage+ · RC2 · CP5 · STE · TP-PERM · CP-SNIP · J-D title/CLI 🟡 最小**；**下一刀：其它 CP·TP 余量 / system_note·lite**。  
 执行序 → **`docs/TODO.md`**。

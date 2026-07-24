@@ -34,6 +34,11 @@ import {
   resolveTranscriptPathFromJson,
   rewriteTranscriptFromMessages,
   setTranscriptWriteState,
+  appendSessionTitle,
+  ensureTranscriptFile,
+  metaInputFromSession,
+  getTranscriptWriteState,
+  normalizeSessionTitle,
 } from './sessionTranscript.ts'
 import type { SessionUsage } from './sessionUsage.ts'
 import { cloneSessionUsage } from './sessionUsage.ts'
@@ -718,6 +723,59 @@ export async function migrateSessionToJsonl(
   }
 }
 
+/**
+ * 为会话追加 `title` entry（last-wins；不进模型链）。
+ * 路径解析与 saveSession 一致：filePath / sessionsDir / project layout。
+ * 若 jsonl 不存在则先写 meta 再 append title。
+ */
+export async function setSessionTitle(
+  session: PersistableSession,
+  title: string,
+  options?: {
+    scope?: SessionScope
+    sessionsDir?: string
+    filePath?: string
+  },
+): Promise<{ transcriptPath: string; title: string }> {
+  const normalized = normalizeSessionTitle(title)
+  if (!normalized) {
+    throw new Error('setSessionTitle: title is empty')
+  }
+
+  const rawFilePath = options?.filePath
+    ? path.resolve(options.filePath)
+    : resolveSessionFilePath(session.id, {
+        scope: options?.scope,
+        cwd: session.cwd,
+        sessionsDir: options?.sessionsDir,
+      })
+  const transcriptPath = resolveTranscriptPathFromJson(rawFilePath)
+
+  await ensureTranscriptFile(
+    transcriptPath,
+    metaInputFromSession(session),
+  )
+  await appendSessionTitle(transcriptPath, {
+    sessionId: session.id,
+    title: normalized,
+  })
+
+  const prev = getTranscriptWriteState(session)
+  if (prev?.filePath) {
+    setTranscriptWriteState(session, {
+      filePath: prev.filePath,
+      appendedMessageCount: prev.appendedMessageCount,
+    })
+  } else {
+    setTranscriptWriteState(session, {
+      filePath: transcriptPath,
+      appendedMessageCount: session.messages.length,
+    })
+  }
+
+  return { transcriptPath, title: normalized }
+}
+
 async function loadSessionSnapshotFromPath(
   filePath: string,
 ): Promise<SessionSnapshot> {
@@ -1072,6 +1130,8 @@ export type SessionListItem = {
   messageCount: number
   /** 首条有意义 user 摘要，截断 */
   preview: string
+  /** 用户标题（jsonl `title` last-wins）；无则缺省 */
+  title?: string
   cwd?: string
   model?: string
 }
@@ -1113,7 +1173,7 @@ async function sessionListItemFromJsonl(
     return null
   }
 
-  const { messages, meta } = messagesFromTranscriptEntries(entries)
+  const { messages, meta, title } = messagesFromTranscriptEntries(entries)
   const id =
     (meta?.sessionId && meta.sessionId.trim()) || idFromFile
   let lastTs: string | undefined
@@ -1131,6 +1191,7 @@ async function sessionListItemFromJsonl(
     updatedAt: mtimeIso || lastTs || new Date(0).toISOString(),
     messageCount: messages.length,
     preview: sessionPreviewFromMessages(messages),
+    ...(title ? { title } : {}),
     cwd: meta?.cwd,
     model: meta?.model,
   }
@@ -1220,6 +1281,7 @@ export async function listProjectSessions(opts: {
             preview: keepJsonlMsgs
               ? prev.preview
               : sessionPreviewFromMessages(messages),
+            title: prev.title,
             cwd:
               typeof o.cwd === 'string'
                 ? o.cwd
@@ -1260,6 +1322,7 @@ export async function listProjectSessions(opts: {
           updatedAt: newerIso(prev.updatedAt, item.updatedAt),
           messageCount: useJsonlMsgs ? item.messageCount : prev.messageCount,
           preview: useJsonlMsgs ? item.preview : prev.preview,
+          title: item.title ?? prev.title,
           cwd: prev.cwd ?? item.cwd,
           model: prev.model ?? item.model,
           fromJson: true,

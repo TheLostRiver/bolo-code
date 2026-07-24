@@ -56,10 +56,20 @@ export type TranscriptCompactBoundaryEntry = TranscriptEntryBase & {
   summary?: string
 }
 
+/**
+ * 会话标题（线性 append；**last-wins**）。
+ * 不进模型链；list / resume 摘要可读；rewrite 时保留最后一条。
+ */
+export type TranscriptTitleEntry = TranscriptEntryBase & {
+  type: 'title'
+  title: string
+}
+
 export type TranscriptEntry =
   | TranscriptMetaEntry
   | TranscriptMessageEntry
   | TranscriptCompactBoundaryEntry
+  | TranscriptTitleEntry
 
 export type TranscriptMetaInput = {
   sessionId: string
@@ -294,6 +304,52 @@ export async function appendCompactBoundary(
   await appendTranscriptLine(file, entry)
 }
 
+/** 规范化标题：trim + 压空白；空串返回 undefined */
+export function normalizeSessionTitle(raw: string): string | undefined {
+  const t = raw.replace(/\s+/g, ' ').trim()
+  return t ? t : undefined
+}
+
+export function buildTitleEntry(opts: {
+  sessionId: string
+  title: string
+  timestamp?: string
+}): TranscriptTitleEntry {
+  const title = normalizeSessionTitle(opts.title)
+  if (!title) {
+    throw new Error('buildTitleEntry: title is empty')
+  }
+  return {
+    type: 'title',
+    sessionId: opts.sessionId,
+    timestamp: opts.timestamp ?? nowIso(),
+    title,
+  }
+}
+
+/** 追加 `title` entry（不进 messages 链） */
+export async function appendSessionTitle(
+  file: string,
+  opts: { sessionId: string; title: string },
+): Promise<TranscriptTitleEntry> {
+  const entry = buildTitleEntry(opts)
+  await appendTranscriptLine(file, entry)
+  return entry
+}
+
+/** entries 中最后一条非空 title（last-wins） */
+export function titleFromTranscriptEntries(
+  entries: TranscriptEntry[],
+): string | undefined {
+  let title: string | undefined
+  for (const e of entries) {
+    if (e.type !== 'title') continue
+    const t = normalizeSessionTitle(e.title)
+    if (t) title = t
+  }
+  return title
+}
+
 /** 运行时：已 append 的 messages 条数（增量双写） */
 type TranscriptWriteState = {
   filePath: string
@@ -322,16 +378,35 @@ export function setTranscriptWriteState(
 }
 
 /**
- * 从 messages 全量重建 jsonl（meta + 可选 compact_boundary + 全部 message）。
+ * 从 messages 全量重建 jsonl（meta + 可选 compact_boundary + 全部 message + 保留 title）。
  * 用于 compact 后 messages 变短等无法纯 append 的情况。
+ * title：显式 opts.title 优先；否则读旧文件 last-wins 保留。
  */
 export async function rewriteTranscriptFromMessages(
   file: string,
   session: PersistableSession,
-  opts?: { createdAt?: string; compactBoundarySummary?: string },
+  opts?: {
+    createdAt?: string
+    compactBoundarySummary?: string
+    /** 显式标题；省略则尽量保留磁盘上最后一条 title */
+    title?: string
+  },
 ): Promise<void> {
   const filePath = path.resolve(file)
   await fs.mkdir(path.dirname(filePath), { recursive: true })
+
+  let preservedTitle: string | undefined
+  if (opts && 'title' in opts && opts.title !== undefined) {
+    preservedTitle = normalizeSessionTitle(opts.title)
+  } else {
+    try {
+      const { entries } = await loadTranscriptFile(filePath)
+      preservedTitle = titleFromTranscriptEntries(entries)
+    } catch {
+      preservedTitle = undefined
+    }
+  }
+
   const lines: string[] = []
   lines.push(
     JSON.stringify(
@@ -357,6 +432,13 @@ export async function rewriteTranscriptFromMessages(
       message: cloneMessage(m),
     }
     lines.push(JSON.stringify(entry))
+  }
+  if (preservedTitle) {
+    lines.push(
+      JSON.stringify(
+        buildTitleEntry({ sessionId: session.id, title: preservedTitle }),
+      ),
+    )
   }
   const body = lines.length ? lines.join('\n') + '\n' : ''
   const tmp = path.join(
@@ -650,6 +732,20 @@ export async function loadTranscriptFile(
           summary: typeof o.summary === 'string' ? o.summary : undefined,
           uuid: typeof o.uuid === 'string' ? o.uuid : undefined,
         })
+        continue
+      }
+      if (o.type === 'title') {
+        if (typeof o.title !== 'string') continue
+        const title = normalizeSessionTitle(o.title)
+        if (!title) continue
+        entries.push({
+          type: 'title',
+          sessionId: typeof o.sessionId === 'string' ? o.sessionId : '',
+          timestamp:
+            typeof o.timestamp === 'string' ? o.timestamp : nowIso(),
+          title,
+          uuid: typeof o.uuid === 'string' ? o.uuid : undefined,
+        })
       }
     } catch {
       // 损坏行跳过
@@ -661,6 +757,7 @@ export async function loadTranscriptFile(
 /**
  * 策略 R1：取**最后一个** `compact_boundary` 之后的 message 行作为有效模型链。
  * 无 boundary 时取全部 message。meta 仍取文件中首条 meta。
+ * `title` 不进 messages（仅元数据 last-wins）。
  * compact 后 rewrite 的 jsonl 为 meta+boundary+压缩后 messages，与此一致。
  */
 export function messagesFromTranscriptEntries(entries: TranscriptEntry[]): {
@@ -668,13 +765,20 @@ export function messagesFromTranscriptEntries(entries: TranscriptEntry[]): {
   meta?: TranscriptMetaEntry
   /** 是否应用了 compact_boundary 截断 */
   usedCompactBoundary: boolean
+  /** 最后一条 title（若有） */
+  title?: string
 } {
   let meta: TranscriptMetaEntry | undefined
   let lastBoundary = -1
+  let title: string | undefined
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i]!
     if (e.type === 'meta' && !meta) meta = e
     if (e.type === 'compact_boundary') lastBoundary = i
+    if (e.type === 'title') {
+      const t = normalizeSessionTitle(e.title)
+      if (t) title = t
+    }
   }
   const messages: ChatMessage[] = []
   const start = lastBoundary >= 0 ? lastBoundary + 1 : 0
@@ -686,6 +790,7 @@ export function messagesFromTranscriptEntries(entries: TranscriptEntry[]): {
     messages,
     meta,
     usedCompactBoundary: lastBoundary >= 0,
+    ...(title ? { title } : {}),
   }
 }
 
@@ -702,9 +807,10 @@ export async function loadTranscriptMessages(
   path: string
   entryCount: number
   usedCompactBoundary: boolean
+  title?: string
 }> {
   const { entries, path: filePath } = await loadTranscriptFile(file, opts)
-  const { messages, meta, usedCompactBoundary } =
+  const { messages, meta, usedCompactBoundary, title } =
     messagesFromTranscriptEntries(entries)
   return {
     messages,
@@ -712,6 +818,7 @@ export async function loadTranscriptMessages(
     path: filePath,
     entryCount: entries.length,
     usedCompactBoundary,
+    ...(title ? { title } : {}),
   }
 }
 

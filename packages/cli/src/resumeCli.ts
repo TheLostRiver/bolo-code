@@ -137,7 +137,7 @@ export function formatSessionSummary(s: SessionSummary): string {
 export function formatSessionList(items: SessionListItem[]): string {
   if (!items.length) return '(no sessions)'
   const header =
-    ' #  id                          msgs  updated              preview'
+    ' #  id                          msgs  updated              title/preview'
   const rows = items.map((it, i) => {
     const n = String(i + 1).padStart(2, ' ')
     const id =
@@ -148,7 +148,10 @@ export function formatSessionList(items: SessionListItem[]): string {
       .replace(/\.\d{3}Z$/, 'Z')
       .slice(0, 19)
       .padEnd(19)
-    const prev = (it.preview || '(no user message)').slice(0, 52)
+    const label = it.title?.trim()
+      ? it.title.trim()
+      : it.preview || '(no user message)'
+    const prev = label.slice(0, 52)
     const model = it.model ? `  [${it.model}]` : ''
     return `${n}  ${id}  ${msgs}  ${when}  ${prev}${model}`
   })
@@ -156,7 +159,7 @@ export function formatSessionList(items: SessionListItem[]): string {
 }
 
 /**
- * RS8：按 id 子串或 preview 过滤（大小写不敏感）。
+ * RS8：按 id 子串、title 或 preview 过滤（大小写不敏感）。
  * 空 query → 原列表。
  */
 export function filterSessionListItems(
@@ -166,7 +169,8 @@ export function filterSessionListItems(
   const q = query.trim().toLowerCase()
   if (!q) return items
   return items.filter((it) => {
-    const hay = `${it.id} ${it.preview} ${it.model ?? ''}`.toLowerCase()
+    const hay =
+      `${it.id} ${it.title ?? ''} ${it.preview} ${it.model ?? ''}`.toLowerCase()
     return hay.includes(q)
   })
 }

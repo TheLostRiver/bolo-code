@@ -4,6 +4,9 @@
  * 支持：
  *   --resume | --resume <id> | --resume=<id> | -r | -r <id>
  *   --continue | -c
+ *   --list | -l
+ *   --migrate-session <id|path> | --migrate-session=<id>
+ *   --force | --delete-json（配合 migrate）
  *   --print | -p [prompt]
  *   --cwd <path>
  *   --help | -h
@@ -22,6 +25,17 @@ export type CliArgs = {
    * 与 --resume 同时出现时 continue 优先
    */
   continue?: boolean
+  /** 打印当前项目会话列表（非交互） */
+  list?: boolean
+  /**
+   * 将旧 JSON 旁路写出 jsonl（包装 migrateSessionToJsonl）
+   * 值为 session id 或路径
+   */
+  migrateSession?: string
+  /** migrate：强制 rewrite 已有 jsonl */
+  force?: boolean
+  /** migrate：写出 jsonl 后删除旧 .json */
+  deleteJson?: boolean
   /** 单轮 / 非交互：有 prompt 则 submit 后退出；无 prompt 则只打印摘要 */
   print: boolean
   /** 用户输入（-p 值、位置参数拼接、或后续由 stdin 填充） */
@@ -73,6 +87,36 @@ export function parseArgs(argv: string[]): CliArgs {
     // --continue / -c：resume 列表第一条（最新）
     if (a === '--continue' || a === '-c') {
       out.continue = true
+      continue
+    }
+
+    // --list / -l：非交互列项目会话
+    if (a === '--list' || a === '-l') {
+      out.list = true
+      continue
+    }
+
+    // --force / --delete-json：migrate 选项
+    if (a === '--force') {
+      out.force = true
+      continue
+    }
+    if (a === '--delete-json') {
+      out.deleteJson = true
+      continue
+    }
+
+    // --migrate-session <id|path>
+    if (a === '--migrate-session') {
+      const { value, next } = takeValue(argv, i)
+      out.migrateSession = value
+      i = next
+      continue
+    }
+    if (a.startsWith('--migrate-session=')) {
+      const v = a.slice('--migrate-session='.length)
+      if (!v) throw new Error('missing value after --migrate-session=')
+      out.migrateSession = v
       continue
     }
 
@@ -137,6 +181,16 @@ export function parseArgs(argv: string[]): CliArgs {
     positionals.push(a)
   }
 
+  // 位置子命令：migrate-session <id>
+  if (positionals[0] === 'migrate-session') {
+    const id = positionals[1]
+    if (!id) {
+      throw new Error('migrate-session requires <id|path>')
+    }
+    out.migrateSession = id
+    positionals.splice(0, 2)
+  }
+
   if (positionals.length) {
     const joined = positionals.join(' ').trim()
     if (joined) {
@@ -159,6 +213,8 @@ export function formatHelp(): string {
 用法:
   bolo                               新会话（TTY：欢迎 banner + REPL）
   bolo "question"                    新会话单轮 prompt
+  bolo --list                        列出当前项目会话（非交互）
+  bolo -l                            同上
   bolo --continue                    恢复当前项目最新一条会话
   bolo -c                            同上（--continue 短选项）
   bolo --resume                      列出当前项目会话并选择进入
@@ -166,19 +222,26 @@ export function formatHelp(): string {
   bolo --resume <id> -p "prompt"     恢复后单轮 submit 并打印助手输出
   bolo --resume=<id> --print         仅摘要（非交互）
   bolo -r <id> "follow-up question"  位置参数作为 prompt
+  bolo --migrate-session <id|path>   旧 JSON → 旁路 jsonl（默认不删 JSON）
+  bolo migrate-session <id|path>     同上（位置子命令）
+  bolo --migrate-session <id> --force --delete-json
 
 查找路径（纯 id）:
-  1. <cwd>/.bolo/sessions/<id>.json
-  2. ~/.bolo/sessions/<id>.json（或 $BOLO_CONFIG_DIR/sessions/）
-  也可用绝对/相对 .json 路径作为 id。
+  1. <cwd>/.bolo/sessions/<id>.jsonl（主）/ .json（只读兼容）
+  2. ~/.bolo/sessions/<id>.*（或 $BOLO_CONFIG_DIR/sessions/）
+  也可用绝对/相对 .json / .jsonl 路径作为 id。
 
 REPL 斜杠命令（会话内）:
-  /help  /clear  /compact  /context  /model  /effort  /thinking  /plan  /permissions
+  /help  /clear  /title  /compact  /context  /model  /effort  /thinking  /plan  /permissions
   详见 docs/SLASH_COMMANDS.md
 
 选项:
+  -l, --list               非交互打印 listProjectSessions
   -c, --continue           恢复 listProjectSessions 第一条（最新）
   -r, --resume [id|path]   恢复会话；无 id 时列项目 .bolo/sessions
+      --migrate-session    旧 JSON 旁路写出 jsonl
+      --force              migrate：强制 rewrite 已有非空 jsonl
+      --delete-json        migrate：写出后删除旧 .json
   -p, --prompt [text]      单轮 prompt（隐含 --print）
       --print              非交互：有 prompt 则跑一轮，否则只摘要
       --cwd <dir>          解析 project sessions 的工作目录

@@ -380,6 +380,81 @@ function cmdClear(session: SlashSession, _args: string): SlashDispatchResult {
   }
 }
 
+/**
+ * `/title`：查看或设置会话标题（jsonl `title` entry，last-wins；不进模型链）。
+ * 无参：读盘 last title；有参：append title。
+ */
+async function cmdTitle(
+  session: SlashSession,
+  args: string,
+): Promise<SlashDispatchResult> {
+  const text = args.trim()
+  const {
+    setSessionTitle,
+    getSessionPersistMeta,
+    resolveSessionFilePath,
+  } = await import('./sessionPersist.ts')
+  const {
+    loadTranscriptMessages,
+    resolveTranscriptPathFromJson,
+    getTranscriptWriteState,
+  } = await import('./sessionTranscript.ts')
+
+  const meta = getSessionPersistMeta(session)
+  const tw = getTranscriptWriteState(session)
+  const saveOpts = {
+    sessionsDir: meta?.sessionsDir,
+    filePath: meta?.filePath ?? tw?.filePath,
+    scope: meta?.scope,
+  }
+
+  if (!text) {
+    try {
+      const jsonSide =
+        saveOpts.filePath ??
+        resolveSessionFilePath(session.id, {
+          scope: meta?.scope ?? 'project',
+          cwd: session.cwd,
+          sessionsDir: meta?.sessionsDir,
+        })
+      const tp = resolveTranscriptPathFromJson(jsonSide)
+      const loaded = await loadTranscriptMessages(tp)
+      if (loaded.title) {
+        return {
+          ok: true,
+          message: `Title: ${loaded.title}`,
+        }
+      }
+      return {
+        ok: true,
+        message:
+          'No title set. Usage: /title <text>  (appends a title entry to transcript)',
+      }
+    } catch {
+      return {
+        ok: true,
+        message:
+          'No title set (no transcript yet). Usage: /title <text>',
+      }
+    }
+  }
+
+  try {
+    const r = await setSessionTitle(
+      session as Parameters<typeof setSessionTitle>[0],
+      text,
+      saveOpts,
+    )
+    return {
+      ok: true,
+      message: `Title set to "${r.title}"`,
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return { ok: false, message: `title failed: ${msg}` }
+  }
+}
+
 async function cmdCompact(
   session: SlashSession,
   args: string,
@@ -1418,6 +1493,13 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     summary: 'Clear conversation messages (keep id/cwd/system)',
     group: 'session',
     run: cmdClear,
+  },
+  {
+    name: 'title',
+    summary: 'Show or set session title (jsonl title entry; not model-visible)',
+    usage: '[text]',
+    group: 'session',
+    run: cmdTitle,
   },
   {
     name: 'compact',

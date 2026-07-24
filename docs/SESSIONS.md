@@ -27,8 +27,9 @@
 | `meta` | 文件首行：id / cwd / permissionMode / model / createdAt + **配置切片**（systemPromptSections、autoCompact、contextWindow、maxPtlRetries、permissionRules、effortLevel、usage…） |
 | `message` | 包裹现有 `ChatMessage` |
 | `compact_boundary` | full compact 边界（`compactSession` 成功后 rewrite jsonl 写入） |
+| `title` | 会话标题（**last-wins**；**不进**模型 messages；rewrite 时保留最后一条） |
 
-`saveSession` **默认**只增量 append / rewrite `.jsonl`；不再默认原子写 JSON。`migrateSessionToJsonl` 可将旧 JSON 旁路写出 jsonl（默认不删 JSON）。详见 `docs/TODO_SESSION_JSONL.md`。
+`saveSession` **默认**只增量 append / rewrite `.jsonl`；不再默认原子写 JSON。`migrateSessionToJsonl` 可将旧 JSON 旁路写出 jsonl（默认不删 JSON）。`setSessionTitle` / `/title` 追加 `title` 行。详见 `docs/TODO_SESSION_JSONL.md`。
 
 ## 2. 快照格式（version 1，只读兼容）
 
@@ -100,7 +101,8 @@ const session = await createSession({
 | `loadSession` | 读 JSON+旁路 jsonl → `SessionSnapshot`（双文件：jsonl messages 非空则优先；否则 JSON） |
 | `loadTranscriptFile` / `loadTranscriptMessages` | 读 jsonl → entries / **R1** 线性 messages（最后 boundary 之后） |
 | `migrateSessionToJsonl` | 旧 JSON 旁路写出 jsonl（D2；可选 `deleteJson` / `force`） |
-| `listProjectSessions` | 扫 `*.json` + `*.jsonl`（path/配置优先 JSON；messageCount/preview 跟可用 jsonl；updatedAt 取较新；去重；坏文件跳过） |
+| `setSessionTitle` | 追加 `title` entry（last-wins；不进模型链） |
+| `listProjectSessions` | 扫 `*.json` + `*.jsonl`（path/配置优先 JSON；messageCount/preview 跟可用 jsonl；**title** 来自 jsonl last-wins；updatedAt 取较新；去重；坏文件跳过） |
 | `resumeSession` | `loadSession` + `createSession` + 恢复 messages/配置 |
 | `resolveSessionFilePath` | 解析「逻辑 JSON」路径（配对用） |
 
@@ -110,7 +112,7 @@ const session = await createSession({
 |--------------|------------|
 | JSONL 追加 transcript | **默认只写** `.jsonl` 增量 append；旧 JSON 只读 |
 | 项目哈希目录 + 多类 entry | 固定 `.bolo/sessions/<id>.jsonl`（+ 可选旧 `.json`） |
-| 丰富元数据 / 侧链 agent | 主会话 messages + meta 配置切片；entry 最小集 meta/message/boundary |
+| 丰富元数据 / 侧链 agent | 主会话 messages + meta 配置切片；entry 最小集 meta/message/boundary/**title** |
 
 Resume 主路径：`loadSessionPair` — **messages 以 jsonl 为准**（有效 message 非空时），JSON 提供 meta/配置；仅 jsonl 时 meta 扩展字段恢复配置；jsonl 仅 meta/坏行时回退 JSON messages。
 
@@ -118,9 +120,10 @@ Resume 主路径：`loadSessionPair` — **messages 以 jsonl 为准**（有效 
 npx tsx scripts/test-transcript-append.ts
 npx tsx scripts/test-transcript-load.ts
 npx tsx scripts/test-session-persist.ts
+npx tsx scripts/test-session-title.ts
 ```
 
-## 5. CLI：`bolo --resume`
+## 5. CLI：`bolo --resume` / `--list` / migrate
 
 最小 CLI 包 `@bolo/cli`（bin：`bolo`）。对照参考实现的 `-r/--resume`，本轮只做入口接线，**无 Ink TUI / 无遥测**。
 
@@ -128,9 +131,17 @@ npx tsx scripts/test-session-persist.ts
 
 ```bash
 # 仓库内（需已安装依赖；tsx 在根 devDependencies）
+# 非交互列项目会话
+npx bolo --list
+npx bolo -l
+
 # 无 id：列出当前项目会话（TTY 选择 / 非 TTY 打印列表）
 npx bolo --resume
 npx bolo -r
+
+# 旧 JSON → 旁路 jsonl（默认不删 JSON）
+npx bolo --migrate-session <sessionId>
+npx bolo migrate-session <sessionId> --force --delete-json
 
 npx bolo --resume <sessionId>
 npx bolo --resume=<sessionId>
@@ -158,6 +169,8 @@ npx bolo --resume <id> --cwd /path/to/project
 | `--resume <id>` 成功 | 打印摘要：id、cwd、文件路径、消息数、最近一条 |
 | **`--resume` / `-r` 无 id（已实现 RS1–RS6）** | `listProjectSessions` 扫当前项目 `.bolo/sessions`；TTY 编号选择后 `resumeSession`；非 TTY 打印列表并要求 `--resume <id>`（exit 2）；空列表提示 `bolo` 新建（exit 1） |
 | **`--continue` / `-c`（RS9）** | `listProjectSessions` 第一条（最新）→ `resumeSession`；空列表 exit 1 |
+| **`--list` / `-l`** | 非交互打印 `listProjectSessions`（title 优先于 preview 展示） |
+| **`--migrate-session` / `migrate-session`** | 包装 `migrateSessionToJsonl`；`--force` / `--delete-json` |
 | 另有 prompt（`-p` / 位置参数 / 管道 stdin） | `submitPrompt` 一轮并打印助手文本；默认 autoSave |
 | TTY 且无 prompt、无 `--print` | 极简 readline 循环（`bolo>` → submit → 打印；空行或 `/exit` 退出） |
 | `--print` 且无 prompt | 仅摘要后退出 |
@@ -179,4 +192,5 @@ npx tsx scripts/test-transcript-append.ts
 npx tsx scripts/test-transcript-load.ts
 npx tsx scripts/test-cli-resume.ts
 npx tsx scripts/test-session-list.ts
+npx tsx scripts/test-session-title.ts
 ```

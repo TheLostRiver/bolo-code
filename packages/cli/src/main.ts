@@ -1,9 +1,14 @@
 /**
  * bolo CLI 入口
  */
+import {
+  listProjectSessions,
+  migrateSessionToJsonl,
+} from '../../core/src/index.ts'
 import { formatHelp, isResumePicker, parseArgs } from './parseArgs.ts'
 import { runNewSessionCli } from './newSessionCli.ts'
 import {
+  formatSessionList,
   resolveContinueSessionId,
   ResumePickerError,
   runResumeCli,
@@ -69,6 +74,52 @@ async function main(): Promise<void> {
 
   const cwd = args.cwd ?? process.cwd()
   const isTty = process.stdin.isTTY === true
+
+  // ── --list / -l：非交互列项目会话 ──
+  if (args.list) {
+    try {
+      const items = await listProjectSessions({ cwd, limit: 50 })
+      if (!items.length) {
+        process.stdout.write('(no sessions in project .bolo/sessions)\n')
+        process.exit(0)
+      }
+      process.stdout.write(`${formatSessionList(items)}\n`)
+      process.exit(0)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      process.stderr.write(`error: ${msg}\n`)
+      process.exit(1)
+    }
+  }
+
+  // ── --migrate-session / migrate-session：JSON → jsonl ──
+  if (args.migrateSession) {
+    try {
+      const r = await migrateSessionToJsonl(args.migrateSession, {
+        cwd,
+        force: args.force === true,
+        deleteJson: args.deleteJson === true,
+      })
+      const status = r.wrote
+        ? 'wrote'
+        : 'skipped (jsonl already has messages; use --force)'
+      process.stdout.write(
+        [
+          `migrate-session: ${status}`,
+          `  id/path:  ${args.migrateSession}`,
+          `  json:     ${r.jsonPath}`,
+          `  jsonl:    ${r.transcriptPath}`,
+          `  messages: ${r.messageCount}`,
+          `  deletedJson: ${r.deletedJson}`,
+        ].join('\n') + '\n',
+      )
+      process.exit(0)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      process.stderr.write(`error: ${msg}\n`)
+      process.exit(1)
+    }
+  }
 
   // ── --continue / -c：最新一条 ──
   if (args.continue) {
@@ -158,7 +209,7 @@ async function main(): Promise<void> {
 
   // 非 TTY 无参：help，勿挂起
   process.stderr.write(
-    'error: bolo with no args requires a TTY. Use --help, --resume, or pass a prompt.\n',
+    'error: bolo with no args requires a TTY. Use --help, --list, --resume, or pass a prompt.\n',
   )
   process.stdout.write(formatHelp())
   process.exit(2)

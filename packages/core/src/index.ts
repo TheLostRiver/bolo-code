@@ -275,6 +275,7 @@ export {
   atomicWriteJson,
   loadSessionPair,
   migrateSessionToJsonl,
+  setSessionTitle,
   type SessionSnapshot,
   type SessionScope,
   type SessionListItem,
@@ -289,6 +290,7 @@ export {
   ensureTranscriptFile,
   recordSessionMessages,
   appendCompactBoundary,
+  appendSessionTitle,
   dualWriteSessionTranscript,
   writeTranscriptAfterCompact,
   resolveTranscriptPathFromJson,
@@ -299,6 +301,9 @@ export {
   loadTranscriptFile,
   loadTranscriptMessages,
   messagesFromTranscriptEntries,
+  titleFromTranscriptEntries,
+  normalizeSessionTitle,
+  buildTitleEntry,
   getTranscriptWriteState,
   setTranscriptWriteState,
   metaInputFromSession,
@@ -307,6 +312,7 @@ export {
   type TranscriptMetaEntry,
   type TranscriptMessageEntry,
   type TranscriptCompactBoundaryEntry,
+  type TranscriptTitleEntry,
   type TranscriptMetaInput,
 } from './sessionTranscript.ts'
 
