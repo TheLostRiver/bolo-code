@@ -34,6 +34,7 @@
   · **CP 余量小步**：默认开 auto · 环境熔断 · `/autocompact`
   · **TP 余量小步**：StreamingToolExecutor 边流边跑（queryLoop 主路径）
   · **TP-PERM**：permission 规则匹配小步（always-deny · Bash 通配 · `/deny`）
+  · **CP-SNIP**：snip 最小（门槛裁前缀 · 安全 cut · prepare 写回）
   · Usage+ 本地 breakdown（cache · byModel · /cost）
   · RC2 思考链二期（Responses reasoning SSE · /thinking 显示开关）
   · MCP-SSE 经典 SSE 长连接（type:sse · endpoint 事件 · list_changed）
@@ -52,14 +53,15 @@ P1：
   9. ~~MCP-SSE 经典 SSE~~ ✅ 最小
   10. ~~CP 余量：默认 auto + 环境熔断 + /autocompact~~ ✅ 最小
   11. ~~TP 余量：StreamingToolExecutor 最小~~ ✅ 最小
-  12. ~~TP-PERM：permission 规则匹配小步~~ ✅ 最小（本刀）
-  下一刀：snip 小步 ·（或）J-D 余量
+  12. ~~TP-PERM：permission 规则匹配小步~~ ✅ 最小
+  13. ~~CP-SNIP：snip 最小~~ ✅ 最小（本刀）
+  下一刀：J-D 余量 ·（或）其它 CP/TP 余量
 ```
 
 | 优先级 | 含义（当前） |
 |--------|----------------|
 | **P0** | 抬 headless 水位：韧性 / TP / **CP 日用** 已 🟡 |
-| **P1** | 扩展深度（**MCP HTTP+SSE ✅** · **RC1+RC2 ✅** · **PL2 ✅** · **Usage+ ✅** · **CP5 ✅** · **STE ✅** · **TP-PERM ✅**）— **默认下一刀区：snip / J-D** |
+| **P1** | 扩展深度（**MCP HTTP+SSE ✅** · **RC1+RC2 ✅** · **PL2 ✅** · **Usage+ ✅** · **CP5 ✅** · **STE ✅** · **TP-PERM ✅** · **CP-SNIP ✅**）— **默认下一刀区：J-D / CP·TP 余量** |
 | **P2** | 未做或仅最小的子项 |
 | **P3** | GUI / 完整 Ink / 后置协议 |
 
@@ -134,10 +136,11 @@ P1：
 | **CP2** | auto 阈值常量显式化 + `getContextPressure`（ok/warn/critical/over）；临近窗口才 critical | ✅ 最小 |
 | **CP3** | auto 失败熔断加固（连续失败不拖垮 turn）；compact **不改** `systemPromptSections` | ✅ 最小 |
 | **CP4** | `/context`：messages/system 分拆、window/threshold/pressure、prepare 顺序；`/compact` 报告前后 token | ✅ 最小 |
-| **CP5** | 默认开 `autoCompactEnabled`；`BOLO_DISABLE_AUTO_COMPACT` / `BOLO_DISABLE_COMPACT` 环境熔断；`/autocompact` + prepare 重挂 | ✅ 最小（本刀） |
-| **CP-doc** | `COMPACTION.md` / `AGENT_LOOP.md` / ROADMAP / TODO；`test-context-slash` · `test-auto-compact` | ✅ |
+| **CP5** | 默认开 `autoCompactEnabled`；`BOLO_DISABLE_AUTO_COMPACT` / `BOLO_DISABLE_COMPACT` 环境熔断；`/autocompact` + prepare 重挂 | ✅ 最小 |
+| **CP-SNIP** | **snip 最小**：token/条数门槛 · 安全 cut（tool 配对）· `History snipped` 边界 · prepare 写回 · snip→micro→auto | ✅ 最小（本刀） |
+| **CP-doc** | `COMPACTION.md` / `AGENT_LOOP.md` / ROADMAP / TODO；`test-context-slash` · `test-auto-compact` · `test-snip` | ✅ |
 
-**明确后置（CP 再后）：** cached microcompact / snip 全管线 / 真 tokenizer。
+**明确后置（CP 再后）：** cached microcompact / SnipTool·UUID 回放 / 真 tokenizer。
 
 ### 2.7 MCP 远程 transport
 
@@ -190,7 +193,7 @@ P1：
 | **J-D 余量** | entry / CLI | 更多 entry 类型；CLI `migrate-session` 包装 | 🟡 可选支线 |
 | **C6+** | Cache 后置 | 1h TTL / global scope / break detection / cached MC | ⬜ **后置** |
 | **TP 余量** | permission / STE | **STE ✅** · **TP-PERM 规则匹配 ✅**；完整 YOLO / 更强 apply_patch / STE progress | 🟡 规则小步已齐；YOLO ⬜ |
-| **CP 余量** | compact 再深 | **默认开 auto ✅**；snip · cached MC · 真 tokenizer 仍后置 | 🟡 默认 auto 已齐；其余 ⬜ |
+| **CP 余量** | compact 再深 | **默认开 auto ✅**；**snip 最小 ✅**；cached MC · SnipTool/UUID · 真 tokenizer 仍后置 | 🟡 snip 最小已齐；其余 ⬜ |
 
 ---
 
@@ -230,9 +233,10 @@ P1：
   · CP5 默认 auto + 环境熔断 + /autocompact 最小
   · TP-STE StreamingToolExecutor 边流边跑最小
   · TP-PERM permission 规则匹配小步（always-deny · Bash 通配 · /deny）
+  · CP-SNIP snip 最小（门槛 · 安全 cut · prepare 写回）
 
 下一阶段：
-  ① snip 小步 / J-D 余量   ← 默认主刀区（P1 余量）
+  ① J-D 余量 / 其它 CP·TP 余量   ← 默认主刀区（P1 余量）
   ② C6+ / OR6 / T8 / Electron / 完整 YOLO  （后置）
 ```
 
@@ -242,13 +246,13 @@ P1：
 
 若只开一刀（**非 Electron**）：
 
-> **主推：snip 最小** 或 **J-D 余量**  
+> **主推：J-D 余量**（entry/CLI）或其它 CP/TP 余量小步  
 > - 勿一口做完整市场 / OAuth MCP / 完整 Ink / 完整 YOLO  
 >
-> **本刀已勾选：** **TP-PERM**（permission 规则匹配小步：always-deny · Bash 通配/`:*` · `/deny` · 快照/meta；**非**完整 YOLO 分类器）。  
-> **明确后置：** STE progress/interruptBehavior · 思考链安全回灌 · Anthropic thinking budget · 插件市场 · OAuth · SSE 自动重连 · cached MC · snip 全管线 · 真 tokenizer · OR6 · C6+ · T8 · Electron · **完整 YOLO / auto 分类器** · 远程 USD 账单。
+> **本刀已勾选：** **CP-SNIP**（snip 最小：无 LLM 裁前缀 · 安全 cut · `History snipped` · prepare 链 snip→micro→auto · `test-snip`）。  
+> **明确后置：** STE progress/interruptBehavior · 思考链安全回灌 · Anthropic thinking budget · 插件市场 · OAuth · SSE 自动重连 · cached MC · SnipTool/UUID 回放 · 真 tokenizer · OR6 · C6+ · T8 · Electron · **完整 YOLO / auto 分类器** · 远程 USD 账单。
 
-**已齐摘要：** resume · slash · BOLO TUI 最小 · rules · C1–C5 · JSONL 主路径 · creators · Subagent · MCP stdio+HTTP+**SSE** 最小 · **plugins PL1+PL2 最小** · Responses HTTP · Loop 韧性最小 · Tool+Permission 日用 + **STE** + **规则匹配小步** · Compact 日用加深 + **默认 auto** · **RC1+RC2 思考链** · **Usage+ 最小**。
+**已齐摘要：** resume · slash · BOLO TUI 最小 · rules · C1–C5 · JSONL 主路径 · creators · Subagent · MCP stdio+HTTP+**SSE** 最小 · **plugins PL1+PL2 最小** · Responses HTTP · Loop 韧性最小 · Tool+Permission 日用 + **STE** + **规则匹配小步** · Compact 日用加深 + **默认 auto** + **snip 最小** · **RC1+RC2 思考链** · **Usage+ 最小**。
 
 ---
 
@@ -258,7 +262,7 @@ P1：
 |------|---------|
 | LR* | M-Loop 韧性 🟡 |
 | TP* · **TP-STE** · **TP-PERM** | M-Tool+Permission 🟡（STE + 规则匹配小步） |
-| CP* · **CP5** | 长会话 compact 🟡（默认 auto ✅） |
+| CP* · **CP5** · **CP-SNIP** | 长会话 compact 🟡（默认 auto ✅ · snip 最小 ✅） |
 | RS* · T* | M5.2 / M-TUI（T0–T7 ✅；T8 ⬜） |
 | SL* · SL-polish | M-Slash ✅ |
 | R* | M-Rules ✅ |
@@ -287,4 +291,4 @@ P1：
 ---
 
 **一句话：**  
-**TP-PERM**（permission 规则匹配小步）已落地；**下一刀：snip 小步** 或 J-D 余量；完整 YOLO / 市场 / OAuth / cached MC / 回灌勿抢。
+**CP-SNIP**（snip 最小）已落地；**下一刀：J-D 余量** 或其它 CP/TP 余量；完整 YOLO / 市场 / OAuth / cached MC / SnipTool 回放 / 回灌勿抢。

@@ -10,7 +10,7 @@
 
 | 层 | 粗估 | 说明 |
 |----|------|------|
-| **Headless 核心**（loop / tools / provider / compact / prompt） | **~55–65%** | 主路径可用；compact 日用加深已 🟡；**STE ✅**；**permission 规则匹配小步 ✅**；仍缺 cached MC/snip、完整 YOLO 分类器 |
+| **Headless 核心**（loop / tools / provider / compact / prompt） | **~55–65%** | 主路径可用；compact 日用加深已 🟡；**STE ✅**；**permission 规则匹配小步 ✅**；**snip 最小 ✅**；仍缺 cached MC、SnipTool/UUID、完整 YOLO 分类器 |
 | 会话与 CLI | **~70–80%** | JSONL 默认写（T3）；resume/continue；无参 REPL；非成熟 Ink |
 | **扩展面（MCP / Plugins / Skills）** | **~55–65%** | Skills + MCP stdio 面 + list_changed + **HTTP transport** ✅；**SSE ✅ 最小**；**PL2 热加载 ✅ 最小**；市场 ⬜ |
 | **Subagent** | **~50–60%** | 真 loop + Agent + 目录定义；async/fork 最小；worktree ⬜ |
@@ -43,8 +43,9 @@
 10. ~~**CP5**（默认开 auto · 环境熔断 · `/autocompact`）~~ ✅ 最小  
 11. ~~**TP 余量：StreamingToolExecutor 最小**~~ ✅ 最小  
 12. ~~**TP-PERM：permission 规则匹配小步**~~ ✅ 最小（always-deny + Bash 通配；非完整 YOLO）  
-13. **下一刀 P1 余量：** snip 小步 · J-D 余量 · 其它 TP/CP 余量  
-14. **后置：** 思考回灌 · Anthropic budget · OR6 WS · cache TTL · cached MC · 完整 YOLO 分类器 · T8 Ink · Electron · 插件市场  
+13. ~~**CP-SNIP：snip 最小**~~ ✅ 最小（门槛裁前缀 · 安全 cut · prepare 写回）  
+14. **下一刀 P1 余量：** J-D 余量 · 其它 TP/CP 余量  
+15. **后置：** 思考回灌 · Anthropic budget · OR6 WS · cache TTL · cached MC · SnipTool/UUID · 完整 YOLO 分类器 · T8 Ink · Electron · 插件市场  
 
 ---
 
@@ -97,7 +98,7 @@
 
 | 能力 | 状态 | 对资源的影响 |
 |------|------|----------------|
-| Full / auto / micro compact · PTL | ✅/🟡 | 加权 token 估 + pressure；默认 **`autoCompactEnabled: true`**；`BOLO_DISABLE_*` 熔断；`/autocompact`；cached MC/snip 后置 |
+| Full / auto / micro compact · PTL | ✅/🟡 | 加权 token 估 + pressure；默认 **`autoCompactEnabled: true`**；`BOLO_DISABLE_*` 熔断；`/autocompact`；**snip 最小 ✅**（门槛+安全 cut+边界）；cached MC / SnipTool 后置 |
 | Skill catalog-only | ✅ | 降输入 |
 | **Effort** low/medium/high/max/auto | ✅ | session + `/effort` → max_tokens |
 | Prompt Cache 布局 + **API 标记** | ✅ | C1–C5：`cache_control` / `prompt_cache_key` |
@@ -446,7 +447,7 @@ flowchart TB
 | G 协议 | Responses HTTP | ✅；WS 后置 |
 | H 韧性 | 错误分类 + model 退避 + PTL | 🟡 最小（本刀） |
 
-**默认下一刀：** 见 **`docs/TODO.md` §8**（**P1 余量：snip / J-D**）。
+**默认下一刀：** 见 **`docs/TODO.md` §8**（**P1 余量：J-D / CP·TP**）。
 
 ---
 
@@ -487,7 +488,7 @@ flowchart TB
 
 | commit | 内容（代码行为） |
 |--------|------------------|
-| *(本刀)* | **TP-PERM**：permission 规则匹配小步（always-deny · Bash 通配/`:*` · `/deny` · 快照/meta；非 YOLO） |
+| *(本刀)* | **CP-SNIP**：snip 最小（门槛裁前缀 · tool 安全 cut · `History snipped` · prepare 写回 · snip→micro→auto） |
 | `bd99c95` | **TP-STE**：StreamingToolExecutor 最小（边流边跑 · 保序 · Bash 级联 · discard · queryLoop 接入） |
 | `19cf680` | **CP5**：默认 auto compact + 环境熔断 + `/autocompact` |
 | `3ec8b52` | **Loop 韧性**：`errorClassify` + `wrapCallModelWithRetry`；queryLoop `model_retry`；文档口径诚实化 |
@@ -512,7 +513,7 @@ flowchart TB
 | M0–M2 | ✅/🟡 | headless 主路径可跑；相对 HC 未满 |
 | **M-Loop 韧性** | 🟡 最小 | 分类 + 429/5xx 有限退避；PTL 正交 |
 | **M-Tool+Permission** | 🟡 最小 | Edit + path/bash allow/deny + abort + **STE** + **规则匹配小步**；完整 YOLO 后置 |
-| **M-Compact 日用** | 🟡 最小 | 加权 token · pressure · `/context`·`/compact`；**默认 auto ✅**；cached MC/snip 后置 |
+| **M-Compact 日用** | 🟡 最小 | 加权 token · pressure · `/context`·`/compact`；**默认 auto ✅**；**snip 最小 ✅**；cached MC / SnipTool 后置 |
 | **M-Slash** | ✅ | 日用 `/` + SL-polish |
 | **M-Rules** | ✅ | `.bolo/rules` + path-scoped + `/rules` |
 | **M-Creators** | ✅ | bundled creators |
@@ -526,5 +527,5 @@ flowchart TB
 
 **一句话：**  
 Headless **主路径可日用**，相对参考实现约 **40–55%**（文档不再写 ~70% 乐观数）。  
-**P0 切片** LR / TP / CP 日用均 🟡 最小；**MCP HTTP+SSE · PL2 · Usage+ · RC2 · CP5 · STE · TP-PERM 规则匹配 🟡 最小**；**下一刀：snip 小步 / J-D 余量**。  
+**P0 切片** LR / TP / CP 日用均 🟡 最小；**MCP HTTP+SSE · PL2 · Usage+ · RC2 · CP5 · STE · TP-PERM · CP-SNIP 🟡 最小**；**下一刀：J-D 余量 / 其它 CP·TP 余量**。  
 执行序 → **`docs/TODO.md`**。

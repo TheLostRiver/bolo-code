@@ -31,7 +31,7 @@ HelsincyCode 在 **query 主循环**里大致顺序（逻辑层）：
 
 ```
 messages
-  → [可选] snip / 其它裁剪
+  → snip（无 LLM，丢过旧前缀，保留尾部；达 token/条数门槛）
   → microcompact          // 轻量：清旧 tool_result 内容，尽量保缓存
   → autocompact 判断       // 达 token 阈值 → full compact
   → call model
@@ -40,6 +40,7 @@ messages
 
 | 层级 | 参考模块（逻辑名） | 作用 | Bolo 优先级 |
 |------|-------------------|------|-------------|
+| **Snip** | `snipCompactIfNeeded` | 无 LLM，裁掉过旧前缀，插 `History snipped` 边界 | **P1 最小 ✅** |
 | **Full compact** | `compactConversation` | LLM 写长摘要，重建会话前缀 | **P0 必做对** |
 | **Microcompact** | `microcompactMessages` | 清可压缩 tool 的旧结果正文 | P1 |
 | **Auto compact** | `autoCompactIfNeeded` | 阈值 + 熔断 + 调 full | P0 策略 / P1 接主循环 |
@@ -47,7 +48,7 @@ messages
 | **Cached / API microcompact** | cache edits | 依赖特定 API 缓存编辑 | P2 不做 |
 | **Partial compact** | 按索引部分摘要 | 高级 | P2 |
 
-Bolo **Full compact + auto + microcompact 已接线**；cached/API micro 与 session memory compact 仍不做。
+Bolo **snip 最小 + Full compact + auto + microcompact 已接线**；SnipTool / UUID 链 / resume 回放 / cached micro / session memory 仍不做。
 
 ---
 
@@ -400,6 +401,7 @@ type CompactSummarizer = (req: {
 - [x] PTL 截断重试（`isPromptTooLongError` + `truncateHeadForPtlRetry` + queryLoop / full compact）  
 - [x] 加权 token 启发式 + `getContextPressure` + `/context`·`/compact` 日用（CP* 最小）  
 - [x] 默认开 auto + 环境熔断 + `/autocompact` 可见性（CP 余量小步）  
+- [x] snip 最小：`snipMessagesIfNeeded` + prepare 链 snip→micro→auto；tool 配对安全切；`test-snip`  
 - [ ] 任何 compaction 遥测 / 远程实验开关  
 
 ---
@@ -415,7 +417,8 @@ type CompactSummarizer = (req: {
 | **已接线** | PTL 截断重试；`test-ptl-retry` |
 | **已接线** | 加权 token · pressure · richer `/context`·`/compact`；`test-context-slash` |
 | **已接线** | 默认 `autoCompactEnabled: true`；`BOLO_DISABLE_*` 环境熔断；`/autocompact` 运行时开关；`test-auto-compact` |
-| **再后** | snip · cached microcompact · partial compact · 真 tokenizer |
+| **已接线** | snip 最小：门槛 + 安全 cut + 边界 + prepare 写回；`test-snip` |
+| **再后** | SnipTool / UUID 回放 / cached microcompact · partial compact · 真 tokenizer |
 
 ---
 
@@ -430,5 +433,7 @@ type CompactSummarizer = (req: {
 | Pre/PostCompact | `executePreCompactHooks` / `executePostCompactHooks` |
 | `autoPolicy` | `autoCompact.ts` 阈值与熔断（无 logEvent） |
 | `microCompact` | `microcompactMessages` 的「清 tool 结果」语义 |
+| `snipMessagesIfNeeded` | `snipCompactIfNeeded`（无 LLM 裁前缀；Bolo 无 UUID/SnipTool） |
 
 **原则重申**：先对照再写；压缩质量 = 摘要质量 + 管道正确性，不是删消息条数。
+Full compact **禁止**用 `slice(-N)` 冒充；**snip** 是显式轻量层，有门槛、安全 cut 与边界，不得替代 full compact 摘要。

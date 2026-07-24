@@ -475,7 +475,7 @@ function cmdContext(session: SlashSession, _args: string): SlashDispatchResult {
   }
   lines.push(
     'cache:           stable system prefix first; providers may send cache_control / prompt_cache_key (see docs/PROMPT_CACHE.md)',
-    'prepare order:   microcompact → auto full compact → callModel (PTL truncate is fallback)',
+    'prepare order:   snip → microcompact → auto full compact → callModel (PTL truncate is fallback)',
     'toggle:          /autocompact [on|off]',
     formatUsageOneLiner(session.usage),
   )

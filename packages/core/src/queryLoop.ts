@@ -2,7 +2,7 @@
  * queryLoop — 对照 HelsincyCode query.ts queryLoop
  *
  * while true:
- *   prepareMessages（默认链：microcompact → auto full compact）
+ *   prepareMessages（默认链：snip → microcompact → auto full compact）
  *   callModel stream (+ tools)
  *     若 429/5xx/timeout：wrapCallModelWithRetry 退避（deps 默认包装）
  *     若 PTL：截断最旧 API 轮次 → 写回 session → 再 prepare → 重试（有限次）
@@ -152,7 +152,8 @@ function applyPreparedToSession(
     : prepared.messages.filter(
         (m) =>
           m.role !== 'system' ||
-          m.content.trim() === 'Conversation compacted',
+          m.content.trim() === 'Conversation compacted' ||
+          m.content.trim() === 'History snipped',
       )
 }
 

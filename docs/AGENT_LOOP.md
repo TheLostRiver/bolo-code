@@ -121,7 +121,8 @@ type TerminalReason =
 
 - StreamingToolExecutor **加深**（progress 通道 · interruptBehavior · 完整 streaming fallback UI）  
 - 遥测 / GrowthBook / 无限 unattended 429  
-- reactive compact / context collapse / snip  
+- reactive compact / context collapse / SnipTool·UUID 全管线  
 - 完整 Message 类型系统（assistant content blocks 数组）— v1 仍用简化 ChatMessage  
 
-后续 **P1 余量**：snip 小步 · J-D entry；完整 YOLO 后置；compact 再深见 `docs/COMPACTION.md`。
+**已接：** snip 最小（`snipMessagesIfNeeded` → prepare 链 snip→micro→auto）。  
+后续 **P1 余量**：J-D entry/CLI；完整 YOLO 后置；compact 再深见 `docs/COMPACTION.md`。

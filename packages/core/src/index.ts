@@ -10,6 +10,7 @@ import {
   isAutoCompactEnvDisabled,
   type CompactSummarizer,
   type MicrocompactOptions,
+  type SnipOptions,
 } from '../../compact/src/index.ts'
 import { runHooks } from '../../hooks/src/index.ts'
 import {
@@ -51,6 +52,7 @@ import {
   composePrepareMessages,
   createAutoCompactPrepare,
   createMicrocompactPrepare,
+  createSnipPrepare,
   productionDeps,
   type QueryDeps,
 } from './deps.ts'
@@ -112,17 +114,25 @@ export {
   createCallModelFromProvider,
   createAutoCompactPrepare,
   createMicrocompactPrepare,
+  createSnipPrepare,
   composePrepareMessages,
   identityPrepareMessages,
   wrapCallModelWithRetry,
   DEFAULT_MAX_MODEL_RETRIES,
   DEFAULT_MODEL_RETRY_BASE_DELAY_MS,
 } from './deps.ts'
-export type { MicrocompactOptions } from '../../compact/src/index.ts'
+export type {
+  MicrocompactOptions,
+  SnipOptions,
+} from '../../compact/src/index.ts'
 export {
   microcompactMessages,
+  snipMessagesIfNeeded,
+  findSafeSnipCutIndex,
   TOOL_RESULT_CLEARED_MESSAGE,
+  SNIP_BOUNDARY_CONTENT,
   DEFAULT_MICROCOMPACT_OPTIONS,
+  DEFAULT_SNIP_OPTIONS,
   isPromptTooLongError,
   truncateHeadForPtlRetry,
   groupMessagesByApiRound,
@@ -383,9 +393,14 @@ export type CreateSessionOptions = {
   contextWindowTokens?: number
   /**
    * Microcompact（清旧 tool_result，无 LLM）。
-   * 默认启用；`false` 关闭。顺序：micro → auto full。
+   * 默认启用；`false` 关闭。顺序：snip → micro → auto full。
    */
   microcompact?: MicrocompactOptions | false
+  /**
+   * Snip（无 LLM，丢过旧前缀，保留尾部）。
+   * 默认启用；`false` 关闭。在 micro / auto 之前。
+   */
+  snip?: SnipOptions | false
   /**
    * callModel / compact summarizer 命中 PTL 时截断重试次数。
    * 默认 3；0 = 关闭。
@@ -622,37 +637,55 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
     onEvent: opts.onEvent ?? (() => {}),
   }
 
-  // 对照参考 query：microcompact → autocompact → callModel
+  // 对照参考 query：snip → microcompact → autocompact → callModel
   const microOpts: MicrocompactOptions | undefined =
     opts.microcompact === false
       ? { enabled: false }
       : opts.microcompact === undefined
         ? undefined
         : opts.microcompact
+  const snipOpts: SnipOptions | false | undefined =
+    opts.snip === false
+      ? false
+      : opts.snip === undefined
+        ? undefined
+        : opts.snip
 
   if (session.autoCompactEnabled && session.compactSummarizer) {
-    wireSessionPrepareMessages(session, { microcompact: microOpts })
+    wireSessionPrepareMessages(session, {
+      microcompact: microOpts,
+      snip: snipOpts,
+    })
   } else if (opts.deps) {
-    // 自定义 deps：在其 prepare 前挂 micro（便宜、幂等）
+    // 自定义 deps：在其 prepare 前挂 snip → micro（便宜、幂等）
+    const snipPrepare = createSnipPrepare(snipOpts)
     const microPrepare = createMicrocompactPrepare(microOpts)
     session.deps = {
       ...session.deps,
       prepareMessages: composePrepareMessages(
+        snipPrepare,
         microPrepare,
         opts.deps.prepareMessages,
       ),
     }
-  } else if (opts.microcompact === false || opts.microcompact !== undefined) {
-    // 覆盖 productionDeps 默认 micro 配置
+  } else if (
+    opts.microcompact === false ||
+    opts.microcompact !== undefined ||
+    opts.snip === false ||
+    opts.snip !== undefined
+  ) {
+    // 覆盖 productionDeps 默认 snip/micro 配置
     session.deps = {
       ...session.deps,
-      prepareMessages: createMicrocompactPrepare(microOpts),
+      prepareMessages: composePrepareMessages(
+        createSnipPrepare(snipOpts),
+        createMicrocompactPrepare(microOpts),
+      ),
     }
   } else if (session.autoCompactEnabled && !session.compactSummarizer) {
-    // 默认 auto 开但无 summarizer：仍只 micro（与旧「未挂 auto」一致）
-    // productionDeps 已默认 micro
+    // 默认 auto 开但无 summarizer：仍 snip → micro（productionDeps 默认）
   }
-  // 否则：productionDeps 已默认 micro（DEFAULT_MICROCOMPACT_OPTIONS）
+  // 否则：productionDeps 已默认 snip → micro
 
   if (opts.autoSave) {
     const as =
@@ -1189,11 +1222,13 @@ export async function persistSession(
 /**
  * 按 session.autoCompactEnabled + summarizer 重挂 prepare 链。
  * 供 createSession / 运行时 `/autocompact` 共用。
+ * 顺序：snip → micro → auto full。
  */
 export function wireSessionPrepareMessages(
   session: BoloSession,
   opts?: {
     microcompact?: MicrocompactOptions | false
+    snip?: SnipOptions | false
   },
 ): void {
   const microOpts: MicrocompactOptions | undefined =
@@ -1202,12 +1237,20 @@ export function wireSessionPrepareMessages(
       : opts?.microcompact === undefined
         ? undefined
         : opts.microcompact
+  const snipOpts: SnipOptions | false | undefined =
+    opts?.snip === false
+      ? false
+      : opts?.snip === undefined
+        ? undefined
+        : opts.snip
+  const snipPrepare = createSnipPrepare(snipOpts)
   const microPrepare = createMicrocompactPrepare(microOpts)
 
   if (session.autoCompactEnabled && session.compactSummarizer) {
     session.deps = {
       ...session.deps,
       prepareMessages: composePrepareMessages(
+        snipPrepare,
         microPrepare,
         createAutoCompactPrepare({
           enabled: true,
@@ -1224,7 +1267,7 @@ export function wireSessionPrepareMessages(
 
   session.deps = {
     ...session.deps,
-    prepareMessages: microPrepare,
+    prepareMessages: composePrepareMessages(snipPrepare, microPrepare),
   }
 }
 
@@ -1235,7 +1278,10 @@ export function wireSessionPrepareMessages(
 export function setSessionAutoCompact(
   session: BoloSession,
   enabled: boolean,
-  opts?: { microcompact?: MicrocompactOptions | false },
+  opts?: {
+    microcompact?: MicrocompactOptions | false
+    snip?: SnipOptions | false
+  },
 ): { autoCompactEnabled: boolean; envDisabled: boolean } {
   session.autoCompactEnabled = enabled === true
   wireSessionPrepareMessages(session, opts)

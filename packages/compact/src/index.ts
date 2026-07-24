@@ -714,6 +714,163 @@ function stripPtlRetryMarker(messages: ChatMessage[]): ChatMessage[] {
   return messages
 }
 
+// ── Snip（无 LLM：丢掉过旧前缀，保留尾部；在 micro / auto 之前）────
+
+/**
+ * 对照参考 snipCompactIfNeeded 语义（无 SnipTool / 无遥测 / 无 UUID 链）：
+ * - 不调模型；只裁消息数组
+ * - 与 micro 正交：先 snip 再 micro
+ * - tokensFreed 供 auto 阈值扣减（prepare 链内）
+ * - 边界是 system 占位文案，便于 transcript 识别
+ */
+export const SNIP_BOUNDARY_CONTENT = 'History snipped'
+
+export type SnipOptions = {
+  /** 默认 true */
+  enabled?: boolean
+  /**
+   * 保留最近 N 条消息（会为 tool 配对向前多留 assistant）。
+   * 默认 32。
+   */
+  keepRecentMessages?: number
+  /**
+   * 仅当 estimateTokens ≥ 此值才考虑 snip。
+   * 默认 32_000（低于典型 auto 阈值，优先轻量裁剪）。
+   */
+  minTokensToSnip?: number
+  /**
+   * 至少丢掉这么多条才执行（避免无意义抖动）。
+   * 默认 6。
+   */
+  minMessagesToRemove?: number
+}
+
+export type SnipResult = {
+  messages: ChatMessage[]
+  /** 粗估释放 tokens（与 estimateTokens 一致） */
+  tokensFreed: number
+  removedCount: number
+  executed: boolean
+  /** 写入链首的边界 system 消息（executed 时有） */
+  boundaryMessage?: ChatMessage
+}
+
+export const DEFAULT_SNIP_OPTIONS: Required<
+  Pick<
+    SnipOptions,
+    'enabled' | 'keepRecentMessages' | 'minTokensToSnip' | 'minMessagesToRemove'
+  >
+> = {
+  enabled: true,
+  keepRecentMessages: 32,
+  minTokensToSnip: 32_000,
+  minMessagesToRemove: 6,
+}
+
+/**
+ * 为保留尾部找安全起点：不可从孤立 tool 结果切开；
+ * 若落在 tool 上则回退到带 tool_calls 的 assistant。
+ */
+export function findSafeSnipCutIndex(
+  messages: ChatMessage[],
+  keepRecent: number,
+): number {
+  const n = messages.length
+  if (n === 0) return 0
+  const keep = Math.max(1, Math.min(keepRecent, n))
+  let cut = n - keep
+  // 孤立 tool：并入其前序 assistant
+  while (cut > 0 && cut < n && messages[cut]!.role === 'tool') {
+    cut -= 1
+  }
+  // 若 cut 落在 assistant.tool_calls 中间之后的「半段」已由上处理；
+  // 再避免把 compact/snip 边界单独丢掉却留下无头摘要：边界可随前缀走
+  return Math.max(0, cut)
+}
+
+function isSnipBoundaryMessage(m: ChatMessage): boolean {
+  return m.role === 'system' && m.content.trim() === SNIP_BOUNDARY_CONTENT
+}
+
+/**
+ * Snip：无 LLM。token/条数达门槛时丢掉前缀，保留尾部，链首插边界。
+ * 不改 role/tool_call_id；失败路径返回原数组引用。
+ */
+export function snipMessagesIfNeeded(
+  messages: ChatMessage[],
+  options?: SnipOptions,
+): SnipResult {
+  const enabled = options?.enabled ?? DEFAULT_SNIP_OPTIONS.enabled
+  if (!enabled || messages.length === 0) {
+    return {
+      messages,
+      tokensFreed: 0,
+      removedCount: 0,
+      executed: false,
+    }
+  }
+
+  const keepRecent = Math.max(
+    1,
+    options?.keepRecentMessages ?? DEFAULT_SNIP_OPTIONS.keepRecentMessages,
+  )
+  const minTokens =
+    options?.minTokensToSnip ?? DEFAULT_SNIP_OPTIONS.minTokensToSnip
+  const minRemove = Math.max(
+    1,
+    options?.minMessagesToRemove ?? DEFAULT_SNIP_OPTIONS.minMessagesToRemove,
+  )
+
+  // 去掉已有 snip 边界再估（避免重复边界叠层干扰计数）
+  const stripped = messages.filter((m) => !isSnipBoundaryMessage(m))
+  const tokenCount = estimateTokens(stripped)
+  if (tokenCount < minTokens) {
+    return {
+      messages,
+      tokensFreed: 0,
+      removedCount: 0,
+      executed: false,
+    }
+  }
+
+  const cut = findSafeSnipCutIndex(stripped, keepRecent)
+  if (cut < minRemove) {
+    return {
+      messages,
+      tokensFreed: 0,
+      removedCount: 0,
+      executed: false,
+    }
+  }
+
+  const dropped = stripped.slice(0, cut)
+  const kept = stripped.slice(cut)
+  if (kept.length === 0) {
+    return {
+      messages,
+      tokensFreed: 0,
+      removedCount: 0,
+      executed: false,
+    }
+  }
+
+  const tokensFreed = estimateTokens(dropped)
+  const boundaryMessage: ChatMessage = {
+    role: 'system',
+    content: SNIP_BOUNDARY_CONTENT,
+  }
+  // 边界文案极短；不扣 tokensFreed，便于 auto 侧保守扣减
+  const next = [boundaryMessage, ...kept]
+
+  return {
+    messages: next,
+    tokensFreed,
+    removedCount: dropped.length,
+    executed: true,
+    boundaryMessage,
+  }
+}
+
 // ── Microcompact（清旧 tool_result，无 LLM）────────────────────────
 
 /** 与 HC TIME_BASED_MC_CLEARED_MESSAGE / TOOL_RESULT_CLEARED_MESSAGE 对齐 */
