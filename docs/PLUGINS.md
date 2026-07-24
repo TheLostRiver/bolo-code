@@ -63,9 +63,17 @@ npx tsx scripts/test-plugins-market.ts
 npx tsx scripts/test-plugins-pl2.ts
 ```
 
+## 规范优先级
+
+- **一等公民：** `bolo.plugin.json` + `bolo.marketplace.json` + 本文 / 将升 **Spec v0**  
+- **不接** Claude / Codex 官方市场（版权与账号）  
+- 外来 `.claude-plugin` / `.codex-plugin` 仅可选只读 importer（后置）  
+
+规划切片：**`docs/TODO_SKILL_MCP_PLUGIN.md`（PL-SPEC · IMPORT 附录）**。
+
 ## 后置（非本最小版）
 
-- 完整官方 marketplace 命名/策略  
+- 完整官方 marketplace 命名/策略（**Bolo 自有**运营深度，非借用他厂商店）  
 - zip / git / npm 源安装  
 - 自动更新 / 依赖解析  
 - 插件市场 Web UI

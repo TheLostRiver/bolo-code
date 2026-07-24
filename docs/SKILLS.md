@@ -111,10 +111,12 @@ npx tsx scripts/test-skill-catalog.ts
 路径：`packages/bundled-skills/<id>/SKILL.md`，由 `getBundledSkillsDir()`（`import.meta`）定位。  
 Slash：`/skill-creator`、`/plugin-creator`、`/skill <id>`、`/skills`（未知内置命令时回落到同名 user-invocable skill）。
 
-## 7. 仍未做
+## 7. 仍未做 / 规划
 
 - 远程 skill / MCP skill  
 - 与 HC 完全一致的动态 skill_discovery 预取  
+
+**可移植完善与切片序：** 见 **`docs/TODO_SKILL_MCP_PLUGIN.md`（S-PORT）** — frontmatter 契约、覆盖序、disable 钉死、可选旁路根（默认关）。
 
 ---
 

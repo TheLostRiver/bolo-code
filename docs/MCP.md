@@ -156,4 +156,7 @@ Fixtures：
 | 自动重连 / 断线重试预算 | ⬜（关连接后由上层重开） |
 | 插件热重载 MCP | 🟡 最小（`/plugins reload` 默认重连 workspace MCP，含插件 contributes） |
 
+**通用连接加深切片（诊断 / 秘钥卫生 / 校验）：** 见 **`docs/TODO_SKILL_MCP_PLUGIN.md`（M-GEN）**。  
+**边界：** MCP 是协议客户端；**不是**插件官方商店；OAuth 后置。
+
 > 语义对照参考实现 MCP 多 transport（stdio / sse / http）、session/endpoint、错误隔离；**重新实现**，非 SDK 大段复制。
