@@ -33,6 +33,7 @@
   · Compact 日用加深（加权 token 估 · 压力 · /context·/compact · 熔断）
   · Usage+ 本地 breakdown（cache · byModel · /cost）
   · RC2 思考链二期（Responses reasoning SSE · /thinking 显示开关）
+  · MCP-SSE 经典 SSE 长连接（type:sse · endpoint 事件 · list_changed）
 
 相对参考实现 headless 约 40–55%（勿再写 ~70% 乐观数）。
 P0 抬水位：
@@ -44,14 +45,15 @@ P1：
   5. ~~思考链流式显示~~ ✅ 最小
   6. ~~PL2 插件深化~~ ✅ 最小
   7. ~~Usage+ 本地 breakdown~~ ✅ 最小
-  8. ~~RC2 思考链二期~~ ✅ 最小（本刀）
-  下一刀：经典 SSE 长连接 ·（或）CP/TP 余量 / C6+
+  8. ~~RC2 思考链二期~~ ✅ 最小
+  9. ~~MCP-SSE 经典 SSE~~ ✅ 最小（本刀）
+  下一刀：CP/TP 余量 ·（或）C6+ / 其它 P1 余量
 ```
 
 | 优先级 | 含义（当前） |
 |--------|----------------|
 | **P0** | 抬 headless 水位：韧性 / TP / **CP 日用** 已 🟡 |
-| **P1** | 扩展深度（**MCP HTTP ✅** · **RC1+RC2 ✅** · **PL2 ✅** · **Usage+ ✅**）— **默认下一刀区：经典 SSE / 余量** |
+| **P1** | 扩展深度（**MCP HTTP+SSE ✅** · **RC1+RC2 ✅** · **PL2 ✅** · **Usage+ ✅**）— **默认下一刀区：CP/TP 余量** |
 | **P2** | 未做或仅最小的子项 |
 | **P3** | GUI / 完整 Ink / 后置协议 |
 
@@ -93,6 +95,7 @@ P1：
 | **MCP2 stdio 面** | resources/prompts + meta 工具 + `/mcp` 子命令 | ✅ |
 | **MCP2 list_changed** | tools/resources/prompts 通知 → 再 list → 缓存 + `session.tools` 热刷新 | ✅ |
 | **MCP2 HTTP** | `McpClient` 抽象 + Streamable HTTP（`type: http` / url）+ 错误隔离 + `/mcp` transport/status | ✅ 最小 |
+| **MCP-SSE** | 经典 SSE 长连接（`type: sse`）+ endpoint 事件 + POST 消息 + list_changed | ✅ 最小（本刀） |
 | **PL1** | 本地 plugins 发现 + skills/hooks/mcp 合并（非市场） | ✅ 最小 |
 | **PL2** | 热加载 + commands 贡献 + `/plugins` 深化 | ✅ 最小（本刀） |
 | **OR1–OR5** | OpenAI Responses HTTP SSE 直连 | ✅ |
@@ -138,7 +141,7 @@ P1：
 | **MCP-T5** | fixture + `scripts/test-mcp-http.ts` | ✅ |
 | **MCP-doc** | `MCP.md` / ROADMAP / TODO / ARCHITECTURE | ✅ |
 
-**明确后置：** 经典 SSE 长连接（`type: sse`）· OAuth · headersHelper · 插件市场。
+**明确后置：** OAuth · headersHelper · 插件市场 · SSE 自动重连预算。
 
 ### 2.8 插件深化（PL2 本刀）
 
@@ -169,16 +172,16 @@ P1：
 
 | ID | 主题 | 说明 | 状态 |
 |----|------|------|------|
-| **MCP2 余量** | 远程 transport | **Streamable HTTP + 抽象** 已接 host；经典 SSE 长连接后置 | ✅ 最小 |
+| **MCP2 余量** | 远程 transport | **Streamable HTTP + 抽象** 已接 host | ✅ 最小 |
+| **MCP-SSE** | 经典 SSE 长连接 | `type: sse` · GET 长连接 · endpoint · POST 消息 · list_changed | ✅ 最小（本刀） |
 | **RC1** | 思考链流式显示 | provider 解析 → queryLoop → CLI dim；不持久化回灌 | ✅ 最小 |
-| **RC2** | Reasoning 加深 | openai-responses reasoning SSE；`/thinking` 显示开关；**跳过** ChatMessage 回灌 | ✅ 最小（本刀） |
+| **RC2** | Reasoning 加深 | openai-responses reasoning SSE；`/thinking` 显示开关；**跳过** ChatMessage 回灌 | ✅ 最小 |
 | **PL2** | plugins 深度 | 热加载 / commands 贡献 / `/plugins reload` | ✅ 最小 |
 | **Usage+** | 本地 usage 展示 | cache 字段 + byModel + `/cost` breakdown；快照/meta 持久化 | ✅ 最小 |
 | **J-D 余量** | entry / CLI | 更多 entry 类型；CLI `migrate-session` 包装 | 🟡 可选支线 |
 | **C6+** | Cache 后置 | 1h TTL / global scope / break detection / cached MC | ⬜ **后置** |
 | **TP 余量** | permission 深度 | 完整分类器 / StreamingToolExecutor / 更强 apply_patch | ⬜ 后置 |
 | **CP 余量** | compact 再深 | 默认开 auto · snip · cached MC · 真 tokenizer | ⬜ 后置 |
-| **MCP-SSE** | 经典 SSE 长连接 | `type: sse` 真实现（配置已预留） | ⬜ 可选 |
 
 ---
 
@@ -214,10 +217,10 @@ P1：
   RS* · SL* · SL-polish · T0–T7 · R* · C1–C5 · J-A/B/C · J-D(+T3)
   · K* · S0–S7 · MCP1 · MCP2(stdio + list_changed + HTTP 最小) · PL1 · OR1–OR5
   · LR* · TP* · CP* 长会话 compact 日用最小 · RC1 思考链显示最小 · PL2 插件热加载最小
-  · Usage+ 本地 breakdown 最小 · RC2 思考链二期最小
+  · Usage+ 本地 breakdown 最小 · RC2 思考链二期最小 · MCP-SSE 经典 SSE 最小
 
 下一阶段：
-  ① 经典 SSE 长连接 / CP 余量 / TP 余量   ← 默认主刀区（P1 余量）
+  ① CP 余量 / TP 余量 / J-D 余量   ← 默认主刀区（P1 余量）
   ② C6+ / OR6 / T8 / Electron  （后置）
 ```
 
@@ -227,13 +230,13 @@ P1：
 
 若只开一刀（**非 Electron**）：
 
-> **主推：经典 SSE 长连接**（MCP `type: sse` 真实现）或 **CP/TP 余量**（P1 余量）  
+> **主推：CP/TP 余量**（默认 auto compact 小步 · permission 深度）或 **J-D 余量**  
 > - 勿一口做完整市场 / OAuth MCP / 完整 Ink  
 >
-> **本刀已勾选：** **RC2**（openai-responses reasoning SSE · `/thinking` 显示开关 · 不回灌 ChatMessage · 无遥测）。  
-> **明确后置：** 思考链安全回灌 · Anthropic thinking budget · 插件市场 · OAuth · cached MC · snip · 默认开 auto · OR6 · C6+ · T8 · Electron · 完整 permission 分类器 · 远程 USD 账单。
+> **本刀已勾选：** **MCP-SSE**（`type: sse` 经典长连接 · endpoint 事件 · POST 消息 · list_changed · 错误隔离 · 无遥测）。  
+> **明确后置：** 思考链安全回灌 · Anthropic thinking budget · 插件市场 · OAuth · SSE 自动重连 · cached MC · snip · 默认开 auto · OR6 · C6+ · T8 · Electron · 完整 permission 分类器 · 远程 USD 账单。
 
-**已齐摘要：** resume · slash · BOLO TUI 最小 · rules · C1–C5 · JSONL 主路径 · creators · Subagent · MCP stdio+HTTP 最小 · **plugins PL1+PL2 最小** · Responses HTTP · Loop 韧性最小 · Tool+Permission 日用最小 · Compact 日用加深最小 · **RC1+RC2 思考链** · **Usage+ 最小**。
+**已齐摘要：** resume · slash · BOLO TUI 最小 · rules · C1–C5 · JSONL 主路径 · creators · Subagent · MCP stdio+HTTP+**SSE** 最小 · **plugins PL1+PL2 最小** · Responses HTTP · Loop 韧性最小 · Tool+Permission 日用最小 · Compact 日用加深最小 · **RC1+RC2 思考链** · **Usage+ 最小**。
 
 ---
 
@@ -272,4 +275,4 @@ P1：
 ---
 
 **一句话：**  
-RC2（Responses reasoning · `/thinking`）已落地；**下一刀：经典 SSE 或 CP/TP 余量**；市场 / cached MC / snip / 回灌勿抢。
+RC2（Responses reasoning · `/thinking`）与 **MCP-SSE**（经典 `type:sse`）已落地；**下一刀：CP/TP 余量**；市场 / OAuth / cached MC / snip / 回灌勿抢。

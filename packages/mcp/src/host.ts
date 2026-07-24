@@ -1,5 +1,5 @@
 /**
- * MCP host：连 stdio / http servers → listTools/listResources/listPrompts
+ * MCP host：连 stdio / http / sse servers → listTools/listResources/listPrompts
  * → 注册 BoloTool（mcp__server__tool + 可选 ListMcpResources / ReadMcpResource / GetMcpPrompt）
  * → list_changed 通知热刷新（tools/resources/prompts 缓存 + 可选会话工具表同步）
  * 单 server 失败 warn，不阻断其它 server / 会话
@@ -25,6 +25,7 @@ import {
   type McpToolDef,
 } from './client.ts'
 import { McpHttpClient } from './httpClient.ts'
+import { McpSseClient } from './sseClient.ts'
 import { McpStdioClient } from './stdioClient.ts'
 import { mcpToolName, parseMcpToolName } from './names.ts'
 import {
@@ -576,9 +577,10 @@ function createMcpClient(
     })
   }
   if (transport === 'sse') {
-    throw new Error(
-      `MCP server "${cfg.name}": type "sse" not implemented yet; use type "http" (Streamable HTTP) or stdio`,
-    )
+    return new McpSseClient({
+      server: cfg,
+      timeoutMs: options.timeoutMs,
+    })
   }
   return new McpStdioClient({
     server: cfg,
@@ -588,7 +590,7 @@ function createMcpClient(
 }
 
 /**
- * 连接配置中的 MCP servers（stdio / http），list tools/resources/prompts 后注册 BoloTool，
+ * 连接配置中的 MCP servers（stdio / http / sse），list tools/resources/prompts 后注册 BoloTool，
  * 并挂 list_changed 热刷新。任一 server 失败只记 warning，不拖垮其它 server。
  */
 export async function connectMcpServers(
@@ -611,7 +613,7 @@ export async function connectMcpServers(
     const transport = resolveMcpTransport(cfg)
     if (!transport) {
       warnings.push(
-        `skip MCP server "${cfg.name}": need command (stdio) or url (http)`,
+        `skip MCP server "${cfg.name}": need command (stdio) or url (http/sse)`,
       )
       continue
     }

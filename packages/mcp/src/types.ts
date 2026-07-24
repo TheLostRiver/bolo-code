@@ -1,6 +1,6 @@
 /**
  * MCP 配置与注册类型
- * transport：stdio（本地进程）| http（Streamable HTTP）| sse（预留，本刀未实现）
+ * transport：stdio（本地进程）| http（Streamable HTTP）| sse（经典 SSE 长连接）
  */
 
 /** 对照参考实现 transport 枚举的最小子集 */

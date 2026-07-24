@@ -1,5 +1,5 @@
 /**
- * MCP client 抽象：stdio / http 共用 host 路径
+ * MCP client 抽象：stdio / http / sse 共用 host 路径
  * 无遥测；listTools/call · resources · prompts · list_changed 通知
  */
 

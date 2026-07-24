@@ -1,5 +1,5 @@
 /**
- * @bolo/mcp — MCP host：stdio / Streamable HTTP、tools/resources/prompts、list_changed、mcp__* 命名
+ * @bolo/mcp — MCP host：stdio / Streamable HTTP / 经典 SSE、tools/resources/prompts、list_changed、mcp__* 命名
  * 无遥测；禁止 mock invoke 冒充完成
  */
 
@@ -50,6 +50,12 @@ export {
   parseSseDataPayloads,
   type HttpClientOptions,
 } from './httpClient.ts'
+export {
+  McpSseClient,
+  consumeSseEvents,
+  resolveSseMessageUrl,
+  type SseClientOptions,
+} from './sseClient.ts'
 export {
   connectMcpServers,
   closeMcpConnections,

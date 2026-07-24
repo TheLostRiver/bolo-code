@@ -39,7 +39,7 @@
 6. ~~**PL2 插件深化**（热加载 · commands · `/plugins reload`）~~ ✅ 最小  
 7. ~~**Usage+**（`/cost` cache + by-model breakdown · 本地可观测）~~ ✅ 最小  
 8. ~~**RC2**（Responses reasoning SSE · `/thinking` 显示开关）~~ ✅ 最小  
-9. **下一刀 P1 余量：** 经典 SSE 长连接 · CP/TP 余量  
+9. **下一刀 P1 余量：** CP/TP 余量 · J-D 余量  
 10. **后置：** 思考回灌 · Anthropic budget · OR6 WS · cache TTL · cached MC · T8 Ink · Electron · 插件市场  
 
 ---
@@ -171,7 +171,7 @@
 | MCP resources/prompts（stdio）+ meta 工具 + `/mcp` | ✅ |
 | MCP **list_changed 热刷新**（tools/resources/prompts） | ✅ |
 | MCP **transport 抽象 + Streamable HTTP** | ✅ 最小 |
-| MCP 经典 SSE 长连接（`type: sse`） | ⬜ |
+| MCP 经典 SSE 长连接（`type: sse`） | ✅ 最小 |
 | Plugins 本地加载 | ✅ 最小 |
 | Plugins 热加载 / commands（PL2） | ✅ 最小；市场 ⬜ |
 | Subagent 真 loop | ✅ |
@@ -223,7 +223,7 @@ K1–K2 + slash 回落 ✅；rule-creator 可选 ⬜。
 | 3.2b MCP resources/prompts + meta + `/mcp` | ✅ |
 | 3.2c MCP list_changed 热刷新 | ✅（stdio） |
 | 3.2d MCP Streamable HTTP + client 抽象 | ✅ 最小 |
-| 3.2e MCP 经典 SSE 长连接 | ⬜ |
+| 3.2e MCP 经典 SSE 长连接 | ✅ 最小 |
 | 3.3 Plugins 真加载 | ✅ 最小（本地）；PL2 热加载 ⬜ |
 | 3.4 Subagent | ✅ 见 M-Subagent |
 
@@ -405,7 +405,8 @@ flowchart TB
 | Usage 本地记账 | ✅ Usage+ 最小（cache + byModel + `/cost`） |
 | openai-responses HTTP SSE | ✅；WS ⬜ |
 | MCP stdio + resources/prompts + list_changed | ✅ |
-| MCP Streamable HTTP + `McpClient` 抽象 | ✅ 最小；经典 SSE 长连接 ⬜ |
+| MCP Streamable HTTP + `McpClient` 抽象 | ✅ 最小 |
+| MCP 经典 SSE 长连接（`type: sse`） | ✅ 最小 |
 | Plugins 本地最小 | ✅ |
 | Plugins 热加载 + commands（PL2） | ✅ 最小；市场 ⬜ |
 | Undo / 多模态 / 沙箱 | ⬜ 后置 |
@@ -421,7 +422,7 @@ flowchart TB
 | `config` | layout（rules/agents/skills…）· workspace 加载 |
 | `tools` | builtins（含 Edit）· Agent · apply_patch |
 | `skills` | 发现 · catalog · bundled |
-| `plugins` / `mcp` | 本地加载 · stdio/http host（resources/prompts/list_changed） |
+| `plugins` / `mcp` | 本地加载 · stdio/http/**sse** host（resources/prompts/list_changed） |
 | `cli` | banner · REPL · resume picker · `submitUserInput` |
 | `providers` | effort · usage · **promptCache** · openai-responses |
 
@@ -434,13 +435,13 @@ flowchart TB
 | A 交互 | 斜杠 · SL-polish · rules · skills · creators | ✅ |
 | B 成本 | C1–C5 | ✅；C6+ 后置 |
 | C 存盘 | JSONL A–D + **J-D T3**（默认 jsonl / migrate / meta / R1） | ✅ 主路径 |
-| D 扩展 | Subagent · MCP（stdio + HTTP 最小）· plugins PL1+PL2 最小 | ✅ 最小；**SSE 长连接 · 市场 ⬜** |
+| D 扩展 | Subagent · MCP（stdio + HTTP + **SSE 最小**）· plugins PL1+PL2 最小 | ✅ 最小；**市场 · OAuth ⬜** |
 | E TUI | T0–T7 | ✅；T8 ⬜ |
 | F GUI | Electron | ⬜ 后置 |
 | G 协议 | Responses HTTP | ✅；WS 后置 |
 | H 韧性 | 错误分类 + model 退避 + PTL | 🟡 最小（本刀） |
 
-**默认下一刀：** 见 **`docs/TODO.md` §7**（**P1 余量：经典 SSE / CP·TP**）。
+**默认下一刀：** 见 **`docs/TODO.md` §7**（**P1 余量：CP/TP · J-D**）。
 
 ---
 
@@ -511,12 +512,12 @@ flowchart TB
 | **M-Subagent** | 🟡 | S0–S7 + async/fork/侧链最小 |
 | **M-TUI** | 🟡 | T0–T7 ✅；T8 Ink ⬜ |
 | **M-Cost** | 🟡 | C1–C5 ✅；TTL/break 后置 |
-| **M3** | 🟡 | MCP stdio + list_changed + **HTTP 最小** + **PL2 热加载最小**；SSE 长连接 · 市场 ⬜ |
+| **M3** | 🟡 | MCP stdio + list_changed + **HTTP 最小** + **SSE 最小** + **PL2 热加载最小**；市场 ⬜ |
 | **M5** | 🟡 | 会话/CLI 可用；JSONL 主路径 T3 ✅ |
 | **Responses** | 🟡 | HTTP SSE ✅；WS ⬜ |
 | M4–M6 | ⬜ | Electron 与体验打磨 |
 
 **一句话：**  
 Headless **主路径可日用**，相对参考实现约 **40–55%**（文档不再写 ~70% 乐观数）。  
-**P0 切片** LR / TP / CP 日用均 🟡 最小；**MCP HTTP · PL2 · Usage+ · RC2 🟡 最小**；**下一刀：经典 SSE ·（或）CP/TP 余量**。  
+**P0 切片** LR / TP / CP 日用均 🟡 最小；**MCP HTTP+SSE · PL2 · Usage+ · RC2 🟡 最小**；**下一刀：CP/TP 余量**。  
 执行序 → **`docs/TODO.md`**。
