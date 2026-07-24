@@ -17,7 +17,20 @@ Headers 日志脱敏：**M-GEN-3 最小**（`redactMcpHeaders`）。
 
 ## 配置
 
-用户与项目分层（项目覆盖同名 server）：
+用户与项目分层（**后写覆盖**，M-GEN-8）：
+
+```
+user ~/.bolo/mcp.json
+  → project .bolo/mcp.json
+  → user plugins contributes.mcpServers
+  → project plugins contributes.mcpServers
+```
+
+- 同名 server：后层赢，并记 `mcp server "x" overridden: A → B`（进 `mcpConfigWarnings`）  
+- 每条 server 可带 `scope: user | project | plugin`（仅诊断，不进协议）  
+- API：`mergeMcpServerLayers` · `tagMcpServerScope`  
+
+用户与项目路径：
 
 - `~/.bolo/mcp.json`（或 `BOLO_CONFIG_DIR/mcp.json`）
 - `.bolo/mcp.json`
