@@ -164,9 +164,9 @@ P3  GUI / 打磨 / 后置
 
 若只开一刀：
 
-> **T4–T6**（流式工具行 / 权限 y/n）或 **J-C+**（jsonl 优先 resume / RS7 双格式列表）。
+> **RS8 美化 picker**、**jsonl 优先 resume**、或 **Electron M4 规划落地**（大块后置）。
 
-已齐：resume 列表、斜杠、BOLO 欢迎、rules、prompt cache、JSONL 双写、creators、Subagent（含 S7 `.bolo/agents`）、MCP、plugins、`--continue`、T3 状态行、jsonl messages 回退。
+已齐：resume 列表（含 RS7 双格式）、斜杠、BOLO 欢迎、T3–T6 CLI 事件/权限、rules、prompt cache、JSONL 双写+boundary+jsonl 回退 load、creators、Subagent S0–S7、MCP、plugins、`--continue`。
 
 ---
 
@@ -198,4 +198,4 @@ P3  GUI / 打磨 / 后置
 ---
 
 **一句话：**  
-日用 CLI 主路径（resume / slash / banner / rules / cache / JSONL 双写与 jsonl 回退 / Subagent S0–S7 / MCP）已齐；下一刀 **T4–T6 / J-C+**。
+日用 CLI 主路径（resume 列表含 RS7 / slash / BOLO TUI T0–T7 / rules / cache / JSONL 双写·boundary·回退 load / creators / Subagent S0–S7 / MCP / plugins / continue）已齐；下一刀 **RS8 美化 picker**、**jsonl 优先 resume**、或 **Electron M4**。
