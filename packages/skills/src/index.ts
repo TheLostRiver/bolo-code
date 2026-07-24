@@ -11,12 +11,39 @@
  *   - 默认只把「目录索引」进上下文（name + description + when_to_use）
  *   - 全文仅在模型调用 Skill 工具 / 用户显式 /skill 时加载
  *   - 禁止把所有全局 skill 正文无条件塞进 system（会爆 token）
+ *
+ * Frontmatter 契约：S-PORT-1 → `./frontmatter.ts`
  */
 
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import { fileURLToPath } from 'node:url'
+import {
+  parseSkillMarkdown,
+  SKILL_FRONTMATTER_ALIASES,
+  SKILL_FRONTMATTER_CANONICAL,
+  parseSkillFrontmatterFields,
+  parseMarkdownFrontmatter,
+  parseSkillBoolean,
+  normalizeSkillId,
+  type ParsedSkillFrontmatter,
+} from './frontmatter.ts'
+
+export type {
+  ParsedSkillFrontmatter,
+  SkillFrontmatterCanonical,
+} from './frontmatter.ts'
+
+export {
+  parseSkillMarkdown,
+  parseSkillFrontmatterFields,
+  parseMarkdownFrontmatter,
+  parseSkillBoolean,
+  normalizeSkillId,
+  SKILL_FRONTMATTER_ALIASES,
+  SKILL_FRONTMATTER_CANONICAL,
+}
 
 export type SkillMeta = {
   id: string
@@ -25,7 +52,7 @@ export type SkillMeta = {
   /** when_to_use：给模型决定是否调用 */
   whenToUse?: string
   path: string
-  /** 是否允许模型通过 Skill 工具调用；false 则仅用户 slash */
+  /** 是否允许模型通过 Skill 工具调用；true 则仅用户 slash（若 userInvocable） */
   disableModelInvocation?: boolean
   /** 是否允许用户 /skill 调用 */
   userInvocable?: boolean
@@ -49,6 +76,7 @@ export type SkillCatalogEntry = {
   source: SkillSource
   path: string
   disableModelInvocation: boolean
+  userInvocable: boolean
 }
 
 /**
@@ -70,58 +98,30 @@ export function describeSkillLayout(userRoot?: string) {
   }
 }
 
-function parseBoolean(v: string | undefined, defaultValue: boolean): boolean {
-  if (v === undefined || v === '') return defaultValue
-  const n = v.toLowerCase().trim()
-  if (['false', '0', 'no', 'off'].includes(n)) return false
-  if (['true', '1', 'yes', 'on'].includes(n)) return true
-  return defaultValue
-}
-
-function parseFrontmatter(raw: string): {
-  frontmatter: Record<string, string>
-  body: string
-} {
-  if (!raw.startsWith('---')) {
-    return { frontmatter: {}, body: raw }
-  }
-  const end = raw.indexOf('\n---', 3)
-  if (end < 0) return { frontmatter: {}, body: raw }
-  const block = raw.slice(3, end).trim()
-  const body = raw.slice(end + 4).replace(/^\r?\n/, '')
-  const frontmatter: Record<string, string> = {}
-  for (const line of block.split(/\r?\n/)) {
-    const m = line.match(/^([A-Za-z0-9_-]+)\s*:\s*(.*)$/)
-    if (m) frontmatter[m[1]] = m[2].replace(/^["']|["']$/g, '').trim()
-  }
-  return { frontmatter, body }
-}
-
 export async function loadSkillFile(
   skillMdPath: string,
   source: SkillSource,
 ): Promise<LoadedSkill | null> {
   try {
     const raw = await fs.readFile(skillMdPath, 'utf8')
-    const { frontmatter, body } = parseFrontmatter(raw)
-    const id = frontmatter.id || path.basename(path.dirname(skillMdPath))
-    const name = frontmatter.name || id
+    const fallbackId = path.basename(path.dirname(skillMdPath))
+    const { body, fields } = parseSkillMarkdown(raw, { fallbackId })
+    const id = fields.id || normalizeSkillId(fallbackId)
+    if (!id) return null
+    const name = fields.name || id
     return {
       meta: {
         id,
         name,
-        description: frontmatter.description,
-        whenToUse: frontmatter.when_to_use || frontmatter.whenToUse,
+        description: fields.description,
+        whenToUse: fields.whenToUse,
         path: skillMdPath,
-        disableModelInvocation: parseBoolean(
-          frontmatter['disable-model-invocation'],
-          false,
-        ),
-        userInvocable: parseBoolean(frontmatter['user-invocable'], true),
+        disableModelInvocation: fields.disableModelInvocation,
+        userInvocable: fields.userInvocable,
       },
       source,
       body,
-      frontmatter,
+      frontmatter: fields.raw,
     }
   } catch {
     return null
@@ -208,6 +208,7 @@ export function toCatalogEntry(skill: LoadedSkill): SkillCatalogEntry {
     source: skill.source,
     path: skill.meta.path,
     disableModelInvocation: skill.meta.disableModelInvocation === true,
+    userInvocable: skill.meta.userInvocable !== false,
   }
 }
 
@@ -226,6 +227,8 @@ function clip(s: string, max = MAX_LISTING_DESC_CHARS): string {
 /**
  * 仅索引进上下文（给模型发现用，不是全文）
  * 对照 HC skill_listing + SkillTool prompt 的「目录预算」思路
+ *
+ * disable-model-invocation: 不进模型 catalog（仍可 /skills 列出，见 slash）。
  */
 export function formatSkillCatalog(
   skills: LoadedSkill[] | SkillCatalogEntry[],
@@ -234,12 +237,10 @@ export function formatSkillCatalog(
   const entries = skills.map((s) =>
     'meta' in s ? toCatalogEntry(s as LoadedSkill) : (s as SkillCatalogEntry),
   )
-  // 模型可调用的才进 Skill 工具目录
   const invocable = entries.filter((e) => !e.disableModelInvocation)
   if (!invocable.length) return ''
 
   const ctx = options?.contextWindowTokens ?? 128_000
-  // ~1% 上下文字符预算（chars ≈ tokens * 4）
   const budget =
     options?.maxChars ??
     Math.min(12_000, Math.floor(ctx * 4 * 0.01) || 8_000)
@@ -251,17 +252,20 @@ export function formatSkillCatalog(
   ]
 
   let used = lines.join('\n').length
+  let listed = 0
   for (const e of invocable) {
     const descParts = [e.description, e.whenToUse].filter(Boolean)
     const desc = clip(descParts.join(' — ') || '(no description)')
     const line = `- ${e.id}: ${desc} [${e.source}]`
     if (used + line.length + 1 > budget) {
+      const omitted = invocable.length - listed
       lines.push(
-        `- … (${invocable.length - lines.length + 3} more skills omitted; use Skill tool with exact id if known)`,
+        `- … (${omitted} more skills omitted; use Skill tool with exact id if known)`,
       )
       break
     }
     lines.push(line)
+    listed += 1
     used += line.length + 1
   }
 

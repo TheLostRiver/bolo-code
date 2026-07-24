@@ -140,8 +140,8 @@ PL-SPEC 出口 ────────► IMPORT-*（可选）
 
 | ID | 任务 | 验收 | 状态 |
 |----|------|------|------|
-| **S-PORT-0** | 本文落盘；`TODO.md` / `ROADMAP.md` / `SKILLS.md` 互链 | 链接互通 | ✅ 本刀 |
-| **S-PORT-1** | **Frontmatter 契约表**（规范字段 + 别名） | `name`/`id`/`description`/`when_to_use`↔`whenToUse`；未知键忽略；单测 | ⬜ |
+| **S-PORT-0** | 本文落盘；`TODO.md` / `ROADMAP.md` / `SKILLS.md` 互链 | 链接互通 | ✅ |
+| **S-PORT-1** | **Frontmatter 契约表**（规范字段 + 别名） | `name`/`id`/`description`/`when_to_use`↔`whenToUse` 等；未知键忽略；`frontmatter.ts` + `test-skill-catalog` | ✅ 最小 |
 | **S-PORT-2** | **发现根**：Bolo 一等 + **可选旁路** | 默认 bundled→user→project→plugin；旁路默认 **off** | ⬜ |
 | **S-PORT-3** | **覆盖序与同 id** 写死 | 后源覆盖前源；`/skills` 显示 source；测 | ⬜ |
 | **S-PORT-4** | **`disable-model-invocation` 钉死** | catalog 可列；Skill 工具拒绝；`user-invocable` slash 仍可 | ⬜ |
@@ -229,7 +229,7 @@ PL-SPEC 出口 ────────► IMPORT-*（可选）
 
 | 序 | 刀 | 切片 |
 |----|----|------|
-| 1 | 文档 + 契约 | ~~S-PORT-0~~ ✅ → **S-PORT-1** + S-PORT-8 起步 |
+| 1 | 文档 + 契约 | ~~S-PORT-0~~ ✅ · ~~S-PORT-1~~ ✅ → **S-PORT-3/4/8 加固** 或 **S-PORT-2** |
 | 2 | Skill 行为 | S-PORT-3 · S-PORT-4 · S-PORT-5 |
 | 3 | Skill 发现/creator | S-PORT-2 · S-PORT-6 · S-PORT-7 |
 | 4 | MCP 诊断卫生 | M-GEN-0 · M-GEN-1 · M-GEN-2 · M-GEN-3 |
@@ -293,4 +293,4 @@ PL-SPEC 出口 ────────► IMPORT-*（可选）
 
 > **Skill 先做成可移植内容标准；MCP 做成稳、可诊、无秘钥泄漏的协议客户端；插件始终以 `bolo.*` 为一等规范。官方市场与外来完整运行时兼容从长计议，且永不绑 Claude/Codex 商店。**
 
-**默认下一刀：** **S-PORT-1**（frontmatter 契约表 + 测试）→ 接 S-PORT-8。
+**默认下一刀：** **S-PORT-3 + S-PORT-4**（覆盖序与 disable/user-invocable 行为钉死 + 测）或 **S-PORT-2**（可选旁路根，默认 off）。
