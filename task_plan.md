@@ -1,15 +1,16 @@
 # Task Plan: Bolo Code
 
 ## Goal
-Skip Electron; finish remaining non-GUI TODO items (picker polish, jsonl-first, apply_patch, sidechain).
+兼容 OpenAI **Responses API 原生直连**；保留 Chat Completions。
 
 ## Next Step
-- usage 本地累计 / fork-async 可选
-- 或 polish docs ROADMAP 水位
+OR1–OR5：`openaiResponses.ts` + fromEnv kind + 单测（SSE fixture）。  
+参考：OpenAI 文档 + Codex `codex-api/src/endpoint/responses.rs` + `sse/responses.rs`（仅此）。
 
 ## Current Phase
-apply_patch + jsonl-first + RS8 + sidechain — shipping
+docs: Responses plan — implement next
 
 ## Notes
 - Electron 后置
-- 执行勾选：docs/TODO.md
+- 不通读 Codex 全仓
+- 不把 Responses 请求转成 Chat Completions 再发

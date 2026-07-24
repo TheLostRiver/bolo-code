@@ -164,9 +164,10 @@ P3  GUI / 打磨 / 后置
 
 若只开一刀：
 
-> **T8 完整 Ink（可选）**、**fork/async subagent**；**usage 本地累计** ✅；**Electron 明确后置**。
+> **OpenAI Responses API 直连**（`docs/PROVIDERS.md` OR1–OR5；定点参考 Codex `codex-api` responses SSE，禁止通读全仓）。  
+> **Electron / 完整 Ink T8** 后置。
 
-已齐：resume 列表（RS7/RS8）、jsonl 优先 messages、斜杠、BOLO TUI T0–T7、rules、prompt cache、JSONL 双写+boundary、creators、Subagent S0–S7+侧链、MCP、plugins、`--continue`、真 apply_patch 最小。
+已齐：resume / slash / BOLO TUI / rules / cache / JSONL / creators / Subagent / MCP / plugins / usage+effort / always-allow / apply_patch 等日用 CLI 主路径。
 
 ---
 
@@ -183,6 +184,7 @@ P3  GUI / 打磨 / 后置
 | K* | M-Creators |
 | S* | M-Subagent |
 | MCP* | M3.2 |
+| **OR*** | **OpenAI Responses 直连**（`PROVIDERS.md`） |
 | M4 | Electron |
 
 ---
@@ -198,4 +200,4 @@ P3  GUI / 打磨 / 后置
 ---
 
 **一句话：**  
-日用 CLI 主路径（slash 含 **`/doctor`·`/status` 本地诊断** / usage+`/cost` / Subagent / MCP / plugins / BOLO TUI）已齐；**Electron 后置**；下一刀可选 **fork/async subagent** 或 T8 Ink。
+日用 CLI 主路径已齐；**Electron 后置**；下一协议刀：**OpenAI Responses 原生直连**（保留 Chat Completions；Codex 只读 `codex-api` responses 定点，不通读全仓）。

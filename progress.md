@@ -1,15 +1,12 @@
 # Progress Log
 
-## Session: continue without Electron
+## Session: OpenAI Responses 决策
 
-- Fixed/landed WIP: real apply_patch, JSONL-first messages on load, subagent sidechain transcript
-- RS8: richer resume picker (table + id/filter/q); docs TODO sync
-- Skipped Electron per user
+- 确认现状：仅 Chat Completions（`openai-compatible`），无 Responses
+- 产品目标：增加 **Responses 原生直连** 适配器（不伪装成 Completions）
+- Codex（本地树）：**定点**读 `codex-rs/codex-api` 的 responses HTTP+SSE；禁止通读全仓
+- 文档：`PROVIDERS.md` OR0–OR6；`TODO.md` 下一刀指向 OR*
 
-## main tip (this batch)
+## Prior main tip
 
-See git log after push — apply_patch / jsonl-first / sidechain / RS8 picker
-
-## Prior
-
-P0–P2 main path already on main (resume list, slash, BOLO TUI, rules, cache, JSONL dual-write, creators, subagent, MCP, plugins, continue, T4–T6, agents dir, …)
+见 git log（usage/effort/fork/always-allow 等已在 main）
