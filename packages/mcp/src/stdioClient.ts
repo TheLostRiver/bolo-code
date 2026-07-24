@@ -1,6 +1,6 @@
 /**
- * MCP stdio JSON-RPC client — Content-Length framing（对照 MCP SDK / HC mcp client）
- * 无遥测；最小能力：initialize → tools/list → tools/call
+ * MCP stdio JSON-RPC client — Content-Length framing（对照 MCP SDK / HC mcp client 语义）
+ * 无遥测；能力：initialize → tools/list|call · resources/list|read · prompts/list|get
  */
 
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
@@ -37,6 +37,55 @@ export type McpToolDef = {
 export type McpCallResult = {
   content?: Array<{ type?: string; text?: string; [k: string]: unknown }>
   isError?: boolean
+  [k: string]: unknown
+}
+
+/** server capabilities（initialize result；对照 HC client.capabilities） */
+export type McpServerCapabilities = {
+  tools?: Record<string, unknown>
+  resources?: Record<string, unknown>
+  prompts?: Record<string, unknown>
+  [k: string]: unknown
+}
+
+export type McpResourceDef = {
+  uri: string
+  name?: string
+  description?: string
+  mimeType?: string
+  [k: string]: unknown
+}
+
+export type McpResourceContents = {
+  uri: string
+  mimeType?: string
+  text?: string
+  blob?: string
+  [k: string]: unknown
+}
+
+export type McpPromptDef = {
+  name: string
+  description?: string
+  arguments?: Array<{
+    name: string
+    description?: string
+    required?: boolean
+  }>
+  [k: string]: unknown
+}
+
+export type McpPromptMessage = {
+  role?: string
+  content?:
+    | { type?: string; text?: string; [k: string]: unknown }
+    | Array<{ type?: string; text?: string; [k: string]: unknown }>
+  [k: string]: unknown
+}
+
+export type McpGetPromptResult = {
+  description?: string
+  messages?: McpPromptMessage[]
   [k: string]: unknown
 }
 
@@ -120,6 +169,8 @@ export class McpStdioClient {
   private closed = false
   private readonly timeoutMs: number
   private readonly opts: StdioClientOptions
+  /** initialize 返回的 server capabilities（可能为空对象） */
+  private _capabilities: McpServerCapabilities = {}
 
   constructor(opts: StdioClientOptions) {
     this.opts = opts
@@ -129,6 +180,22 @@ export class McpStdioClient {
 
   get isConnected(): boolean {
     return this.proc !== null && !this.closed
+  }
+
+  get capabilities(): McpServerCapabilities {
+    return this._capabilities
+  }
+
+  get supportsTools(): boolean {
+    return this._capabilities.tools != null
+  }
+
+  get supportsResources(): boolean {
+    return this._capabilities.resources != null
+  }
+
+  get supportsPrompts(): boolean {
+    return this._capabilities.prompts != null
   }
 
   async connect(): Promise<void> {
@@ -273,15 +340,23 @@ export class McpStdioClient {
   }
 
   private async initialize(): Promise<void> {
-    await this.request('initialize', {
+    const result = (await this.request('initialize', {
       protocolVersion: PROTOCOL_VERSION,
-      capabilities: {},
+      capabilities: {
+        // 声明我们能处理的面（最小）；server 用 result.capabilities 宣告自身
+        roots: {},
+      },
       clientInfo: { name: 'bolo', version: '0.0.1' },
-    })
+    })) as { capabilities?: McpServerCapabilities }
+    this._capabilities =
+      result?.capabilities && typeof result.capabilities === 'object'
+        ? result.capabilities
+        : {}
     this.notify('notifications/initialized')
   }
 
   async listTools(): Promise<McpToolDef[]> {
+    // 无 tools capability 时仍尝试 list（部分 server 未声明但可 list）
     const result = (await this.request('tools/list', {})) as {
       tools?: McpToolDef[]
     }
@@ -296,6 +371,58 @@ export class McpStdioClient {
       name,
       arguments: args,
     })) as McpCallResult
+    return result ?? {}
+  }
+
+  async listResources(): Promise<McpResourceDef[]> {
+    if (!this.supportsResources) return []
+    try {
+      const result = (await this.request('resources/list', {})) as {
+        resources?: McpResourceDef[]
+      }
+      return Array.isArray(result?.resources) ? result.resources : []
+    } catch {
+      return []
+    }
+  }
+
+  async readResource(uri: string): Promise<McpResourceContents[]> {
+    if (!this.supportsResources) {
+      throw new Error(
+        `MCP server "${this.serverName}" does not support resources`,
+      )
+    }
+    const result = (await this.request('resources/read', { uri })) as {
+      contents?: McpResourceContents[]
+    }
+    return Array.isArray(result?.contents) ? result.contents : []
+  }
+
+  async listPrompts(): Promise<McpPromptDef[]> {
+    if (!this.supportsPrompts) return []
+    try {
+      const result = (await this.request('prompts/list', {})) as {
+        prompts?: McpPromptDef[]
+      }
+      return Array.isArray(result?.prompts) ? result.prompts : []
+    } catch {
+      return []
+    }
+  }
+
+  async getPrompt(
+    name: string,
+    args: Record<string, string> = {},
+  ): Promise<McpGetPromptResult> {
+    if (!this.supportsPrompts) {
+      throw new Error(
+        `MCP server "${this.serverName}" does not support prompts`,
+      )
+    }
+    const result = (await this.request('prompts/get', {
+      name,
+      arguments: args,
+    })) as McpGetPromptResult
     return result ?? {}
   }
 
@@ -344,4 +471,52 @@ export function formatMcpCallOutput(result: McpCallResult): string {
     if (parts.length) return parts.join('\n')
   }
   return JSON.stringify(result)
+}
+
+/** resources/read 内容 → 模型可读文本（blob 只记 mime/长度，不灌 base64） */
+export function formatMcpResourceContents(
+  contents: McpResourceContents[],
+): string {
+  if (!contents.length) return '(empty resource)'
+  const parts = contents.map((c) => {
+    if (typeof c.text === 'string') {
+      const head = c.mimeType ? `[${c.uri} ${c.mimeType}]\n` : `[${c.uri}]\n`
+      return head + c.text
+    }
+    if (typeof c.blob === 'string') {
+      return `[${c.uri}] binary blob (${c.mimeType ?? 'application/octet-stream'}, base64 len=${c.blob.length}) — not inlined`
+    }
+    return JSON.stringify(c)
+  })
+  return parts.join('\n\n')
+}
+
+/** prompts/get messages → 可读文本 */
+export function formatMcpPromptResult(result: McpGetPromptResult): string {
+  const lines: string[] = []
+  if (result.description) lines.push(result.description)
+  const messages = Array.isArray(result.messages) ? result.messages : []
+  for (const m of messages) {
+    const role = m.role ?? 'message'
+    const content = m.content
+    let text = ''
+    if (typeof content === 'string') text = content
+    else if (Array.isArray(content)) {
+      text = content
+        .map((c) =>
+          c && typeof c === 'object' && typeof c.text === 'string'
+            ? c.text
+            : JSON.stringify(c),
+        )
+        .join('\n')
+    } else if (content && typeof content === 'object') {
+      text =
+        typeof (content as { text?: string }).text === 'string'
+          ? String((content as { text: string }).text)
+          : JSON.stringify(content)
+    }
+    lines.push(`[${role}] ${text}`)
+  }
+  if (!lines.length) return JSON.stringify(result)
+  return lines.join('\n')
 }

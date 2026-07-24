@@ -66,6 +66,22 @@ export type SlashSession = {
   mcpConnections?: Array<{
     name: string
     tools?: Array<{ name: string; description?: string }>
+    resources?: Array<{
+      uri: string
+      name?: string
+      description?: string
+      mimeType?: string
+    }>
+    prompts?: Array<{
+      name: string
+      description?: string
+      arguments?: Array<{ name: string; required?: boolean }>
+    }>
+    capabilities?: {
+      tools?: boolean
+      resources?: boolean
+      prompts?: boolean
+    }
   }>
   /** workspace 插件；/plugins · /doctor */
   plugins?: Array<{
@@ -432,12 +448,72 @@ function cmdMcp(session: SlashSession, args: string): SlashDispatchResult {
     }
     return { ok: true, message: lines.join('\n') }
   }
+  if (sub === 'resources' || sub.startsWith('resources ')) {
+    const lines: string[] = [`mcp resources (${conns.length} server(s)):`]
+    let any = false
+    for (const s of conns) {
+      const resources = s.resources ?? []
+      if (!resources.length) {
+        const cap = s.capabilities?.resources ? 'none listed' : 'not supported'
+        lines.push(`  ${s.name}: (${cap})`)
+        continue
+      }
+      any = true
+      for (const r of resources) {
+        const label = r.name ? `${r.name} ` : ''
+        const mime = r.mimeType ? ` [${r.mimeType}]` : ''
+        lines.push(`  ${s.name}  ${label}${r.uri}${mime}`)
+      }
+    }
+    if (!any) {
+      lines.push(
+        'Tip: servers without resources still may expose tools; use ListMcpResources tool when connected.',
+      )
+    } else {
+      lines.push('Read via tool ReadMcpResource { server, uri }.')
+    }
+    return { ok: true, message: lines.join('\n') }
+  }
+  if (sub === 'prompts' || sub.startsWith('prompts ')) {
+    const lines: string[] = [`mcp prompts (${conns.length} server(s)):`]
+    let any = false
+    for (const s of conns) {
+      const prompts = s.prompts ?? []
+      if (!prompts.length) {
+        const cap = s.capabilities?.prompts ? 'none listed' : 'not supported'
+        lines.push(`  ${s.name}: (${cap})`)
+        continue
+      }
+      any = true
+      for (const p of prompts) {
+        const desc = p.description ? ` — ${p.description.slice(0, 50)}` : ''
+        const argsHint =
+          p.arguments?.length
+            ? ` (args: ${p.arguments.map((a) => a.name).join(', ')})`
+            : ''
+        lines.push(`  ${s.name}/${p.name}${argsHint}${desc}`)
+      }
+    }
+    if (any) {
+      lines.push('Fetch via tool GetMcpPrompt { server, name, arguments? }.')
+    }
+    return { ok: true, message: lines.join('\n') }
+  }
   const lines = [`mcp servers (${conns.length}):`]
   for (const s of conns) {
     const n = s.tools?.length ?? 0
-    lines.push(`  ${s.name}  tools=${n}`)
+    const nr = s.resources?.length ?? 0
+    const np = s.prompts?.length ?? 0
+    const caps: string[] = []
+    if (s.capabilities?.tools || n > 0) caps.push('tools')
+    if (s.capabilities?.resources) caps.push('resources')
+    if (s.capabilities?.prompts) caps.push('prompts')
+    const capStr = caps.length ? caps.join('+') : 'unknown'
+    lines.push(`  ${s.name}  tools=${n} resources=${nr} prompts=${np}  [${capStr}]`)
   }
-  lines.push('Use /mcp tools for full tool names (mcp__server__tool).')
+  lines.push(
+    'Use /mcp tools | /mcp resources | /mcp prompts for details.',
+  )
   return { ok: true, message: lines.join('\n') }
 }
 
@@ -957,8 +1033,8 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
   },
   {
     name: 'mcp',
-    summary: 'List connected MCP servers or tools',
-    usage: '[tools]',
+    summary: 'List connected MCP servers, tools, resources, or prompts',
+    usage: '[tools|resources|prompts]',
     group: 'extensions',
     run: cmdMcp,
   },

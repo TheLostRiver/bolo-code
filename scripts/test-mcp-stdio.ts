@@ -1,5 +1,5 @@
 /**
- * MCP stdio 真连接测试 — mock echo server list + call
+ * MCP stdio 真连接测试 — tools + resources + prompts（MCP2 部分）
  * 运行：npx tsx scripts/test-mcp-stdio.ts
  */
 
@@ -19,6 +19,7 @@ import {
 import {
   createSessionFromWorkspace,
   closeSessionMcp,
+  dispatchSlashCommand,
 } from '../packages/core/src/index.ts'
 import { writeJsonFile } from '../packages/config/src/index.ts'
 
@@ -59,6 +60,10 @@ async function testStdioListCall() {
     timeoutMs: 10_000,
   })
   await client.connect()
+  assert(client.supportsTools, 'supports tools capability')
+  assert(client.supportsResources, 'supports resources capability')
+  assert(client.supportsPrompts, 'supports prompts capability')
+
   const tools = await client.listTools()
   assert(tools.some((t) => t.name === 'echo'), 'listTools has echo')
   const call = await client.callTool('echo', { text: 'hello' })
@@ -67,6 +72,24 @@ async function testStdioListCall() {
       ? String((call.content[0] as { text: string }).text)
       : ''
   assert(text === 'echo:hello', `call echo got ${text}`)
+
+  const resources = await client.listResources()
+  assert(
+    resources.some((r) => r.uri === 'bolo://echo/greeting'),
+    'listResources has greeting',
+  )
+  const contents = await client.readResource('bolo://echo/greeting')
+  assert(
+    contents.some((c) => c.text === 'hello-from-resource'),
+    'readResource greeting text',
+  )
+
+  const prompts = await client.listPrompts()
+  assert(prompts.some((p) => p.name === 'greet'), 'listPrompts has greet')
+  const prompt = await client.getPrompt('greet', { who: 'bolo' })
+  const msgText = JSON.stringify(prompt)
+  assert(msgText.includes('bolo'), `getPrompt includes who: ${msgText}`)
+
   await client.close()
 }
 
@@ -91,9 +114,49 @@ async function testConnectHost() {
     result.tools.some((t) => t.name === mcpToolName('echo', 'echo')),
     'registered mcp__echo__echo',
   )
+  assert(
+    result.tools.some((t) => t.name === 'ListMcpResources'),
+    'meta ListMcpResources',
+  )
+  assert(
+    result.tools.some((t) => t.name === 'ReadMcpResource'),
+    'meta ReadMcpResource',
+  )
+  assert(result.tools.some((t) => t.name === 'GetMcpPrompt'), 'meta GetMcpPrompt')
+
+  const echoConn = result.servers.find((s) => s.name === 'echo')
+  assert(echoConn?.capabilities.resources === true, 'echo resources cap')
+  assert(
+    echoConn?.resources.some((r) => r.uri.includes('greeting')),
+    'echo resources listed',
+  )
+  assert(echoConn?.prompts.some((p) => p.name === 'greet'), 'echo prompts listed')
+
   const tool = result.tools.find((t) => t.name === 'mcp__echo__echo')!
   const out = await tool.call({ text: 'host' }, { cwd: process.cwd() })
   assert(out.ok && out.output.includes('echo:host'), `host call ${out.output}`)
+
+  const listRes = result.tools.find((t) => t.name === 'ListMcpResources')!
+  const listed = await listRes.call({}, { cwd: process.cwd() })
+  assert(
+    listed.ok && listed.output.includes('bolo://echo/greeting'),
+    `list res ${listed.output}`,
+  )
+
+  const readRes = result.tools.find((t) => t.name === 'ReadMcpResource')!
+  const read = await readRes.call(
+    { server: 'echo', uri: 'bolo://echo/greeting' },
+    { cwd: process.cwd() },
+  )
+  assert(read.ok && read.output.includes('hello-from-resource'), `read ${read.output}`)
+
+  const getPrompt = result.tools.find((t) => t.name === 'GetMcpPrompt')!
+  const gp = await getPrompt.call(
+    { server: 'echo', name: 'greet', arguments: { who: 'host' } },
+    { cwd: process.cwd() },
+  )
+  assert(gp.ok && gp.output.includes('host'), `prompt ${gp.output}`)
+
   await closeMcpConnections(result.servers)
 }
 
@@ -128,9 +191,30 @@ async function testSessionWiring() {
     session.tools?.some((t) => t.name === 'mcp__echo__echo'),
     'session has mcp tool',
   )
+  assert(
+    session.tools?.some((t) => t.name === 'ListMcpResources'),
+    'session has ListMcpResources',
+  )
   const t = session.tools!.find((x) => x.name === 'mcp__echo__echo')!
   const r = await t.call({ text: 'sess' }, { cwd: projectCwd })
   assert(r.ok && r.output.includes('echo:sess'), 'session tool call')
+
+  const slashServers = await dispatchSlashCommand(session, 'mcp', '')
+  assert(
+    slashServers.ok && slashServers.message.includes('resources='),
+    `/mcp: ${slashServers.message}`,
+  )
+  const slashRes = await dispatchSlashCommand(session, 'mcp', 'resources')
+  assert(
+    slashRes.ok && slashRes.message.includes('bolo://echo/greeting'),
+    `/mcp resources: ${slashRes.message}`,
+  )
+  const slashPrompts = await dispatchSlashCommand(session, 'mcp', 'prompts')
+  assert(
+    slashPrompts.ok && slashPrompts.message.includes('greet'),
+    `/mcp prompts: ${slashPrompts.message}`,
+  )
+
   await closeSessionMcp(session)
 }
 

@@ -1,6 +1,9 @@
 /**
- * 极简 MCP stdio echo server（测试用）
- * 支持 Content-Length 帧：initialize / tools/list / tools/call(echo)
+ * 极简 MCP stdio fixture（测试用）
+ * 支持 Content-Length 帧：
+ *   initialize / tools/list / tools/call(echo)
+ *   resources/list / resources/read
+ *   prompts/list / prompts/get
  * 运行：node scripts/fixtures/mcp-echo-server.mjs
  */
 
@@ -11,6 +14,25 @@ function writeMessage(msg) {
   process.stdout.write(body)
 }
 
+const RESOURCES = [
+  {
+    uri: 'bolo://echo/greeting',
+    name: 'greeting',
+    description: 'A short greeting text',
+    mimeType: 'text/plain',
+  },
+]
+
+const PROMPTS = [
+  {
+    name: 'greet',
+    description: 'Greet someone by name',
+    arguments: [
+      { name: 'who', description: 'Name to greet', required: false },
+    ],
+  },
+]
+
 function handleRequest(msg) {
   const { id, method, params } = msg
   if (method === 'initialize') {
@@ -19,8 +41,12 @@ function handleRequest(msg) {
       id,
       result: {
         protocolVersion: '2024-11-05',
-        capabilities: { tools: {} },
-        serverInfo: { name: 'bolo-echo', version: '0.0.1' },
+        capabilities: {
+          tools: {},
+          resources: {},
+          prompts: {},
+        },
+        serverInfo: { name: 'bolo-echo', version: '0.0.2' },
       },
     })
     return
@@ -72,6 +98,74 @@ function handleRequest(msg) {
     })
     return
   }
+  if (method === 'resources/list') {
+    writeMessage({
+      jsonrpc: '2.0',
+      id,
+      result: { resources: RESOURCES },
+    })
+    return
+  }
+  if (method === 'resources/read') {
+    const uri = params?.uri
+    if (uri !== 'bolo://echo/greeting') {
+      writeMessage({
+        jsonrpc: '2.0',
+        id,
+        error: { code: -32002, message: `Resource not found: ${uri}` },
+      })
+      return
+    }
+    writeMessage({
+      jsonrpc: '2.0',
+      id,
+      result: {
+        contents: [
+          {
+            uri,
+            mimeType: 'text/plain',
+            text: 'hello-from-resource',
+          },
+        ],
+      },
+    })
+    return
+  }
+  if (method === 'prompts/list') {
+    writeMessage({
+      jsonrpc: '2.0',
+      id,
+      result: { prompts: PROMPTS },
+    })
+    return
+  }
+  if (method === 'prompts/get') {
+    const name = params?.name
+    const args = params?.arguments ?? {}
+    if (name !== 'greet') {
+      writeMessage({
+        jsonrpc: '2.0',
+        id,
+        error: { code: -32602, message: `Unknown prompt: ${name}` },
+      })
+      return
+    }
+    const who = typeof args.who === 'string' && args.who ? args.who : 'world'
+    writeMessage({
+      jsonrpc: '2.0',
+      id,
+      result: {
+        description: 'Greet prompt',
+        messages: [
+          {
+            role: 'user',
+            content: { type: 'text', text: `Please greet ${who}.` },
+          },
+        ],
+      },
+    })
+    return
+  }
   if (id !== undefined) {
     writeMessage({
       jsonrpc: '2.0',
@@ -118,6 +212,3 @@ function onChunk(chunk) {
 
 process.stdin.on('data', onChunk)
 process.stdin.on('end', () => process.exit(0))
-
-// 也支持 readline 纯行模式（若上游只写 NDJSON）
-// 主路径走 data 缓冲即可

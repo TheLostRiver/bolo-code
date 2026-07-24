@@ -132,9 +132,10 @@ idle
 
 ### 6.2 MCP
 
-- 传输：stdio / SSE（后续 HTTP）
-- 能力：tools、resources、prompts（按优先级落地 tools）
-- 命名：`mcp__<server>__<tool>`，PermissionRequest / PreToolUse matcher 可匹配
+- 传输：stdio ✅；SSE / HTTP ⬜
+- 能力：tools ✅；resources / prompts ✅（stdio + meta 工具）；list_changed 热刷新 ⬜
+- 命名：远端 `mcp__<server>__<tool>`；meta：`ListMcpResources` / `ReadMcpResource` / `GetMcpPrompt`
+- PermissionRequest / PreToolUse matcher 可匹配 `mcp__*`
 
 ### 6.3 Hooks（详见 [HOOKS.md](./HOOKS.md)）
 
