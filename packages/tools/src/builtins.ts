@@ -11,6 +11,7 @@ import {
   formatSkillBodyForInjection,
   type LoadedSkill,
 } from '../../skills/src/index.ts'
+import { applyPatchToCwd } from './applyPatch.ts'
 import {
   buildTool,
   type BoloTool,
@@ -194,20 +195,53 @@ export function createWriteTool(): BoloTool {
 export function createApplyPatchTool(): BoloTool {
   return buildTool({
     name: 'apply_patch',
-    description: 'Write file content (simplified patch: path + content)',
+    description:
+      'Apply a minimal patch under cwd. Prefer *** Begin Patch with *** Add/Update/Delete File, or a simple unified diff. Input: { patch } (or legacy path+content full write).',
     requiresPermission: true,
     isConcurrencySafe: () => false,
     isReadOnly: () => false,
     inputJSONSchema: {
       type: 'object',
       properties: {
+        patch: {
+          type: 'string',
+          description:
+            'Patch text: *** Begin Patch ... *** End Patch, or unified ---/+++/@@ hunks',
+        },
+        // legacy Write-style full replace (kept for older prompts)
         path: { type: 'string' },
         content: { type: 'string' },
       },
-      required: ['path', 'content'],
     },
     async call(input, ctx) {
-      return createWriteTool().call(input, ctx)
+      try {
+        const patch = input.patch != null ? String(input.patch) : ''
+        if (patch.trim()) {
+          const result = await applyPatchToCwd(ctx.cwd, patch)
+          return { ok: true, output: result.output }
+        }
+        // legacy: full-file write via path + content
+        const filePath = input.path != null ? String(input.path) : ''
+        if (filePath && input.content != null) {
+          const p = resolveSafe(ctx.cwd, filePath)
+          await fs.mkdir(path.dirname(p), { recursive: true })
+          await fs.writeFile(p, String(input.content), 'utf8')
+          return { ok: true, output: `wrote ${filePath}` }
+        }
+        return {
+          ok: false,
+          isError: true,
+          output: 'apply_patch: provide `patch` text (or legacy path+content)',
+          errorCode: 'invalid_input',
+        }
+      } catch (e) {
+        return {
+          ok: false,
+          isError: true,
+          output: e instanceof Error ? e.message : String(e),
+          errorCode: 'apply_patch_failed',
+        }
+      }
     },
   })
 }

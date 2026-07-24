@@ -34,6 +34,15 @@ export {
 } from './builtins.ts'
 
 export {
+  applyPatchToCwd,
+  parseApplyPatch,
+  resolveSafe,
+  type ApplyPatchResult,
+  type PatchOp,
+  type PatchHunk,
+} from './applyPatch.ts'
+
+export {
   toolsToOpenAI,
   toolsToAnthropic,
   type ToolLike,

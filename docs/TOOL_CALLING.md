@@ -16,6 +16,7 @@
 | `partitionToolCalls` | 只读批并发、写串行 |
 | Glob / Grep 真实现 | `createGlobTool` / `createGrepTool` |
 | Skill 按需 | `Skill` 工具 + catalog |
+| apply_patch | 真补丁：`*** Begin Patch` / Add|Update|Delete File，或简易 unified diff；`resolveSafe` 不逃出 cwd |
 
 ## 2. 管道
 

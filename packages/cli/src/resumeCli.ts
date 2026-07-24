@@ -133,18 +133,91 @@ export function formatSessionSummary(s: SessionSummary): string {
   return lines.join('\n')
 }
 
-/** 编号列表（stdout） */
+/** 编号列表（stdout）— 表格行便于扫读 */
 export function formatSessionList(items: SessionListItem[]): string {
   if (!items.length) return '(no sessions)'
-  return items
-    .map((it, i) => {
-      const n = String(i + 1).padStart(2, ' ')
-      const when = it.updatedAt.replace('T', ' ').replace(/\.\d{3}Z$/, 'Z')
-      const model = it.model ? `  model=${it.model}` : ''
-      const prev = it.preview || '(no user message)'
-      return `${n}. ${it.id}  msgs=${it.messageCount}  ${when}${model}\n    ${prev}`
-    })
-    .join('\n')
+  const header =
+    ' #  id                          msgs  updated              preview'
+  const rows = items.map((it, i) => {
+    const n = String(i + 1).padStart(2, ' ')
+    const id =
+      it.id.length > 28 ? `${it.id.slice(0, 27)}…` : it.id.padEnd(28)
+    const msgs = String(it.messageCount).padStart(4)
+    const when = it.updatedAt
+      .replace('T', ' ')
+      .replace(/\.\d{3}Z$/, 'Z')
+      .slice(0, 19)
+      .padEnd(19)
+    const prev = (it.preview || '(no user message)').slice(0, 52)
+    const model = it.model ? `  [${it.model}]` : ''
+    return `${n}  ${id}  ${msgs}  ${when}  ${prev}${model}`
+  })
+  return [header, ...rows].join('\n')
+}
+
+/**
+ * RS8：按 id 子串或 preview 过滤（大小写不敏感）。
+ * 空 query → 原列表。
+ */
+export function filterSessionListItems(
+  items: SessionListItem[],
+  query: string,
+): SessionListItem[] {
+  const q = query.trim().toLowerCase()
+  if (!q) return items
+  return items.filter((it) => {
+    const hay = `${it.id} ${it.preview} ${it.model ?? ''}`.toLowerCase()
+    return hay.includes(q)
+  })
+}
+
+/**
+ * RS8：解析用户输入 → 选中 id。
+ * - 纯数字：1-based 索引
+ * - q / quit / exit：取消
+ * - 其它：当 id 精确匹配或唯一前缀 / 过滤唯一命中
+ */
+export function resolveSessionPickerChoice(
+  items: SessionListItem[],
+  raw: string,
+):
+  | { ok: true; id: string }
+  | { ok: false; reason: 'cancel' | 'empty' | 'invalid' | 'ambiguous'; message: string } {
+  const s = raw.trim()
+  if (!s) {
+    return { ok: false, reason: 'empty', message: 'Please enter a number, id, or filter.' }
+  }
+  const lower = s.toLowerCase()
+  if (lower === 'q' || lower === 'quit' || lower === 'exit') {
+    return { ok: false, reason: 'cancel', message: 'Cancelled.' }
+  }
+  if (/^\d+$/.test(s)) {
+    const n = Number.parseInt(s, 10)
+    if (!Number.isFinite(n) || n < 1 || n > items.length) {
+      return {
+        ok: false,
+        reason: 'invalid',
+        message: `Invalid choice. Enter 1–${items.length}, an id, filter text, or q.`,
+      }
+    }
+    return { ok: true, id: items[n - 1]!.id }
+  }
+  const exact = items.find((it) => it.id === s)
+  if (exact) return { ok: true, id: exact.id }
+  const filtered = filterSessionListItems(items, s)
+  if (filtered.length === 1) return { ok: true, id: filtered[0]!.id }
+  if (filtered.length === 0) {
+    return {
+      ok: false,
+      reason: 'invalid',
+      message: `No session matches "${s}". Try number, id fragment, or q.`,
+    }
+  }
+  return {
+    ok: false,
+    reason: 'ambiguous',
+    message: `Ambiguous filter "${s}" (${filtered.length} matches). Narrow it or use a number.`,
+  }
 }
 
 /**
@@ -170,10 +243,10 @@ export async function resolveContinueSessionId(opts: {
 }
 
 /**
- * 无 id：列项目会话并选 id。
+ * 无 id：列项目会话并选 id（RS8 增强）。
  * - 空列表 → exit 1
  * - 非 TTY → 打印列表，要求 --resume <id>，exit 2
- * - TTY → 问编号，返回选中 id
+ * - TTY → 编号 / id / 过滤 / q 取消
  */
 export async function pickProjectSessionId(opts: {
   cwd: string
@@ -185,7 +258,7 @@ export async function pickProjectSessionId(opts: {
 }): Promise<string> {
   const writeOut = opts.writeOut ?? ((s) => process.stdout.write(s))
   const writeErr = opts.writeErr ?? ((s) => process.stderr.write(s))
-  const items = await listProjectSessions({
+  let items = await listProjectSessions({
     cwd: opts.cwd,
     sessionsDir: opts.sessionsDir,
   })
@@ -197,11 +270,9 @@ export async function pickProjectSessionId(opts: {
     )
   }
 
-  const listText = formatSessionList(items)
-  writeOut(`${listText}\n`)
-
   const isTty = opts.isTty ?? process.stdin.isTTY === true
   if (!isTty) {
+    writeOut(`${formatSessionList(items)}\n`)
     writeErr(
       'Non-interactive terminal: pick a session with --resume <id> (see list above).\n',
     )
@@ -228,18 +299,27 @@ export async function pickProjectSessionId(opts: {
       }
     })
 
+  writeOut(`${formatSessionList(items)}\n`)
+  writeOut(
+    'Enter number, session id, filter text (unique match), or q to cancel.\n',
+  )
+
   for (;;) {
-    const raw = (await readChoice(`Select session [1-${items.length}]: `)).trim()
-    if (!raw) {
-      writeErr('Please enter a number.\n')
+    const raw = await readChoice(`Select session [1-${items.length}]: `)
+    const resolved = resolveSessionPickerChoice(items, raw)
+    if (resolved.ok) return resolved.id
+    if (resolved.reason === 'cancel') {
+      throw new ResumePickerError(resolved.message, 1)
+    }
+    // 过滤多命中：展示缩小列表再选
+    if (resolved.reason === 'ambiguous') {
+      const filtered = filterSessionListItems(items, raw.trim())
+      writeOut(`${formatSessionList(filtered)}\n`)
+      items = filtered
+      writeErr(`${resolved.message}\n`)
       continue
     }
-    const n = Number.parseInt(raw, 10)
-    if (!Number.isFinite(n) || n < 1 || n > items.length) {
-      writeErr(`Invalid choice. Enter 1–${items.length}.\n`)
-      continue
-    }
-    return items[n - 1]!.id
+    writeErr(`${resolved.message}\n`)
   }
 }
 

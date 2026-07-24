@@ -93,6 +93,49 @@ async function main() {
   const gr = await grept.call({ pattern: 'export' }, { cwd: tmp })
   assert(gr.ok && gr.output.includes('a.ts'), 'grep finds export')
 
+  // apply_patch: Add + Update under temp cwd
+  const patchTmp = await fs.mkdtemp(path.join(os.tmpdir(), 'bolo-patch-'))
+  const apply = findToolByName(tools, 'apply_patch')!
+  const addRes = await apply.call(
+    {
+      patch: `*** Begin Patch
+*** Add File: hello.txt
++hello
+*** End Patch`,
+    },
+    { cwd: patchTmp },
+  )
+  assert(addRes.ok, `add patch ok: ${addRes.output}`)
+  const added = await fs.readFile(path.join(patchTmp, 'hello.txt'), 'utf8')
+  assert(added.includes('hello'), 'add file content')
+
+  const updRes = await apply.call(
+    {
+      patch: `*** Begin Patch
+*** Update File: hello.txt
+@@
+-hello
++hello world
+*** End Patch`,
+    },
+    { cwd: patchTmp },
+  )
+  assert(updRes.ok, `update patch ok: ${updRes.output}`)
+  const updated = await fs.readFile(path.join(patchTmp, 'hello.txt'), 'utf8')
+  assert(updated.includes('hello world'), 'update file content')
+
+  const escape = await apply.call(
+    {
+      patch: `*** Begin Patch
+*** Add File: ../escape.txt
++nope
+*** End Patch`,
+    },
+    { cwd: patchTmp },
+  )
+  assert(!escape.ok && escape.isError, 'escape cwd fails')
+  assert(String(escape.output).includes('escapes cwd'), 'escape error message')
+
   // buildTool defaults
   const custom = buildTool({
     name: 'Custom',

@@ -2,7 +2,7 @@
 
 > 对照 HelsincyCode `sessionStorage`：有 session id、落盘、resume。  
 > Bolo：**单文件 JSON 快照**为主路径；**T1 双写**旁路 JSONL append（`sessionTranscript.ts`），**无遥测**。  
-> **`loadSession` 仍只读 JSON**；JSON 缺失时 `resumeSession` 可用旁路 `.jsonl` 经 `loadTranscriptMessages` 重建 messages（J-C 起步）。
+> **`loadSession` / `resumeSession`（J-C+）**：同 id 同时存在 `.json` 与 `.jsonl` 时，**messages 优先 jsonl**（更新 transcript）；配置切片可从 JSON 补。仅有其一则用其一。
 
 ## 1. 路径约定
 
@@ -85,10 +85,10 @@ const session = await createSession({
 |-----|------|
 | `toSnapshot` / `parseSessionSnapshot` | 序列化 / 校验 |
 | `saveSession` / `persistSession` | 原子写（temp + rename）+ 旁路 jsonl 双写 |
-| `loadSession` | 读 JSON → `SessionSnapshot`（不改） |
-| `loadTranscriptFile` / `loadTranscriptMessages` | 读 jsonl → entries / 线性 messages（J-C） |
+| `loadSession` | 读 JSON+旁路 jsonl → `SessionSnapshot`（双文件时 messages 优先 jsonl） |
+| `loadTranscriptFile` / `loadTranscriptMessages` | 读 jsonl → entries / 线性 messages |
 | `listProjectSessions` | 扫 `*.json` + `*.jsonl`（同 id 优先 JSON 元数据；仅 jsonl 用 mtime；去重；坏文件跳过） |
-| `resumeSession` | load JSON；缺失则 jsonl 回退 + `createSession` + 恢复 messages/配置 |
+| `resumeSession` | `loadSession` + `createSession` + 恢复 messages/配置 |
 | `resolveSessionFilePath` | 仅解析路径 |
 
 ## 4. 与 HC 的差异
@@ -99,7 +99,7 @@ const session = await createSession({
 | 项目哈希目录 + 多类 entry | 固定 `.bolo/sessions/<id>.json` + `<id>.jsonl` |
 | 丰富元数据 / 侧链 agent | 仅主会话 messages + 配置切片；entry 最小集 meta/message/boundary |
 
-Resume 主路径仍为 JSON；**JSON 不存在时**回退 `loadTranscriptMessages`（Phase C 最小）。jsonl **优先于** JSON 的完整切换见后续切片。
+Resume 主路径：`loadSessionPair` — **messages 以 jsonl 为准**（若存在），JSON 提供 meta/配置；仅 JSON 或仅 jsonl 均可恢复。
 
 ```bash
 npx tsx scripts/test-transcript-append.ts

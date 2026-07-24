@@ -15,6 +15,8 @@ export {
   pickProjectSessionId,
   resolveContinueSessionId,
   formatSessionList,
+  filterSessionListItems,
+  resolveSessionPickerChoice,
   buildSessionSummary,
   formatSessionSummary,
   lastAssistantText,

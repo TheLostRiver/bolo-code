@@ -5,7 +5,7 @@
 
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
-import { getBoloHomeDir } from '../../config/src/paths.ts'
+import { getBoloHomeDir, getProjectLayout } from '../../config/src/paths.ts'
 import { runHooks } from '../../hooks/src/index.ts'
 import {
   newId,
@@ -25,6 +25,10 @@ import {
 } from '../../permissions/src/index.ts'
 import type { QueryDeps } from './deps.ts'
 import { queryLoop, type QueryLoopEvent, type Terminal } from './queryLoop.ts'
+import {
+  ensureTranscriptFile,
+  recordSessionMessages,
+} from './sessionTranscript.ts'
 import type { AskPermissionFn } from './toolExecution.ts'
 
 export const AGENT_TOOL_NAME = 'Agent'
@@ -416,6 +420,13 @@ export type RunSubagentParams = {
   maxTurns?: number
   signal?: AbortSignal
   onEvent?: (e: QueryLoopEvent) => void
+  /**
+   * 结束后写侧链 transcript。
+   * - true：`{cwd}/.bolo/sessions/agent-{id}.jsonl`
+   * - string：sessions 目录（写 `agent-{id}.jsonl`）
+   * - 默认 false
+   */
+  writeTranscript?: boolean | string
 }
 
 export type RunSubagentResult = {
@@ -425,6 +436,41 @@ export type RunSubagentResult = {
   isError: boolean
   terminal: Terminal
   messages: ChatMessage[]
+  /** 侧链 transcript 路径（若写入） */
+  agentTranscriptPath?: string
+}
+
+/** 解析子 agent 侧链 jsonl 路径 */
+export function resolveSubagentTranscriptPath(opts: {
+  cwd: string
+  agentId: string
+  writeTranscript?: boolean | string
+}): string | null {
+  const wt = opts.writeTranscript
+  if (wt === undefined || wt === false) return null
+  const sessionsDir =
+    typeof wt === 'string' && wt.trim()
+      ? path.resolve(wt.trim())
+      : getProjectLayout(opts.cwd).sessionsDir
+  const safeId = opts.agentId.replace(/[^\w.-]+/g, '_')
+  return path.join(sessionsDir, `agent-${safeId}.jsonl`)
+}
+
+async function writeSubagentTranscript(opts: {
+  filePath: string
+  parentSessionId: string
+  agentId: string
+  agentType: string
+  cwd: string
+  messages: ChatMessage[]
+}): Promise<void> {
+  const sessionId = `${opts.parentSessionId}:${opts.agentId}`
+  await ensureTranscriptFile(opts.filePath, {
+    sessionId,
+    cwd: opts.cwd,
+    createdAt: nowIso(),
+  })
+  await recordSessionMessages(opts.filePath, opts.messages, { sessionId })
 }
 
 /**
@@ -489,6 +535,28 @@ export async function runSubagent(
       `Subagent ${agentType} ended: ${terminal.reason}${terminal.detail ? ` (${terminal.detail})` : ''}`
     : summaryText
 
+  let agentTranscriptPath: string | undefined
+  const sidePath = resolveSubagentTranscriptPath({
+    cwd: params.cwd,
+    agentId,
+    writeTranscript: params.writeTranscript,
+  })
+  if (sidePath) {
+    try {
+      await writeSubagentTranscript({
+        filePath: sidePath,
+        parentSessionId: params.parentSessionId,
+        agentId,
+        agentType,
+        cwd: params.cwd,
+        messages,
+      })
+      agentTranscriptPath = sidePath
+    } catch {
+      // 侧链失败不阻断主结果；hook 不带 path
+    }
+  }
+
   await runHooks(
     'SubagentStop',
     {
@@ -498,6 +566,9 @@ export async function runSubagent(
       timestamp: nowIso(),
       agent_id: agentId,
       agent_type: agentType,
+      ...(agentTranscriptPath
+        ? { agent_transcript_path: agentTranscriptPath }
+        : {}),
     },
     params.hooks,
   )
@@ -509,6 +580,7 @@ export async function runSubagent(
     isError,
     terminal,
     messages,
+    ...(agentTranscriptPath ? { agentTranscriptPath } : {}),
   }
 }
 
@@ -525,6 +597,8 @@ export type SubagentParentContext = {
   agentDefinitions?: ActiveAgentDefinitions
   signal?: AbortSignal
   onEvent?: (e: QueryLoopEvent) => void
+  /** 覆盖默认侧链写盘（默认 Agent 工具会写 transcript） */
+  writeTranscript?: boolean | string
 }
 
 function agentTypesHint(active?: ActiveAgentDefinitions | null): string {
@@ -618,14 +692,24 @@ export function createAgentTool(
         skills: parent.skills,
         signal: parent.signal ?? ctx.signal,
         onEvent: parent.onEvent,
+        // 默认写侧链 transcript（S7+）；可用 extras.writeTranscript=false 关闭
+        writeTranscript:
+          parent.writeTranscript !== undefined
+            ? parent.writeTranscript
+            : ctx.extras?.writeTranscript !== undefined
+              ? (ctx.extras.writeTranscript as boolean | string)
+              : true,
       })
 
       const header = `[subagent ${result.agentType} ${result.agentId}]`
       const body = result.summary
+      const pathNote = result.agentTranscriptPath
+        ? `\ntranscript: ${result.agentTranscriptPath}`
+        : ''
       return {
         ok: !result.isError,
         isError: result.isError,
-        output: `${header}\n${body}`,
+        output: `${header}\n${body}${pathNote}`,
         errorCode: result.isError ? 'subagent_failed' : undefined,
       }
     },

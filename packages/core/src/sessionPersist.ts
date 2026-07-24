@@ -3,7 +3,7 @@
  *
  * 对照 HelsincyCode sessionStorage：有 session id、落盘、resume。
  * Bolo v1：单文件 JSON 快照；T1 双写旁路 JSONL append（见 sessionTranscript.ts）。
- * Resume 仍读 JSON（T1）；无遥测。
+ * J-C+：同 id 同时有 `.json` + `.jsonl` 时 messages 优先 jsonl，meta 可从 json 补；无遥测。
  *
  * 路径：
  * - 项目：`<cwd>/.bolo/sessions/<id>.json`（默认）+ 旁路 `<id>.jsonl`
@@ -25,7 +25,11 @@ import {
   parsePermissionMode,
   type PermissionMode,
 } from '../../permissions/src/index.ts'
-import { dualWriteSessionTranscript } from './sessionTranscript.ts'
+import {
+  dualWriteSessionTranscript,
+  loadTranscriptMessages,
+  resolveTranscriptPathFromJson,
+} from './sessionTranscript.ts'
 
 /** 可落盘的会话切片（避免与 index 循环依赖） */
 export type PersistableSession = {
@@ -384,29 +388,155 @@ async function loadSessionSnapshotFromPath(
   return parseSessionSnapshot(JSON.parse(raw) as unknown)
 }
 
+function isMissingFileError(err: unknown): boolean {
+  const code = (err as NodeJS.ErrnoException)?.code
+  if (code === 'ENOENT') return true
+  const msg = err instanceof Error ? err.message : String(err)
+  return /ENOENT|no such file|session not found/i.test(msg)
+}
+
 /**
- * 读会话快照。
+ * 从 `.jsonl` 建最小快照（无 JSON 时）；meta 行提供配置切片。
+ */
+async function snapshotFromTranscriptOnly(
+  transcriptPath: string,
+  opts?: { idHint?: string; cwd?: string },
+): Promise<SessionSnapshot> {
+  const { messages, meta, path: tPath } = await loadTranscriptMessages(
+    transcriptPath,
+  )
+  const jsonPath = resolveJsonPathFromTranscript(tPath)
+  const id =
+    meta?.sessionId ||
+    path.basename(jsonPath).replace(/\.json$/i, '') ||
+    opts?.idHint ||
+    'unknown'
+  const now = nowIso()
+  const mode = parsePermissionMode(
+    typeof meta?.permissionMode === 'string' ? meta.permissionMode : 'default',
+  )
+  return {
+    version: SESSION_SNAPSHOT_VERSION,
+    id,
+    cwd: meta?.cwd ?? opts?.cwd ?? process.cwd(),
+    permissionMode: mode,
+    messages,
+    systemPromptSections: [],
+    model: meta?.model,
+    autoCompactEnabled: true,
+    contextWindowTokens: 128_000,
+    maxPtlRetries: 3,
+    createdAt: meta?.createdAt ?? now,
+    updatedAt: now,
+  }
+}
+
+/**
+ * J-C+：同目录 `.json` + `.jsonl` 时 messages 优先 transcript；
+ * meta / system / 配置切片可从 JSON 补；仅有其一则用其一。
+ * 返回 path 始终为 JSON 侧路径（便于 autoSave 写回）。
+ */
+export async function loadSessionPair(
+  jsonPath: string,
+  opts?: { idHint?: string; cwd?: string },
+): Promise<{ path: string; snapshot: SessionSnapshot; fromTranscript: boolean }> {
+  const resolvedJson = path.resolve(jsonPath)
+  const transcriptPath = resolveTranscriptPathFromJson(resolvedJson)
+
+  let jsonSnap: SessionSnapshot | undefined
+  try {
+    jsonSnap = await loadSessionSnapshotFromPath(resolvedJson)
+  } catch (err) {
+    if (!isMissingFileError(err)) throw err
+  }
+
+  let transcript:
+    | Awaited<ReturnType<typeof loadTranscriptMessages>>
+    | undefined
+  try {
+    transcript = await loadTranscriptMessages(transcriptPath)
+  } catch (err) {
+    if (!isMissingFileError(err)) throw err
+  }
+
+  if (jsonSnap && transcript) {
+    // 双文件：messages 用 jsonl（更新 transcript）；其余字段保留 JSON
+    return {
+      path: resolvedJson,
+      snapshot: {
+        ...jsonSnap,
+        messages: transcript.messages,
+        // meta 可补 JSON 缺省
+        model: jsonSnap.model ?? transcript.meta?.model,
+        cwd: jsonSnap.cwd || transcript.meta?.cwd || opts?.cwd || process.cwd(),
+        createdAt: jsonSnap.createdAt || transcript.meta?.createdAt || jsonSnap.createdAt,
+      },
+      fromTranscript: true,
+    }
+  }
+
+  if (jsonSnap) {
+    return { path: resolvedJson, snapshot: jsonSnap, fromTranscript: false }
+  }
+
+  if (transcript) {
+    const snapshot = await snapshotFromTranscriptOnly(transcriptPath, {
+      idHint: opts?.idHint,
+      cwd: opts?.cwd,
+    })
+    return { path: resolvedJson, snapshot, fromTranscript: true }
+  }
+
+  throw new Error(`session not found: ${resolvedJson} (json and jsonl)`)
+}
+
+/**
+ * 读会话快照（J-C+：同 id 有 jsonl 时 messages 优先 jsonl）。
  * - 路径 / filePath / sessionsDir / 显式 scope：只查该处
  * - 纯 id 且未指定 scope/sessionsDir：先 project（cwd），再 user（~/.bolo）
+ * - 显式 `.jsonl`：读 transcript，meta 可从旁路 `.json` 补
  */
 export async function loadSession(
   idOrPath: string,
   options?: LoadSessionOptions,
 ): Promise<{ path: string; snapshot: SessionSnapshot }> {
+  const cwd = options?.cwd
+
   if (options?.filePath) {
     const filePath = path.resolve(options.filePath)
-    const snapshot = await loadSessionSnapshotFromPath(filePath)
-    return { path: filePath, snapshot }
+    if (filePath.endsWith('.jsonl')) {
+      const jsonPath = resolveJsonPathFromTranscript(filePath)
+      const loaded = await loadSessionPair(jsonPath, {
+        idHint: idOrPath,
+        cwd,
+      })
+      return { path: loaded.path, snapshot: loaded.snapshot }
+    }
+    const loaded = await loadSessionPair(filePath, { idHint: idOrPath, cwd })
+    return { path: loaded.path, snapshot: loaded.snapshot }
   }
+
   if (looksLikeSessionPath(idOrPath)) {
     const filePath = path.resolve(idOrPath)
-    const snapshot = await loadSessionSnapshotFromPath(filePath)
-    return { path: filePath, snapshot }
+    if (filePath.endsWith('.jsonl')) {
+      const jsonPath = resolveJsonPathFromTranscript(filePath)
+      const loaded = await loadSessionPair(jsonPath, {
+        idHint: path.basename(jsonPath, '.json'),
+        cwd,
+      })
+      return { path: loaded.path, snapshot: loaded.snapshot }
+    }
+    const loaded = await loadSessionPair(filePath, {
+      idHint: path.basename(filePath, '.json'),
+      cwd,
+    })
+    return { path: loaded.path, snapshot: loaded.snapshot }
   }
+
   if (options?.sessionsDir || options?.scope) {
     const { filePath } = resolveIdOrPath(idOrPath, options)
-    const snapshot = await loadSessionSnapshotFromPath(filePath)
-    return { path: filePath, snapshot }
+    const loaded = await loadSessionPair(filePath, { idHint: idOrPath, cwd })
+    return { path: loaded.path, snapshot: loaded.snapshot }
   }
 
   // 纯 id：project → user
@@ -415,19 +545,23 @@ export async function loadSession(
     cwd: options?.cwd,
   })
   try {
-    const snapshot = await loadSessionSnapshotFromPath(projectPath)
-    return { path: projectPath, snapshot }
+    const loaded = await loadSessionPair(projectPath, {
+      idHint: idOrPath,
+      cwd: options?.cwd,
+    })
+    return { path: loaded.path, snapshot: loaded.snapshot }
   } catch (err) {
-    const code = (err as NodeJS.ErrnoException)?.code
-    if (code !== 'ENOENT') throw err
+    if (!isMissingFileError(err)) throw err
   }
   const userPath = resolveSessionFilePath(idOrPath, { scope: 'user' })
   try {
-    const snapshot = await loadSessionSnapshotFromPath(userPath)
-    return { path: userPath, snapshot }
+    const loaded = await loadSessionPair(userPath, {
+      idHint: idOrPath,
+      cwd: options?.cwd,
+    })
+    return { path: loaded.path, snapshot: loaded.snapshot }
   } catch (err) {
-    const code = (err as NodeJS.ErrnoException)?.code
-    if (code === 'ENOENT') {
+    if (isMissingFileError(err)) {
       throw new Error(
         `session not found: ${idOrPath} (looked in project and user sessions)`,
       )

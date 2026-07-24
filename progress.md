@@ -1,12 +1,15 @@
 # Progress Log
 
-## Session: T4–T6 流式工具行 + TTY 权限 + slash 确认
+## Session: continue without Electron
 
-- **T4** `formatSessionEvent` / `createSessionEventPrinter`：REPL 与单轮路径打印 text delta + `→/✓/✗ Tool`
-- **T5** `createTtyAskPermission`：TTY `Allow <tool>? [y/N]`；非 TTY deny；接 PermissionRequest 链
-- **T6** REPL 已走 `submitUserInput`；`/help` 本地打印
-- 测试：`scripts/test-cli-events.ts`；文档 `TUI.md` / `TODO.md` 勾选
+- Fixed/landed WIP: real apply_patch, JSONL-first messages on load, subagent sidechain transcript
+- RS8: richer resume picker (table + id/filter/q); docs TODO sync
+- Skipped Electron per user
 
-## 默认下一刀
+## main tip (this batch)
 
-J-C+（jsonl 优先 resume / RS7）或 S7（`.bolo/agents`）或 T8 Ink
+See git log after push — apply_patch / jsonl-first / sidechain / RS8 picker
+
+## Prior
+
+P0–P2 main path already on main (resume list, slash, BOLO TUI, rules, cache, JSONL dual-write, creators, subagent, MCP, plugins, continue, T4–T6, agents dir, …)

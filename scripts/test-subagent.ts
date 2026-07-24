@@ -337,6 +337,43 @@ async function main() {
   assert(!direct.isError, 'direct ok')
   assert(direct.agentId.startsWith('agent'), 'agent id')
 
+  // --- 侧链 transcript ---
+  const sideTmp = await fs.mkdtemp(path.join(os.tmpdir(), 'bolo-side-'))
+  const sideSessions = path.join(sideTmp, 'sessions')
+  let stopPath: string | undefined
+  const side = await runSubagent({
+    def: getAgentDefinition('general'),
+    prompt: 'sidechain me',
+    parentSessionId: 'sess_side_parent',
+    cwd: sideTmp,
+    hooks: {
+      SubagentStop: [
+        {
+          hooks: [
+            {
+              type: 'command',
+              command:
+                'node -e "const fs=require(\'fs\');const d=JSON.parse(fs.readFileSync(0,\'utf8\'));if(d.agent_transcript_path)fs.writeFileSync(process.env.BOLO_SIDE_MARK,d.agent_transcript_path)"',
+            },
+          ],
+        },
+      ],
+    },
+    deps: childDeps,
+    permissionMode: 'bypassPermissions',
+    askPermission: async () => 'allow',
+    allTools: createBuiltinTools(),
+    writeTranscript: sideSessions,
+  })
+  assert(side.agentTranscriptPath, 'side transcript path returned')
+  assert(
+    side.agentTranscriptPath!.includes(`agent-${side.agentId}`),
+    'side path has agent id',
+  )
+  const sideBody = await fs.readFile(side.agentTranscriptPath!, 'utf8')
+  assert(sideBody.includes('direct child report') || sideBody.includes('sidechain me'), 'side jsonl has messages')
+  assert(sideBody.includes('"type":"meta"') || sideBody.includes('"type": "meta"'), 'side has meta')
+
   // --- 父 session 调 Agent 工具 ---
   const provider = createNestedMockProvider()
   const log: string[] = []

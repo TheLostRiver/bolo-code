@@ -16,6 +16,8 @@ import {
   isResumePicker,
   formatHelp,
   formatSessionList,
+  filterSessionListItems,
+  resolveSessionPickerChoice,
   pickProjectSessionId,
   resolveContinueSessionId,
   ResumePickerError,
@@ -214,7 +216,24 @@ async function main() {
   const listText = formatSessionList(listed2)
   assert(listText.includes('sess_new'), 'format list id')
   assert(listText.includes(jsonlOnlyId), 'format list jsonl id')
-  assert(listText.includes('1.'), 'format numbered')
+  assert(
+    listText.includes(' 1 ') || listText.includes('1  '),
+    'format numbered row',
+  )
+  assert(listText.includes('preview') || listText.includes('msgs'), 'table header')
+
+  // ── RS8 filter / resolve ──
+  const filtered = filterSessionListItems(listed2, 'newer')
+  assert(
+    filtered.some((x) => x.id === 'sess_new'),
+    'filter hits preview',
+  )
+  const rPick = resolveSessionPickerChoice(listed2, '1')
+  assert(rPick.ok && rPick.id === listed2[0]!.id, 'resolve #1')
+  const rId = resolveSessionPickerChoice(listed2, 'sess_old')
+  assert(rId.ok && rId.id === 'sess_old', 'resolve exact id')
+  const rQuit = resolveSessionPickerChoice(listed2, 'q')
+  assert(!rQuit.ok && rQuit.reason === 'cancel', 'resolve q cancel')
 
   // ── non-TTY picker ──
   const out: string[] = []

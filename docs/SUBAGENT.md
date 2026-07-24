@@ -85,9 +85,10 @@ Optional system append / replacement body for the subagent.
 
 ## 刻意不做（P2+）
 
-- 侧链 `agent-*.jsonl`
 - Fork 继承父 messages、异步后台、worktree
 - 遥测 / GrowthBook / teammate
+
+侧链 transcript（可选）：`runSubagent({ writeTranscript: true })` 写入 `{cwd}/.bolo/sessions/agent-{id}.jsonl`；`SubagentStop` 可带 `agent_transcript_path`。
 
 ## 完成定义
 

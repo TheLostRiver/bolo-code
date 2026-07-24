@@ -60,7 +60,7 @@ P3  GUI / 打磨 / 后置
 | **RS5** | 空列表提示新建 `bolo` | | ✅ |
 | **RS6** | 列表字段：id · mtime · preview · 消息数 | | ✅ |
 | **RS7** | JSONL 双格式列表 | `*.json`+`*.jsonl` 去重 | ✅ |
-| RS8 | 箭头键 / 美化 picker | 随 M-TUI P1 | ⬜ |
+| **RS8** | 表格列表 + id/过滤/q 取消（非箭头键；跨平台 readline） | 美化 picker | ✅ |
 | RS9 | `--continue` 最近一条 | P1 捷径 | ✅ |
 
 **范围钉死：** 默认 **仅当前项目** sessions；全局 `~/.bolo/sessions` 需显式 flag（如 `--scope user`）再议。
@@ -119,8 +119,8 @@ P3  GUI / 打磨 / 后置
 | MCP1 | **MCP stdio** listTools/call → 进 tools 表 | ✅ |
 | PL1 | Plugins 真加载（本地发现 + skills/hooks/mcp 合并；非市场） | ✅ 最小 |
 | S7 | `.bolo/agents` 目录定义（frontmatter + 覆盖内置 + `/agents`） | ✅ |
-| S7+ | 侧链 transcript · 权限细化 | ⬜ |
-| J-C+ | JSONL resume 主路径优先 · list 增强（RS7） | 部分（RS7 列表双格式 ✅；resume 优先 jsonl 未切） |
+| S7+ | 侧链 transcript · 权限细化 | ✅ 最小（agent-*.jsonl + Stop path） |
+| J-C+ | JSONL resume 主路径优先 · list 增强（RS7） | ✅（双文件 messages 优先 jsonl；RS7 列表） |
 
 ---
 
@@ -131,7 +131,7 @@ P3  GUI / 打磨 / 后置
 | M4 | Electron GUI | ⬜ |
 | T8 | 完整 Ink TUI | ⬜ |
 | S12+ | Fork 继承上下文 / 异步 agent / worktree | ⬜ |
-| 其它 | 真 apply_patch、本地 usage 上报 UI、企业策略… | ⬜ |
+| 其它 | 真 apply_patch ✅ 最小 · 本地 usage 上报 UI、企业策略… | 🟡 |
 
 **不做：** 远程遥测、GrowthBook、抄 Claude 商标/IP。
 
@@ -164,9 +164,9 @@ P3  GUI / 打磨 / 后置
 
 若只开一刀：
 
-> **RS8 美化 picker**、**jsonl 优先 resume**、或 **Electron M4 规划落地**（大块后置）。
+> **T8 完整 Ink（可选）**、**fork/async subagent**、**usage 本地累计**；**Electron 明确后置**。
 
-已齐：resume 列表（含 RS7 双格式）、斜杠、BOLO 欢迎、T3–T6 CLI 事件/权限、rules、prompt cache、JSONL 双写+boundary+jsonl 回退 load、creators、Subagent S0–S7、MCP、plugins、`--continue`。
+已齐：resume 列表（RS7/RS8）、jsonl 优先 messages、斜杠、BOLO TUI T0–T7、rules、prompt cache、JSONL 双写+boundary、creators、Subagent S0–S7+侧链、MCP、plugins、`--continue`、真 apply_patch 最小。
 
 ---
 
@@ -198,4 +198,4 @@ P3  GUI / 打磨 / 后置
 ---
 
 **一句话：**  
-日用 CLI 主路径（resume 列表含 RS7 / slash / BOLO TUI T0–T7 / rules / cache / JSONL 双写·boundary·回退 load / creators / Subagent S0–S7 / MCP / plugins / continue）已齐；下一刀 **RS8 美化 picker**、**jsonl 优先 resume**、或 **Electron M4**。
+日用 CLI 主路径（RS8 picker / jsonl 优先 messages / apply_patch / 侧链 transcript / slash / BOLO TUI / rules / cache / Subagent S0–S7 / MCP / plugins）已齐；**Electron 后置**；下一刀可选 **usage 本地累计** 或 **fork/async subagent**。

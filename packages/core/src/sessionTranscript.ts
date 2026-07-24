@@ -2,7 +2,7 @@
  * 会话 JSONL transcript（T1 双写：append-only）
  *
  * 对照 HelsincyCode sessionStorage 的 JSONL 追加语义；无遥测。
- * T1：与 JSON 快照并行写入；resume 仍读 JSON（见 docs/SESSIONS.md）。
+ * T1：与 JSON 快照并行写入；J-C+：同 id 有 jsonl 时 resume/load messages 优先 jsonl。
  */
 
 import { promises as fs } from 'node:fs'
@@ -364,7 +364,7 @@ export async function loadTranscriptFile(
 
 /**
  * 从 jsonl 重建线性 messages（只取 type=message 行，按文件顺序）。
- * 供 JSON 快照缺失时的 resume 回退；不改变 loadSession 的 JSON 主路径。
+ * J-C+：loadSession / resumeSession 在同 id 有 jsonl 时优先用此重建 messages。
  */
 export async function loadTranscriptMessages(
   file: string,
