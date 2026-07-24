@@ -43,6 +43,8 @@ export type SlashSession = {
   skills?: LoadedSkill[]
   /** 活跃 subagent 定义；供 /agents */
   agentDefinitions?: import('./subagent.ts').ActiveAgentDefinitions
+  /** 后台 subagent 表；/agents status · /bg */
+  backgroundAgents?: import('./subagent.ts').BackgroundAgentStore
   /** 本地 usage 累计；/cost · /context */
   usage?: SessionUsage
 }
@@ -388,8 +390,17 @@ function sessionSkills(session: SlashSession): LoadedSkill[] {
 
 async function cmdAgents(
   session: SlashSession,
-  _args: string,
+  args: string,
 ): Promise<SlashDispatchResult> {
+  const sub = args.trim().toLowerCase()
+  if (sub === 'status' || sub === 'bg' || sub.startsWith('status ')) {
+    const { formatBackgroundAgentsStatus } = await import('./subagent.ts')
+    return {
+      ok: true,
+      message: formatBackgroundAgentsStatus(session.backgroundAgents),
+    }
+  }
+
   const { listActiveAgents, loadAgentsDir, builtinAgentMap } = await import(
     './subagent.ts'
   )
@@ -422,9 +433,18 @@ async function cmdAgents(
     }),
     '',
     'Dirs: .bolo/agents/*.md  ·  ~/.bolo/agents/*.md  ·  project overrides builtin',
-    'Agent tool: subagent_type=<name>',
+    'Agent tool: subagent_type=<name> · run_in_background=true',
+    'Background: /agents status  ·  /bg',
   ]
   return { ok: true, message: lines.join('\n') }
+}
+
+async function cmdBg(session: SlashSession): Promise<SlashDispatchResult> {
+  const { formatBackgroundAgentsStatus } = await import('./subagent.ts')
+  return {
+    ok: true,
+    message: formatBackgroundAgentsStatus(session.backgroundAgents),
+  }
 }
 
 function cmdSkills(session: SlashSession, args: string): SlashDispatchResult {
@@ -581,8 +601,14 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
   },
   {
     name: 'agents',
-    summary: 'List active subagent types (builtin + .bolo/agents)',
+    summary: 'List active subagent types; status for background runs',
+    usage: '[status]',
     run: cmdAgents,
+  },
+  {
+    name: 'bg',
+    summary: 'List background subagent running/done results',
+    run: (session) => cmdBg(session),
   },
   {
     name: 'skill',

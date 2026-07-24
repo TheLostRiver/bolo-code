@@ -79,16 +79,19 @@ Optional system append / replacement body for the subagent.
 ## Agent 工具（主会话 builtins）
 
 - **name:** `Agent`
-- **input:** `prompt`（必填）、`subagent_type`（可选，默认 `general`）
+- **input:** `prompt`（必填）、`subagent_type`（可选，默认 `general`）、`run_in_background` / `async`（可选布尔）
 - **`isConcurrencySafe`:** 恒 `false`（同轮多个 Agent 串行）
-- **结果：** 成功为摘要文本；失败 `isError` + 错误说明
+- **结果：** 同步成功为摘要文本；`run_in_background=true` 时立即返回 `started agent <id>…`，结果写入 `session.backgroundAgents`，用 `/agents status` 或 `/bg` 轮询
+- **失败：** `isError` + 错误说明
 
 ## 刻意不做（P2+）
 
-- Fork 继承父 messages、异步后台、worktree
+- Fork 继承父 messages、完整 worktree / swarm
 - 遥测 / GrowthBook / teammate
 
 侧链 transcript（可选）：`runSubagent({ writeTranscript: true })` 写入 `{cwd}/.bolo/sessions/agent-{id}.jsonl`；`SubagentStop` 可带 `agent_transcript_path`。
+
+**S12 最小 async：** Agent 工具 `run_in_background` 后台 `runSubagent`；会话 `backgroundAgents.pendingAgents` / `backgroundAgentResults`；可选 system 通知进 `session.messages`。
 
 ## 完成定义
 
@@ -96,3 +99,4 @@ Optional system append / replacement body for the subagent.
 
 - **S0–S6：** 文档 + `runSubagent` + Agent 工具 + 测试绿
 - **S7：** `.bolo/agents` 发现、覆盖内置、resolve + `/agents` + `ensure*Layout` 的 `agents/`
+- **S12 partial：** 可选后台 subagent（无 fork / 无 worktree）

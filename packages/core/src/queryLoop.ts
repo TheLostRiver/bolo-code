@@ -94,6 +94,8 @@ export type QueryLoopParams = {
   skills?: LoadedSkill[]
   /** 活跃 agent 定义；传给 Agent 工具 resolve */
   agentDefinitions?: import('./subagent.ts').ActiveAgentDefinitions
+  /** 后台 subagent 状态表（Agent run_in_background） */
+  backgroundStore?: import('./subagent.ts').BackgroundAgentStore
   /**
    * callModel 因上下文过长失败时，截断最旧轮次再试的次数。
    * 默认 3；0 = 关闭。对照 HC MAX_PTL_RETRIES。
@@ -346,6 +348,8 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
       tools,
       deps: params.deps,
       agentDefinitions: params.agentDefinitions,
+      backgroundStore: params.backgroundStore,
+      parentMessages: params.messages,
       signal: params.signal,
       onEvent: params.onEvent,
     })

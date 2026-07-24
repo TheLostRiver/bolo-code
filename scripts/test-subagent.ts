@@ -14,6 +14,7 @@ import {
   getAgentDefinition,
   createDefaultTools,
   createAgentTool,
+  createBackgroundAgentStore,
   AGENT_TOOL_NAME,
   EXPLORE_AGENT,
   GENERAL_AGENT,
@@ -405,6 +406,9 @@ async function main() {
 
   assert(createAgentTool().name === 'Agent', 'createAgentTool name')
 
+  // --- S12 background Agent ---
+  await testBackgroundSubagent()
+
   // --- S7 project agents ---
   await testProjectAgentsDir()
   assert(
@@ -415,6 +419,144 @@ async function main() {
   )
 
   console.log('PASS test-subagent')
+}
+
+async function flushMicrotasks(times = 20): Promise<void> {
+  for (let i = 0; i < times; i++) {
+    await Promise.resolve()
+    await new Promise((r) => setTimeout(r, 0))
+  }
+}
+
+async function testBackgroundSubagent(): Promise<void> {
+  const bgTmp = await fs.mkdtemp(path.join(os.tmpdir(), 'bolo-bg-agent-'))
+  try {
+    const bgProvider: LlmProvider = {
+      id: 'mock',
+      async *completeStream(): AsyncIterable<ProviderStreamEvent> {
+        // 微延迟，确保 tool_result 先返回 running
+        await new Promise((r) => setTimeout(r, 5))
+        yield { type: 'text_delta', text: 'BG_AGENT_DONE' }
+        yield { type: 'done' }
+      },
+      async completeText() {
+        return 'n/a'
+      },
+    }
+    const bgDeps: QueryDeps = {
+      callModel: async function* ({ messages, signal, tools }) {
+        yield* bgProvider.completeStream(messages, {
+          signal,
+          tools: tools as CompleteStreamOptions['tools'],
+        })
+      },
+      prepareMessages: identityPrepareMessages,
+      uuid: () => 'uuid_bg_1',
+    }
+
+    const store = createBackgroundAgentStore()
+    const parentMessages: ChatMessage[] = []
+    const tool = createAgentTool()
+    const started = await tool.call(
+      {
+        prompt: 'background task',
+        subagent_type: 'general',
+        run_in_background: true,
+      },
+      {
+        cwd: bgTmp,
+        sessionId: 'sess_bg',
+        extras: {
+          writeTranscript: false,
+          subagentParent: {
+            parentSessionId: 'sess_bg',
+            cwd: bgTmp,
+            hooks: {},
+            deps: bgDeps,
+            permissionMode: 'bypassPermissions' as const,
+            askPermission: async () => 'allow' as const,
+            allTools: createBuiltinTools(),
+            backgroundStore: store,
+            parentMessages,
+          },
+        },
+      },
+    )
+    assert(started.ok, `bg start ok: ${started.output}`)
+    assert(
+      /started agent agent\S+ in background/i.test(started.output),
+      `bg start message: ${started.output}`,
+    )
+    assert(
+      started.output.includes('poll with') || started.output.includes('/bg'),
+      'poll hint',
+    )
+
+    const runningIds = Object.keys(store.pendingAgents)
+    assert(runningIds.length === 1, 'one pending agent')
+    const agentId = runningIds[0]!
+    assert(
+      store.pendingAgents[agentId]!.status === 'running',
+      'status running right after start',
+    )
+    assert(
+      !store.backgroundAgentResults[agentId],
+      'no result yet while running',
+    )
+
+    // 轮询直到 done（mock 微任务/定时）
+    let done = false
+    for (let i = 0; i < 50; i++) {
+      await flushMicrotasks(5)
+      const row =
+        store.backgroundAgentResults[agentId] ?? store.pendingAgents[agentId]
+      if (row && (row.status === 'done' || row.status === 'error')) {
+        done = true
+        assert(row.status === 'done', `bg status done: ${row.status}`)
+        assert(
+          (row.summary ?? '').includes('BG_AGENT_DONE'),
+          `bg summary: ${row.summary}`,
+        )
+        break
+      }
+    }
+    assert(done, 'background agent finished and pollable')
+
+    const session = await createSession({
+      cwd: bgTmp,
+      provider: createNestedMockProvider(),
+      systemPrompt: false,
+      permissionMode: 'bypassPermissions',
+      askPermission: async () => 'allow',
+    })
+    session.backgroundAgents = store
+    const statusSlash = await dispatchSlashCommand(session, 'agents', 'status')
+    assert(statusSlash.ok, 'slash /agents status ok')
+    assert(
+      statusSlash.message.includes(agentId),
+      `/agents status lists id: ${statusSlash.message}`,
+    )
+    assert(
+      statusSlash.message.includes('done') ||
+        statusSlash.message.includes('BG_AGENT_DONE'),
+      `/agents status summary: ${statusSlash.message}`,
+    )
+    const bgSlash = await dispatchSlashCommand(session, 'bg', '')
+    assert(bgSlash.ok, 'slash /bg ok')
+    assert(bgSlash.message.includes(agentId), '/bg lists id')
+
+    assert(
+      parentMessages.some(
+        (m) =>
+          m.role === 'system' &&
+          m.content.includes(agentId) &&
+          m.content.includes('BG_AGENT_DONE'),
+      ),
+      'parent system notify on finish',
+    )
+  } finally {
+    await fs.rm(bgTmp, { recursive: true, force: true })
+  }
 }
 
 main().catch((e) => {

@@ -48,6 +48,7 @@ import {
 import { queryLoop, type QueryLoopEvent, type Terminal } from './queryLoop.ts'
 import type { AskPermissionFn } from './toolExecution.ts'
 import {
+  createBackgroundAgentStore,
   createDefaultTools,
   loadAgentsDir,
   type ActiveAgentDefinitions,
@@ -350,6 +351,11 @@ export type BoloSession = {
    * Agent 工具 / spawnSubagent 按此 resolve。
    */
   agentDefinitions?: ActiveAgentDefinitions
+  /**
+   * 后台 subagent 表（Agent run_in_background）。
+   * pendingAgents + backgroundAgentResults；/agents status · /bg 读取。
+   */
+  backgroundAgents?: import('./subagent.ts').BackgroundAgentStore
   /** 已连接的 MCP stdio 进程；endSession 时关闭 */
   mcpConnections?: ConnectedMcpServer[]
   onEvent: (e: SessionEvent) => void
@@ -452,6 +458,7 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
         ? 3
         : Math.max(0, opts.maxPtlRetries),
     agentDefinitions,
+    backgroundAgents: createBackgroundAgentStore(),
     tools: createDefaultTools(agentDefinitions),
     usage: {
       inputTokens: 0,
@@ -722,6 +729,7 @@ export async function submitPrompt(
     skills: session.skills,
     tools: session.tools ?? createDefaultTools(session.agentDefinitions),
     agentDefinitions: session.agentDefinitions,
+    backgroundStore: session.backgroundAgents,
     maxTurns: options?.maxTurns ?? 8,
     querySource: options?.querySource ?? 'repl_main_thread',
     maxPtlRetries: session.maxPtlRetries,
@@ -967,6 +975,10 @@ export {
   GENERAL_AGENT,
   createAgentTool,
   createDefaultTools,
+  createBackgroundAgentStore,
+  formatBackgroundAgentsStatus,
+  markBackgroundAgentRunning,
+  markBackgroundAgentFinished,
   getAgentDefinition,
   listBuiltinAgents,
   listActiveAgents,
@@ -984,6 +996,9 @@ export {
   type AgentDefinition,
   type AgentDefinitionSource,
   type ActiveAgentDefinitions,
+  type BackgroundAgentEntry,
+  type BackgroundAgentStatus,
+  type BackgroundAgentStore,
   type LoadAgentsDirOptions,
   type LoadAgentsDirResult,
   type ResolveAgentToolsResult,

@@ -431,6 +431,8 @@ export type RunSubagentParams = {
    * - 默认 false
    */
   writeTranscript?: boolean | string
+  /** 可选固定 agent id（后台启动时先占位再跑） */
+  agentId?: string
 }
 
 export type RunSubagentResult = {
@@ -442,6 +444,124 @@ export type RunSubagentResult = {
   messages: ChatMessage[]
   /** 侧链 transcript 路径（若写入） */
   agentTranscriptPath?: string
+}
+
+/** 后台 subagent 状态（S12 最小 async） */
+export type BackgroundAgentStatus = 'running' | 'done' | 'error'
+
+export type BackgroundAgentEntry = {
+  agentId: string
+  agentType: string
+  prompt: string
+  status: BackgroundAgentStatus
+  startedAt: string
+  finishedAt?: string
+  summary?: string
+  isError?: boolean
+  agentTranscriptPath?: string
+}
+
+/**
+ * 会话级后台 agent 表：pending + 完成后结果。
+ * Agent 工具 `run_in_background` 写入；`/agents status` / `/bg` 读取。
+ */
+export type BackgroundAgentStore = {
+  /** 仍在跑或刚登记的条目（done 后可保留或移到 results） */
+  pendingAgents: Record<string, BackgroundAgentEntry>
+  /** 完成后的结果摘要（与 pending 可并存；以 results 为准可轮询） */
+  backgroundAgentResults: Record<string, BackgroundAgentEntry>
+}
+
+export function createBackgroundAgentStore(): BackgroundAgentStore {
+  return { pendingAgents: {}, backgroundAgentResults: {} }
+}
+
+export function markBackgroundAgentRunning(
+  store: BackgroundAgentStore,
+  entry: Pick<BackgroundAgentEntry, 'agentId' | 'agentType' | 'prompt'> & {
+    startedAt?: string
+  },
+): BackgroundAgentEntry {
+  const row: BackgroundAgentEntry = {
+    agentId: entry.agentId,
+    agentType: entry.agentType,
+    prompt: entry.prompt,
+    status: 'running',
+    startedAt: entry.startedAt ?? nowIso(),
+  }
+  store.pendingAgents[entry.agentId] = row
+  return row
+}
+
+export function markBackgroundAgentFinished(
+  store: BackgroundAgentStore,
+  result: Pick<
+    RunSubagentResult,
+    'agentId' | 'agentType' | 'summary' | 'isError' | 'agentTranscriptPath'
+  > & { prompt?: string; startedAt?: string },
+): BackgroundAgentEntry {
+  const prev = store.pendingAgents[result.agentId]
+  const row: BackgroundAgentEntry = {
+    agentId: result.agentId,
+    agentType: result.agentType,
+    prompt: result.prompt ?? prev?.prompt ?? '',
+    status: result.isError ? 'error' : 'done',
+    startedAt: result.startedAt ?? prev?.startedAt ?? nowIso(),
+    finishedAt: nowIso(),
+    summary: result.summary,
+    isError: result.isError,
+    ...(result.agentTranscriptPath
+      ? { agentTranscriptPath: result.agentTranscriptPath }
+      : {}),
+  }
+  store.pendingAgents[result.agentId] = row
+  store.backgroundAgentResults[result.agentId] = row
+  return row
+}
+
+/** 列表 running / done 摘要（slash 与调试） */
+export function formatBackgroundAgentsStatus(
+  store?: BackgroundAgentStore | null,
+): string {
+  if (!store) {
+    return 'No background agent store on session.'
+  }
+  const pending = Object.values(store.pendingAgents)
+  const results = Object.values(store.backgroundAgentResults)
+  if (!pending.length && !results.length) {
+    return 'No background agents. Start with Agent tool run_in_background=true.'
+  }
+  const lines: string[] = ['Background agents:', '']
+  const seen = new Set<string>()
+  const rows = [
+    ...pending,
+    ...results.filter((r) => !store.pendingAgents[r.agentId]),
+  ]
+  for (const r of rows) {
+    if (seen.has(r.agentId)) continue
+    seen.add(r.agentId)
+    const head = `  ${r.agentId}  [${r.status}]  type=${r.agentType}`
+    lines.push(head)
+    if (r.status === 'running') {
+      lines.push(`    prompt: ${truncateOneLine(r.prompt, 80)}`)
+      lines.push(`    started: ${r.startedAt}`)
+    } else {
+      const sum = (r.summary ?? '').trim() || '(no summary)'
+      lines.push(`    summary: ${truncateOneLine(sum, 120)}`)
+      if (r.agentTranscriptPath) {
+        lines.push(`    transcript: ${r.agentTranscriptPath}`)
+      }
+    }
+  }
+  lines.push('')
+  lines.push('Poll: /agents status  ·  /bg')
+  return lines.join('\n')
+}
+
+function truncateOneLine(s: string, max: number): string {
+  const t = s.replace(/\s+/g, ' ').trim()
+  if (t.length <= max) return t
+  return `${t.slice(0, Math.max(0, max - 1))}…`
 }
 
 /** 解析子 agent 侧链 jsonl 路径 */
@@ -483,7 +603,7 @@ async function writeSubagentTranscript(opts: {
 export async function runSubagent(
   params: RunSubagentParams,
 ): Promise<RunSubagentResult> {
-  const agentId = newId('agent')
+  const agentId = params.agentId?.trim() || newId('agent')
   const agentType = params.def.agentType
   const allTools = params.allTools ?? createDefaultTools()
   const { resolvedTools } = resolveAgentTools(params.def, allTools)
@@ -607,6 +727,13 @@ export type SubagentParentContext = {
   onEvent?: (e: QueryLoopEvent) => void
   /** 覆盖默认侧链写盘（默认 Agent 工具会写 transcript） */
   writeTranscript?: boolean | string
+  /** 会话后台 agent 表（run_in_background） */
+  backgroundStore?: BackgroundAgentStore
+  /**
+   * 后台完成后可选通知：推一条 system 文本到父 messages。
+   * 未传则只写 backgroundAgentResults。
+   */
+  parentMessages?: ChatMessage[]
 }
 
 function agentTypesHint(active?: ActiveAgentDefinitions | null): string {
@@ -614,6 +741,15 @@ function agentTypesHint(active?: ActiveAgentDefinitions | null): string {
     .map((a) => a.agentType)
     .join('|')
   return types || 'explore|general'
+}
+
+function isTruthyBackgroundFlag(v: unknown): boolean {
+  if (v === true || v === 1) return true
+  if (typeof v === 'string') {
+    const s = v.trim().toLowerCase()
+    return s === 'true' || s === '1' || s === 'yes'
+  }
+  return false
 }
 
 /**
@@ -625,7 +761,7 @@ export function createAgentTool(
   const hint = agentTypesHint(activeAgents)
   return buildTool({
     name: AGENT_TOOL_NAME,
-    description: `Spawn a subagent with an isolated message loop. Use for focused exploration or multi-step subtasks. Input: prompt, optional subagent_type (${hint}).`,
+    description: `Spawn a subagent with an isolated message loop. Use for focused exploration or multi-step subtasks. Input: prompt, optional subagent_type (${hint}), optional run_in_background.`,
     requiresPermission: false,
     isConcurrencySafe: () => false,
     isReadOnly: () => false,
@@ -639,6 +775,15 @@ export function createAgentTool(
         subagent_type: {
           type: 'string',
           description: `Agent type (${hint}); default general`,
+        },
+        run_in_background: {
+          type: 'boolean',
+          description:
+            'If true, start subagent async and return immediately; poll /agents status or /bg',
+        },
+        async: {
+          type: 'boolean',
+          description: 'Alias of run_in_background',
         },
       },
       required: ['prompt'],
@@ -687,7 +832,14 @@ export function createAgentTool(
         }
       }
 
-      const result = await runSubagent({
+      const writeTranscript: boolean | string =
+        parent.writeTranscript !== undefined
+          ? parent.writeTranscript
+          : ctx.extras?.writeTranscript !== undefined
+            ? (ctx.extras.writeTranscript as boolean | string)
+            : true
+
+      const runParams: RunSubagentParams = {
         def,
         prompt,
         parentSessionId: parent.parentSessionId,
@@ -703,13 +855,72 @@ export function createAgentTool(
         signal: parent.signal ?? ctx.signal,
         onEvent: parent.onEvent,
         // 默认写侧链 transcript（S7+）；可用 extras.writeTranscript=false 关闭
-        writeTranscript:
-          parent.writeTranscript !== undefined
-            ? parent.writeTranscript
-            : ctx.extras?.writeTranscript !== undefined
-              ? (ctx.extras.writeTranscript as boolean | string)
-              : true,
-      })
+        writeTranscript,
+      }
+
+      const runInBackground = isTruthyBackgroundFlag(
+        input.run_in_background ?? input.async,
+      )
+
+      if (runInBackground) {
+        const store = parent.backgroundStore
+        if (!store) {
+          return {
+            ok: false,
+            isError: true,
+            output:
+              'Agent run_in_background requires session backgroundStore (createSession wires it).',
+            errorCode: 'no_background_store',
+          }
+        }
+        const agentId = newId('agent')
+        markBackgroundAgentRunning(store, {
+          agentId,
+          agentType: def.agentType,
+          prompt,
+        })
+        void runSubagent({ ...runParams, agentId })
+          .then((result) => {
+            markBackgroundAgentFinished(store, {
+              agentId: result.agentId,
+              agentType: result.agentType,
+              summary: result.summary,
+              isError: result.isError,
+              agentTranscriptPath: result.agentTranscriptPath,
+              prompt,
+            })
+            if (parent.parentMessages) {
+              const tag = result.isError ? 'error' : 'done'
+              parent.parentMessages.push({
+                role: 'system',
+                content: `[background agent ${result.agentId} ${tag}] ${result.summary}`,
+              })
+            }
+          })
+          .catch((e) => {
+            const detail = e instanceof Error ? e.message : String(e)
+            markBackgroundAgentFinished(store, {
+              agentId,
+              agentType: def.agentType,
+              summary: `Background subagent failed: ${detail}`,
+              isError: true,
+              prompt,
+            })
+            if (parent.parentMessages) {
+              parent.parentMessages.push({
+                role: 'system',
+                content: `[background agent ${agentId} error] ${detail}`,
+              })
+            }
+          })
+
+        return {
+          ok: true,
+          output: `started agent ${agentId} in background; poll with /agents status or /bg`,
+        }
+      }
+
+      const result = await runSubagent(runParams)
 
       const header = `[subagent ${result.agentType} ${result.agentId}]`
       const body = result.summary
