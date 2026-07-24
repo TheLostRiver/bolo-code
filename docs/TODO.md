@@ -56,14 +56,15 @@ P1：
   12. ~~TP-PERM：permission 规则匹配小步~~ ✅ 最小
   13. ~~CP-SNIP：snip 最小~~ ✅ 最小
   14. ~~J-D 余量：title entry + CLI list/migrate~~ ✅ 最小
-  15. ~~J-D 再余量：system_note + lite list + /note~~ ✅ 最小（本刀）
+  15. ~~J-D 再余量：system_note + lite list + /note~~ ✅ 最小
+  16. ~~TP-STE+：tool_progress + interruptBehavior~~ ✅ 最小（本刀）
   下一刀：其它 CP/TP 余量 ·（完整 YOLO / 市场 **后置，需你确认再开**）
 ```
 
 | 优先级 | 含义（当前） |
 |--------|----------------|
 | **P0** | 抬 headless 水位：韧性 / TP / **CP 日用** 已 🟡 |
-| **P1** | 扩展深度（**MCP HTTP+SSE ✅** · **RC1+RC2 ✅** · **PL2 ✅** · **Usage+ ✅** · **CP5 ✅** · **STE ✅** · **TP-PERM ✅** · **CP-SNIP ✅** · **J-D title/CLI ✅** · **system_note+lite ✅**）— **默认下一刀区：其它 CP·TP 余量** |
+| **P1** | 扩展深度（… · **TP-STE+ ✅** · **system_note+lite ✅**）— **默认下一刀区：其它 CP·TP 余量** |
 | **P2** | 未做或仅最小的子项 |
 | **P3** | GUI / 完整 Ink / 后置协议 |
 
@@ -129,7 +130,8 @@ P1：
 | **TP4** | Bash/Read/Write/Edit/apply_patch 中段 **AbortSignal** → `Error: tool cancelled` | ✅ 最小 |
 | **TP5** | schema 校验失败 → `<tool_use_error>`（既有，测试覆盖） | ✅ |
 | **TP-STE** | **StreamingToolExecutor** 最小：边流边跑 · 入队序 drain · Bash 级联 · discard · queryLoop 接入 | ✅ 最小 |
-| **TP-PERM** | **规则匹配小步**：always-deny（工具/前缀/path/bash）· Bash 通配 · `/deny` · 快照/meta；**非** YOLO | ✅ 最小（本刀） |
+| **TP-STE+** | **progress + interruptBehavior**：`tool_progress` 事件 · Bash `cancel` / 默认 `block` · CLI dim 进度行 | ✅ 最小（本刀） |
+| **TP-PERM** | **规则匹配小步**：always-deny（工具/前缀/path/bash）· Bash 通配 · `/deny` · 快照/meta；**非** YOLO | ✅ 最小 |
 | **TP-doc** | `TOOL_CALLING.md` / `PERMISSIONS.md` / ROADMAP / TODO | ✅ |
 
 ### 2.6 Compact 日用加深
@@ -197,7 +199,7 @@ P1：
 | **J-D 余量** | entry / CLI | **title** + `/title` + list title + `--list` + `--migrate-session` | ✅ 最小 |
 | **J-D 再余量** | system_note / lite | **system_note** + `/note` + `scanTranscriptLite` list | ✅ 最小（本刀） |
 | **C6+** | Cache 后置 | 1h TTL / global scope / break detection / cached MC | ⬜ **后置** |
-| **TP 余量** | permission / STE | **STE ✅** · **TP-PERM 规则匹配 ✅**；完整 YOLO / 更强 apply_patch / STE progress | 🟡 规则小步已齐；YOLO ⬜ |
+| **TP 余量** | permission / STE | **STE ✅** · **TP-STE+ progress/interrupt ✅** · **TP-PERM ✅**；完整 YOLO / 更强 apply_patch | 🟡 YOLO ⬜（需确认） |
 | **CP 余量** | compact 再深 | **默认开 auto ✅**；**snip 最小 ✅**；cached MC · SnipTool/UUID · 真 tokenizer 仍后置 | 🟡 snip 最小已齐；其余 ⬜ |
 
 ---
@@ -241,6 +243,7 @@ P1：
   · CP-SNIP snip 最小（门槛 · 安全 cut · prepare 写回）
   · J-D 余量 title entry + CLI --list / migrate-session
   · J-D 再余量 system_note + /note + scanTranscriptLite list
+  · TP-STE+ tool_progress + interruptBehavior（Bash cancel）
 
 下一阶段：
   ① 其它 CP·TP 余量   ← 默认主刀区（P1 余量）
@@ -256,10 +259,10 @@ P1：
 > **主推：其它 CP/TP 余量**（勿抢完整 YOLO / 市场）  
 > - 勿一口做完整市场 / OAuth MCP / 完整 Ink / 完整 YOLO  
 >
-> **本刀已勾选：** **J-D 再余量**（`system_note` · `/note` · rewrite 保留 · `scanTranscriptLite` list · `test-session-notes-lite`）。  
-> **明确后置（开工前叫用户）：** **完整 YOLO / auto 分类器** · **插件市场** · STE progress · 思考链安全回灌 · Anthropic thinking budget · OAuth · SSE 自动重连 · cached MC · SnipTool/UUID · 真 tokenizer · OR6 · C6+ · T8 · Electron · 远程 USD 账单。
+> **本刀已勾选：** **TP-STE+**（`tool_progress` · `interruptBehavior` cancel/block · Bash cancel · CLI 进度行 · `test-streaming-tool-executor` / `test-cli-events`）。  
+> **明确后置（开工前叫用户）：** **完整 YOLO / auto 分类器** · **插件市场** · 思考链安全回灌 · Anthropic thinking budget · OAuth · SSE 自动重连 · cached MC · SnipTool/UUID · 真 tokenizer · OR6 · C6+ · T8 · Electron · 远程 USD 账单。
 
-**已齐摘要：** resume · slash · BOLO TUI 最小 · rules · C1–C5 · JSONL 主路径（**title + system_note**）· creators · Subagent · MCP stdio+HTTP+**SSE** 最小 · **plugins PL1+PL2 最小** · Responses HTTP · Loop 韧性最小 · Tool+Permission 日用 + **STE** + **规则匹配小步** · Compact 日用加深 + **默认 auto** + **snip 最小** · **RC1+RC2 思考链** · **Usage+ 最小** · CLI `--list` / migrate · lite list。
+**已齐摘要：** resume · slash · BOLO TUI 最小 · rules · C1–C5 · JSONL 主路径（**title + system_note**）· creators · Subagent · MCP stdio+HTTP+**SSE** 最小 · **plugins PL1+PL2 最小** · Responses HTTP · Loop 韧性最小 · Tool+Permission 日用 + **STE + progress/interrupt** + **规则匹配小步** · Compact 日用加深 + **默认 auto** + **snip 最小** · **RC1+RC2 思考链** · **Usage+ 最小** · CLI `--list` / migrate · lite list。
 
 ---
 
@@ -268,7 +271,7 @@ P1：
 | TODO | ROADMAP |
 |------|---------|
 | LR* | M-Loop 韧性 🟡 |
-| TP* · **TP-STE** · **TP-PERM** | M-Tool+Permission 🟡（STE + 规则匹配小步） |
+| TP* · **TP-STE** · **TP-STE+** · **TP-PERM** | M-Tool+Permission 🟡（STE + progress/interrupt + 规则匹配） |
 | CP* · **CP5** · **CP-SNIP** | 长会话 compact 🟡（默认 auto ✅ · snip 最小 ✅） |
 | RS* · T* | M5.2 / M-TUI（T0–T7 ✅；T8 ⬜） |
 | SL* · SL-polish | M-Slash ✅ |
@@ -298,5 +301,5 @@ P1：
 ---
 
 **一句话：**  
-**J-D 再余量**（system_note + lite list）已落地；**下一刀：其它 CP/TP 余量**。  
+**TP-STE+**（progress + interruptBehavior）已落地；**下一刀：其它 CP/TP 余量**。  
 **完整 YOLO / 插件市场** 后置——**动手前先叫用户确认**。

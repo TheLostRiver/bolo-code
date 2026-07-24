@@ -87,6 +87,12 @@ export type ToolExecutionEvent =
   | { type: 'phase'; phase: 'awaiting_permission' | 'running' }
   | { type: 'tool_start'; id: string; name: string; input: unknown }
   | {
+      type: 'tool_progress'
+      id: string
+      name: string
+      message: string
+    }
+  | {
       type: 'tool_end'
       id: string
       name: string
@@ -439,6 +445,16 @@ export async function runToolUse(
       cwd: ctx.cwd,
       sessionId: ctx.sessionId,
       signal: ctx.signal,
+      onProgress: (message) => {
+        const m = typeof message === 'string' ? message.trim() : ''
+        if (!m) return
+        emit(ctx, {
+          type: 'tool_progress',
+          id: toolUseId,
+          name,
+          message: m.length > 200 ? `${m.slice(0, 199)}…` : m,
+        })
+      },
       extras: {
         skills: ctx.skills,
         subagentParent: ctx.deps

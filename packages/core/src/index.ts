@@ -331,6 +331,12 @@ export type SessionEvent =
   /** 思考链增量（流式展示；不持久化进 transcript） */
   | { type: 'reasoning'; text: string }
   | { type: 'tool_start'; id: string; name: string; input: unknown }
+  | {
+      type: 'tool_progress'
+      id: string
+      name: string
+      message: string
+    }
   | { type: 'tool_end'; id: string; name: string; output: string; ok: boolean }
   | { type: 'permission_request'; id: string; name: string; input: unknown }
   | { type: 'hook'; event: string; exitCode: number; blocked?: boolean }

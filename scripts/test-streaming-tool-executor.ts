@@ -216,6 +216,105 @@ async function main() {
   assert(r6[0]!.content.includes('No such tool'), 'unknown tool')
   assert(r6[1]!.content.includes('hi') || r6[1]!.content.length > 0, 'bash after unknown')
 
+  // 7) tool_progress 经 onEvent 透出
+  const progressLog: string[] = []
+  const progTool = buildTool({
+    name: 'Prog',
+    description: 'p',
+    requiresPermission: false,
+    isConcurrencySafe: () => true,
+    isReadOnly: () => true,
+    inputJSONSchema: { type: 'object', properties: {} },
+    async call(_input, ctx) {
+      ctx.onProgress?.('step-one')
+      return { ok: true, output: 'done' }
+    },
+  })
+  const ex7 = new StreamingToolExecutor({
+    context: {
+      ...baseCtx([progTool]),
+      onEvent: (e) => {
+        if (e.type === 'tool_progress') {
+          progressLog.push(`${e.name}:${e.message}`)
+        }
+      },
+    },
+  })
+  ex7.addTool({ id: 'p1', name: 'Prog', input: {} })
+  await ex7.drain()
+  assert(
+    progressLog.some((x) => x.includes('step-one')),
+    `progress events: ${progressLog.join(',')}`,
+  )
+
+  // 8) interruptBehavior: block 不因 parent interrupt 取消；cancel 会取消
+  let blockFinished = false
+  const blockTool = buildTool({
+    name: 'BlockWrite',
+    description: 'block',
+    requiresPermission: false,
+    isConcurrencySafe: () => false,
+    isReadOnly: () => false,
+    interruptBehavior: () => 'block',
+    inputJSONSchema: { type: 'object', properties: {} },
+    async call(_input, ctx) {
+      await sleep(80)
+      blockFinished = !ctx.signal?.aborted
+      return {
+        ok: true,
+        output: ctx.signal?.aborted ? 'aborted' : 'ok-block',
+      }
+    },
+  })
+  const parentBlock = new AbortController()
+  const ex8 = new StreamingToolExecutor({
+    context: baseCtx([blockTool], parentBlock.signal),
+  })
+  ex8.addTool({ id: 'bw', name: 'BlockWrite', input: {} })
+  await sleep(15)
+  parentBlock.abort('interrupt')
+  const r8 = await ex8.drain()
+  assert(blockFinished, 'block tool finished despite interrupt')
+  assert(
+    r8[0]!.content.includes('ok-block'),
+    `block result: ${r8[0]!.content.slice(0, 80)}`,
+  )
+
+  let cancelSawAbort = false
+  const cancelTool = buildTool({
+    name: 'CancelShell',
+    description: 'cancel',
+    requiresPermission: false,
+    isConcurrencySafe: () => false,
+    isReadOnly: () => false,
+    interruptBehavior: () => 'cancel',
+    inputJSONSchema: { type: 'object', properties: {} },
+    async call(_input, ctx) {
+      await sleep(80)
+      cancelSawAbort = Boolean(ctx.signal?.aborted)
+      return {
+        ok: !ctx.signal?.aborted,
+        output: ctx.signal?.aborted ? 'cancelled' : 'ok-cancel',
+        isError: Boolean(ctx.signal?.aborted),
+      }
+    },
+  })
+  const parentCancel = new AbortController()
+  const ex9 = new StreamingToolExecutor({
+    context: baseCtx([cancelTool], parentCancel.signal),
+  })
+  ex9.addTool({ id: 'cs', name: 'CancelShell', input: {} })
+  await sleep(15)
+  parentCancel.abort('interrupt')
+  const r9 = await ex9.drain()
+  assert(cancelSawAbort, 'cancel tool saw abort')
+  assert(
+    r9[0]!.content.includes('cancelled') ||
+      r9[0]!.content.includes('tool cancelled') ||
+      r9[0]!.content.includes('Abort'),
+    `cancel result: ${r9[0]!.content.slice(0, 100)}`,
+  )
+
   console.log('STREAMING TOOL EXECUTOR TESTS PASS')
 }
 

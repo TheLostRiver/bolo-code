@@ -1,5 +1,5 @@
 /**
- * StreamingToolExecutor — 边收 tool_call 边调度（最小）
+ * StreamingToolExecutor — 边收 tool_call 边调度（最小 + progress/interrupt）
  *
  * 对照参考实现语义（重新实现，无遥测）：
  * - 并发安全工具可与其它并发安全工具并行
@@ -7,8 +7,8 @@
  * - drain 结果按入队顺序（非完成顺序）
  * - Bash 执行失败 → 取消排队/在跑的兄弟 tool
  * - discard → 排队项合成错误，放弃本轮流式结果
- *
- * 有意缩小：无 progress 通道、无 interruptBehavior、无 contextModifier。
+ * - tool_progress 经 runToolUse onEvent 透出
+ * - interruptBehavior：cancel 工具在 parent abort(reason=interrupt) 时取消；block 继续跑完
  */
 
 import type { ChatMessage } from '../../shared/src/index.ts'
@@ -85,6 +85,47 @@ function createChildAbortController(parent?: AbortSignal): AbortController {
     { once: true },
   )
   return child
+}
+
+/**
+ * 工具执行用 AbortController：
+ * - parent discard / sibling_error / 普通 abort → 始终转发
+ * - parent reason === 'interrupt' 且 interruptBehavior === 'block' → **不**转发（对照 HC）
+ */
+function createToolAbortController(
+  parent: AbortSignal | undefined,
+  interruptBehavior: 'cancel' | 'block',
+): AbortController {
+  const child = new AbortController()
+  if (!parent) return child
+  const forward = () => {
+    if (child.signal.aborted) return
+    const reason = parent.reason
+    if (reason === 'interrupt' && interruptBehavior === 'block') {
+      return
+    }
+    child.abort(reason)
+  }
+  if (parent.aborted) {
+    forward()
+    return child
+  }
+  parent.addEventListener('abort', forward, { once: true })
+  return child
+}
+
+function resolveInterruptBehavior(
+  tools: readonly BoloTool[],
+  name: string,
+): 'cancel' | 'block' {
+  const tool = findToolByName(tools, name)
+  if (!tool?.interruptBehavior) return 'block'
+  try {
+    const b = tool.interruptBehavior()
+    return b === 'cancel' ? 'cancel' : 'block'
+  } catch {
+    return 'block'
+  }
 }
 
 /** Bash 失败且应级联取消兄弟（权限 deny / 用户取消不级联） */
@@ -234,17 +275,38 @@ export class StreamingToolExecutor {
       return
     }
 
-    if (this.hasBashErrored || this.siblingAbort.signal.aborted) {
-      const reason =
-        this.siblingAbort.signal.reason === 'streaming_discard'
-          ? 'Streaming discarded — tool not executed'
-          : `Cancelled: parallel tool call ${this.erroredBashDesc || 'Bash'} errored`
-      tool.result = syntheticResult(tool.id, tool.block.name, reason)
+    // Bash 级联 / discard：立刻合成错误（interrupt 不走这里）
+    if (this.hasBashErrored) {
+      tool.result = syntheticResult(
+        tool.id,
+        tool.block.name,
+        `Cancelled: parallel tool call ${this.erroredBashDesc || 'Bash'} errored`,
+      )
       tool.status = 'completed'
       return
     }
+    if (
+      this.siblingAbort.signal.aborted &&
+      this.siblingAbort.signal.reason === 'streaming_discard'
+    ) {
+      tool.result = syntheticResult(
+        tool.id,
+        tool.block.name,
+        'Streaming discarded — tool not executed',
+      )
+      tool.status = 'completed'
+      return
+    }
+    // sibling_error 已在 hasBashErrored 处理；其余 abort(reason=interrupt 等) 交给 toolAbort 策略
 
-    const toolAbort = createChildAbortController(this.siblingAbort.signal)
+    const interruptBehavior = resolveInterruptBehavior(
+      this.toolsDef,
+      tool.block.name,
+    )
+    const toolAbort = createToolAbortController(
+      this.siblingAbort.signal,
+      interruptBehavior,
+    )
     const ctx: RunToolUseContext = {
       ...this.baseCtx,
       tools: this.toolsDef,

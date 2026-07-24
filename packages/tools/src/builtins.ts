@@ -109,6 +109,8 @@ export function createBashTool(): BoloTool {
     requiresPermission: true,
     isConcurrencySafe: () => false,
     isReadOnly: () => false,
+    /** 用户 interrupt 时可取消 shell（对照 HC Bash cancel） */
+    interruptBehavior: () => 'cancel',
     inputJSONSchema: {
       type: 'object',
       properties: {
@@ -132,6 +134,13 @@ export function createBashTool(): BoloTool {
       const timeoutMs = Number.isFinite(rawTimeout)
         ? Math.min(600_000, Math.max(1, Math.floor(rawTimeout)))
         : 30_000
+      const preview =
+        command.length > 80 ? `${command.slice(0, 79)}…` : command
+      try {
+        ctx.onProgress?.(`running: ${preview}`)
+      } catch {
+        /* progress 不得拖垮工具 */
+      }
       try {
         const shell = process.platform === 'win32' ? 'cmd.exe' : 'sh'
         const args =

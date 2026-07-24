@@ -89,7 +89,7 @@
 | **Loop 韧性：错误分类 + model 退避** | 🟡 最小 | `errorClassify` + `wrapCallModelWithRetry`；默认 3 次；事件 `model_retry` |
 | PTL 截断重试 | ✅ | 与 model 退避正交 |
 | buildTool + 分区并发 + 常用工具 | ✅/🟡 | **Edit** ✅ 最小；真 apply_patch；Write；schema → tool_use_error |
-| **StreamingToolExecutor**（边流边跑） | 🟡 最小 | queryLoop 收 `tool_call` 即调度；保序 drain；Bash 级联 cancel；`discard`；无 progress/interruptBehavior |
+| **StreamingToolExecutor**（边流边跑） | 🟡 最小+ | queryLoop 收 `tool_call` 即调度；保序 drain；Bash 级联；`discard`；**tool_progress**；**interruptBehavior**（Bash=cancel，默认 block） |
 | tool 中段 AbortSignal | 🟡 最小 | Bash/Read/Write/Edit/apply_patch 尊重 abort |
 | Provider：OpenAI 兼容 / Anthropic / **openai-responses** / mock | ✅ | Responses：**HTTP SSE** ✅；WS ⬜ |
 | **思考链流式显示**（reasoning / thinking） | 🟡 最小 | RC1+RC2：`reasoning_delta`→CLI dim；Responses reasoning SSE；`/thinking` 开关；**不**回灌 ChatMessage；budget ⬜ |
@@ -516,7 +516,7 @@ flowchart TB
 |--------|------|--------|
 | M0–M2 | ✅/🟡 | headless 主路径可跑；相对 HC 未满 |
 | **M-Loop 韧性** | 🟡 最小 | 分类 + 429/5xx 有限退避；PTL 正交 |
-| **M-Tool+Permission** | 🟡 最小 | Edit + path/bash allow/deny + abort + **STE** + **规则匹配小步**；完整 YOLO 后置 |
+| **M-Tool+Permission** | 🟡 最小+ | Edit + path/bash allow/deny + abort + **STE** + **progress/interrupt** + **规则匹配**；完整 YOLO 后置（需确认） |
 | **M-Compact 日用** | 🟡 最小 | 加权 token · pressure · `/context`·`/compact`；**默认 auto ✅**；**snip 最小 ✅**；cached MC / SnipTool 后置 |
 | **M-Slash** | ✅ | 日用 `/` + SL-polish |
 | **M-Rules** | ✅ | `.bolo/rules` + path-scoped + `/rules` |

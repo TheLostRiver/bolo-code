@@ -14,13 +14,15 @@
 | `runToolUse` 顺序 | find → schema → validate → Pre → Gate → call → **truncate** → Post |
 | 未知工具 / 校验错误 | `<tool_use_error>…</tool_use_error>`（对模型友好） |
 | `partitionToolCalls` | 只读批并发、写串行（`runTools` 批后执行） |
-| **StreamingToolExecutor** | 边收 `tool_call` 边调度；并发规则同上；**结果按入队序**；Bash 失败可取消兄弟；`discard` 放弃本轮 |
+| **StreamingToolExecutor** | 边收 `tool_call` 边调度；并发规则同上；**结果按入队序**；Bash 失败可取消兄弟；`discard` 放弃本轮；**tool_progress**；**interruptBehavior**（cancel/block） |
 | Glob / Grep 真实现 | `createGlobTool` / `createGrepTool` |
 | Skill 按需 | `Skill` 工具 + catalog |
 | **Edit** | `old_string` / `new_string`；默认**唯一**匹配；`replace_all` 可选；清晰错误 |
 | Write | 全文写入；`resolveSafe` 不逃出 cwd |
 | apply_patch | `*** Begin Patch` / Add\|Update\|Delete，或简易 unified diff |
 | AbortSignal | Bash / Read / Write / Edit / apply_patch 尊重中段 abort → `Error: tool cancelled` |
+| interruptBehavior | 默认 **block**；**Bash = cancel**（用户 interrupt 可杀 shell） |
+| tool_progress | `ToolContext.onProgress` → `tool_progress` 事件；CLI dim `… Tool msg` |
 | tool_result 字符预算 | 默认 50_000；截断 + 可选 spill |
 
 ## 2. 管道
@@ -66,8 +68,8 @@ Edit 失败形态（示例）：
 ## 5. 仍未对齐（有意后置）
 
 - 完整 zod 与复杂 schema  
-- StreamingToolExecutor 加深：progress 通道 · interruptBehavior · 完整 contextModifier  
-- 完整 YOLO / auto 分类器（模型批）  
+- StreamingToolExecutor 再深：完整 contextModifier · 多级 progress 结构化 payload  
+- 完整 YOLO / auto 分类器（**开工前需用户确认**）  
 - UI renderToolResult  
 
 ## 6. 测试
@@ -76,6 +78,7 @@ Edit 失败形态（示例）：
 npx tsx scripts/test-tool-calling.ts
 npx tsx scripts/test-streaming-tool-executor.ts
 npx tsx scripts/test-permissions.ts
+npx tsx scripts/test-cli-events.ts
 npx tsx scripts/smoke-turn.ts
 ```
 

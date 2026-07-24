@@ -25,6 +25,18 @@ async function main() {
       '→ Bash',
     'tool_start line',
   )
+  const progLine = formatToolEventLine({
+    type: 'tool_progress',
+    id: '1',
+    name: 'Bash',
+    message: 'running: echo',
+  })
+  assert(
+    typeof progLine === 'string' &&
+      progLine.includes('Bash') &&
+      progLine.includes('running'),
+    'tool_progress line',
+  )
   assert(
     formatToolEventLine({
       type: 'tool_end',

@@ -12,6 +12,7 @@ export {
   type ToolResult,
   type ToolContext,
   type ToolCallResult,
+  type ToolInterruptBehavior,
   type JsonSchema,
 } from './types.ts'
 

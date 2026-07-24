@@ -9,6 +9,12 @@ export type CliSessionEvent =
   | { type: 'reasoning'; text: string }
   | { type: 'tool_start'; id: string; name: string; input?: unknown }
   | {
+      type: 'tool_progress'
+      id: string
+      name: string
+      message: string
+    }
+  | {
       type: 'tool_end'
       id: string
       name: string
@@ -19,19 +25,28 @@ export type CliSessionEvent =
   | { type: 'warning'; message: string }
   | { type: string; [k: string]: unknown }
 
-/** ANSI：dim 思考链（无 TTY 时仍写转义；多数终端可忽略或显示弱样式） */
+/** ANSI：dim 思考链 / 进度（无 TTY 时仍写转义；多数终端可忽略或显示弱样式） */
 const DIM = '\x1b[2m'
 const RESET = '\x1b[0m'
 
 /**
- * 工具起止简行；其它事件返回 null（text/reasoning 由打印机处理）。
+ * 工具起止/进度简行；其它事件返回 null（text/reasoning 由打印机处理）。
  * - start: `→ ToolName`
+ * - progress: `… ToolName message`（弱样式）
  * - end ok: `✓ ToolName`
  * - end fail: `✗ ToolName`
  */
 export function formatToolEventLine(e: CliSessionEvent): string | null {
   if (e.type === 'tool_start' && typeof e.name === 'string') {
     return `→ ${e.name}`
+  }
+  if (e.type === 'tool_progress' && typeof e.name === 'string') {
+    const msg =
+      typeof e.message === 'string' && e.message.trim()
+        ? e.message.trim()
+        : ''
+    const body = msg ? `${e.name} ${msg}` : e.name
+    return `${DIM}… ${body}${RESET}`
   }
   if (e.type === 'tool_end' && typeof e.name === 'string') {
     const ok = e.ok !== false

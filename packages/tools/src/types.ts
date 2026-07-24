@@ -24,11 +24,19 @@ export type ToolContext = {
   cwd: string
   sessionId?: string
   signal?: AbortSignal
+  /**
+   * 长跑工具可选进度（对照 HC progress 通道最小版）。
+   * 文本一行；无遥测外发。
+   */
+  onProgress?: (message: string) => void
   /** Skill 工具等扩展上下文 */
   extras?: Record<string, unknown>
 }
 
 export type ToolCallResult = ToolResult
+
+/** 用户中断（interrupt）时：cancel 立刻取消；block 继续跑完（对照 HC interruptBehavior） */
+export type ToolInterruptBehavior = 'cancel' | 'block'
 
 export type BoloTool = {
   name: string
@@ -45,6 +53,11 @@ export type BoloTool = {
   /** 对照 HC isReadOnly */
   isReadOnly: (input: unknown) => boolean
   isEnabled: () => boolean
+  /**
+   * 用户 interrupt 时行为（对照 HC interruptBehavior）。
+   * 默认 block（安全：不静默砍写文件类工具）。
+   */
+  interruptBehavior: () => ToolInterruptBehavior
   /**
    * 工具级权限钩子（对照 checkPermissions）。
    * 默认 allow， defer 给全局 PermissionGate。
@@ -67,6 +80,7 @@ type Defaultable =
   | 'isEnabled'
   | 'checkPermissions'
   | 'requiresPermission'
+  | 'interruptBehavior'
 
 export type ToolDef = Omit<BoloTool, Defaultable> & Partial<Pick<BoloTool, Defaultable>>
 
@@ -75,6 +89,8 @@ const TOOL_DEFAULTS = {
   isConcurrencySafe: (_input?: unknown) => false,
   isReadOnly: (_input?: unknown) => false,
   requiresPermission: true,
+  /** 默认 block：interrupt 不杀正在写盘的工具 */
+  interruptBehavior: () => 'block' as ToolInterruptBehavior,
   checkPermissions: async (
     input: Record<string, unknown>,
     _ctx?: ToolContext,
@@ -91,6 +107,8 @@ export function buildTool(def: ToolDef): BoloTool {
     isConcurrencySafe: def.isConcurrencySafe ?? TOOL_DEFAULTS.isConcurrencySafe,
     isReadOnly: def.isReadOnly ?? TOOL_DEFAULTS.isReadOnly,
     isEnabled: def.isEnabled ?? TOOL_DEFAULTS.isEnabled,
+    interruptBehavior:
+      def.interruptBehavior ?? TOOL_DEFAULTS.interruptBehavior,
     checkPermissions:
       def.checkPermissions ??
       (async (input) => ({ behavior: 'allow' as const })),
