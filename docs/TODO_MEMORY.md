@@ -56,11 +56,12 @@
 | **MEM-3** | system 注入行为段 + 索引正文 | volatile；`loadMemory !== false` | ✅ |
 | **MEM-4** | `/memory` 显示路径/开关/预览 | slash `cmdMemory` | ✅ |
 | **MEM-5** | 测试 | `scripts/test-memory.ts` | ✅ |
-| **MEM-6** | topic 扫描 + 按需相关记忆 | 后置 | ⬜ |
-| **MEM-7** | project-scoped memory | 后置 | ⬜ |
-| **MEM-8** | team / daily log | 后置 | ⬜ |
+| **MEM-6** | topic 扫描 + 确定性相关记忆 | AUTORUN A1 | ⬜ |
+| **MEM-7** | project-scoped memory | AUTORUN A2 | ⬜ |
+| **MEM-8** | team / daily log | **OUT**（不进 AUTORUN） | ⬜ |
 
-**本刀交付：MEM-0 → MEM-5 最小闭环 ✅。**
+**已交付：MEM-0 → MEM-5 最小闭环 ✅。**  
+**续作序：** `docs/TODO_AUTORUN.md`（先 MEM-6，再 MEM-7）。
 
 ---
 
@@ -100,4 +101,4 @@ docs/MEMORY.md                  # 契约
 
 > **MEMORY.md 是跨会话笔记索引；进 system 有预算；明细 topic 文件后置按需加载。**
 
-**已交付：MEM-0…5。下一刀可选：MEM-6 topic 相关检索，或其它 P1。**
+**已交付：MEM-0…5。AUTORUN 下一刀：MEM-6（见 `docs/TODO_AUTORUN.md`）。**

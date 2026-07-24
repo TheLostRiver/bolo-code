@@ -290,6 +290,7 @@ PL-SPEC 出口 ────────► IMPORT-*（可选）
 
 > **Skill 先做成可移植内容标准；MCP 做成稳、可诊、无秘钥泄漏的协议客户端；插件始终以 `bolo.*` 为一等规范。官方市场与外来完整运行时兼容从长计议，且永不绑 Claude/Codex 商店。**
 
-**默认下一刀：** 后置可选 — **M-GEN-7 OAuth** · **IMPORT** · **官方市场深度** · Electron（均需确认）。  
+**Skill / MCP / Plugin Spec：** S-PORT ✅ · M-GEN-0..6+8 ✅ · **PL-SPEC-0..6 ✅**。  
 
-**Skill / MCP / Plugin Spec：** S-PORT ✅ · M-GEN-0..6+8 ✅ · **PL-SPEC-0..6 ✅**。
+**全局下一轨：** `docs/TODO_AUTORUN.md`（先 Memory MEM-6/7；本专册 **IMPORT-S1/P1/X** 为波次 B）。  
+**OUT：** M-GEN-7 OAuth · 官方市场深度 · Electron（需另令，不进 AUTORUN）。

@@ -1,7 +1,7 @@
 # Bolo Code 整体路线图（详细版）
 
-> 更新：对齐 **auto Y0–Y4 最小 + PL-MKT 最小 + Y3.6 审计 note**；主路径与相对 HC 分口径。  
-> **勾选与「下一刀」以 `docs/TODO.md` 为准**；本文件回答：**做到哪 / 缺什么 / 验收 / 里程碑**。  
+> 更新：Memory MEM-0…5 ✅；**无人值守轨 `docs/TODO_AUTORUN.md`（无 Electron）**；主路径与相对 HC 分口径。  
+> **勾选与「下一刀」以 `docs/TODO.md` + `TODO_AUTORUN.md` 为准**；本文件回答：**做到哪 / 缺什么 / 验收 / 里程碑**。  
 > 原则：借鉴参考实现 **语义**再实现；**无遥测**；文档无本机绝对路径；**状态按代码行为**，不按错误 commit subject。
 
 ---
@@ -53,7 +53,8 @@
 20. ~~**Auto/YOLO Y0–Y4 最小**~~ ✅（两阶段 + 危险/PS 硬拦 + 熔断 demote + 对抗测 + **Y3.6 审计 note**）  
 21. ~~**扩展三层** — Skill 可移植 → MCP 通用 → Bolo 插件规范~~ ✅（**`docs/TODO_SKILL_MCP_PLUGIN.md`**）  
 22. ~~**跨会话 Memory 最小**~~ ✅（MEM-0…5；**`docs/TODO_MEMORY.md`** / **`docs/MEMORY.md`**）  
-23. **后置（需确认）：** Memory topic/project · 官方 marketplace 深度 · MCP OAuth · OR6 · T8 · Electron · worktree · 完整 YOLO 企业策略  
+23. **无人值守轨（进行中）：** **`docs/TODO_AUTORUN.md`** — A MEM-6/7 → B IMPORT → C SA → D CP-OBS → E 收口（**无 Electron**）  
+24. **本轨 OUT（需新指令）：** Electron · T8 Ink · MCP OAuth · 官方 marketplace · OR6 · worktree · MEM-8 team · 完整 YOLO 企业/sandbox · cached MC  
 
 ---
 
@@ -459,7 +460,7 @@ flowchart TB
 | H 韧性 | 错误分类 + model 退避 + PTL | 🟡 最小 |
 | I 权限 auto | Y0–Y4 最小 + Y3.6 审计 note | ✅ 最小（HC auto 语义 ~85–90%；UI/企业 ⬜） |
 
-**默认下一刀：** 见 **`docs/TODO.md` §8**（扩展三层最小出口齐；后置 OAuth/IMPORT/市场深度/Electron）。
+**默认下一刀：** 见 **`docs/TODO_AUTORUN.md`**（第一刀 **MEM-6**；整轨无 Electron）。
 
 ---
 
@@ -487,6 +488,7 @@ flowchart TB
 | **`TODO_AUTO_PERMISSIONS.md`** | **Auto/YOLO 分类器专项（Y0–Y4）** |
 | **`TODO_SKILL_MCP_PLUGIN.md`** | **Skill 可移植 · MCP 通用 · Bolo 插件规范** |
 | **`TODO_MEMORY.md`** | **跨会话 Memory（MEM-0…5 最小 ✅）** |
+| **`TODO_AUTORUN.md`** | **无人值守执行序（无 Electron）** |
 | `PERMISSIONS.md` | 规则门控 + **auto 分类器路径**（与 YOLO 企业层正交） |
 | `AGENT_LOOP.md` | loop · 错误分类 · model/PTL 重试 |
 | `TODO_SESSION_JSONL.md` | JSONL 专项（主路径已齐） |
@@ -551,5 +553,6 @@ Headless **主路径可日用**，相对参考实现约 **40–55%**（文档不
 **规则权限 + auto Y0–Y4 最小已齐**（HC auto **语义** ~85–90%；Y3.6 审计 note ✅；UI/企业策略 ⬜）。  
 **PL-MKT 最小已齐**（本地/URL 清单 install；非官方市场全家桶）。  
 扩展三层（Skill/MCP/Plugin Spec）最小 ✅；**跨会话 Memory 最小（MEM-0…5）✅**。  
-后置：Memory topic/project · 官方市场深度 / MCP OAuth / T8 / Electron。  
-执行序 → **`docs/TODO.md`**。
+**进行中：** 无人值守轨 **`docs/TODO_AUTORUN.md`**（MEM-6…收口；无 Electron）。  
+OUT（另令）：Electron · OAuth · 官方市场 · worktree · 企业 YOLO。  
+执行序 → **`docs/TODO.md`** + **`docs/TODO_AUTORUN.md`**。
