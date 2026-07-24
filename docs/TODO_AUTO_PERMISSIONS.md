@@ -152,41 +152,44 @@ type AutoClassifyResult =
 
 | ID | 任务 | 验收 |
 |----|------|------|
-| **Y0.1** | 本文定稿；`PERMISSIONS.md` 增加 auto 专节入口 | 链接互通 |
-| **Y0.2** | 类型草案：`PermissionMode` 含 `auto`；`AutoClassify*` | 类型可编译，mode 尚未接线 |
-| **Y0.3** | 对照表 HC→Bolo 冻结「做/不做」 | 本节 §1.2 / §2 |
+| **Y0.1** | 本文定稿；`PERMISSIONS.md` 增加 auto 专节入口 | 链接互通 | ✅ |
+| **Y0.2** | 类型草案：`PermissionMode` 含 `auto`；`AutoClassify*` | 类型可编译 | ✅ |
+| **Y0.3** | 对照表 HC→Bolo 冻结「做/不做」 | 本节 §1.2 / §2 | ✅ |
 
-**出口：** 实现者无需再猜产品边界。
-
----
-
-### Y1 — 模式与快路径骨架（仍可无真 LLM）
-
-| ID | 任务 | 验收 |
-|----|------|------|
-| **Y1.1** | `permissionMode: 'auto'` 进入枚举 + `/permissions auto` + 循环可选 | 单测 + slash |
-| **Y1.2** | 快照 / JSONL meta 持久化 mode | resume 保持 auto |
-| **Y1.3** | `autoAllowlist`：Read/Glob/Grep/Skill 等 → allow | 单测 |
-| **Y1.4** | auto 下非白名单 **暂** deny 或 ask（显式配置 `autoFallback: 'deny'\|'ask'`，默认 **deny** 更安全） | 文档写清；**禁止**静默当 bypass |
-| **Y1.5** | 系统提示词一行说明 auto 行为 | SYSTEM_PROMPT / catalog |
-
-**出口：** 模式可切换；**尚未**「智能放行危险操作」（仅白名单真自动）。  
-**相对 HC YOLO 语义：~10–15%。**
+**出口：** 实现者无需再猜产品边界。 **本阶段已完成。**
 
 ---
 
-### Y2 — 真分类器（单阶段）★ 第一个「可用 auto」
+### Y1 — 模式与快路径骨架
 
-| ID | 任务 | 验收 |
-|----|------|------|
-| **Y2.1** | `deps.classifyPermission` 或 `provider.completeText` 侧路调用 | mock provider 可测 |
-| **Y2.2** | `autoClassifier`：组装 system + user（工具名/入参/cwd/摘要） | 单测 snapshot 字符串关键字段 |
-| **Y2.3** | 解析 JSON decision；非法/空 → deny + `unavailable` | 单测 |
-| **Y2.4** | `runToolUse`：mode=auto 且规则层 ask → 调分类器 | 集成测：mock 返回 allow 则执行 |
-| **Y2.5** | acceptEdits 快路径：cwd 内 edit 跳过分类器 | 单测 |
-| **Y2.6** | 超时（如 15–30s）→ deny | 单测 |
-| **Y2.7** | `/permissions` / `/doctor` 显示最近一次分类 reason（本地） | 手工/测 |
-| **Y2.8** | 文档：费用提示（每危险工具可能多一次调用） | PERMISSIONS / 本文件 |
+| ID | 任务 | 验收 | 状态 |
+|----|------|------|------|
+| **Y1.1** | `permissionMode: 'auto'` + `/permissions auto` + 循环 | 单测 + slash | ✅ |
+| **Y1.2** | 快照 / JSONL meta 持久化 mode | resume 保持 auto | ✅（既有 mode 字段） |
+| **Y1.3** | `autoAllowlist`：Read/Glob/Grep/Skill | 单测 | ✅ |
+| **Y1.4** | auto 非白名单 → 分类器路径；无分类器 **deny** | fail-closed | ✅ |
+| **Y1.5** | 系统提示词 auto 行为 | permissionModeBehaviorLine | ✅ |
+
+**出口：** 模式可切换；白名单真自动。 **~15% HC auto 语义。**
+
+---
+
+### Y2 — 真分类器（单阶段）★
+
+| ID | 任务 | 验收 | 状态 |
+|----|------|------|------|
+| **Y2.1–Y2.6** | completeText 侧路 · prompt · 解析 · runToolUse · acceptEdits 快路径 · 超时 | `test-auto-permissions` | ✅ 最小 |
+| **Y2.7** | `/permissions` 显示 circuit/lastReason | slash | ✅ 最小 |
+| **Y2.8** | 费用提示 | PERMISSIONS / slash | ✅ |
+
+**出口：** headless 可开 auto，危险操作经模型批/拒；**fail-closed**。 **~45% HC auto 语义（Y2 完成）。**
+
+### Y3 / Y4
+
+| 阶段 | 状态 |
+|------|------|
+| Y3 清洗/熔断/危险库 | 🟡 部分：stripDangerousAllows + 熔断计数已入；危险模式库仍 ⬜ |
+| Y4 两阶段/对抗 | ⬜ |
 
 **出口：** headless 可开 auto，危险操作经模型批/拒；**fail-closed**。  
 **相对 HC YOLO 语义：~40–50%。**  

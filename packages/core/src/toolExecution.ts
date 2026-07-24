@@ -14,8 +14,14 @@ import path from 'node:path'
 import {
   addAlwaysAllowToolName,
   decidePermission,
+  createAutoModeState,
+  recordAutoClassifySuccess,
+  recordAutoClassifyFailure,
   type PermissionMode,
   type SessionPermissionRules,
+  type AutoModeState,
+  type AutoClassifyFn,
+  type AutoClassifyInput,
 } from '../../permissions/src/index.ts'
 import { runHooks } from '../../hooks/src/index.ts'
 import { nowIso, type ChatMessage, type HooksConfig } from '../../shared/src/index.ts'
@@ -138,6 +144,13 @@ export type RunToolUseContext = {
   parentMessages?: import('../../shared/src/index.ts').ChatMessage[]
   /** fork 时注入子 agent 的父 system 段 */
   parentSystemPromptSections?: readonly string[]
+  /**
+   * auto 模式分类器（Y2）。mode=auto 且规则层 ask 时调用。
+   * 未注入则 auto 对非快路径 **deny**（fail-closed）。
+   */
+  classifyPermission?: AutoClassifyFn
+  /** 会话 auto 状态（熔断 / lastReason） */
+  autoModeState?: AutoModeState
   signal?: AbortSignal
   onEvent?: (e: ToolExecutionEvent | QueryLoopEvent) => void
 }
@@ -152,6 +165,25 @@ export type RunToolUseResult = {
 
 function emit(ctx: RunToolUseContext, e: ToolExecutionEvent) {
   ctx.onEvent?.(e)
+}
+
+/** 供 auto 分类器的极简近期摘要（不进主对话） */
+function summarizeRecentMessages(
+  messages: import('../../shared/src/index.ts').ChatMessage[] | undefined,
+  max = 8,
+): string {
+  if (!messages?.length) return ''
+  const slice = messages.slice(-max)
+  return slice
+    .map((m) => {
+      const role = m.role
+      const content = (m.content ?? '').replace(/\s+/g, ' ').trim().slice(0, 200)
+      const tools = m.tool_calls?.map((t) => t.name).join(',')
+      return tools
+        ? `${role}: ${content} [tools:${tools}]`
+        : `${role}: ${content}`
+    })
+    .join('\n')
 }
 
 function parseInput(block: ToolUseBlock): unknown {
@@ -355,6 +387,118 @@ export async function runToolUse(
   }
 
   if (finalBehavior === 'ask') {
+    // ── auto 模式：分类器（对照 HC YOLO 挂接点）──
+    if (ctx.permissionMode === 'auto') {
+      const autoState = ctx.autoModeState
+      if (autoState?.circuitBroken) {
+        if (autoState.fallback === 'ask') {
+          // 熔断后回退 UI ask：fall through 到下方 hooks/UI
+        } else {
+          return endResult(
+            ctx,
+            toolUseId,
+            name,
+            formatToolUseError(
+              `permission denied (auto circuit open: ${autoState.lastReason ?? 'classifier unavailable'})`,
+            ),
+            {
+              blocked: false,
+              denied: true,
+              ok: false,
+              isError: true,
+              concurrencySafe,
+            },
+          )
+        }
+      }
+      if (!autoState?.circuitBroken || autoState.fallback !== 'ask') {
+        const classify = ctx.classifyPermission
+        if (!classify) {
+          if (autoState) {
+            recordAutoClassifyFailure(
+              autoState,
+              'no classifyPermission injected',
+            )
+          }
+          return endResult(
+            ctx,
+            toolUseId,
+            name,
+            formatToolUseError(
+              'permission denied (auto: no classifier; fail-closed)',
+            ),
+            {
+              blocked: false,
+              denied: true,
+              ok: false,
+              isError: true,
+              concurrencySafe,
+            },
+          )
+        }
+        const recentSummary = summarizeRecentMessages(ctx.parentMessages)
+        const classifyInput: AutoClassifyInput = {
+          toolName: name,
+          toolInput,
+          cwd: ctx.cwd,
+          recentSummary,
+        }
+        const result = await classify(classifyInput, {
+          signal: ctx.signal,
+        })
+        if (result.unavailable) {
+          if (autoState) {
+            recordAutoClassifyFailure(autoState, result.reason)
+          }
+          emit(ctx, {
+            type: 'permission_decision',
+            mode: 'auto',
+            behavior: 'deny',
+            reason: result.reason,
+          })
+          return endResult(
+            ctx,
+            toolUseId,
+            name,
+            formatToolUseError(`permission denied (auto: ${result.reason})`),
+            {
+              blocked: false,
+              denied: true,
+              ok: false,
+              isError: true,
+              concurrencySafe,
+            },
+          )
+        }
+        if (autoState) {
+          recordAutoClassifySuccess(autoState, result.decision, result.reason)
+        }
+        emit(ctx, {
+          type: 'permission_decision',
+          mode: 'auto',
+          behavior: result.decision,
+          reason: result.reason,
+        })
+        if (result.decision === 'deny') {
+          return endResult(
+            ctx,
+            toolUseId,
+            name,
+            formatToolUseError(`permission denied (auto: ${result.reason})`),
+            {
+              blocked: false,
+              denied: true,
+              ok: false,
+              isError: true,
+              concurrencySafe,
+            },
+          )
+        }
+        finalBehavior = 'allow'
+      }
+    }
+
+    if (finalBehavior === 'ask') {
     emit(ctx, { type: 'phase', phase: 'awaiting_permission' })
     emit(ctx, {
       type: 'permission_request',
@@ -419,6 +563,7 @@ export async function runToolUse(
         },
       )
     }
+    } // end if still ask (UI path)
   }
 
   // --- Execute ---

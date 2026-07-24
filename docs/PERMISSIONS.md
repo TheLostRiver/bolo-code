@@ -30,13 +30,19 @@ PreToolUse (可 block)
   → PostToolUse
 ```
 
-**Gate 顺序（TP-PERM 分类器小步 / 规则匹配增强）：**
+**Gate 顺序（含 auto）：**
 
-1. **会话 always-deny**（工具名 / 前缀 / path glob / Bash 模式）→ **deny**（**含** `bypassPermissions`）  
+1. **会话 always-deny** → **deny**（**含** `bypassPermissions` / `auto`）  
 2. `bypassPermissions` → allow  
-3. `plan` → 读 allow；写/壳/MCP **deny**（**优先于** always-allow）  
+3. `plan` → 读 allow；写/壳/MCP **deny**  
 4. 会话 always-allow 规则 → allow  
-5. `acceptEdits` / `default` 矩阵  
+5. **`auto`**：白名单/读 allow；cwd 内 edit allow；其余 → **ask 标记**（由 `runToolUse` 调分类器）  
+6. `acceptEdits` / `default` 矩阵  
+
+**auto 异步路径（Y2）：** 规则层 `ask` + `mode=auto` → `classifyPermission`（`provider.completeText` 侧路）→ allow/deny；`unavailable` → deny + 熔断计数。  
+进入 auto（`setPermissionMode` / `/permissions auto`）时 **剥离** Bash/Agent 全工具 always-allow 与过宽 bash 模式。
+
+费用：每个需分类的工具可能 **额外一次** 模型调用。详见 `docs/TODO_AUTO_PERMISSIONS.md`。
 
 ## 3. 工具类别（Bolo）
 

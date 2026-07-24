@@ -265,15 +265,12 @@ P1：
 
 若只开一刀（**非 Electron**）：
 
-> **主推：Auto/YOLO 权限分类器（专项路线图）**  
-> - **真源：`docs/TODO_AUTO_PERMISSIONS.md`**  
-> - 顺序：**Y0 规格 → Y1 模式+白名单 → Y2 真分类器（首个可发布）→ Y3 清洗/熔断 → Y4 ~90% 语义**  
-> - **禁止** Y1 勾成「完整 YOLO ✅」；Y2 才是第一个可用 auto  
-> - PL-MKT 插件市场最小已齐（`docs/PLUGINS.md`）  
->
-> **后置：** 完整官方 marketplace 深度 · OAuth · OR6 · T8 · Electron · worktree · cached MC  
+> **主推：Auto/YOLO 续作 Y3**（清洗加深 / 危险模式库 / 敏感路径）— 见 `docs/TODO_AUTO_PERMISSIONS.md`  
+> - **Y0–Y2 已落地最小可用 auto**（`/permissions auto` · 白名单 · 侧路分类器 · fail-closed）  
+> - **禁止** 把 Y2 勾成「完整 YOLO 100%」；Y3/Y4 仍待做  
+> - 测试：`npx tsx scripts/test-auto-permissions.ts`  
 
-**已齐摘要：** 规则权限四档+allow/deny · PL-MKT 最小 · headless 主路径见上文；**auto/YOLO 专册已立、实现按 Y0–Y4 未齐**。
+**已齐摘要：** … · **auto Y2 最小** · PL-MKT · …
 
 ---
 

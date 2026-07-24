@@ -97,6 +97,9 @@ export type QueryLoopParams = {
   askPermission: AskPermissionFn
   /** 会话 Always-allow；透传 runTools */
   permissionRules?: SessionPermissionRules
+  /** auto 分类器 / 状态 */
+  classifyPermission?: import('../../permissions/src/index.ts').AutoClassifyFn
+  autoModeState?: import('../../permissions/src/index.ts').AutoModeState
   /** tool_result 字符预算 */
   maxToolResultChars?: number
   spillTruncatedToolResults?: boolean
@@ -249,6 +252,8 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
           permissionMode: params.permissionMode,
           askPermission: params.askPermission,
           permissionRules: params.permissionRules,
+          classifyPermission: params.classifyPermission,
+          autoModeState: params.autoModeState,
           maxToolResultChars: params.maxToolResultChars,
           spillTruncatedToolResults: params.spillTruncatedToolResults,
           skills: params.skills,

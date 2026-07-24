@@ -1399,10 +1399,10 @@ function cmdPlan(session: SlashSession, _args: string): SlashDispatchResult {
   return { ok: true, message: 'permissionMode set to plan' }
 }
 
-function cmdPermissions(
+async function cmdPermissions(
   session: SlashSession,
   args: string,
-): SlashDispatchResult {
+): Promise<SlashDispatchResult> {
   const raw = args.trim()
   if (!raw) {
     const list = PERMISSION_MODES.map((m) => {
@@ -1410,9 +1410,20 @@ function cmdPermissions(
       const mark = m === session.permissionMode ? ' *' : ''
       return `  ${m}${mark} — ${meta.userLabel}`
     }).join('\n')
+    const auto = session as {
+      autoModeState?: { lastReason?: string; circuitBroken?: boolean }
+    }
+    let autoLine = ''
+    if (session.permissionMode === 'auto' && auto.autoModeState) {
+      autoLine =
+        `\nauto: circuit=${auto.autoModeState.circuitBroken ? 'open' : 'ok'}` +
+        (auto.autoModeState.lastReason
+          ? ` last=${auto.autoModeState.lastReason}`
+          : '')
+    }
     return {
       ok: true,
-      message: `permissionMode: ${session.permissionMode}\nmodes:\n${list}`,
+      message: `permissionMode: ${session.permissionMode}\nmodes:\n${list}${autoLine}`,
     }
   }
   if (!isPermissionMode(raw)) {
@@ -1421,8 +1432,21 @@ function cmdPermissions(
       message: `Invalid mode "${raw}". Usage: /permissions [${PERMISSION_MODES.join('|')}]`,
     }
   }
-  session.permissionMode = raw
-  return { ok: true, message: `permissionMode set to ${raw}` }
+  // 走 setPermissionMode 逻辑（strip + auto state）
+  const { setPermissionMode } = await import('./index.ts')
+  setPermissionMode(
+    session as Parameters<typeof setPermissionMode>[0],
+    raw as PermissionMode,
+  )
+  let extra = ''
+  if (raw === 'auto') {
+    const st = (session as { autoModeState?: { lastReason?: string } })
+      .autoModeState
+    extra = st?.lastReason ? ` (${st.lastReason})` : ''
+    extra +=
+      ' — classifier will approve/deny non-allowlisted tools; expect extra model cost; failures deny.'
+  }
+  return { ok: true, message: `permissionMode set to ${raw}${extra}` }
 }
 
 function ensurePermissionRules(session: SlashSession): SessionPermissionRules {

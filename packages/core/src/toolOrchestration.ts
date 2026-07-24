@@ -29,6 +29,8 @@ export type RunToolsParams = {
   permissionMode: import('../../permissions/src/index.ts').PermissionMode
   askPermission: AskPermissionFn
   permissionRules?: import('../../permissions/src/index.ts').SessionPermissionRules
+  classifyPermission?: import('../../permissions/src/index.ts').AutoClassifyFn
+  autoModeState?: import('../../permissions/src/index.ts').AutoModeState
   maxToolResultChars?: number
   spillTruncatedToolResults?: boolean
   skills?: LoadedSkill[]
@@ -95,6 +97,8 @@ export async function runTools(params: RunToolsParams): Promise<RunToolsResult> 
     permissionMode: params.permissionMode,
     askPermission: params.askPermission,
     permissionRules: params.permissionRules,
+    classifyPermission: params.classifyPermission,
+    autoModeState: params.autoModeState,
     maxToolResultChars: params.maxToolResultChars,
     spillTruncatedToolResults: params.spillTruncatedToolResults,
     skills: params.skills,

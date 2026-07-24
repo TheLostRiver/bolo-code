@@ -1,15 +1,17 @@
 /**
  * 权限模式与门控 — 对照参考实现 PermissionMode / permissions 决策链语义
- * 见 docs/PERMISSIONS.md
- * 无遥测、无 YOLO / auto 分类器
+ * 见 docs/PERMISSIONS.md · docs/TODO_AUTO_PERMISSIONS.md
+ * 无遥测；auto 分类器为 Y1–Y2 最小实现
  */
 
 import path from 'node:path'
+import { isAutoAllowlistedTool } from './autoAllowlist.ts'
 
 export const PERMISSION_MODES = [
   'default',
   'acceptEdits',
   'plan',
+  'auto',
   'bypassPermissions',
 ] as const
 
@@ -46,6 +48,12 @@ export const PERMISSION_MODE_META: Record<PermissionMode, PermissionModeMeta> = 
     shortTitle: 'Plan',
     userLabel: 'Plan',
   },
+  auto: {
+    id: 'auto',
+    title: 'Auto',
+    shortTitle: 'Auto',
+    userLabel: '自动（分类器）',
+  },
   bypassPermissions: {
     id: 'bypassPermissions',
     title: 'Bypass Permissions',
@@ -68,14 +76,15 @@ export function parsePermissionMode(
 
 /**
  * 子 agent 权限不得比父会话更宽（S8 最小）。
- * 排序：plan < default < acceptEdits < bypassPermissions
- * 对照 HC「子权限更严」语义；无 YOLO。
+ * 排序：plan < default < acceptEdits < auto < bypassPermissions
+ * auto 宽于 acceptEdits（可自动放行 shell，经分类器），窄于 bypass。
  */
 const PERMISSION_MODE_RANK: Record<PermissionMode, number> = {
   plan: 0,
   default: 1,
   acceptEdits: 2,
-  bypassPermissions: 3,
+  auto: 3,
+  bypassPermissions: 4,
 }
 
 export function permissionModeRank(mode: PermissionMode): number {
@@ -104,7 +113,7 @@ export function resolveSubagentPermissionMode(
     : parentMode
 }
 
-/** Shift+Tab 风格循环（对照 getNextPermissionMode，无 auto/dontAsk） */
+/** Shift+Tab 风格循环：default → acceptEdits → plan → auto → bypass → default */
 export function getNextPermissionMode(mode: PermissionMode): PermissionMode {
   switch (mode) {
     case 'default':
@@ -112,6 +121,8 @@ export function getNextPermissionMode(mode: PermissionMode): PermissionMode {
     case 'acceptEdits':
       return 'plan'
     case 'plan':
+      return 'auto'
+    case 'auto':
       return 'bypassPermissions'
     case 'bypassPermissions':
       return 'default'
@@ -564,13 +575,14 @@ export type GateResult = {
  * 纯函数门控 — 对照参考实现规则优先 + 模式矩阵的最小表驱动版
  *
  * 顺序：
- * 1. always-deny（硬规则，**含** bypass）
+ * 1. always-deny（硬规则，**含** bypass / auto）
  * 2. bypass → allow
  * 3. plan（写/壳/MCP 仍 deny，优先于 always-allow）
  * 4. always-allow
- * 5. acceptEdits / default 矩阵
+ * 5. auto：白名单 allow；acceptEdits 可放行的 edit → allow；其余 → ask（由 runToolUse 调分类器）
+ * 6. acceptEdits / default 矩阵
  *
- * 非完整 YOLO / auto 分类器。
+ * auto 的 LLM 分类在 toolExecution 异步路径；此处仅同步规则。
  */
 export function decidePermission(input: GateInput): GateResult {
   const category = classifyTool(input.toolName)
@@ -615,6 +627,33 @@ export function decidePermission(input: GateInput): GateResult {
       ...base,
       behavior: 'allow',
       reason: 'session always-allow rule',
+    }
+  }
+
+  // auto：同步快路径；其余 ask → 分类器（toolExecution）
+  if (mode === 'auto') {
+    if (isAutoAllowlistedTool(input.toolName) || category === 'read') {
+      return {
+        ...base,
+        behavior: 'allow',
+        reason: 'auto: allowlisted / read',
+      }
+    }
+    if (category === 'edit') {
+      const p = extractPathFromInput(input.toolInput)
+      if (p && isPathInsideCwd(input.cwd, p)) {
+        return {
+          ...base,
+          behavior: 'allow',
+          reason: 'auto: edit inside cwd (acceptEdits fast-path)',
+        }
+      }
+    }
+    // 需分类器（或熔断后 fallback）
+    return {
+      ...base,
+      behavior: 'ask',
+      reason: 'auto: needs classifier',
     }
   }
 
@@ -674,3 +713,30 @@ export function decidePermission(input: GateInput): GateResult {
     reason: 'default: unknown tool → ask',
   }
 }
+
+// re-exports for auto subsystem
+export {
+  isAutoAllowlistedTool,
+  AUTO_ALLOWLIST_TOOLS,
+} from './autoAllowlist.ts'
+export {
+  createAutoModeState,
+  recordAutoClassifySuccess,
+  recordAutoClassifyFailure,
+  resetAutoModeCircuit,
+  DEFAULT_AUTO_CIRCUIT_THRESHOLD,
+  type AutoModeState,
+  type AutoModeFallback,
+} from './autoMode.ts'
+export {
+  parseAutoClassifierResponse,
+  buildAutoClassifierSystemPrompt,
+  buildAutoClassifierUserPrompt,
+  buildClassifierMessages,
+  createAutoClassifyFromCompleteText,
+  DEFAULT_AUTO_CLASSIFY_TIMEOUT_MS,
+  type AutoClassifyInput,
+  type AutoClassifyResult,
+  type AutoClassifyFn,
+} from './autoClassifier.ts'
+export { stripDangerousAllowsForAuto } from './stripDangerousAllows.ts'

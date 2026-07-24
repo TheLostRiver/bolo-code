@@ -256,6 +256,14 @@ export {
   addAlwaysDenyPathGlob,
   addAlwaysDenyBashPrefix,
   addAlwaysDenyPrefix,
+  isAutoAllowlistedTool,
+  createAutoModeState,
+  stripDangerousAllowsForAuto,
+  createAutoClassifyFromCompleteText,
+  parseAutoClassifierResponse,
+  type AutoModeState,
+  type AutoClassifyFn,
+  type AutoClassifyResult,
 } from '../../permissions/src/index.ts'
 export {
   SESSION_SNAPSHOT_VERSION,
@@ -482,6 +490,14 @@ export type BoloSession = {
   askPermission: AskPermissionFn
   /** 会话 Always-allow（/allow 与 CLI `a`） */
   permissionRules: SessionPermissionRules
+  /**
+   * auto 模式状态（熔断 / lastReason）；mode=auto 时使用。
+   */
+  autoModeState?: AutoModeState
+  /**
+   * auto 分类器；默认由 provider.completeText 注入（Y2）。
+   */
+  classifyPermission?: AutoClassifyFn
   /** tool_result 字符预算（C6） */
   maxToolResultChars: number
   compactSummarizer?: CompactSummarizer
@@ -645,6 +661,17 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
     // 测试/smoke 显式传 allow。
     askPermission: opts.askPermission ?? (async () => 'deny'),
     permissionRules: opts.permissionRules ?? createEmptyPermissionRules(),
+    autoModeState: createAutoModeState('deny'),
+    classifyPermission: (() => {
+      const p = provider
+      if (p.completeText) {
+        return createAutoClassifyFromCompleteText(
+          (messages, o) => p.completeText!(messages, o),
+          { model: opts.model },
+        )
+      }
+      return undefined
+    })(),
     maxToolResultChars: opts.maxToolResultChars ?? 50_000,
     compactSummarizer: opts.compactSummarizer,
     skills,
@@ -1122,6 +1149,8 @@ export async function submitPrompt(
     permissionMode: session.permissionMode,
     askPermission: session.askPermission,
     permissionRules: session.permissionRules,
+    classifyPermission: session.classifyPermission,
+    autoModeState: session.autoModeState,
     maxToolResultChars: session.maxToolResultChars,
     skills: session.skills,
     tools: session.tools ?? createDefaultTools(session.agentDefinitions),
@@ -1496,9 +1525,32 @@ export {
 
 /**
  * 切换权限模式（对照 HC cyclePermissionMode 的 session 侧）
+ * 进入 auto 时剥离危险 always-allow（Y3.1 最小）。
  */
 export function setPermissionMode(session: BoloSession, mode: PermissionMode) {
+  const prev = session.permissionMode
   session.permissionMode = mode
+  if (mode === 'auto' && prev !== 'auto') {
+    const removed = stripDangerousAllowsForAuto(session.permissionRules)
+    if (!session.autoModeState) {
+      session.autoModeState = createAutoModeState('deny')
+    } else {
+      // 进 auto 重置熔断，给分类器新机会
+      session.autoModeState.circuitBroken = false
+      session.autoModeState.consecutiveFailures = 0
+    }
+    if (removed.length) {
+      session.autoModeState.lastReason = `stripped dangerous allows: ${removed.join(', ')}`
+    }
+    // 确保有分类器
+    if (!session.classifyPermission && session.provider.completeText) {
+      const p = session.provider
+      session.classifyPermission = createAutoClassifyFromCompleteText(
+        (messages, o) => p.completeText!(messages, o),
+        { model: session.model },
+      )
+    }
+  }
   emit(session, {
     type: 'phase',
     phase: session.phase,

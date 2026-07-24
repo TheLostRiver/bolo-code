@@ -298,7 +298,15 @@ export function permissionModeBehaviorLine(
     case 'bypassPermissions':
       return (
         'Permission mode: bypassPermissions — most tools are auto-allowed by the gate. ' +
-        'Still act responsibly: no reckless destructive commands; prefer reversible steps.'
+        'Still act responsibly: no reckless destructive commands; prefer reversible steps. ' +
+        'Session always-deny rules still apply.'
+      )
+    case 'auto':
+      return (
+        'Permission mode: auto — safe/read tools and in-workspace edits may auto-allow; ' +
+        'other tools are approved or denied by a local security classifier (side model call). ' +
+        'Each risky tool may cost an extra model request. On classifier failure, actions are denied. ' +
+        'Always-deny rules and plan-mode write bans still apply. Prefer reversible steps.'
       )
     default:
       return (
