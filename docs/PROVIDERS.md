@@ -87,14 +87,25 @@
 - 流式：`content_block_start` / `content_block_delta`（`text_delta` / `input_json_delta`）/ `message_stop`
 - tool 结果：下一条 `user` 的 `tool_result` blocks
 
-内部统一为 Bolo `ProviderStreamEvent`（`text_delta` | `tool_call` | `done` | `error`），agent loop 无需关心协议。
+内部统一为 Bolo `ProviderStreamEvent`（`text_delta` | `tool_call` | `usage` | `done` | `error`），agent loop 无需关心协议。
+
+### Usage 事件（若 API 有）
+
+- OpenAI-compatible：请求带 `stream_options.include_usage`；SSE 末包 `usage.prompt_tokens` / `completion_tokens` → `yield { type:'usage' }`；无则 queryLoop 用 chars/4 估算。
+- Anthropic：`message_start` / `message_delta` 的 `usage` 合并后 yield；无则同样回落估算。
+
+### Effort → max_tokens
+
+`session.effortLevel`（`/effort`）经 `callModel` → `completeStream({ effort })` → `mapEffort`：`low` 较小、`high`/`max` 较大、`auto`/缺省用配置默认 `maxTokens`（默认 8192）。仅映射输出上限，非 thinking budget。
 
 ## 代码
 
 | 文件 | 职责 |
 |------|------|
-| `openaiCompatible.ts` | OpenAI 流 |
-| `anthropic.ts` | Anthropic Messages 流 |
+| `openaiCompatible.ts` | OpenAI 流 + usage |
+| `anthropic.ts` | Anthropic Messages 流 + usage |
+| `sseUsage.ts` | 解析/合并 SSE usage 片段 |
+| `effort.ts` | `mapEffort` → maxTokens |
 | `fromEnv.ts` | 装配 / 推断 |
 | `compactSummarizer.ts` | 无 tools 摘要（两协议通用） |
 

@@ -212,7 +212,7 @@ function cmdEffort(session: SlashSession, args: string): SlashDispatchResult {
   if (!raw) {
     return {
       ok: true,
-      message: `effort: ${session.effortLevel ?? 'auto'} (session field; no provider mapping yet)`,
+      message: `effort: ${session.effortLevel ?? 'auto'} (maps to max_tokens via mapEffort)`,
     }
   }
   if (!isEffortLevel(raw)) {

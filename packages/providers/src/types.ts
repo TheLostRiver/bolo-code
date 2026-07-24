@@ -21,6 +21,13 @@ export type CompleteStreamOptions = {
   tools?: ToolSpec[]
   signal?: AbortSignal
   disableTools?: boolean
+  /**
+   * 会话 effort 档位（low|medium|high|max|auto）。
+   * provider 用 mapEffort 映射 max_tokens；auto/缺省 = 配置默认。
+   */
+  effort?: string
+  /** 覆盖本轮 max_tokens（优先于 effort 映射结果） */
+  maxTokens?: number
 }
 
 export interface LlmProvider {

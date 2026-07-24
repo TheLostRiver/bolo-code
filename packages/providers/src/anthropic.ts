@@ -11,7 +11,10 @@ import type {
   CompleteStreamOptions,
   LlmProvider,
   ProviderStreamEvent,
+  ProviderUsage,
 } from './types.ts'
+import { mapEffort, DEFAULT_EFFORT_BASE_MAX_TOKENS } from './effort.ts'
+import { mergeProviderUsage, parseAnthropicStreamUsage } from './sseUsage.ts'
 
 export type AnthropicConfig = {
   apiKey: string
@@ -138,7 +141,7 @@ function normalizeBaseUrl(base?: string): string {
 export function createAnthropicProvider(config: AnthropicConfig): LlmProvider {
   const baseUrl = normalizeBaseUrl(config.baseUrl)
   const timeoutMs = config.timeoutMs ?? 120_000
-  const maxTokens = config.maxTokens ?? 8192
+  const baseMaxTokens = config.maxTokens ?? DEFAULT_EFFORT_BASE_MAX_TOKENS
   const version = config.anthropicVersion ?? '2023-06-01'
 
   async function* streamMessages(
@@ -147,6 +150,9 @@ export function createAnthropicProvider(config: AnthropicConfig): LlmProvider {
   ): AsyncIterable<ProviderStreamEvent> {
     const { system, messages: antMessages } = toAnthropicMessages(messages)
     const url = `${baseUrl}/messages`
+    const maxTokens =
+      options?.maxTokens ??
+      mapEffort(options?.effort, baseMaxTokens).maxTokens
 
     const body: Record<string, unknown> = {
       model: config.model,
@@ -169,6 +175,7 @@ export function createAnthropicProvider(config: AnthropicConfig): LlmProvider {
       number,
       { id: string; name: string; json: string }
     >()
+    let streamUsage: ProviderUsage | null = null
 
     try {
       const res = await fetch(url, {
@@ -231,6 +238,11 @@ export function createAnthropicProvider(config: AnthropicConfig): LlmProvider {
           let evt: {
             type?: string
             index?: number
+            usage?: unknown
+            message?: {
+              usage?: unknown
+              content_block?: unknown
+            }
             content_block?: {
               type?: string
               id?: string
@@ -249,6 +261,9 @@ export function createAnthropicProvider(config: AnthropicConfig): LlmProvider {
           } catch {
             continue
           }
+
+          const u = parseAnthropicStreamUsage(evt)
+          if (u) streamUsage = mergeProviderUsage(streamUsage, u)
 
           switch (evt.type) {
             case 'content_block_start': {
@@ -285,6 +300,7 @@ export function createAnthropicProvider(config: AnthropicConfig): LlmProvider {
             }
             case 'message_stop': {
               yield* flushTools()
+              if (streamUsage) yield { type: 'usage', usage: streamUsage }
               yield { type: 'done' }
               return
             }
@@ -302,6 +318,7 @@ export function createAnthropicProvider(config: AnthropicConfig): LlmProvider {
       }
 
       yield* flushTools()
+      if (streamUsage) yield { type: 'usage', usage: streamUsage }
       yield { type: 'done' }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -315,10 +332,13 @@ export function createAnthropicProvider(config: AnthropicConfig): LlmProvider {
 
   async function completeText(
     messages: ChatMessage[],
-    options?: { signal?: AbortSignal },
+    options?: { signal?: AbortSignal; effort?: string; maxTokens?: number },
   ): Promise<string> {
     const { system, messages: antMessages } = toAnthropicMessages(messages)
     const url = `${baseUrl}/messages`
+    const maxTokens =
+      options?.maxTokens ??
+      mapEffort(options?.effort, baseMaxTokens).maxTokens
     const body: Record<string, unknown> = {
       model: config.model,
       max_tokens: maxTokens,

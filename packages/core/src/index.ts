@@ -308,8 +308,9 @@ export type BoloSession = {
   skills: LoadedSkill[]
   model?: string
   /**
-   * 会话级 effort 档位（/effort）；仅存字段，暂无 provider 映射。
-   * `undefined` 视为 auto。
+   * 会话级 effort 档位（/effort）。
+   * 经 callModel → completeStream options.effort → mapEffort → max_tokens。
+   * `undefined` 视为 auto（默认 base maxTokens）。
    */
   effortLevel?: string
   /** 会话级 auto compact 开关（prepareMessages） */
@@ -704,6 +705,7 @@ export async function submitPrompt(
     querySource: options?.querySource ?? 'repl_main_thread',
     maxPtlRetries: session.maxPtlRetries,
     usage: session.usage,
+    effortLevel: session.effortLevel,
     onEvent: (e) => mapLoopEvent(session, e),
   })
 

@@ -25,7 +25,7 @@
 | `/context` | 消息数、字符粗算、permissionMode、model、effort、cwd、id、usage 一行 |
 | `/cost` · `/usage` | 会话内本地 token 累计（`session.usage`）；无遥测、不上报 |
 | `/model [name]` | 无参显示；有参设 `session.model` |
-| `/effort [low\|medium\|high\|max\|auto]` | 会话字段 `effortLevel`；`auto` 清除覆盖；暂无 provider 映射 |
+| `/effort [low\|medium\|high\|max\|auto]` | 会话字段 `effortLevel`；`auto` 清除覆盖；经 `mapEffort` 映射为 `max_tokens` |
 | `/plan` | `permissionMode = plan` |
 | `/permissions [mode]` | 无参列出四档；有参切换 |
 
@@ -45,5 +45,5 @@ REPL 额外：`/exit` `/quit` 由 CLI 处理（退出循环，不进总线）。
 ## 非目标（本切片）
 
 - skill 回落 `/skills`、插件命令、远程/账号类命令
-- effort → API 参数映射
+- effort → thinking / reasoning 强度（目前仅 max_tokens）
 - 遥测 / 远程 cost 账单

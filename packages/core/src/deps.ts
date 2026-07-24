@@ -23,6 +23,9 @@ export type CallModelFn = (req: {
   signal?: AbortSignal
   tools?: readonly BoloTool[] | ToolSpec[]
   disableTools?: boolean
+  /** session.effortLevel；透传 provider mapEffort → max_tokens */
+  effort?: string
+  maxTokens?: number
 }) => AsyncIterable<ProviderStreamEvent>
 
 export type PrepareMessagesResult = {
@@ -44,8 +47,21 @@ export type QueryDeps = {
 }
 
 export function createCallModelFromProvider(provider: LlmProvider): CallModelFn {
-  return async function* ({ messages, signal, tools, disableTools }) {
-    yield* provider.completeStream(messages, { signal, tools, disableTools })
+  return async function* ({
+    messages,
+    signal,
+    tools,
+    disableTools,
+    effort,
+    maxTokens,
+  }) {
+    yield* provider.completeStream(messages, {
+      signal,
+      tools,
+      disableTools,
+      effort,
+      maxTokens,
+    })
   }
 }
 

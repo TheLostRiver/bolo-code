@@ -136,6 +136,7 @@ export function createProviderFromEnv(
       baseUrl,
       model,
       timeoutMs: overrides?.timeoutMs,
+      maxTokens: overrides?.maxTokens,
     }),
     kind: 'openai-compatible',
     model,

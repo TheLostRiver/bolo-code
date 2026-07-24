@@ -96,6 +96,10 @@ export type QueryLoopParams = {
    * 有 provider `usage` 事件则累加；否则 chars/4 估算并标 estimated。
    */
   usage?: SessionUsage
+  /**
+   * 会话 effort 档位（/effort）；透传 callModel → provider max_tokens 映射。
+   */
+  effortLevel?: string
   onEvent?: (e: QueryLoopEvent) => void
   signal?: AbortSignal
 }
@@ -210,6 +214,7 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
           messages: messagesForQuery,
           signal: params.signal,
           tools,
+          effort: params.effortLevel,
         })) {
           if (ev.type === 'text_delta') {
             assistantText += ev.text
