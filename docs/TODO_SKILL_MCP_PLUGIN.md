@@ -230,7 +230,7 @@ PL-SPEC 出口 ────────► IMPORT-*（可选）
 | 序 | 刀 | 切片 |
 |----|----|------|
 | 1 | Skill 可移植 | ~~S-PORT-0..8~~ ✅ 最小出口 |
-| 2 | MCP 诊断卫生 | ~~M-GEN-0..5 + M-GEN-8~~ ✅ → **M-GEN-6** 可选 / **PL-SPEC** |
+| 2 | MCP 诊断卫生 | ~~M-GEN-0..6 + M-GEN-8~~ ✅ → **PL-SPEC** / OAuth 后置 |
 | 3 | MCP 诊断卫生 | M-GEN-0 · M-GEN-1 · M-GEN-2 · M-GEN-3 |
 | 4 | MCP 加固 | M-GEN-4 · M-GEN-5 · M-GEN-8（± M-GEN-6） |
 | 5 | Bolo Spec | PL-SPEC-0 · PL-SPEC-1 · PL-SPEC-2 · PL-SPEC-3 · PL-SPEC-4 |
@@ -292,6 +292,6 @@ PL-SPEC 出口 ────────► IMPORT-*（可选）
 
 > **Skill 先做成可移植内容标准；MCP 做成稳、可诊、无秘钥泄漏的协议客户端；插件始终以 `bolo.*` 为一等规范。官方市场与外来完整运行时兼容从长计议，且永不绑 Claude/Codex 商店。**
 
-**默认下一刀：** **M-GEN-6**（`${VAR}` 插值，可选）或 **PL-SPEC**（Bolo 插件规范）。OAuth = M-GEN-7 后置。  
+**默认下一刀：** **PL-SPEC**（Bolo 插件规范）或 **M-GEN-7 OAuth**（后置，需确认）。  
 
-**MCP 日用通用：** M-GEN-0..5 + **M-GEN-8** ✅（无 OAuth）。
+**MCP 日用通用：** M-GEN-0..6 + M-GEN-8 ✅（OAuth 仍 ⬜）。

@@ -45,6 +45,41 @@ user ~/.bolo/mcp.json
 - `reconnect*` 仅对 `sse` 有意义，其它 transport → warning  
 - 连接阶段再次 `validate`；失败文案进入 session `warning` 事件与 `console.warn([bolo mcp] …)`
 
+### 环境变量插值（M-GEN-6）
+
+连接前展开（对照 HC `expandEnvVarsInString`），**无脚本执行**：
+
+| 语法 | 行为 |
+|------|------|
+| `${VAR}` | 取 `process.env.VAR`；缺失则保留原文并 warn |
+| `${VAR:-default}` | 缺失时用 default |
+
+作用字段：`command` · `args` · `url` · `env` · `headers`（**不**展开 `name`）。  
+API：`expandEnvVarsInString` · `expandMcpServerConfig`。
+
+示例：
+
+```json
+{
+  "mcpServers": {
+    "remote": {
+      "type": "http",
+      "url": "https://${MCP_HOST}/mcp",
+      "headers": {
+        "Authorization": "Bearer ${MCP_TOKEN}"
+      }
+    },
+    "local": {
+      "command": "${NODE_BIN:-node}",
+      "args": ["${MCP_SCRIPT}"],
+      "env": {
+        "API_KEY": "${API_KEY}"
+      }
+    }
+  }
+}
+```
+
 ### stdio（本地进程）
 
 ```json
