@@ -554,6 +554,8 @@ flowchart TB
 Headless **主路径可日用**，相对参考实现约 **45–60%**（文档不再写 ~70% 乐观数）。  
 **规则权限 + auto Y0–Y4 最小已齐**（HC auto **语义** ~85–90%；Y3.6 审计 note ✅；UI/企业策略 ⬜）。  
 **PL-MKT 最小已齐**（本地/URL 清单 install；非官方市场全家桶）。  
-扩展三层 ✅；Memory/IMPORT ✅；AUTORUN 小轨 ✅；**产品轨 TODO_PRODUCT 圆满 ✅**。  
-OUT：Electron · OAuth · 官方市场 · worktree · 企业 YOLO · cached MC · 完整 Ink。  
-执行序 → **`docs/TODO.md`**（无强制默认刀）。
+扩展三层 ✅；Memory/IMPORT ✅；AUTORUN/PRODUCT **小轨** ✅（**≠ 整盘完成**）。  
+**进行中：整盘后续 `docs/TODO_FULL.md`**（T8 → compact 深刀 → worktree → OAuth/… → Y5+ → 收口）。  
+**后置：** Electron。  
+**永不：** 官方市场 API · 遥测。  
+执行序 → **`docs/TODO.md` §8** + **`docs/TODO_FULL.md`**。

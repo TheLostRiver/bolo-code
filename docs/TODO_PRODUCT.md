@@ -1,16 +1,15 @@
 # 产品级执行轨（Product Track）
 
-> **整盘 headless 后续执行真源**（非 Memory 窄轨）。  
-> 总览：`docs/ROADMAP.md` · 入口：`docs/TODO.md`。  
-> 历史：`docs/TODO_AUTORUN.md` 已收口。  
-> **Electron / 企业 YOLO / 官方市场 / OAuth / worktree / cached MC / T8 Ink** 仍 **OUT**。
+> **整盘 headless 后续的一截小轨（历史）** — zip/SA/doctor/窄 TUI。  
+> **已圆满。** 整盘更大后续见 **`docs/TODO_FULL.md`**（含 T8/Ink、compact 深刀、worktree、OAuth、Y5+ 等；**Electron 仍后置**）。  
+> 总览：`docs/ROADMAP.md` · 入口：`docs/TODO.md`。
 
 ---
 
 ## 0. 一句话
 
-> **产品轨已圆满：** zip 插件安装 · 后台并发帽 · doctor 健康面 · 窄终端 TUI · 文档收口。  
-> 相对 HC 仍诚实 **~45–60%** 量级，不写 ~70%。
+> **Product 小轨已圆满**（非整盘 ROADMAP 完成）。  
+> 下一整盘真源：`docs/TODO_FULL.md`。
 
 ---
 
@@ -31,9 +30,11 @@
 
 ---
 
-## 2. OUT（仍不做）
+## 2. OUT（本小轨当时不做 → 多数已迁入 TODO_FULL）
 
-Electron · T8 完整 Ink · Y5+ 企业 YOLO · 官方市场 API · MCP OAuth · worktree · cached MC · 遥测。
+当时 OUT、现由 **`TODO_FULL`** 承接：T8 Ink · Y5+ · OAuth · worktree · cached MC · 自有市场深度。  
+**仍后置：** Electron。  
+**仍禁止：** 官方市场 API · 遥测。
 
 ---
 
@@ -50,10 +51,11 @@ node --import tsx/esm scripts/test-memory.ts
 
 ## 4. 圆满
 
-§5 条件已满足。下一刀需用户点名 **OUT** 或新轨。
+Product 小轨 § 条件已满足。  
+**整盘未完成** — 见 `docs/TODO_FULL.md`。
 
 ---
 
 ## 5. 一句话
 
-> **TODO_PRODUCT 全 ✅。** 插件 zip、子代理帽、doctor、窄 TUI 已落地；GUI/企业层仍另令。
+> **TODO_PRODUCT 全 ✅（小轨）。** 整盘后续 → **`TODO_FULL`**；Electron 不急。
