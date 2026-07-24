@@ -15,7 +15,9 @@
 | `AGENT_LOOP.md` | loop / 错误分类 / model·PTL 重试 |
 | `COMPACTION.md` | compact 管道 · auto 阈值 · micro · token 启发式 |
 | `TOOL_CALLING.md` / `PERMISSIONS.md` | 工具管道 · 权限门控 · always-allow |
+| **`TODO_AUTO_PERMISSIONS.md`** | **Auto/YOLO 分类器专项（Y0–Y4）；与规则层正交** |
 | `MCP.md` | MCP transport · 配置 · `/mcp` |
+| `PLUGINS.md` | 插件 · PL-MKT 最小市场 |
 | `TODO_SESSION_JSONL.md` | JSONL 存盘专项（主路径已齐；余量 entry/CLI） |
 | 其它 `docs/*.md` | 契约真源 |
 
@@ -253,7 +255,7 @@ P1：
   · **PL-MKT** 插件市场最小（register/search/install）
 
 下一阶段：
-  ① **完整 YOLO / auto 权限分类器**（需用户确认）
+  ① **Auto/YOLO** — `docs/TODO_AUTO_PERMISSIONS.md`（Y0→Y4）
   ② 完整官方市场深度 / OAuth / OR6 / T8 / Electron 等后置
 ```
 
@@ -263,12 +265,15 @@ P1：
 
 若只开一刀（**非 Electron**）：
 
-> **本刀已勾选：PL-MKT 插件市场最小**（`docs/PLUGINS.md` · `/plugins market|search|install` · `test-plugins-market`）。  
-> **下一刀需用户确认：完整 YOLO / auto 权限分类器**  
->  
-> **后置：** 完整官方 marketplace 策略 · OAuth · adaptive thinking · OR6 · C6+ · T8 · Electron · worktree  
+> **主推：Auto/YOLO 权限分类器（专项路线图）**  
+> - **真源：`docs/TODO_AUTO_PERMISSIONS.md`**  
+> - 顺序：**Y0 规格 → Y1 模式+白名单 → Y2 真分类器（首个可发布）→ Y3 清洗/熔断 → Y4 ~90% 语义**  
+> - **禁止** Y1 勾成「完整 YOLO ✅」；Y2 才是第一个可用 auto  
+> - PL-MKT 插件市场最小已齐（`docs/PLUGINS.md`）  
+>
+> **后置：** 完整官方 marketplace 深度 · OAuth · OR6 · T8 · Electron · worktree · cached MC  
 
-**已齐摘要：** … · **PL1+PL2+PL-MKT 最小** · …
+**已齐摘要：** 规则权限四档+allow/deny · PL-MKT 最小 · headless 主路径见上文；**auto/YOLO 专册已立、实现按 Y0–Y4 未齐**。
 
 ---
 
@@ -277,12 +282,11 @@ P1：
 | TODO | ROADMAP |
 |------|---------|
 | LR* | M-Loop 韧性 🟡 |
-| TP* · STE · STE+ · PERM · **PATCH+** | M-Tool+Permission 🟡 |
-| CP* · CP5 · SNIP | 长会话 compact 🟡 |
-| **RC1–RC3** | 思考链显示 + persist + Anthropic budget 最小 |
-| **MCP-SSE+** | SSE + 可选重连 |
-| S* · **S8** · **HK*** | Subagent + Hooks 硬化 |
-| MCP* · PL* | M3（**市场 ⬜ 需确认**） |
+| TP* · STE · PERM · PATCH+ | M-Tool+Permission 🟡 |
+| **YOLO-Y0…Y4** | **`TODO_AUTO_PERMISSIONS.md` / M-AutoPermission** |
+| CP* · SNIP | 长会话 compact 🟡 |
+| RC1–RC3 | 思考链 |
+| MCP* · **PL-MKT** | M3 扩展（官方市场深度 ⬜） |
 | M4 / T8 | Electron / Ink ⬜ |
 
 ---
@@ -292,13 +296,13 @@ P1：
 - [ ] 无遥测  
 - [ ] 文档无本机绝对路径  
 - [ ] 相关 `scripts/test-*.ts` 绿  
-- [ ] 更新本文对应 ⬜→✅，并扫一眼 `ROADMAP` 总览是否仍一致  
+- [ ] YOLO 阶段仅按 `TODO_AUTO_PERMISSIONS.md` 勾选（勿越级）  
 - [ ] stub / mock 未勾成「完成」  
-- [ ] commit message 与 tree 一致（**写完 COMMITMSG 后立刻 commit，避免竞态**）  
+- [ ] commit message 与 tree 一致  
 - [ ] 完成度区分主路径 vs 相对 HC  
 
 ---
 
 **一句话：**  
-**PL-MKT 插件市场最小**已落地；**下一刀：完整 YOLO / auto 权限分类器（需确认）**。  
+规则权限已可用；**auto/YOLO 按 `docs/TODO_AUTO_PERMISSIONS.md` 专册推进**（目标：HC auto **语义** ~90%，非权限 UI 全家桶）。**PL-MKT 插件市场最小**已落地；**下一刀：完整 YOLO / auto 权限分类器（需确认）**。  
 完整官方市场深度 / OAuth / Electron 仍后置。

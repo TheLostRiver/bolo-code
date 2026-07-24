@@ -134,9 +134,11 @@ Session.permissionMode / permissionRules
 - **always-deny 赢过 allow 与 bypass**；path/bash 通配；plan 仍 deny 写  
 - 无遥测  
 
-## 8. 明确不做
+## 8. 明确不做（本文件范围）
 
-- 跨会话全局 allow 规则 DSL（仅会话 + 快照）  
-- YOLO / auto 分类器（模型批）  
+- 跨会话全局 allow 规则 DSL（仅会话 + 快照；全局 DSL 另议）  
+- **完整 YOLO / auto 分类器实现** — **专项路线图：`docs/TODO_AUTO_PERMISSIONS.md`（Y0–Y4）**  
 - sandbox 网络策略  
-- 完整 path allowlist 引擎（本刀：glob + cwd 内外 + deny）
+- 完整 path allowlist 引擎（本文件：glob + cwd 内外 + deny）  
+
+> 规则层（四档 + allow/deny）以本文为准；**auto 模式与分类器**以 `TODO_AUTO_PERMISSIONS.md` 为准，二者在 `decidePermission` 之后衔接。

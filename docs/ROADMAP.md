@@ -48,9 +48,9 @@
 15. ~~**J-D 再余量：system_note + lite list**~~ ✅ 最小  
 16. ~~**TP-STE+ / HK / S8**~~ ✅ 最小  
 18. ~~**TP-PATCH+ · RC3 · MCP-SSE 重连**~~ ✅ 最小  
-19. ~~**PL-MKT 插件市场最小**~~ ✅ 最小（本刀）  
-20. **下一刀（需用户确认）：** 完整 YOLO / auto 权限分类器  
-21. **后置：** 完整官方 marketplace 深度 · OAuth · OR6 · T8 · Electron  
+19. ~~**PL-MKT 插件市场最小**~~ ✅ 最小  
+20. **下一主线：Auto/YOLO 分类器** — 见 **`docs/TODO_AUTO_PERMISSIONS.md`（Y0–Y4）**  
+21. **后置：** 完整官方 marketplace 深度 · OAuth · OR6 · T8 · Electron · worktree  
 
 ---
 
@@ -453,7 +453,7 @@ flowchart TB
 | G 协议 | Responses HTTP | ✅；WS 后置 |
 | H 韧性 | 错误分类 + model 退避 + PTL | 🟡 最小（本刀） |
 
-**默认下一刀：** 见 **`docs/TODO.md` §8**（**完整 YOLO / auto 分类器 —— 需用户确认**；插件市场最小已齐）。
+**默认下一刀：** 见 **`docs/TODO.md` §8** + **`docs/TODO_AUTO_PERMISSIONS.md`**（Auto/YOLO Y0→Y2 优先）。
 
 ---
 
@@ -478,9 +478,12 @@ flowchart TB
 |------|------|
 | **本文件** | 里程碑 / 能力矩阵 / 验收 |
 | **`TODO.md`** | **执行入口 + 下一刀** |
+| **`TODO_AUTO_PERMISSIONS.md`** | **Auto/YOLO 分类器专项（Y0–Y4）** |
+| `PERMISSIONS.md` | 四档规则门控（与 auto 正交） |
 | `AGENT_LOOP.md` | loop · 错误分类 · model/PTL 重试 |
 | `TODO_SESSION_JSONL.md` | JSONL 专项（主路径已齐） |
 | `PROMPT_CACHE.md` | C1–C5 与后置 |
+| `PLUGINS.md` | 插件 · PL-MKT 最小市场 |
 | `SLASH_COMMANDS.md` · `RULES.md` · `SUBAGENT.md` | 契约 |
 | `TUI.md` · `BRAND.md` | 欢迎与品牌 |
 | `SESSIONS.md` · `PROVIDERS.md` · `MCP.md` · `SKILLS.md` | 会话 / 厂商 / 扩展 |
@@ -519,7 +522,7 @@ flowchart TB
 |--------|------|--------|
 | M0–M2 | ✅/🟡 | headless 主路径可跑；相对 HC 未满 |
 | **M-Loop 韧性** | 🟡 最小 | 分类 + 429/5xx 有限退避；PTL 正交 |
-| **M-Tool+Permission** | 🟡 最小+ | Edit + path/bash allow/deny + abort + **STE** + **progress/interrupt** + **规则匹配**；完整 YOLO 后置（需确认） |
+| **M-Tool+Permission** | 🟡 最小+ | 规则层 ✅；**auto/YOLO 见 `TODO_AUTO_PERMISSIONS.md`（Y0–Y4 未实现）** |
 | **M-Compact 日用** | 🟡 最小 | 加权 token · pressure · `/context`·`/compact`；**默认 auto ✅**；**snip 最小 ✅**；cached MC / SnipTool 后置 |
 | **M-Slash** | ✅ | 日用 `/` + SL-polish |
 | **M-Rules** | ✅ | `.bolo/rules` + path-scoped + `/rules` |
@@ -535,5 +538,6 @@ flowchart TB
 **一句话：**  
 Headless **主路径可日用**，相对参考实现约 **40–55%**（文档不再写 ~70% 乐观数）。  
 **P1 可闭环余量已齐**（含 apply_patch Move · reasoning persist · SSE 重连 · hooks · S8）。  
-**下一刀：完整 YOLO / 插件市场 —— 需用户确认后再开。**  
+**规则权限日用已齐；auto/YOLO 按专册 `TODO_AUTO_PERMISSIONS.md` 推进（目标 HC auto 语义 ~90%，非权限 UI 全家桶）。**  
+**PL-MKT 最小已齐。**  
 执行序 → **`docs/TODO.md`**。
