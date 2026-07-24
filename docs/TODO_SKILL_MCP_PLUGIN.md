@@ -230,7 +230,7 @@ PL-SPEC 出口 ────────► IMPORT-*（可选）
 | 序 | 刀 | 切片 |
 |----|----|------|
 | 1 | Skill 可移植 | ~~S-PORT-0..8~~ ✅ 最小出口 |
-| 2 | MCP 诊断卫生 | **M-GEN-0..3** |
+| 2 | MCP 诊断卫生 | ~~M-GEN-0/1/3~~ ✅ → **M-GEN-2** doctor/mcp 诊断 |
 | 3 | MCP 诊断卫生 | M-GEN-0 · M-GEN-1 · M-GEN-2 · M-GEN-3 |
 | 4 | MCP 加固 | M-GEN-4 · M-GEN-5 · M-GEN-8（± M-GEN-6） |
 | 5 | Bolo Spec | PL-SPEC-0 · PL-SPEC-1 · PL-SPEC-2 · PL-SPEC-3 · PL-SPEC-4 |
@@ -292,6 +292,7 @@ PL-SPEC 出口 ────────► IMPORT-*（可选）
 
 > **Skill 先做成可移植内容标准；MCP 做成稳、可诊、无秘钥泄漏的协议客户端；插件始终以 `bolo.*` 为一等规范。官方市场与外来完整运行时兼容从长计议，且永不绑 Claude/Codex 商店。**
 
-**默认下一刀：** **M-GEN**（MCP 通用连接加深，见本文 §5）— 从 **M-GEN-0/1** 起。  
+**默认下一刀：** **M-GEN-2**（`/mcp` / `/doctor` 诊断加深）。  
 
-**Skill 专题：** S-PORT-0..8 最小出口 ✅（可移植契约 + creator + 无远程商店承诺）。
+**Skill 专题：** S-PORT-0..8 最小出口 ✅。  
+**MCP：** M-GEN-0/1/3 最小 ✅（边界 + 配置校验 + headers 脱敏）。

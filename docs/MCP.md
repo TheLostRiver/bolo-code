@@ -2,12 +2,35 @@
 
 Bolo 以 **stdio JSON-RPC**、**Streamable HTTP** 与 **经典 SSE 长连接** 连接外部 MCP server，把远端 tools / resources / prompts 接入会话。无遥测。
 
+## 0. 通用性边界（M-GEN-0）
+
+| 是 | 否 |
+|----|-----|
+| 业界 **MCP 协议客户端**（tools / resources / prompts / list_changed） | 插件**官方商店**或 Claude/Codex 市场 |
+| 本地 `mcp.json` + 插件 contributes.mcp | 远程遥测 / GrowthBook |
+| 静态 `headers` 鉴权 | **OAuth 浏览器流 / headersHelper**（后置 M-GEN-7） |
+| 坏配置 **warn 并跳过**，不拖垮会话 | 静默吞掉无效 server 且无提示 |
+
+配置校验与友好错误：**M-GEN-1**（`validateMcpServerConfig` · `loadMcpConfigFileDetailed`）。  
+Headers 日志脱敏：**M-GEN-3 最小**（`redactMcpHeaders`）。  
+切片序：`docs/TODO_SKILL_MCP_PLUGIN.md`（M-GEN）。
+
 ## 配置
 
 用户与项目分层（项目覆盖同名 server）：
 
 - `~/.bolo/mcp.json`（或 `BOLO_CONFIG_DIR/mcp.json`）
 - `.bolo/mcp.json`
+
+### 校验（M-GEN-1）
+
+加载时：
+
+- 坏 JSON → warning，servers = []  
+- 缺 `name` / 无 `command` 且无 `url` / `type` 与字段冲突 → **error 级**，该 server **不连接**  
+- 同时写 `command`+`url` 且无 `type` → warning，**推断为 http**（url 优先）；请显式写 `type`  
+- `reconnect*` 仅对 `sse` 有意义，其它 transport → warning  
+- 连接阶段再次 `validate`；失败文案进入 session `warning` 事件与 `console.warn([bolo mcp] …)`
 
 ### stdio（本地进程）
 
