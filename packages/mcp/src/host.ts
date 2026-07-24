@@ -38,6 +38,7 @@ import {
   formatMcpServerConfigSummary,
   validateMcpServerConfig,
 } from './validate.ts'
+import { expandMcpServerConfig } from './envExpand.ts'
 
 /** list_changed 刷新面（对照 tools|prompts|resources list_changed） */
 export type McpListChangedKind = 'tools' | 'resources' | 'prompts'
@@ -685,15 +686,23 @@ export async function connectMcpServers(
       continue
     }
 
-    const issues = validateMcpServerConfig(cfg)
+    // M-GEN-6：连接前展开 ${VAR} / ${VAR:-default}（env · headers · url · command · args）
+    const { config: expandedCfg, missingVars } = expandMcpServerConfig(cfg)
+    if (missingVars.length) {
+      warnings.push(
+        `MCP server "${cfg.name}": unresolved env vars: ${missingVars.join(', ')} (placeholders left as-is)`,
+      )
+    }
+
+    const issues = validateMcpServerConfig(expandedCfg)
     const errors = issues.filter((i) => i.level === 'error')
     if (errors.length) {
       for (const e of errors) warnings.push(e.message)
       failures.push({
         name: cfg.name,
-        transport: resolveMcpTransport(cfg) ?? 'unknown',
+        transport: resolveMcpTransport(expandedCfg) ?? 'unknown',
         error: errors.map((e) => e.message).join('; '),
-        endpointSummary: formatMcpServerConfigSummary(cfg),
+        endpointSummary: formatMcpServerConfigSummary(expandedCfg),
       })
       continue
     }
@@ -701,7 +710,7 @@ export async function connectMcpServers(
       warnings.push(w.message)
     }
 
-    const transport = resolveMcpTransport(cfg)
+    const transport = resolveMcpTransport(expandedCfg)
     if (!transport) {
       const msg = `skip MCP server "${cfg.name}": need command (stdio) or url (http/sse)`
       warnings.push(msg)
@@ -709,16 +718,16 @@ export async function connectMcpServers(
         name: cfg.name,
         transport: 'unknown',
         error: msg,
-        endpointSummary: formatMcpServerConfigSummary(cfg),
+        endpointSummary: formatMcpServerConfigSummary(expandedCfg),
       })
       continue
     }
 
-    const endpointSummary = formatMcpServerConfigSummary(cfg)
+    const endpointSummary = formatMcpServerConfigSummary(expandedCfg)
 
     let client: McpClient
     try {
-      client = createMcpClient(cfg, options, transport)
+      client = createMcpClient(expandedCfg, options, transport)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       warnings.push(`MCP server "${cfg.name}" failed: ${msg}`)
@@ -820,11 +829,11 @@ export async function connectMcpServers(
         /* ignore */
       }
 
-      if (options.allowConfigToolFallback && cfg.tools?.length) {
+      if (options.allowConfigToolFallback && expandedCfg.tools?.length) {
         warnings.push(
           `MCP "${cfg.name}": using config.tools fallback (no live call)`,
         )
-        for (const t of cfg.tools) {
+        for (const t of expandedCfg.tools) {
           const reg: McpToolRegistration = {
             name: mcpToolName(cfg.name, t.name),
             server: cfg.name,

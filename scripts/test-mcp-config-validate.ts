@@ -1,10 +1,11 @@
 /**
- * MCP 配置校验 + headers 脱敏（M-GEN-1 / M-GEN-3 最小）
+ * MCP 配置校验 + headers 脱敏 + env 插值（M-GEN-1 / M-GEN-3 / M-GEN-6）
  * 运行：node --import tsx/esm scripts/test-mcp-config-validate.ts
  */
 import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import {
   validateMcpServerConfig,
   validateMcpServerConfigs,
@@ -208,5 +209,95 @@ const pair = mergeMcpServerLists(
 )
 assert(pair.servers[0]!.command === '2', 'list merge over')
 assert(pair.warnings.some((w) => w.includes('user → project')), 'list warn')
+
+// M-GEN-6 env expand
+const {
+  expandEnvVarsInString,
+  expandMcpServerConfig,
+} = await import('../packages/mcp/src/index.ts')
+const e1 = expandEnvVarsInString('Bearer ${TOKEN}', {
+  TOKEN: 'secret',
+} as NodeJS.ProcessEnv)
+assert(e1.expanded === 'Bearer secret', 'expand simple')
+assert(e1.missingVars.length === 0, 'no missing')
+const e2 = expandEnvVarsInString('${MISSING:-fallback}', {} as NodeJS.ProcessEnv)
+assert(e2.expanded === 'fallback', 'default value')
+const e3 = expandEnvVarsInString('${MISSING}', {} as NodeJS.ProcessEnv)
+assert(e3.expanded === '${MISSING}', 'keep placeholder')
+assert(e3.missingVars.includes('MISSING'), 'track missing')
+const e4 = expandEnvVarsInString('${A:-x:-y}', { A: undefined } as never)
+assert(e4.expanded === 'x:-y' || e4.expanded === 'x', 'default split once')
+
+const expanded = expandMcpServerConfig(
+  {
+    name: 'svc',
+    type: 'http',
+    url: 'https://${HOST}/mcp',
+    headers: { Authorization: 'Bearer ${API_KEY}' },
+    env: { FOO: '${FOO_VAL:-bar}' },
+    command: 'unused',
+  },
+  {
+    HOST: 'api.example.com',
+    API_KEY: 'k123',
+  } as NodeJS.ProcessEnv,
+)
+assert(expanded.config.url === 'https://api.example.com/mcp', 'url expand')
+assert(
+  expanded.config.headers?.Authorization === 'Bearer k123',
+  'header expand',
+)
+assert(expanded.config.env?.FOO === 'bar', 'env default')
+assert(!expanded.missingVars.length, 'no missing after expand')
+
+const emptyEnv = Object.create(null) as NodeJS.ProcessEnv
+const missEnv = expandMcpServerConfig(
+  {
+    name: 's',
+    command: '${BOLO_MCP_TEST_MISSING_BIN}',
+    args: ['${BOLO_MCP_TEST_MISSING_ARG}'],
+  },
+  emptyEnv,
+)
+assert(
+  missEnv.missingVars.includes('BOLO_MCP_TEST_MISSING_BIN'),
+  `missing BIN: ${JSON.stringify(missEnv)}`,
+)
+assert(
+  missEnv.missingVars.includes('BOLO_MCP_TEST_MISSING_ARG'),
+  `missing ARG: ${JSON.stringify(missEnv.missingVars)}`,
+)
+assert(
+  missEnv.config.command === '${BOLO_MCP_TEST_MISSING_BIN}',
+  'command placeholder kept',
+)
+assert(
+  missEnv.config.args?.[0] === '${BOLO_MCP_TEST_MISSING_ARG}',
+  'arg placeholder kept',
+)
+
+// connect expands env before spawn (stdio with expanded command)
+process.env.BOLO_MCP_TEST_NODE = process.execPath
+const echoServer = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  'fixtures',
+  'mcp-echo-server.mjs',
+)
+const live = await connectMcpServers({
+  servers: [
+    {
+      name: 'env-echo',
+      command: '${BOLO_MCP_TEST_NODE}',
+      args: [echoServer],
+    },
+  ],
+  timeoutMs: 10_000,
+})
+assert(
+  live.servers.some((s) => s.name === 'env-echo'),
+  `env expand connect: ${live.warnings.join('; ')}`,
+)
+await closeMcpConnections(live.servers)
+delete process.env.BOLO_MCP_TEST_NODE
 
 console.log('MCP CONFIG VALIDATE TESTS PASS')

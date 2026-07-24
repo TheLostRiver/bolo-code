@@ -32,6 +32,13 @@ export {
   type McpServerLayer,
   type MergeMcpServerLayersResult,
 } from './merge.ts'
+export {
+  expandEnvVarsInString,
+  expandEnvVarsInRecord,
+  expandMcpServerConfig,
+  type ExpandEnvResult,
+  type ExpandMcpServerConfigResult,
+} from './envExpand.ts'
 export type {
   McpClient,
   McpToolDef,
