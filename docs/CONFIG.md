@@ -19,6 +19,8 @@
   sessions/                 # 会话 JSON 快照（见 docs/SESSIONS.md）
   rules/                    # 可选用户级 rules
   agents/                   # 可选用户级 subagent 定义（*.md）
+  memory/                   # 跨会话长期记忆（MEMORY.md 索引；见 docs/MEMORY.md）
+    MEMORY.md
 ```
 
 ### 项目（仓库根下的 `.bolo/`）
@@ -122,6 +124,8 @@ defaults
 | `BOLO_BASE_URL` / `OPENAI_BASE_URL` | 覆盖 baseUrl |
 | `BOLO_MODEL` / `OPENAI_MODEL` | 覆盖 model |
 | `BOLO_PROVIDER=mock` | 强制 mock |
+| `BOLO_MEMORY_DIR` | 覆盖 memory 根目录（绝对路径；默认 `~/.bolo/memory`） |
+| `BOLO_DISABLE_MEMORY` | `1`/`true`/`yes`/`on` 时不注入 auto memory 段 |
 
 ## 6. 代码
 
@@ -150,7 +154,7 @@ const ws = await loadWorkspace({ cwd: process.cwd() })
 | settings / mcp 等 | `config.json` + `mcp.json` + `hooks.json` |
 | 用户 skills | `~/.bolo/skills` |
 | 项目配置 | `.bolo/`（不进 git 可自行 ignore secrets） |
-| `CLAUDE.md` / memory | **`BOLO.md`**（主品牌）+ 可选兼容 `CLAUDE.md` / `AGENTS.md`；见 `docs/SYSTEM_PROMPT.md` |
+| `CLAUDE.md` / memory | **`BOLO.md`**（主品牌）+ 可选兼容 `CLAUDE.md` / `AGENTS.md`；跨会话 **`~/.bolo/memory/MEMORY.md`** 见 [MEMORY.md](./MEMORY.md) |
 | 项目 rules | **`.bolo/rules/**/*.md`**（+ 可选 `~/.bolo/rules`）；见 **[RULES.md](./RULES.md)** |
 
 ## 8. 项目指令文件（BOLO.md）

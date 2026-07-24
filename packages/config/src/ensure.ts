@@ -49,6 +49,7 @@ export async function ensureLayout(
   await ensureDir(layout.sessionsDir)
   await ensureDir(layout.rulesDir)
   await ensureDir(layout.agentsDir)
+  await ensureDir(layout.memoryDir)
 
   if (writeDefaults) {
     if (await writeJsonIfMissing(layout.configJson, DEFAULT_CONFIG)) {

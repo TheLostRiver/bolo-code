@@ -32,6 +32,8 @@ export type BoloLayoutPaths = {
   rulesDir: string
   /** 项目/用户 agent 定义目录（`.bolo/agents`） */
   agentsDir: string
+  /** 跨会话 memory（`MEMORY.md` 索引） */
+  memoryDir: string
 }
 
 export function layoutPaths(root: string): BoloLayoutPaths {
@@ -45,6 +47,7 @@ export function layoutPaths(root: string): BoloLayoutPaths {
     sessionsDir: path.join(root, 'sessions'),
     rulesDir: path.join(root, 'rules'),
     agentsDir: path.join(root, 'agents'),
+    memoryDir: path.join(root, 'memory'),
   }
 }
 

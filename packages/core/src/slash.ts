@@ -817,7 +817,7 @@ function cmdDoctor(session: SlashSession, _args: string): SlashDispatchResult {
     `autoCompact:     ${autoCompact}`,
     `maxPtlRetries:   ${maxPtl}`,
     `~/.bolo:         ${boloHome} (${boloHomeExists ? 'exists' : 'missing'})`,
-    'Tip: /mcp for MCP detail; /context for tokens; /help for commands.',
+    'Tip: /mcp for MCP detail; /memory for long-term memory; /context for tokens; /help for commands.',
   )
   return { ok: true, message: lines.join('\n') }
 }
@@ -1793,6 +1793,46 @@ function cmdDeny(session: SlashSession, args: string): SlashDispatchResult {
   }
 }
 
+/**
+ * 跨会话 MEMORY.md 状态（对照 HC memdir 可见性）。
+ * 不改会话消息；只读路径 + 预览。
+ */
+async function cmdMemory(
+  _session: SlashSession,
+  args: string,
+): Promise<SlashDispatchResult> {
+  const {
+    loadMemoryEntrypoint,
+    formatMemoryStatus,
+    isMemoryDisabled,
+    getMemoryDir,
+    getMemoryEntrypoint,
+  } = await import('./memory.ts')
+
+  const sub = args.trim().toLowerCase()
+  if (sub === 'path') {
+    return {
+      ok: true,
+      message: [
+        `dir:        ${getMemoryDir()}`,
+        `entrypoint: ${getMemoryEntrypoint()}`,
+      ].join('\n'),
+    }
+  }
+  if (sub && sub !== 'status' && sub !== 'show') {
+    return {
+      ok: false,
+      message: 'Usage: /memory [path|status]',
+    }
+  }
+
+  const loaded = await loadMemoryEntrypoint()
+  return {
+    ok: true,
+    message: formatMemoryStatus(loaded, { disabled: isMemoryDisabled() }),
+  }
+}
+
 async function cmdRules(
   session: SlashSession,
   args: string,
@@ -2104,6 +2144,13 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     summary: 'Local diagnostics (node, cwd, mode, tools, usage, ~/.bolo)',
     group: 'diagnostics',
     run: cmdDoctor,
+  },
+  {
+    name: 'memory',
+    summary: 'Long-term MEMORY.md path, status, and preview',
+    usage: '[path]',
+    group: 'session',
+    run: cmdMemory,
   },
   {
     name: 'status',

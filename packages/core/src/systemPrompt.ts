@@ -15,6 +15,10 @@ import { getBoloHomeDir } from '../../config/src/paths.ts'
 import type { ChatMessage } from '../../shared/src/index.ts'
 import type { PermissionMode } from '../../permissions/src/index.ts'
 import { loadBoloRules } from './rules.ts'
+import {
+  buildMemorySystemSection,
+  isMemoryDisabled,
+} from './memory.ts'
 
 /** 单文件默认上限（字符） */
 export const BOLO_MD_MAX_CHARS_PER_FILE = 32_000
@@ -212,6 +216,12 @@ export type GetSystemPromptOptions = SystemPromptEnv & {
   activePaths?: string[]
   userConfigDir?: string
   mcpPlaceholder?: boolean
+  /**
+   * 是否注入 auto memory 段（默认 true；BOLO_DISABLE_MEMORY 仍熔断）。
+   */
+  loadMemory?: boolean
+  /** 已格式化的 memory 段；优先于自动加载 */
+  memorySection?: string
 }
 
 /**
@@ -422,7 +432,7 @@ export function partitionSystemPromptSections(
 }
 
 /**
- * 易变段：Environment（date/mode/cwd…）→ rules → BOLO.md → skill catalog → 可选 MCP 占位。
+ * 易变段：Environment → rules → BOLO.md → memory → skill catalog → 可选 MCP 占位。
  */
 export async function getVolatileSections(
   opts: GetSystemPromptOptions,
@@ -455,6 +465,16 @@ export async function getVolatileSections(
     sections.push(boloMd.trim())
   }
 
+  // MEM：跨会话 MEMORY.md 索引（volatile；环境可关）
+  if (opts.loadMemory !== false && !isMemoryDisabled()) {
+    const mem =
+      opts.memorySection ??
+      (await buildMemorySystemSection({
+        userBoloDir: opts.userConfigDir,
+      }))
+    if (mem?.trim()) sections.push(mem.trim())
+  }
+
   const catalog =
     opts.skillCatalog ??
     (opts.skills?.length
@@ -476,7 +496,7 @@ export async function getVolatileSections(
 /**
  * 默认系统提示词各段（数组顺序即注入顺序）：**先 stable 后 volatile**。
  * 对照 HC 静态段在前、动态在后；Bolo 无 DYNAMIC_BOUNDARY 全局 cache。
- * 注入序：Identity → System → Task → Tools → Environment → rules → BOLO.md → skill catalog
+ * 注入序：Identity → System → Task → Tools → Environment → rules → BOLO.md → memory → skill catalog
  */
 export async function getSystemPrompt(
   opts: GetSystemPromptOptions,

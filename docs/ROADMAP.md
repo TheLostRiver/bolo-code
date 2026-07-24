@@ -51,8 +51,9 @@
 18. ~~**TP-PATCH+ · RC3 · MCP-SSE 重连**~~ ✅ 最小  
 19. ~~**PL-MKT 插件市场最小**~~ ✅ 最小  
 20. ~~**Auto/YOLO Y0–Y4 最小**~~ ✅（两阶段 + 危险/PS 硬拦 + 熔断 demote + 对抗测 + **Y3.6 审计 note**）  
-21. **下一主线：扩展三层** — Skill 可移植 → MCP 通用 → Bolo 插件规范（**`docs/TODO_SKILL_MCP_PLUGIN.md`**）  
-22. **后置（需确认）：** 官方 marketplace 深度 · MCP OAuth · OR6 · T8 · Electron · worktree · 完整 YOLO 企业策略  
+21. ~~**扩展三层** — Skill 可移植 → MCP 通用 → Bolo 插件规范~~ ✅（**`docs/TODO_SKILL_MCP_PLUGIN.md`**）  
+22. ~~**跨会话 Memory 最小**~~ ✅（MEM-0…5；**`docs/TODO_MEMORY.md`** / **`docs/MEMORY.md`**）  
+23. **后置（需确认）：** Memory topic/project · 官方 marketplace 深度 · MCP OAuth · OR6 · T8 · Electron · worktree · 完整 YOLO 企业策略  
 
 ---
 
@@ -485,11 +486,13 @@ flowchart TB
 | **`TODO.md`** | **执行入口 + 下一刀** |
 | **`TODO_AUTO_PERMISSIONS.md`** | **Auto/YOLO 分类器专项（Y0–Y4）** |
 | **`TODO_SKILL_MCP_PLUGIN.md`** | **Skill 可移植 · MCP 通用 · Bolo 插件规范** |
+| **`TODO_MEMORY.md`** | **跨会话 Memory（MEM-0…5 最小 ✅）** |
 | `PERMISSIONS.md` | 规则门控 + **auto 分类器路径**（与 YOLO 企业层正交） |
 | `AGENT_LOOP.md` | loop · 错误分类 · model/PTL 重试 |
 | `TODO_SESSION_JSONL.md` | JSONL 专项（主路径已齐） |
 | `PROMPT_CACHE.md` | C1–C5 与后置 |
 | `PLUGINS.md` | 插件 · PL-MKT 最小市场（Spec v0 见专册 PL-SPEC） |
+| `MEMORY.md` | 跨会话 MEMORY.md · `/memory` |
 | `SLASH_COMMANDS.md` · `RULES.md` · `SUBAGENT.md` | 契约 |
 | `TUI.md` · `BRAND.md` | 欢迎与品牌 |
 | `SESSIONS.md` · `PROVIDERS.md` · `MCP.md` · `SKILLS.md` | 会话 / 厂商 / 扩展 |
@@ -547,6 +550,6 @@ flowchart TB
 Headless **主路径可日用**，相对参考实现约 **40–55%**（文档不再写 ~70% 乐观数）。  
 **规则权限 + auto Y0–Y4 最小已齐**（HC auto **语义** ~85–90%；Y3.6 审计 note ✅；UI/企业策略 ⬜）。  
 **PL-MKT 最小已齐**（本地/URL 清单 install；非官方市场全家桶）。  
-扩展下一主线：**Skill → MCP → Bolo 插件规范**（`docs/TODO_SKILL_MCP_PLUGIN.md`；默认 **S-PORT-1**）。  
-后置：官方市场深度 / MCP OAuth / T8 / Electron。  
+扩展三层（Skill/MCP/Plugin Spec）最小 ✅；**跨会话 Memory 最小（MEM-0…5）✅**。  
+后置：Memory topic/project · 官方市场深度 / MCP OAuth / T8 / Electron。  
 执行序 → **`docs/TODO.md`**。

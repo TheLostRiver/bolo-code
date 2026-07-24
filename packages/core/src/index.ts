@@ -206,6 +206,20 @@ export {
   BOLO_MD_MAX_CHARS_PER_FILE,
   BOLO_MD_MAX_TOTAL_CHARS,
 } from './systemPrompt.ts'
+export {
+  getMemoryDir,
+  getMemoryEntrypoint,
+  ensureMemoryDir,
+  loadMemoryEntrypoint,
+  truncateMemoryEntrypoint,
+  buildMemorySystemSection,
+  buildMemoryGuidelines,
+  formatMemoryStatus,
+  isMemoryDisabled,
+  MEMORY_ENTRYPOINT_NAME,
+  MAX_MEMORY_ENTRYPOINT_LINES,
+  MAX_MEMORY_ENTRYPOINT_BYTES,
+} from './memory.ts'
 export type {
   SystemPromptPartition,
   GetSystemPromptOptions,
