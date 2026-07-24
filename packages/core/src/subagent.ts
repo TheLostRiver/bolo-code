@@ -21,6 +21,7 @@ import {
 } from '../../tools/src/index.ts'
 import {
   isPermissionMode,
+  resolveSubagentPermissionMode,
   type PermissionMode,
   type SessionPermissionRules,
 } from '../../permissions/src/index.ts'
@@ -647,7 +648,10 @@ export async function runSubagent(
     params.parentSystemPromptSections.length > 0
       ? [...params.parentSystemPromptSections]
       : [params.def.systemPrompt]
-  const permissionMode = params.def.permissionMode ?? params.permissionMode
+  const permissionMode = resolveSubagentPermissionMode(
+    params.permissionMode,
+    params.def.permissionMode,
+  )
   const maxTurns = params.maxTurns ?? 8
 
   await runHooks(
@@ -661,6 +665,7 @@ export async function runSubagent(
       agent_type: agentType,
     },
     params.hooks,
+    { signal: params.signal },
   )
 
   let terminal: Terminal
@@ -736,6 +741,7 @@ export async function runSubagent(
         : {}),
     },
     params.hooks,
+    { signal: params.signal },
   )
 
   return {

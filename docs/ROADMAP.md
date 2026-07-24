@@ -241,7 +241,7 @@ K1–K2 + slash 回落 ✅；rule-creator 可选 ⬜。
 | # | 切片 | 状态 |
 |---|------|------|
 | S0–S7 | 文档 · 定义 · runSubagent · Agent · 项目 agents | ✅ |
-| S8 | 子权限更严 | 🟡 |
+| S8 | 子权限更严（不升级） | ✅ 最小 |
 | S9 | 侧链 jsonl | ✅ 最小 |
 | S10 | 并发策略（Agent 串行） | ✅ 文档/默认 false |
 | S11 | `/agents` | ✅ |
@@ -521,7 +521,7 @@ flowchart TB
 | **M-Slash** | ✅ | 日用 `/` + SL-polish |
 | **M-Rules** | ✅ | `.bolo/rules` + path-scoped + `/rules` |
 | **M-Creators** | ✅ | bundled creators |
-| **M-Subagent** | 🟡 | S0–S7 + async/fork/侧链最小 |
+| **M-Subagent** | 🟡 | S0–S7 + **S8 权限不升级** + async/fork/侧链最小 |
 | **M-TUI** | 🟡 | T0–T7 ✅；T8 Ink ⬜ |
 | **M-Cost** | 🟡 | C1–C5 ✅；TTL/break 后置 |
 | **M3** | 🟡 | MCP stdio + list_changed + **HTTP 最小** + **SSE 最小** + **PL2 热加载最小**；市场 ⬜ |

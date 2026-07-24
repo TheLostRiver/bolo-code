@@ -241,6 +241,8 @@ export {
   PERMISSION_MODES,
   PERMISSION_MODE_META,
   getNextPermissionMode,
+  resolveSubagentPermissionMode,
+  permissionModeRank,
   decidePermission,
   createEmptyPermissionRules,
   matchesAlwaysAllow,
@@ -1053,7 +1055,11 @@ export async function refreshSessionPathScopedRules(
 export async function submitPrompt(
   session: BoloSession,
   prompt: string,
-  options?: { maxTurns?: number; querySource?: string },
+  options?: {
+    maxTurns?: number
+    querySource?: string
+    signal?: AbortSignal
+  },
 ): Promise<Terminal> {
   setPhase(session, 'running')
 
@@ -1067,6 +1073,7 @@ export async function submitPrompt(
       prompt,
     },
     session.hooks,
+    { signal: options?.signal },
   )
   for (const r of submit.results) {
     emit(session, {
@@ -1115,6 +1122,7 @@ export async function submitPrompt(
     usage: session.usage,
     model: session.model,
     effortLevel: session.effortLevel,
+    signal: options?.signal,
     onEvent: (e) => mapLoopEvent(session, e),
   })
 

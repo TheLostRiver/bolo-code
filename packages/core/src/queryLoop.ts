@@ -481,6 +481,7 @@ async function runStopHooks(params: QueryLoopParams): Promise<void> {
       timestamp: nowIso(),
     },
     params.hooks,
+    { signal: params.signal },
   )
   for (const r of stop.results) {
     emit(params, {

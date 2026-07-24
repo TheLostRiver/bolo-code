@@ -278,6 +278,7 @@ export async function runToolUse(
       tool_use_id: toolUseId,
     },
     ctx.hooks,
+    { signal: ctx.signal },
   )
   for (const r of pre.results) {
     emit(ctx, {
@@ -374,6 +375,7 @@ export async function runToolUse(
         tool_use_id: toolUseId,
       },
       ctx.hooks,
+      { signal: ctx.signal },
     )
     for (const r of hookRes.results) {
       emit(ctx, {
@@ -534,6 +536,7 @@ export async function runToolUse(
       tool_use_id: toolUseId,
     },
     ctx.hooks,
+    { signal: ctx.signal },
   )
   for (const r of post.results) {
     emit(ctx, { type: 'hook', event: 'PostToolUse', exitCode: r.exitCode })

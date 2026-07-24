@@ -66,6 +66,44 @@ export function parsePermissionMode(
   return fallback
 }
 
+/**
+ * 子 agent 权限不得比父会话更宽（S8 最小）。
+ * 排序：plan < default < acceptEdits < bypassPermissions
+ * 对照 HC「子权限更严」语义；无 YOLO。
+ */
+const PERMISSION_MODE_RANK: Record<PermissionMode, number> = {
+  plan: 0,
+  default: 1,
+  acceptEdits: 2,
+  bypassPermissions: 3,
+}
+
+export function permissionModeRank(mode: PermissionMode): number {
+  return PERMISSION_MODE_RANK[mode] ?? 1
+}
+
+/**
+ * 取父会话与 agent 定义中较严（rank 更低）的 mode。
+ * defMode 缺省 / 非法 → 用 parent。
+ */
+export function resolveSubagentPermissionMode(
+  parentMode: PermissionMode,
+  defMode?: PermissionMode | string,
+): PermissionMode {
+  if (defMode == null || defMode === '') return parentMode
+  const child = parsePermissionMode(
+    typeof defMode === 'string' ? defMode : undefined,
+    parentMode,
+  )
+  // parse 失败时若 def 非法会回退 parentMode，再取 min 仍是 parent
+  if (typeof defMode === 'string' && !isPermissionMode(defMode)) {
+    return parentMode
+  }
+  return permissionModeRank(child) <= permissionModeRank(parentMode)
+    ? child
+    : parentMode
+}
+
 /** Shift+Tab 风格循环（对照 getNextPermissionMode，无 auto/dontAsk） */
 export function getNextPermissionMode(mode: PermissionMode): PermissionMode {
   switch (mode) {

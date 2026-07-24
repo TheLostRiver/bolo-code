@@ -104,6 +104,9 @@ P1：
 |----|------|------|
 | **S0–S7** | `runSubagent` + Agent 工具 + `.bolo/agents` + `/agents` | ✅ |
 | **S7+ / S12 partial** | 侧链 `agent-*.jsonl`；`run_in_background` + `/bg`；fork 继承父 messages 最小 | ✅ 最小 |
+| **S8** | 子 agent 权限不升级 | `resolveSubagentPermissionMode`：子 mode rank ≤ 父；不可绕过到 bypass | ✅ 最小（本刀） |
+| **HK1** | Hooks 超时硬化 | 默认 30s · 上限 600s · exit 124 · `timedOut` | ✅ 最小（本刀） |
+| **HK2** | Hooks AbortSignal | `runHooks`/`runCommandHook` 支持 signal；tool/Stop/submit 透传 | ✅ 最小（本刀） |
 | **MCP1** | MCP stdio listTools/call → tools 表 | ✅ |
 | **MCP2 stdio 面** | resources/prompts + meta 工具 + `/mcp` 子命令 | ✅ |
 | **MCP2 list_changed** | tools/resources/prompts 通知 → 再 list → 缓存 + `session.tools` 热刷新 | ✅ |
@@ -244,6 +247,7 @@ P1：
   · J-D 余量 title entry + CLI --list / migrate-session
   · J-D 再余量 system_note + /note + scanTranscriptLite list
   · TP-STE+ tool_progress + interruptBehavior（Bash cancel）
+  · HK1–HK2 hooks 超时/abort · S8 子权限不升级
 
 下一阶段：
   ① 其它 CP·TP 余量   ← 默认主刀区（P1 余量）
@@ -259,10 +263,10 @@ P1：
 > **主推：其它 CP/TP 余量**（勿抢完整 YOLO / 市场）  
 > - 勿一口做完整市场 / OAuth MCP / 完整 Ink / 完整 YOLO  
 >
-> **本刀已勾选：** **TP-STE+**（`tool_progress` · `interruptBehavior` cancel/block · Bash cancel · CLI 进度行 · `test-streaming-tool-executor` / `test-cli-events`）。  
+> **本刀已勾选：** **HK1–HK2 + S8**（hooks timeout/abort · 子 agent 权限不升级 · `test-hooks-s8`）。  
 > **明确后置（开工前叫用户）：** **完整 YOLO / auto 分类器** · **插件市场** · 思考链安全回灌 · Anthropic thinking budget · OAuth · SSE 自动重连 · cached MC · SnipTool/UUID · 真 tokenizer · OR6 · C6+ · T8 · Electron · 远程 USD 账单。
 
-**已齐摘要：** resume · slash · BOLO TUI 最小 · rules · C1–C5 · JSONL 主路径（**title + system_note**）· creators · Subagent · MCP stdio+HTTP+**SSE** 最小 · **plugins PL1+PL2 最小** · Responses HTTP · Loop 韧性最小 · Tool+Permission 日用 + **STE + progress/interrupt** + **规则匹配小步** · Compact 日用加深 + **默认 auto** + **snip 最小** · **RC1+RC2 思考链** · **Usage+ 最小** · CLI `--list` / migrate · lite list。
+**已齐摘要：** resume · slash · BOLO TUI 最小 · rules · C1–C5 · JSONL 主路径（**title + system_note**）· creators · Subagent（**S8 权限不升级**）· MCP stdio+HTTP+**SSE** 最小 · **plugins PL1+PL2 最小** · Responses HTTP · Loop 韧性最小 · Tool+Permission 日用 + **STE + progress/interrupt** + **规则匹配小步** · Compact 日用加深 + **默认 auto** + **snip 最小** · **RC1+RC2 思考链** · **Usage+ 最小** · **Hooks 超时/abort** · CLI `--list` / migrate · lite list。
 
 ---
 
@@ -281,7 +285,8 @@ P1：
 | **RC1 · RC2** | 思考链流式 + Responses reasoning + `/thinking` ✅ 最小 |
 | J* | M5.1 / `TODO_SESSION_JSONL`（J-D T3 ✅ · title/CLI ✅ · system_note+lite ✅） |
 | K* | M-Creators ✅ |
-| S* | M-Subagent（S0–S7 ✅；S12 partial） |
+| S* · **S8** | M-Subagent（S0–S7 ✅；S8 权限不升级 ✅；S12 partial） |
+| **HK*** | Hooks 硬化（timeout + signal）✅ 最小 |
 | MCP* · PL* | M3（stdio + HTTP ✅；**PL2 ✅ 最小**；**SSE ✅ 最小**；市场 ⬜） |
 | **OR*** | Responses：HTTP SSE ✅；WS 后置 |
 | M4 | Electron ⬜ |
@@ -295,11 +300,11 @@ P1：
 - [ ] 相关 `scripts/test-*.ts` 绿  
 - [ ] 更新本文对应 ⬜→✅，并扫一眼 `ROADMAP` 总览是否仍一致  
 - [ ] stub / mock 未勾成「完成」  
-- [ ] commit message 与 tree 一致（勿复用旧 `COMMITMSG`）  
+- [ ] commit message 与 tree 一致（**写完 COMMITMSG 后立刻 commit，避免竞态**）  
 - [ ] 完成度区分主路径 vs 相对 HC  
 
 ---
 
 **一句话：**  
-**TP-STE+**（progress + interruptBehavior）已落地；**下一刀：其它 CP/TP 余量**。  
+**HK1–HK2 + S8** 已落地；**下一刀：其它 CP/TP 余量**。  
 **完整 YOLO / 插件市场** 后置——**动手前先叫用户确认**。

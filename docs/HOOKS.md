@@ -269,6 +269,17 @@ PreToolUse → (PermissionRequest?) → tool body → PostToolUse
 
 禁止：先执行 tool 再补 PreToolUse。
 
+### 超时与取消（硬化）
+
+| 项 | 行为 |
+|----|------|
+| `timeout` | command 秒数；默认 **30**；上限 **600**（`clampHookTimeoutSec`） |
+| 超时 | kill 子进程；`exitCode=124`；stderr 含 `hook timeout`；`timedOut: true` |
+| AbortSignal | `runHooks(..., { signal })`；取消 → `exitCode=130`、`aborted: true` |
+| 接线 | Pre/Permission/Post Tool 与 Stop 传 signal；`submitPrompt({ signal })` 透传 |
+
+对照 HC：hook timeout + parent abort；Bolo **无** async hook 注册表 / 遥测。
+
 ## 7. 后续可扩展事件（非 v0 必做）
 
 参考 HelsincyCode：`PostToolUseFailure`、`SessionEnd`、`Notification`、`Elicitation` 等。  
