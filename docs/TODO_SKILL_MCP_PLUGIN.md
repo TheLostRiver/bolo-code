@@ -148,7 +148,7 @@ PL-SPEC 出口 ────────► IMPORT-*（可选）
 | **S-PORT-5** | **catalog 预算可观测** | 省略提示可见（`/skills` 或 `/context`）；超预算不炸 | ⬜ |
 | **S-PORT-6** | **skill-creator 对齐契约** | 生成 SKILL.md 符合 S-PORT-1 | ⬜ |
 | **S-PORT-7** | **拒绝远程 skill（本阶段）** | 文档写明；无 URL 装 skill | ⬜（文档约束） |
-| **S-PORT-8** | 回归包 | `test-skill-catalog`：多根、别名、disable、坏文件不拖垮 | ⬜ |
+| **S-PORT-8** | 回归包 | `test-skill-catalog`：别名 · disable · 坏 frontmatter · 覆盖 · 预算省略 | ✅ 最小（随 S-PORT-1） |
 
 **出口（Skill 专题最小 Done）：**
 
