@@ -102,6 +102,18 @@ export type SlashSession = {
     root?: string
     scope?: string
   }>
+  /** 插件 slash 命令（PL2）；dispatch 回落 */
+  pluginCommands?: Array<{
+    name: string
+    id: string
+    pluginId: string
+    description?: string
+    body: string
+    path?: string
+    scope?: string
+  }>
+  /** 最近插件 merge 错误；/plugins reload */
+  pluginMergeErrors?: string[]
   /** hooks 配置；/hooks */
   hooks?: HooksConfig
 }
@@ -272,9 +284,13 @@ export function editDistance(a: string, b: string): number {
 export function suggestSlashCommands(
   name: string,
   limit = 3,
+  extraNames?: string[],
 ): string[] {
   const needle = name.toLowerCase()
-  const candidates = SLASH_COMMANDS.filter((c) => !c.hidden).map((c) => c.name)
+  const candidates = [
+    ...SLASH_COMMANDS.filter((c) => !c.hidden).map((c) => c.name),
+    ...(extraNames ?? []),
+  ]
   const scored = candidates
     .map((n) => {
       let score = editDistance(needle, n)
@@ -293,12 +309,16 @@ export function suggestSlashCommands(
   return out
 }
 
-function formatUnknownCommand(name: string): string {
+function formatUnknownCommand(
+  name: string,
+  session?: SlashSession,
+): string {
   const tips = [
     `Unknown command /${name}.`,
-    'Type /help for grouped list, or /skills for skill ids.',
+    'Type /help for grouped list, /skills for skill ids, or /plugins commands.',
   ]
-  const suggestions = suggestSlashCommands(name)
+  const extra = (session?.pluginCommands ?? []).map((c) => c.name)
+  const suggestions = suggestSlashCommands(name, 3, extra)
   if (suggestions.length) {
     tips.push(`Did you mean: ${suggestions.map((s) => `/${s}`).join(', ')}?`)
   }
@@ -328,9 +348,10 @@ function formatHelp(): string {
     }
     lines.push('')
   }
-  lines.push('Aliases: /status → /doctor · /usage → /cost')
+  lines.push('Aliases: /status → /doctor · /usage → /cost · /reload-plugins → /plugins reload')
   lines.push('Tip: lines starting with // are normal prompts, not commands.')
   lines.push('Skills: /skills · invoke /<skill-id> or /skill <id>')
+  lines.push('Plugins: /plugins · /plugins commands · /plugins reload (PL2 hot load)')
   return lines.join('\n')
 }
 
@@ -581,13 +602,38 @@ function cmdMcp(session: SlashSession, args: string): SlashDispatchResult {
   return { ok: true, message: lines.join('\n') }
 }
 
-function cmdPlugins(session: SlashSession, _args: string): SlashDispatchResult {
+function cmdPlugins(session: SlashSession, args: string): Promise<SlashDispatchResult> | SlashDispatchResult {
+  const sub = args.trim().split(/\s+/)[0]?.toLowerCase() ?? ''
+
+  if (sub === 'reload' || sub === 'refresh') {
+    return cmdPluginsReload(session)
+  }
+
+  if (sub === 'commands' || sub === 'cmds') {
+    const cmds = session.pluginCommands ?? []
+    if (!cmds.length) {
+      return {
+        ok: true,
+        message:
+          'plugin commands: (none)\nAdd commands/*.md under a plugin (or contributes.commands), then /plugins reload.',
+      }
+    }
+    const lines = [`plugin commands (${cmds.length}):`]
+    for (const c of cmds) {
+      const desc = c.description ? ` — ${c.description}` : ''
+      lines.push(`  /${c.name}${desc}  [${c.pluginId}]`)
+    }
+    lines.push('Invoke: /<plugin-id>:<name>  (body injects into conversation as user message)')
+    return { ok: true, message: lines.join('\n') }
+  }
+
+  // list（默认）
   const plugins = session.plugins ?? []
   if (!plugins.length) {
     return {
       ok: true,
       message:
-        'plugins: (none loaded)\nPlace plugins under ~/.bolo/plugins/<id>/ or .bolo/plugins/<id>/ with bolo.plugin.json (PL1 local only; no marketplace).',
+        'plugins: (none loaded)\nPlace plugins under ~/.bolo/plugins/<id>/ or .bolo/plugins/<id>/ with bolo.plugin.json (PL1 local only; no marketplace).\nUse /plugins reload after adding files mid-session (PL2).',
     }
   }
   const lines = [`plugins (${plugins.length}):`]
@@ -598,7 +644,65 @@ function cmdPlugins(session: SlashSession, _args: string): SlashDispatchResult {
     const scope = p.scope ? ` [${p.scope}]` : ''
     lines.push(`  ${id}${ver}${scope}${name}`)
   }
+  const cmdN = session.pluginCommands?.length ?? 0
+  lines.push(`plugin commands: ${cmdN}  (see /plugins commands)`)
+  lines.push('Subcommands: list (default) | commands | reload')
   return { ok: true, message: lines.join('\n') }
+}
+
+async function cmdPluginsReload(session: SlashSession): Promise<SlashDispatchResult> {
+  const { reloadSessionPlugins } = await import('./index.ts')
+  const r = await reloadSessionPlugins(session as Parameters<typeof reloadSessionPlugins>[0])
+  const parts = [
+    `${r.pluginCount} plugin(s)`,
+    `${r.skillCount} skill(s)`,
+    `${r.commandCount} command(s)`,
+    `${r.hookEventCount} hook event(s)`,
+    `${r.mcpConnectedCount}/${r.mcpServerCount} MCP connected`,
+  ]
+  const lines = [`Reloaded: ${parts.join(' · ')}`]
+  if (r.errors.length) {
+    lines.push(`${r.errors.length} merge note(s):`)
+    for (const e of r.errors.slice(0, 5)) lines.push(`  - ${e}`)
+    if (r.errors.length > 5) lines.push(`  … +${r.errors.length - 5} more`)
+  }
+  if (r.warnings.length) {
+    lines.push(`${r.warnings.length} MCP warning(s):`)
+    for (const w of r.warnings.slice(0, 3)) lines.push(`  - ${w}`)
+  }
+  lines.push('Skill catalog refreshed in system sections; messages history kept.')
+  return { ok: true, message: lines.join('\n') }
+}
+
+/**
+ * 插件命令：把 markdown body 注入为 user 消息（本地 slash，不调 LLM 直到用户再发）。
+ * 对照 HC plugin command 注入 prompt 语义的最小版。
+ */
+function invokePluginCommand(
+  session: SlashSession,
+  name: string,
+): SlashDispatchResult | null {
+  const cmds = session.pluginCommands
+  if (!cmds?.length) return null
+  const n = name.toLowerCase()
+  const hit =
+    cmds.find((c) => c.name === n) ??
+    cmds.find((c) => c.id === n) ??
+    cmds.find((c) => c.name.endsWith(':' + n))
+  if (!hit) return null
+  const header = [
+    `[plugin command /${hit.name} from ${hit.pluginId}]`,
+    hit.description ? `Description: ${hit.description}` : '',
+    '',
+  ]
+    .filter((x) => x !== undefined)
+    .join('\n')
+  const content = `${header}${hit.body}`.trim()
+  session.messages.push({ role: 'user', content })
+  return {
+    ok: true,
+    message: `Injected plugin command /${hit.name} (${content.length} chars). Continue with a normal prompt or wait for next turn.`,
+  }
 }
 
 /**
@@ -1152,9 +1256,17 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
   },
   {
     name: 'plugins',
-    summary: 'List loaded local plugins (PL1)',
+    summary: 'List local plugins; reload mid-session; list plugin commands (PL2)',
+    usage: '[list|commands|reload]',
     group: 'extensions',
     run: cmdPlugins,
+  },
+  {
+    name: 'reload-plugins',
+    summary: 'Alias of /plugins reload',
+    group: 'extensions',
+    hidden: true,
+    run: (session) => cmdPluginsReload(session),
   },
   {
     name: 'hooks',
@@ -1256,6 +1368,10 @@ export async function dispatchSlashCommand(
     return await cmd.run(session, args)
   }
 
+  // 回落：插件 contributes.commands（PL2）
+  const pluginHit = invokePluginCommand(session, name)
+  if (pluginHit) return pluginHit
+
   // 回落：/<skill-id> 或 /skill-creator（user-invocable skill）
   const skills = sessionSkills(session)
   if (skills.length && findSkillById(skills, name)) {
@@ -1264,7 +1380,7 @@ export async function dispatchSlashCommand(
 
   return {
     ok: false,
-    message: formatUnknownCommand(name),
+    message: formatUnknownCommand(name, session),
   }
 }
 

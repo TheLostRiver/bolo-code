@@ -25,12 +25,18 @@ import {
 import {
   closeMcpConnections,
   connectMcpServers,
+  isMcpManagedToolName,
   mergeSessionToolsWithMcp,
   type ConnectedMcpServer,
   type ConnectMcpResult,
   type McpListChangedEvent,
 } from '../../mcp/src/index.ts'
 import type { LoadedSkill } from '../../skills/src/index.ts'
+import { formatSkillCatalog } from '../../skills/src/index.ts'
+import type {
+  LoadedPlugin,
+  PluginCommand,
+} from '../../plugins/src/index.ts'
 import type { BoloTool } from '../../tools/src/index.ts'
 import {
   newId,
@@ -63,6 +69,7 @@ import {
 } from '../../permissions/src/index.ts'
 import {
   assembleSessionSystemPrompt,
+  replaceSkillCatalogSection,
   type AssembleSessionSystemPromptOptions,
 } from './systemPrompt.ts'
 import {
@@ -167,6 +174,7 @@ export {
   buildEffectiveSystemPrompt,
   prepareModelMessages,
   assembleSessionSystemPrompt,
+  replaceSkillCatalogSection,
   systemSectionsToMessages,
   boloMdCandidatePaths,
   permissionModeBehaviorLine,
@@ -447,14 +455,20 @@ export type BoloSession = {
   /** 已连接的 MCP stdio 进程；endSession 时关闭 */
   mcpConnections?: ConnectedMcpServer[]
   /**
-   * workspace 发现的插件列表（PL1）；供 /plugins。
-   * 不参与运行时 hot-reload。
+   * workspace 发现的插件列表（PL1/PL2）；供 /plugins。
+   * PL2：`/plugins reload` 可热刷新列表与贡献点。
    */
-  plugins?: Array<{
-    manifest: { id: string; name?: string; version?: string }
-    root: string
-    scope: string
-  }>
+  plugins?: LoadedPlugin[]
+  /**
+   * 插件贡献的 slash 命令（PL2；contributes.commands / commands/*.md）。
+   * 内置 slash 优先；未知名再查此表。
+   */
+  pluginCommands?: PluginCommand[]
+  /**
+   * 最近一次 workspace 装载的 merge 错误（插件 hooks/mcp/command 冲突等）。
+   * 供 /plugins reload 文案；不写遥测。
+   */
+  pluginMergeErrors?: string[]
   onEvent: (e: SessionEvent) => void
 }
 
@@ -762,6 +776,10 @@ export async function createSessionFromWorkspace(
   // 全文注册表给 Skill 工具（catalog 已在 systemPromptSections）
   session.skills = workspace.skills
   session.plugins = workspace.plugins
+  session.pluginCommands = workspace.pluginMerge?.commands ?? []
+  session.pluginMergeErrors = workspace.pluginMerge?.errors?.length
+    ? [...workspace.pluginMerge.errors]
+    : undefined
   // tools 已在 createSession 按 agentDefinitions 装配；MCP 再追加
 
   let mcp: ConnectMcpResult | undefined
@@ -805,6 +823,130 @@ export async function createSessionFromWorkspace(
   }
 
   return { session, workspace, mcp }
+}
+
+export type ReloadSessionPluginsOptions = {
+  /** 默认 true：关掉旧 MCP 再按新 workspace 连接 */
+  reconnectMcp?: boolean
+  mcpTimeoutMs?: number
+  /** 默认 true：刷新 skill catalog 段（不重建整个 system） */
+  refreshSkillCatalog?: boolean
+}
+
+export type ReloadSessionPluginsResult = {
+  pluginCount: number
+  skillCount: number
+  commandCount: number
+  hookEventCount: number
+  mcpServerCount: number
+  mcpConnectedCount: number
+  errors: string[]
+  warnings: string[]
+}
+
+/**
+ * PL2：会话内热加载插件贡献（对照 HC `/reload-plugins` + refreshActivePlugins 语义）。
+ * - 重扫 user/project plugins + 合并 skills/hooks/mcp/commands
+ * - 刷新 session.skills / hooks / plugins / pluginCommands
+ * - 可选重连 MCP（默认开）：先 close 再 connect 新表
+ * - 不重建 cache-stable system 前缀；仅替换 skill catalog 段
+ * - 无市场、无遥测
+ */
+export async function reloadSessionPlugins(
+  session: BoloSession,
+  opts?: ReloadSessionPluginsOptions,
+): Promise<ReloadSessionPluginsResult> {
+  const reconnectMcp = opts?.reconnectMcp !== false
+  const refreshCatalog = opts?.refreshSkillCatalog !== false
+  const warnings: string[] = []
+
+  const workspace = await loadWorkspace({
+    cwd: session.cwd,
+    ensureDefaults: false,
+  })
+
+  session.plugins = workspace.plugins
+  session.skills = workspace.skills
+  session.hooks = workspace.hooks
+  session.pluginCommands = workspace.pluginMerge?.commands ?? []
+  const errors = workspace.pluginMerge?.errors ?? []
+  session.pluginMergeErrors = errors.length ? [...errors] : undefined
+
+  if (refreshCatalog) {
+    const catalog = formatSkillCatalog(workspace.skills, {
+      contextWindowTokens: session.contextWindowTokens,
+    })
+    session.systemPromptSections = replaceSkillCatalogSection(
+      session.systemPromptSections,
+      catalog || undefined,
+    )
+  }
+
+  let mcpConnectedCount = 0
+  if (reconnectMcp) {
+    await closeSessionMcp(session)
+    // 去掉旧 mcp 工具，保留内置（与 mergeSessionToolsWithMcp 同源）
+    session.tools = (
+      session.tools ?? createDefaultTools(session.agentDefinitions)
+    ).filter((t) => !isMcpManagedToolName(t.name))
+
+    if (workspace.mcpServers.length > 0) {
+      const mcp = await connectMcpServers({
+        servers: workspace.mcpServers,
+        cwd: session.cwd,
+        timeoutMs: opts?.mcpTimeoutMs,
+        onListChanged: async (event: McpListChangedEvent) => {
+          if (session.mcpConnections?.length) {
+            session.tools = mergeSessionToolsWithMcp(
+              session.tools,
+              session.mcpConnections,
+            )
+          }
+          emit(session, {
+            type: 'mcp_list_changed',
+            server: event.server,
+            kind: event.kind,
+            toolCount: event.tools.length,
+            resourceCount: event.resources.length,
+            promptCount: event.prompts.length,
+          })
+        },
+      })
+      for (const w of mcp.warnings) {
+        warnings.push(w)
+        emit(session, { type: 'warning', message: w })
+      }
+      if (mcp.servers.length > 0) {
+        session.mcpConnections = mcp.servers
+        mcpConnectedCount = mcp.servers.length
+      }
+      if (mcp.tools.length > 0) {
+        session.tools = [
+          ...(session.tools ?? createDefaultTools(session.agentDefinitions)),
+          ...mcp.tools,
+        ]
+      }
+    }
+  } else {
+    mcpConnectedCount = session.mcpConnections?.length ?? 0
+  }
+
+  // hooks 事件数（配置侧，非运行时 handler 数）
+  let hookEventCount = 0
+  for (const groups of Object.values(workspace.hooks)) {
+    if (Array.isArray(groups) && groups.length) hookEventCount += 1
+  }
+
+  return {
+    pluginCount: workspace.plugins.length,
+    skillCount: workspace.skills.length,
+    commandCount: session.pluginCommands?.length ?? 0,
+    hookEventCount,
+    mcpServerCount: workspace.mcpServers.length,
+    mcpConnectedCount,
+    errors: [...errors],
+    warnings,
+  }
 }
 
 /** 关闭 MCP 子进程（会话结束时调用） */

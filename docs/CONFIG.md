@@ -61,7 +61,7 @@ defaults
 - **Hooks**：数组合并（用户 + 项目 + 插件 contributes）  
 - **Skills 同 id**：项目覆盖用户；插件 contributes 再覆盖  
 - **Subagent 类型同名**（S7）：内置 ← 用户 `agents/*.md` ← 项目 `.bolo/agents/*.md`（见 [SUBAGENT.md](./SUBAGENT.md)）  
-- **Plugins（PL1）**：扫 user/project `plugins/<id>/bolo.plugin.json`；`contributes.skills`（或默认 `skills/`）合并进 workspace skills catalog；**无**市场/远程安装 
+- **Plugins（PL1+PL2）**：扫 user/project `plugins/<id>/bolo.plugin.json`；合并 skills（默认 `skills/`）、hooks、mcp、**commands**（默认 `commands/*.md`）；会话内 `/plugins reload` 热刷新；**无**市场/远程安装
 
 ## 3. `config.json` 示例
 

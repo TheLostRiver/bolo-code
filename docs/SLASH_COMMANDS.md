@@ -25,7 +25,7 @@
 | `/context` | 消息数、字符粗算、**tokens 分拆（messages + system）**、**window / auto threshold / pressure**、permissionMode、model、effort、cwd、id、**各 system section 标签·长度·token**、**cache + prepare 顺序**、usage 一行 |
 | `/doctor` · `/status` | 本地诊断：node/platform、cwd/id/**provider**/mode/model/effort、messages/sections、tools/skills/agent types、**mcp 连接数**、usage、autoCompact/maxPtlRetries、`getBoloHomeDir()` 是否存在；无遥测；`/status` 为隐藏别名 |
 | `/mcp` · `/mcp tools` | 列出已连接 MCP 服务器；`tools` 列出 `mcp__server__tool` 名 |
-| `/plugins` | 列出 workspace 已发现的本地插件（PL1；非市场） |
+| `/plugins` · `/plugins commands` · `/plugins reload` | 列本地插件；列插件 slash；**热重载**贡献点（PL2）；别名 `/reload-plugins` |
 | `/hooks` · `/hooks <Event>` | 列出已配置 hook 事件与命令数；指定事件打印 matcher/command |
 | `/init` · `/init all\|user\|project` | 确保 `~/.bolo` / 项目 `.bolo` 布局（skills/plugins/sessions/rules/agents + 默认 json） |
 | `/cost` · `/usage` | 会话内本地 token 累计（`session.usage`）；无遥测、不上报；`/usage` 为隐藏别名 |
@@ -53,8 +53,16 @@ REPL 额外：`/exit` `/quit` 由 CLI 处理（退出循环，不进总线）。
 - resume 与新会话的 readline 均经 `runOnePrompt` → `submitUserInput`。
 - 模块：`packages/core/src/slash.ts`；导出见 `@bolo/core`。
 
+## 插件 slash（PL2 最小）
+
+- 插件 `commands/*.md`（或 `contributes.commands`）→ 名默认 `plugin-id:basename`
+- 调用：`/plugin-id:cmd` → 将 markdown body **注入**为一条 user 消息（不立刻调 LLM）
+- 内置 slash 优先于插件命令；再回落 skill id
+- 热加载：`/plugins reload` 重扫磁盘并刷新 `session.skills` / hooks / pluginCommands / skill catalog；默认重连 MCP
+
 ## 非目标（本切片）
 
-- 插件贡献 slash 市场、远程/账号类命令
+- 插件市场、远程安装、账号类命令
+- 插件 command 参数替换 / 完整 prompt 模板引擎
 - effort → thinking / reasoning 强度（目前仅 max_tokens）
 - 遥测 / 远程 cost 账单

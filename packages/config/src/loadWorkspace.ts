@@ -159,6 +159,7 @@ export async function loadWorkspace(
       hooks: {},
       mcpServers: [],
       agents: [],
+      commands: [],
     })
     hooks = mergeHooks(hooks, pluginMerge.hooks)
     mcpServers = mergeMcpServers(mcpServers, pluginMerge.mcpServers)

@@ -570,3 +570,52 @@ export async function assembleSessionSystemPrompt(
     appendSystemPrompt: opts.appendSystemPrompt,
   })
 }
+
+const SKILL_CATALOG_MARKER =
+  '## Available Skills (catalog only — invoke via Skill tool to load full instructions)'
+
+function isSkillCatalogSection(s: string): boolean {
+  const t = s.trimStart()
+  return t.startsWith(SKILL_CATALOG_MARKER)
+}
+
+/**
+ * 替换或插入 skill catalog 段（volatile）。
+ * PL2 `/plugins reload` 后刷新 catalog，不碰 cache-stable 前缀。
+ * - catalogText 非空：替换已有段，或插在 BOLO 后 / MCP 前 / 尾部
+ * - catalogText 空：移除 catalog 段
+ */
+export function replaceSkillCatalogSection(
+  sections: readonly string[],
+  catalogText: string | undefined,
+): string[] {
+  const without = sections.filter((s) => !isSkillCatalogSection(s))
+  const trimmed = catalogText?.trim() ?? ''
+  if (!trimmed) return without
+
+  const isBolo = (s: string) => {
+    const t = s.trimStart()
+    return (
+      t.startsWith('# Project & user instructions') ||
+      t.startsWith('# Project and user instructions')
+    )
+  }
+  const isMcp = (s: string) => {
+    const t = s.trimStart()
+    return t === '# MCP' || t.startsWith('# MCP\n') || t.startsWith('# MCP\r')
+  }
+
+  const boloIdx = without.findIndex(isBolo)
+  if (boloIdx >= 0) {
+    const next = [...without]
+    next.splice(boloIdx + 1, 0, trimmed)
+    return next
+  }
+  const mcpIdx = without.findIndex(isMcp)
+  if (mcpIdx >= 0) {
+    const next = [...without]
+    next.splice(mcpIdx, 0, trimmed)
+    return next
+  }
+  return [...without, trimmed]
+}

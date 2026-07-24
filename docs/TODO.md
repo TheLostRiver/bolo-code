@@ -39,14 +39,15 @@ P0 抬水位：
   3. ~~长会话 compact 加深~~ ✅ 最小
 P1：
   4. ~~MCP 远程 transport（HTTP + 抽象）~~ ✅ 最小
-  5. ~~思考链流式显示~~ ✅ 最小（本刀）
-  下一刀：PL2 · Usage+ ·（可选）经典 SSE 长连接
+  5. ~~思考链流式显示~~ ✅ 最小
+  6. ~~PL2 插件深化~~ ✅ 最小（本刀）
+  下一刀：Usage+ · RC2 ·（可选）经典 SSE 长连接
 ```
 
 | 优先级 | 含义（当前） |
 |--------|----------------|
 | **P0** | 抬 headless 水位：韧性 / TP / **CP 日用** 已 🟡 |
-| **P1** | 扩展深度（**MCP HTTP ✅** · **Reasoning 显示 ✅** · PL2 · Usage+）— **默认下一刀区：PL2 / Usage+** |
+| **P1** | 扩展深度（**MCP HTTP ✅** · **Reasoning 显示 ✅** · **PL2 ✅** · Usage+ · RC2）— **默认下一刀区：Usage+ / RC2** |
 | **P2** | 未做或仅最小的子项 |
 | **P3** | GUI / 完整 Ink / 后置协议 |
 
@@ -89,6 +90,7 @@ P1：
 | **MCP2 list_changed** | tools/resources/prompts 通知 → 再 list → 缓存 + `session.tools` 热刷新 | ✅ |
 | **MCP2 HTTP** | `McpClient` 抽象 + Streamable HTTP（`type: http` / url）+ 错误隔离 + `/mcp` transport/status | ✅ 最小 |
 | **PL1** | 本地 plugins 发现 + skills/hooks/mcp 合并（非市场） | ✅ 最小 |
+| **PL2** | 热加载 + commands 贡献 + `/plugins` 深化 | ✅ 最小（本刀） |
 | **OR1–OR5** | OpenAI Responses HTTP SSE 直连 | ✅ |
 | 其它 | 真 `apply_patch` · usage 本地 `/cost` · tool_result 预算 · 快照/meta 中 permissionRules/effort/usage | ✅ / 🟡 |
 
@@ -121,7 +123,7 @@ P1：
 
 **明确后置（CP 余量）：** cached microcompact / snip 全管线 / 默认开 `autoCompactEnabled` / 真 tokenizer。
 
-### 2.7 MCP 远程 transport（本刀）
+### 2.7 MCP 远程 transport
 
 | ID | 内容 | 状态 |
 |----|------|------|
@@ -132,7 +134,20 @@ P1：
 | **MCP-T5** | fixture + `scripts/test-mcp-http.ts` | ✅ |
 | **MCP-doc** | `MCP.md` / ROADMAP / TODO / ARCHITECTURE | ✅ |
 
-**明确后置：** 经典 SSE 长连接（`type: sse`）· OAuth · headersHelper · 插件热重载 MCP。
+**明确后置：** 经典 SSE 长连接（`type: sse`）· OAuth · headersHelper · 插件市场。
+
+### 2.8 插件深化（PL2 本刀）
+
+| ID | 内容 | 状态 |
+|----|------|------|
+| **PL2-1** | `contributes.commands` / 默认 `commands/*.md` → 命名空间 slash | ✅ |
+| **PL2-2** | `reloadSessionPlugins`：重扫合并 skills/hooks/mcp/commands；刷新 skill catalog | ✅ |
+| **PL2-3** | `/plugins` list · `commands` · `reload`；别名 `/reload-plugins` | ✅ |
+| **PL2-4** | 插件 slash 注入 user 消息；内置优先；未知命令建议含插件名 | ✅ |
+| **PL2-5** | 默认 reload 重连 MCP（含插件 contributes）；fixture `test-plugins-pl2` | ✅ |
+| **PL2-doc** | ARCHITECTURE / CONFIG / SLASH / MCP / ROADMAP / TODO | ✅ |
+
+**明确后置（PL 余量）：** 市场 / 远程安装 / 参数模板引擎 / 文件监视自动 reload。
 
 ---
 
@@ -151,10 +166,10 @@ P1：
 | ID | 主题 | 说明 | 状态 |
 |----|------|------|------|
 | **MCP2 余量** | 远程 transport | **Streamable HTTP + 抽象** 已接 host；经典 SSE 长连接后置 | ✅ 最小 |
-| **RC1** | 思考链流式显示 | provider 解析 → queryLoop → CLI dim；不持久化回灌 | ✅ 最小（本刀） |
+| **RC1** | 思考链流式显示 | provider 解析 → queryLoop → CLI dim；不持久化回灌 | ✅ 最小 |
 | **RC2** | Reasoning 加深 | openai-responses reasoning；ChatMessage 安全回灌；budget/slash 开关 | ⬜ 二期 |
-| **PL2** | plugins 深度 | 热加载 / 贡献 slash 深化 /（若做）市场 | ⬜ **主推下一刀** |
-| **Usage+** | 本地 usage 展示 | 已有累计与 `/cost`；可加深 breakdown | 🟡 可选 |
+| **PL2** | plugins 深度 | 热加载 / commands 贡献 / `/plugins reload` | ✅ 最小（本刀） |
+| **Usage+** | 本地 usage 展示 | 已有累计与 `/cost`；可加深 breakdown | 🟡 **主推下一刀** |
 | **J-D 余量** | entry / CLI | 更多 entry 类型；CLI `migrate-session` 包装 | 🟡 可选支线 |
 | **C6+** | Cache 后置 | 1h TTL / global scope / break detection / cached MC | ⬜ **后置** |
 | **TP 余量** | permission 深度 | 完整分类器 / StreamingToolExecutor / 更强 apply_patch | ⬜ 后置 |
@@ -170,7 +185,7 @@ P1：
 | **S8+** | 子 agent 权限细化 · 并行策略 · worktree | 🟡 / ⬜ |
 | **OR6** | Responses **WebSocket** | ⬜ **后置**（HTTP SSE 已够用） |
 | Skills+ | 远程 skill / 动态 discovery 预取 | ⬜ |
-| MCP 插件热重载 | 插件变更后重挂 MCP | ⬜（可跟 PL2） |
+| MCP 插件热重载 | 插件变更后重挂 MCP | 🟡 最小（跟 PL2 reload） |
 
 ---
 
@@ -194,11 +209,11 @@ P1：
 已完成主线：
   RS* · SL* · SL-polish · T0–T7 · R* · C1–C5 · J-A/B/C · J-D(+T3)
   · K* · S0–S7 · MCP1 · MCP2(stdio + list_changed + HTTP 最小) · PL1 · OR1–OR5
-  · LR* · TP* · CP* 长会话 compact 日用最小 · RC1 思考链显示最小
+  · LR* · TP* · CP* 长会话 compact 日用最小 · RC1 思考链显示最小 · PL2 插件热加载最小
 
 下一阶段：
-  ① PL2 插件深化（或 Usage+）  ← 默认主刀（P1）
-  ② RC2 / 经典 SSE 长连接 / CP 余量 / TP 余量 / C6+ / OR6 / T8 / Electron  （后置）
+  ① Usage+ 本地 breakdown（或 RC2）  ← 默认主刀（P1）
+  ② 经典 SSE 长连接 / CP 余量 / TP 余量 / C6+ / OR6 / T8 / Electron  （后置）
 ```
 
 ---
@@ -207,13 +222,13 @@ P1：
 
 若只开一刀（**非 Electron**）：
 
-> **主推：PL2（plugins 热加载 / 贡献深化）** 或 **Usage+**（P1）  
-> - 勿一口做完整市场 / OAuth MCP  
+> **主推：Usage+**（本地 usage breakdown）或 **RC2**（思考链二期）（P1）  
+> - 勿一口做完整市场 / OAuth MCP / 完整 Ink  
 >
-> **本刀已勾选：** **RC1 思考链流式显示**（`reasoning_delta` · Anthropic thinking · openai `reasoning_content` · CLI dim · 不回灌 ChatMessage）。  
-> **明确后置：** RC2（Responses reasoning / 持久化回灌 / budget 开关）· 经典 SSE · OAuth · cached MC · snip · 默认开 auto · OR6 · C6+ · T8 · Electron · 完整 permission 分类器。
+> **本刀已勾选：** **PL2 插件深化**（`/plugins reload` · commands 贡献 · skill catalog 热刷 · MCP 重连最小）。  
+> **明确后置：** 插件市场 · 经典 SSE · OAuth · cached MC · snip · 默认开 auto · OR6 · C6+ · T8 · Electron · 完整 permission 分类器。
 
-**已齐摘要：** resume · slash · BOLO TUI 最小 · rules · C1–C5 · JSONL 主路径 · creators · Subagent · MCP stdio+HTTP 最小 · plugins 最小 · Responses HTTP · Loop 韧性最小 · Tool+Permission 日用最小 · Compact 日用加深最小 · **思考链显示最小**。
+**已齐摘要：** resume · slash · BOLO TUI 最小 · rules · C1–C5 · JSONL 主路径 · creators · Subagent · MCP stdio+HTTP 最小 · **plugins PL1+PL2 最小** · Responses HTTP · Loop 韧性最小 · Tool+Permission 日用最小 · Compact 日用加深最小 · 思考链显示最小。
 
 ---
 
@@ -231,7 +246,7 @@ P1：
 | J* | M5.1 / `TODO_SESSION_JSONL`（J-D T3 ✅） |
 | K* | M-Creators ✅ |
 | S* | M-Subagent（S0–S7 ✅；S12 partial） |
-| MCP* · PL* | M3（stdio + HTTP ✅；SSE 长连接 · PL2 ⬜） |
+| MCP* · PL* | M3（stdio + HTTP ✅；**PL2 ✅ 最小**；SSE 长连接 ⬜） |
 | **OR*** | Responses：HTTP SSE ✅；WS 后置 |
 | M4 | Electron ⬜ |
 
@@ -250,4 +265,4 @@ P1：
 ---
 
 **一句话：**  
-思考链流式显示（RC1）已落地；**下一刀 P1：PL2 或 Usage+**；RC2 / 经典 SSE / cached MC / snip 勿抢。
+PL2 插件热加载 + commands 贡献已落地；**下一刀 P1：Usage+ 或 RC2**；市场 / 经典 SSE / cached MC / snip 勿抢。

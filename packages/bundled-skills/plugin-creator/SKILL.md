@@ -38,7 +38,8 @@ Minimal:
     "skills": ["skills"],
     "hooks": "hooks.json",
     "mcpServers": "mcp.json",
-    "agents": ["agents"]
+    "agents": ["agents"],
+    "commands": ["commands"]
   }
 }
 ```
@@ -48,6 +49,7 @@ Rules:
 - `id` is required (loader skips manifests without it).
 - Paths in `contributes` are **relative to the plugin root**.
 - `skills` entries are directories scanned for `<name>/SKILL.md` (same as skill discovery).
+- `commands` entries are directories of `*.md` slash prompts (default name `plugin-id:file-stem`).
 - Omit unused contribute keys rather than inventing empty files.
 
 ## Steps (do in order)
@@ -58,8 +60,9 @@ Rules:
 4. **If shipping skills** — create `skills/<skill-id>/SKILL.md` (use skill-creator patterns for frontmatter/body).
 5. **If shipping hooks** — write `hooks.json` matching Bolo hooks config shape; set `contributes.hooks` to that file.
 6. **If shipping MCP** — write `mcp.json` server list; set `contributes.mcpServers`.
-7. **Verify** — reload workspace / new session; plugin is discovered from user then project plugins dirs; contributed skills merge (later sources override same skill id).
-8. **Document for the user** — path, what was contributed, how to toggle/remove (delete or rename the plugin folder).
+7. **If shipping slash commands** — add `commands/<name>.md` (optional frontmatter `name` / `description`); invoke as `/plugin-id:name`.
+8. **Verify** — new session or mid-session `/plugins reload` (PL2); skills merge (later sources override same skill id).
+9. **Document for the user** — path, contributes, `/plugins` · `/plugins commands` · `/plugins reload`.
 
 ## Quality bar
 

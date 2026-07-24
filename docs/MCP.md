@@ -128,6 +128,6 @@ Fixtures：
 | `/mcp` 显示 transport + status | ✅ |
 | 经典 SSE 长连接 transport（`type: sse`） | ⬜ 后置（配置可写 type，连接时明确报未实现） |
 | OAuth / headersHelper | ⬜ |
-| 插件热重载 MCP | ⬜（PL2） |
+| 插件热重载 MCP | 🟡 最小（`/plugins reload` 默认重连 workspace MCP，含插件 contributes） |
 
 > 语义对照参考实现 MCP 多 transport（stdio / sse / http）、session 头、错误隔离；**重新实现**，非 SDK 大段复制。
