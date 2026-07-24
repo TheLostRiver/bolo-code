@@ -13,10 +13,17 @@ import {
   getBundledSkillsDir,
   parseSkillMarkdown,
   parseSkillFrontmatterFields,
+  mergeSkillsByPrecedence,
+  isSkillModelInvocable,
+  isSkillUserInvocable,
+  skillModelInvokeBlockReason,
+  skillUserInvokeBlockReason,
+  SKILL_SOURCE_PRECEDENCE,
   SKILL_FRONTMATTER_ALIASES,
   type LoadedSkill,
 } from '../packages/skills/src/index.ts'
 import { executeTool } from '../packages/tools/src/index.ts'
+import { invokeSkillBySlash } from '../packages/core/src/slash.ts'
 
 function assert(c: unknown, m: string) {
   if (!c) {
@@ -295,5 +302,209 @@ assert(tight.includes('omitted'), 'budget omits with message')
 
 const st = await fs.stat(bundledDir)
 assert(st.isDirectory(), 'bundled-skills dir exists')
+
+// ── S-PORT-3 覆盖序 ──
+assert(
+  SKILL_SOURCE_PRECEDENCE.join(',') === 'bundled,user,project,plugin',
+  'precedence list',
+)
+const layerLow: LoadedSkill = {
+  meta: {
+    id: 'shared',
+    name: 'Low',
+    description: 'from user',
+    path: '/u/shared/SKILL.md',
+  },
+  source: 'user',
+  body: 'USER BODY',
+  frontmatter: {},
+}
+const layerHigh: LoadedSkill = {
+  meta: {
+    id: 'shared',
+    name: 'High',
+    description: 'from plugin',
+    path: '/p/shared/SKILL.md',
+  },
+  source: 'plugin',
+  body: 'PLUGIN BODY',
+  frontmatter: {},
+}
+const onlyOther: LoadedSkill = {
+  meta: { id: 'other', name: 'O', path: '/o/SKILL.md' },
+  source: 'bundled',
+  body: 'o',
+  frontmatter: {},
+}
+const mergedPrec = mergeSkillsByPrecedence(
+  [onlyOther, layerLow],
+  [layerHigh],
+)
+assert(mergedPrec.length === 2, 'merge keeps distinct ids')
+const shared = findSkillById(mergedPrec, 'shared')
+assert(shared?.source === 'plugin', 'plugin wins over user')
+assert(shared?.body.includes('PLUGIN'), 'plugin body wins')
+assert(findSkillById(mergedPrec, 'other')?.source === 'bundled', 'other kept')
+
+// 四层：bundled < user < project < plugin
+const b: LoadedSkill = {
+  meta: { id: 'x', name: 'b', path: '/b' },
+  source: 'bundled',
+  body: 'B',
+  frontmatter: {},
+}
+const u: LoadedSkill = {
+  meta: { id: 'x', name: 'u', path: '/u' },
+  source: 'user',
+  body: 'U',
+  frontmatter: {},
+}
+const p: LoadedSkill = {
+  meta: { id: 'x', name: 'p', path: '/p' },
+  source: 'project',
+  body: 'P',
+  frontmatter: {},
+}
+const g: LoadedSkill = {
+  meta: { id: 'x', name: 'g', path: '/g' },
+  source: 'plugin',
+  body: 'G',
+  frontmatter: {},
+}
+assert(
+  mergeSkillsByPrecedence([b], [u], [p], [g])[0]!.source === 'plugin',
+  'full stack plugin wins',
+)
+assert(
+  mergeSkillsByPrecedence([b], [u], [p])[0]!.source === 'project',
+  'project wins without plugin',
+)
+assert(
+  mergeSkillsByPrecedence([b], [u])[0]!.source === 'user',
+  'user wins over bundled',
+)
+
+// ── S-PORT-4 调用矩阵 ──
+const bothOk: LoadedSkill = {
+  meta: {
+    id: 'ok',
+    name: 'ok',
+    path: '/ok',
+    disableModelInvocation: false,
+    userInvocable: true,
+  },
+  source: 'user',
+  body: 'ok body',
+  frontmatter: {},
+}
+const modelOnly: LoadedSkill = {
+  meta: {
+    id: 'model-only',
+    name: 'mo',
+    path: '/mo',
+    userInvocable: false,
+  },
+  source: 'user',
+  body: 'model only body',
+  frontmatter: {},
+}
+const userOnly: LoadedSkill = {
+  meta: {
+    id: 'user-only',
+    name: 'uo',
+    path: '/uo',
+    disableModelInvocation: true,
+    userInvocable: true,
+  },
+  source: 'user',
+  body: 'user only body',
+  frontmatter: {},
+}
+const neither: LoadedSkill = {
+  meta: {
+    id: 'neither',
+    name: 'n',
+    path: '/n',
+    disableModelInvocation: true,
+    userInvocable: false,
+  },
+  source: 'user',
+  body: 'locked',
+  frontmatter: {},
+}
+
+assert(isSkillModelInvocable(bothOk) && isSkillUserInvocable(bothOk), 'both ok')
+assert(
+  isSkillModelInvocable(modelOnly) && !isSkillUserInvocable(modelOnly),
+  'model only flags',
+)
+assert(
+  !isSkillModelInvocable(userOnly) && isSkillUserInvocable(userOnly),
+  'user only flags',
+)
+assert(
+  !isSkillModelInvocable(neither) && !isSkillUserInvocable(neither),
+  'neither flags',
+)
+assert(skillModelInvokeBlockReason(userOnly), 'model block reason')
+assert(skillUserInvokeBlockReason(modelOnly), 'user block reason')
+assert(skillModelInvokeBlockReason(bothOk) === null, 'no model block')
+assert(skillUserInvokeBlockReason(bothOk) === null, 'no user block')
+
+const matrix = [bothOk, modelOnly, userOnly, neither]
+const catMatrix = formatSkillCatalog(matrix)
+assert(catMatrix.includes('ok'), 'catalog has model-ok')
+assert(catMatrix.includes('model-only'), 'catalog has model-only')
+assert(!catMatrix.includes('user-only'), 'catalog hides disable-model')
+assert(!catMatrix.includes('neither'), 'catalog hides neither')
+
+const toolMo = await executeTool(
+  'Skill',
+  { skill: 'model-only' },
+  { cwd: process.cwd(), skills: matrix },
+)
+assert(toolMo.ok && toolMo.output.includes('model only'), 'model-only tool ok')
+
+const toolUo = await executeTool(
+  'Skill',
+  { skill: 'user-only' },
+  { cwd: process.cwd(), skills: matrix },
+)
+assert(!toolUo.ok, 'user-only tool blocked')
+
+const toolN = await executeTool(
+  'Skill',
+  { skill: 'neither' },
+  { cwd: process.cwd(), skills: matrix },
+)
+assert(!toolN.ok, 'neither tool blocked')
+
+// slash：user-only 可装；model-only / neither 拒
+const fakeSession = {
+  messages: [] as { role: string; content: string }[],
+  skills: matrix,
+}
+const slashUo = invokeSkillBySlash(fakeSession as never, 'user-only')
+assert(slashUo.ok, 'slash user-only ok')
+assert(
+  fakeSession.messages.some((m) => m.content.includes('user only body')),
+  'slash injects body',
+)
+
+const slashMo = invokeSkillBySlash(
+  { messages: [], skills: matrix } as never,
+  'model-only',
+)
+assert(!slashMo.ok, 'slash model-only blocked')
+assert(
+  String(slashMo.message).includes('user-invocable'),
+  'slash model-only reason',
+)
+
+const slashN = invokeSkillBySlash(
+  { messages: [], skills: matrix } as never,
+  'neither',
+)
+assert(!slashN.ok, 'slash neither blocked')
 
 console.log('SKILL CATALOG TESTS PASS')

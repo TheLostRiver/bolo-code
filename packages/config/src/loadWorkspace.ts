@@ -7,6 +7,7 @@ import type { HooksConfig } from '../../shared/src/index.ts'
 import type { PermissionMode } from '../../permissions/src/index.ts'
 import {
   discoverSkills,
+  mergeSkillsByPrecedence,
   type LoadedSkill,
 } from '../../skills/src/index.ts'
 import {
@@ -163,9 +164,8 @@ export async function loadWorkspace(
     })
     hooks = mergeHooks(hooks, pluginMerge.hooks)
     mcpServers = mergeMcpServers(mcpServers, pluginMerge.mcpServers)
-    const skillMap = new Map(skills.map((s) => [s.meta.id, s]))
-    for (const s of pluginMerge.skills) skillMap.set(s.meta.id, s)
-    skills = [...skillMap.values()]
+    // S-PORT-3：plugin 盖过 bundled/user/project（同 id）
+    skills = mergeSkillsByPrecedence(skills, pluginMerge.skills)
   }
 
   const { provider, kind, model, baseUrl } = resolveProviderFromConfig(config)

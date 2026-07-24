@@ -9,6 +9,7 @@ import { promisify } from 'node:util'
 import {
   findSkillById,
   formatSkillBodyForInjection,
+  skillModelInvokeBlockReason,
   type LoadedSkill,
 } from '../../skills/src/index.ts'
 import { applyPatchToCwd } from './applyPatch.ts'
@@ -586,7 +587,9 @@ export function createSkillTool(): BoloTool {
         return {
           ok: false,
           isError: true,
-          output: `Skill "${found.meta.id}" has disable-model-invocation`,
+          output:
+            skillModelInvokeBlockReason(found) ??
+            `Skill "${found.meta.id}" has disable-model-invocation`,
           errorCode: 'disabled',
         }
       }

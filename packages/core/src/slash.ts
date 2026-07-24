@@ -36,6 +36,7 @@ import {
 import {
   findSkillById,
   formatSkillBodyForInjection,
+  skillUserInvokeBlockReason,
   type LoadedSkill,
 } from '../../skills/src/index.ts'
 import type { Terminal } from './queryLoop.ts'
@@ -1796,13 +1797,26 @@ function cmdSkills(session: SlashSession, args: string): SlashDispatchResult {
 
   const lines = ['Skills (catalog):', '']
   for (const s of list) {
-    const inv =
-      s.meta.userInvocable === false ? ' [not user-invocable]' : ''
+    const flags: string[] = []
+    if (s.meta.disableModelInvocation === true) {
+      flags.push('no-model')
+    }
+    if (s.meta.userInvocable === false) {
+      flags.push('no-user')
+    }
+    const flagStr = flags.length ? ` [${flags.join(',')}]` : ''
     const desc = s.meta.description ?? '(no description)'
-    lines.push(`  /${s.meta.id}  [${s.source}]${inv}`)
-    lines.push(`    ${desc}`)
+    const when = s.meta.whenToUse ? ` · when: ${s.meta.whenToUse}` : ''
+    lines.push(`  /${s.meta.id}  [${s.source}]${flagStr}`)
+    lines.push(`    ${desc}${when}`)
   }
   lines.push('')
+  lines.push(
+    'Flags: no-model = disable-model-invocation; no-user = user-invocable:false',
+  )
+  lines.push(
+    `Source precedence (later wins): ${['bundled', 'user', 'project', 'plugin'].join(' → ')}`,
+  )
   lines.push('Invoke: /<skill-id>  or  /skill <id>')
   return { ok: true, message: lines.join('\n') }
 }
@@ -1838,7 +1852,9 @@ export function invokeSkillBySlash(
   if (found.meta.userInvocable === false) {
     return {
       ok: false,
-      message: `Skill "${found.meta.id}" is not user-invocable (user-invocable: false).`,
+      message:
+        skillUserInvokeBlockReason(found) ??
+        `Skill "${found.meta.id}" is not user-invocable (user-invocable: false).`,
     }
   }
   const body = formatSkillBodyForInjection(found)

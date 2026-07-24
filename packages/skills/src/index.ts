@@ -164,9 +164,9 @@ export type DiscoverSkillsOptions = {
 }
 
 /**
- * 发现 skills。合并优先级（同 id）：
- * bundled → user → project（后者覆盖前者）。
- * 插件层由 loadWorkspace 再覆盖。
+ * 发现 skills。合并优先级（同 id，后者覆盖前者）：
+ *   bundled → user → project
+ * 插件层由 `mergeSkillsByPrecedence(..., pluginSkills)` / loadWorkspace 再盖。
  */
 export async function discoverSkills(
   opts: DiscoverSkillsOptions,
@@ -176,27 +176,100 @@ export async function discoverSkills(
     process.env.BOLO_CONFIG_DIR?.trim() ??
     path.join(os.homedir(), '.bolo')
 
-  const map = new Map<string, LoadedSkill>()
+  const layers: LoadedSkill[][] = []
 
   if (opts.bundledSkillsDir !== false) {
     const bundledDir = opts.bundledSkillsDir ?? getBundledSkillsDir()
-    const bundled = await discoverSkillsInDir(bundledDir, 'bundled')
-    for (const s of bundled) map.set(s.meta.id, s)
+    layers.push(await discoverSkillsInDir(bundledDir, 'bundled'))
   }
 
-  const user = await discoverSkillsInDir(
-    path.join(userRoot, 'skills'),
-    'user',
+  layers.push(
+    await discoverSkillsInDir(path.join(userRoot, 'skills'), 'user'),
   )
-  for (const s of user) map.set(s.meta.id, s)
-
-  const project = await discoverSkillsInDir(
-    path.join(opts.cwd, '.bolo', 'skills'),
-    'project',
+  layers.push(
+    await discoverSkillsInDir(
+      path.join(opts.cwd, '.bolo', 'skills'),
+      'project',
+    ),
   )
-  for (const s of project) map.set(s.meta.id, s)
 
+  return mergeSkillsByPrecedence(...layers)
+}
+
+/**
+ * 同 id 覆盖序：后写的层赢（对照 HC managed→user→project 方向，Bolo 为
+ * bundled → user → project → plugin）。
+ * 稳定序：按最终 map 插入序（先出现的 id 保留位置，值可被后层替换）。
+ */
+export function mergeSkillsByPrecedence(
+  ...layers: readonly (readonly LoadedSkill[])[]
+): LoadedSkill[] {
+  const map = new Map<string, LoadedSkill>()
+  for (const layer of layers) {
+    for (const s of layer) {
+      if (!s?.meta?.id) continue
+      map.set(s.meta.id, s)
+    }
+  }
   return [...map.values()]
+}
+
+/** 覆盖源从低到高（文档 / /skills 说明用） */
+export const SKILL_SOURCE_PRECEDENCE: readonly SkillSource[] = [
+  'bundled',
+  'user',
+  'project',
+  'plugin',
+] as const
+
+/**
+ * S-PORT-4：模型是否可通过 Skill 工具加载全文。
+ * disable-model-invocation: true → 否。
+ */
+export function isSkillModelInvocable(
+  skill: LoadedSkill | SkillCatalogEntry | SkillMeta,
+): boolean {
+  const disable =
+    'meta' in skill
+      ? skill.meta.disableModelInvocation
+      : skill.disableModelInvocation
+  return disable !== true
+}
+
+/**
+ * S-PORT-4：用户是否可通过 /skill 或 /<id> 注入全文。
+ * user-invocable: false → 否。与 disable-model-invocation 正交。
+ */
+export function isSkillUserInvocable(
+  skill: LoadedSkill | SkillCatalogEntry | SkillMeta,
+): boolean {
+  const ui =
+    'meta' in skill ? skill.meta.userInvocable : skill.userInvocable
+  return ui !== false
+}
+
+/**
+ * Skill 工具拒绝原因（S-PORT-4）；null = 允许返回全文。
+ */
+export function skillModelInvokeBlockReason(
+  skill: LoadedSkill,
+): string | null {
+  if (!isSkillModelInvocable(skill)) {
+    return `Skill "${skill.meta.id}" has disable-model-invocation (not available via Skill tool; use /skill if user-invocable)`
+  }
+  return null
+}
+
+/**
+ * 用户 slash 拒绝原因；null = 允许注入。
+ */
+export function skillUserInvokeBlockReason(
+  skill: LoadedSkill,
+): string | null {
+  if (!isSkillUserInvocable(skill)) {
+    return `Skill "${skill.meta.id}" is not user-invocable (user-invocable: false)`
+  }
+  return null
 }
 
 export function toCatalogEntry(skill: LoadedSkill): SkillCatalogEntry {
@@ -237,7 +310,7 @@ export function formatSkillCatalog(
   const entries = skills.map((s) =>
     'meta' in s ? toCatalogEntry(s as LoadedSkill) : (s as SkillCatalogEntry),
   )
-  const invocable = entries.filter((e) => !e.disableModelInvocation)
+  const invocable = entries.filter((e) => isSkillModelInvocable(e))
   if (!invocable.length) return ''
 
   const ctx = options?.contextWindowTokens ?? 128_000
