@@ -27,7 +27,7 @@
 | `/autocompact [on\|off]` | 会话级 auto compact 开关；无参显示 on/off + summarizer + 环境熔断；重挂 prepare 链 |
 | `/context` | 消息数、字符粗算、**tokens 分拆（messages + system）**、**window / auto threshold / pressure**、permissionMode、model、effort、cwd、id、**各 system section 标签·长度·token**、**cache + prepare 顺序**、usage 一行；提示 `/autocompact` |
 | `/doctor` · `/status` | 本地诊断：node/platform、cwd/id/**provider**/mode/model/effort、messages/sections、tools/skills/agent types、**mcp 连接数 + 失败摘要**、usage、autoCompact/maxPtlRetries、`getBoloHomeDir()` 是否存在；无遥测；`/status` 为隐藏别名 |
-| `/memory` · `/memory path` | 跨会话 **MEMORY.md** 路径 / 开关 / 是否存在 / 截断信息 / 预览（见 `docs/MEMORY.md`）；`path` 仅路径 |
+| `/memory` · `/memory path` · `/memory topics` | 跨会话 **MEMORY.md**：user/project 路径、开关、预览、topic 列表（见 `docs/MEMORY.md`） |
 | `/mcp` · `/mcp status` · `/mcp tools` | 已连接 MCP：**transport / status / live / caps / 脱敏 endpoint**；`status` 含 **failures + configWarnings**；`tools` 列 `mcp__server__tool` |
 | `/plugins` · `/plugins commands` · `/plugins reload` | 列本地插件；插件 slash；热重载（PL2） |
 | `/plugins market` · `search` · `install` · `uninstall` | **PL-MKT 最小市场**：注册清单 / 搜索 / 安装到 plugins 目录（见 `docs/PLUGINS.md`） |

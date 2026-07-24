@@ -1,5 +1,5 @@
 /**
- * Memory 最小：路径、截断、system 段、禁用开关
+ * Memory：路径、截断、topic 扫描、相关挑选、user+project 分层
  * 运行：node --import tsx/esm scripts/test-memory.ts
  */
 import { promises as fs } from 'node:fs'
@@ -7,16 +7,21 @@ import os from 'node:os'
 import path from 'node:path'
 import {
   getMemoryDir,
+  getProjectMemoryDir,
   getMemoryEntrypoint,
   ensureMemoryDir,
+  ensureProjectMemoryDir,
   loadMemoryEntrypoint,
+  loadProjectMemoryEntrypoint,
   truncateMemoryEntrypoint,
   buildMemorySystemSection,
   buildMemoryGuidelines,
   formatMemoryStatus,
   isMemoryDisabled,
+  scanMemoryTopics,
+  selectRelevantMemoryTopics,
+  tokenizeMemoryQuery,
   MEMORY_ENTRYPOINT_NAME,
-  MAX_MEMORY_ENTRYPOINT_LINES,
 } from '../packages/core/src/memory.ts'
 import { getVolatileSections } from '../packages/core/src/systemPrompt.ts'
 import { dispatchSlashCommand } from '../packages/core/src/slash.ts'
@@ -107,10 +112,69 @@ assert(
   'volatile has memory',
 )
 
+// --- MEM-6 topics ---
+await fs.writeFile(
+  path.join(dir, 'user_preferences.md'),
+  '---\ndescription: prefers bun over npm\ntitle: Prefs\n---\n\nAlways use bun.\n',
+  'utf8',
+)
+await fs.writeFile(
+  path.join(dir, 'unrelated_notes.md'),
+  '# Cooking\n\npasta recipes only\n',
+  'utf8',
+)
+const topics = await scanMemoryTopics(dir, { scope: 'user' })
+assert(topics.length >= 2, 'scan topics')
+assert(
+  topics.some((t) => t.filename === 'user_preferences.md' && t.description?.includes('bun')),
+  'frontmatter description',
+)
+assert(tokenizeMemoryQuery('use bun please').includes('bun'), 'tokenize')
+const rel = selectRelevantMemoryTopics('please use bun not npm', topics)
+assert(rel.some((r) => r.filename.includes('user_preferences')), 'relevant picks prefs')
+assert(!rel.some((r) => r.filename.includes('unrelated')), 'skips cooking')
+
+const sectionRel = await buildMemorySystemSection({
+  userBoloDir: tmpHome,
+  ensureDir: false,
+  relevanceQuery: 'bun package manager preference',
+  includeRelevantTopics: true,
+})
+assert(sectionRel?.includes('Related memory topics'), 'related section')
+assert(sectionRel?.includes('Always use bun') || sectionRel?.includes('bun'), 'related body')
+
+// --- MEM-7 project ---
+const projRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'bolo-mem-proj-'))
+const pdir = getProjectMemoryDir({ cwd: projRoot })
+await ensureProjectMemoryDir({ cwd: projRoot })
+await fs.writeFile(
+  path.join(pdir, MEMORY_ENTRYPOINT_NAME),
+  '- [Deadline](deadline.md) — ship April\n',
+  'utf8',
+)
+await fs.writeFile(
+  path.join(pdir, 'deadline.md'),
+  '---\ndescription: release deadline April\n---\n\nFreeze March 30.\n',
+  'utf8',
+)
+const pl = await loadProjectMemoryEntrypoint({ cwd: projRoot })
+assert(pl.exists && pl.content.includes('Deadline'), 'project entry')
+const both = await buildMemorySystemSection({
+  userBoloDir: tmpHome,
+  cwd: projRoot,
+  ensureDir: false,
+})
+assert(both?.includes('Current user'), 'user heading')
+assert(both?.includes('Current project'), 'project heading')
+assert(both?.includes('Deadline') || both?.includes('ship April'), 'project index in section')
+
 // status format
-const status = formatMemoryStatus(loaded)
+const status = formatMemoryStatus(loaded, {
+  project: pl,
+  topics: await scanMemoryTopics(dir, { scope: 'user' }),
+})
 assert(status.includes('enabled'), 'status enabled')
-assert(status.includes('preview'), 'status preview')
+assert(status.includes('topics:'), 'status topics')
 
 // slash
 const provider: LlmProvider = {
@@ -121,11 +185,10 @@ const provider: LlmProvider = {
   },
 }
 const session = await createSession({
-  cwd: tmpHome,
+  cwd: projRoot,
   provider,
   systemPrompt: false,
 })
-// point memory at tmp via env for slash (uses process env home override)
 const prevMem = process.env.BOLO_MEMORY_DIR
 const prevDisable = process.env.BOLO_DISABLE_MEMORY
 process.env.BOLO_MEMORY_DIR = dir
@@ -134,6 +197,9 @@ const memSlash = await dispatchSlashCommand(session, 'memory', '')
 assert(memSlash.ok && memSlash.message.includes('MEMORY.md'), 'slash memory')
 const pathSlash = await dispatchSlashCommand(session, 'memory', 'path')
 assert(pathSlash.ok && pathSlash.message.includes(dir), 'slash path')
+assert(pathSlash.message.includes('project'), 'slash path project')
+const topicsSlash = await dispatchSlashCommand(session, 'memory', 'topics')
+assert(topicsSlash.ok && topicsSlash.message.includes('user_preferences'), 'slash topics')
 if (prevMem === undefined) delete process.env.BOLO_MEMORY_DIR
 else process.env.BOLO_MEMORY_DIR = prevMem
 if (prevDisable === undefined) delete process.env.BOLO_DISABLE_MEMORY

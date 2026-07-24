@@ -465,12 +465,13 @@ export async function getVolatileSections(
     sections.push(boloMd.trim())
   }
 
-  // MEM：跨会话 MEMORY.md 索引（volatile；环境可关）
+  // MEM：跨会话 MEMORY.md 索引（volatile；环境可关；cwd → project 层）
   if (opts.loadMemory !== false && !isMemoryDisabled()) {
     const mem =
       opts.memorySection ??
       (await buildMemorySystemSection({
         userBoloDir: opts.userConfigDir,
+        cwd: opts.cwd,
       }))
     if (mem?.trim()) sections.push(mem.trim())
   }

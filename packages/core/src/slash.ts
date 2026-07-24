@@ -1795,18 +1795,23 @@ function cmdDeny(session: SlashSession, args: string): SlashDispatchResult {
 
 /**
  * 跨会话 MEMORY.md 状态（对照 HC memdir 可见性）。
- * 不改会话消息；只读路径 + 预览。
+ * 不改会话消息；只读路径 + 预览 / topics。
  */
 async function cmdMemory(
-  _session: SlashSession,
+  session: SlashSession,
   args: string,
 ): Promise<SlashDispatchResult> {
   const {
     loadMemoryEntrypoint,
+    loadProjectMemoryEntrypoint,
     formatMemoryStatus,
+    formatMemoryTopicsList,
     isMemoryDisabled,
     getMemoryDir,
     getMemoryEntrypoint,
+    getProjectMemoryDir,
+    getProjectMemoryEntrypoint,
+    scanMemoryTopics,
   } = await import('./memory.ts')
 
   const sub = args.trim().toLowerCase()
@@ -1814,22 +1819,49 @@ async function cmdMemory(
     return {
       ok: true,
       message: [
-        `dir:        ${getMemoryDir()}`,
-        `entrypoint: ${getMemoryEntrypoint()}`,
+        `user dir:        ${getMemoryDir()}`,
+        `user entry:      ${getMemoryEntrypoint()}`,
+        `project dir:     ${getProjectMemoryDir({ cwd: session.cwd })}`,
+        `project entry:   ${getProjectMemoryEntrypoint({ cwd: session.cwd })}`,
+      ].join('\n'),
+    }
+  }
+  if (sub === 'topics') {
+    const userDir = getMemoryDir()
+    const projectDir = getProjectMemoryDir({ cwd: session.cwd })
+    const topics = [
+      ...(await scanMemoryTopics(userDir, { scope: 'user' })),
+      ...(await scanMemoryTopics(projectDir, { scope: 'project' })),
+    ]
+    return {
+      ok: true,
+      message: [
+        `user dir:    ${userDir}`,
+        `project dir: ${projectDir}`,
+        formatMemoryTopicsList(topics),
       ].join('\n'),
     }
   }
   if (sub && sub !== 'status' && sub !== 'show') {
     return {
       ok: false,
-      message: 'Usage: /memory [path|status]',
+      message: 'Usage: /memory [path|status|topics]',
     }
   }
 
-  const loaded = await loadMemoryEntrypoint()
+  const loaded = await loadMemoryEntrypoint({ scope: 'user' })
+  const project = await loadProjectMemoryEntrypoint({ cwd: session.cwd })
+  const topics = [
+    ...(await scanMemoryTopics(loaded.dir, { scope: 'user' })),
+    ...(await scanMemoryTopics(project.dir, { scope: 'project' })),
+  ]
   return {
     ok: true,
-    message: formatMemoryStatus(loaded, { disabled: isMemoryDisabled() }),
+    message: formatMemoryStatus(loaded, {
+      disabled: isMemoryDisabled(),
+      project,
+      topics,
+    }),
   }
 }
 
@@ -2147,8 +2179,8 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
   },
   {
     name: 'memory',
-    summary: 'Long-term MEMORY.md path, status, and preview',
-    usage: '[path]',
+    summary: 'Long-term MEMORY.md path, status, topics, preview',
+    usage: '[path|status|topics]',
     group: 'session',
     run: cmdMemory,
   },

@@ -56,12 +56,12 @@
 | **MEM-3** | system 注入行为段 + 索引正文 | volatile；`loadMemory !== false` | ✅ |
 | **MEM-4** | `/memory` 显示路径/开关/预览 | slash `cmdMemory` | ✅ |
 | **MEM-5** | 测试 | `scripts/test-memory.ts` | ✅ |
-| **MEM-6** | topic 扫描 + 确定性相关记忆 | AUTORUN A1 | ⬜ |
-| **MEM-7** | project-scoped memory | AUTORUN A2 | ⬜ |
+| **MEM-6** | topic 扫描 + 确定性相关记忆 | AUTORUN A1 | ✅ |
+| **MEM-7** | project-scoped memory | AUTORUN A2 | ✅ |
 | **MEM-8** | team / daily log | **OUT**（不进 AUTORUN） | ⬜ |
 
-**已交付：MEM-0 → MEM-5 最小闭环 ✅。**  
-**续作序：** `docs/TODO_AUTORUN.md`（先 MEM-6，再 MEM-7）。
+**已交付：MEM-0 → MEM-7（MEM-8 OUT）。**  
+**续作序：** `docs/TODO_AUTORUN.md` 波次 B IMPORT。
 
 ---
 
