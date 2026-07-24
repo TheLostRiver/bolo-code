@@ -1,5 +1,5 @@
 /**
- * MCP stdio 真连接测试 — tools + resources + prompts（MCP2 部分）
+ * MCP stdio 真连接测试 — tools + resources + prompts + list_changed 热刷新（MCP2）
  * 运行：npx tsx scripts/test-mcp-stdio.ts
  */
 
@@ -13,20 +13,42 @@ import {
   extractMessages,
   loadMcpConfigFile,
   mcpToolName,
+  mergeSessionToolsWithMcp,
   parseMcpToolName,
   McpStdioClient,
+  type McpListChangedEvent,
 } from '../packages/mcp/src/index.ts'
 import {
   createSessionFromWorkspace,
   closeSessionMcp,
   dispatchSlashCommand,
+  type SessionEvent,
 } from '../packages/core/src/index.ts'
 import { writeJsonFile } from '../packages/config/src/index.ts'
+import type { BoloTool } from '../packages/tools/src/index.ts'
 
 function assert(c: unknown, m: string) {
   if (!c) {
     console.error('FAIL', m)
     process.exit(1)
+  }
+}
+
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms))
+}
+
+async function waitFor(
+  cond: () => boolean,
+  label: string,
+  timeoutMs = 5000,
+): Promise<void> {
+  const start = Date.now()
+  while (!cond()) {
+    if (Date.now() - start > timeoutMs) {
+      assert(false, `timeout waiting: ${label}`)
+    }
+    await sleep(30)
   }
 }
 
@@ -66,6 +88,7 @@ async function testStdioListCall() {
 
   const tools = await client.listTools()
   assert(tools.some((t) => t.name === 'echo'), 'listTools has echo')
+  assert(tools.some((t) => t.name === 'mutate'), 'listTools has mutate')
   const call = await client.callTool('echo', { text: 'hello' })
   const text =
     Array.isArray(call.content) && call.content[0] && 'text' in call.content[0]
@@ -91,6 +114,100 @@ async function testStdioListCall() {
   assert(msgText.includes('bolo'), `getPrompt includes who: ${msgText}`)
 
   await client.close()
+}
+
+async function testListChangedHotRefresh() {
+  const events: McpListChangedEvent[] = []
+  let sessionTools: BoloTool[] = []
+
+  const result = await connectMcpServers({
+    servers: [
+      {
+        name: 'echo',
+        command: nodeBin,
+        args: [echoServer],
+      },
+    ],
+    timeoutMs: 10_000,
+    onListChanged: (ev) => {
+      events.push(ev)
+      sessionTools = mergeSessionToolsWithMcp(sessionTools, result.servers)
+    },
+  })
+  sessionTools = result.tools
+
+  assert(
+    result.tools.some((t) => t.name === mcpToolName('echo', 'echo')),
+    'initial echo tool',
+  )
+  assert(
+    !result.tools.some((t) => t.name === mcpToolName('echo', 'extra')),
+    'no extra yet',
+  )
+
+  const mutate = result.tools.find(
+    (t) => t.name === mcpToolName('echo', 'mutate'),
+  )!
+  const m1 = await mutate.call(
+    { kind: 'tools', action: 'add' },
+    { cwd: process.cwd() },
+  )
+  assert(m1.ok && m1.output.includes('tools+extra'), `mutate tools ${m1.output}`)
+
+  await waitFor(
+    () =>
+      events.some(
+        (e) => e.kind === 'tools' && e.tools.some((t) => t.name === 'extra'),
+      ),
+    'tools list_changed with extra',
+  )
+  assert(
+    sessionTools.some((t) => t.name === mcpToolName('echo', 'extra')),
+    'session tools gained mcp__echo__extra',
+  )
+  const echoConn = result.servers.find((s) => s.name === 'echo')!
+  assert(
+    echoConn.tools.some((t) => t.name === 'extra'),
+    'conn.tools cache has extra',
+  )
+
+  const m2 = await mutate.call(
+    { kind: 'resources', action: 'add' },
+    { cwd: process.cwd() },
+  )
+  assert(m2.ok, 'mutate resources')
+  await waitFor(
+    () =>
+      events.some(
+        (e) =>
+          e.kind === 'resources' &&
+          e.resources.some((r) => r.uri === 'bolo://echo/extra'),
+      ),
+    'resources list_changed',
+  )
+  assert(
+    echoConn.resources.some((r) => r.uri === 'bolo://echo/extra'),
+    'conn.resources has extra',
+  )
+
+  const m3 = await mutate.call(
+    { kind: 'prompts', action: 'add' },
+    { cwd: process.cwd() },
+  )
+  assert(m3.ok, 'mutate prompts')
+  await waitFor(
+    () =>
+      events.some(
+        (e) => e.kind === 'prompts' && e.prompts.some((p) => p.name === 'extra'),
+      ),
+    'prompts list_changed',
+  )
+  assert(
+    echoConn.prompts.some((p) => p.name === 'extra'),
+    'conn.prompts has extra',
+  )
+
+  await closeMcpConnections(result.servers)
 }
 
 async function testConnectHost() {
@@ -180,12 +297,19 @@ async function testSessionWiring() {
     },
   })
 
+  const events: SessionEvent[] = []
   const { session, mcp } = await createSessionFromWorkspace({
     cwd: projectCwd,
     ensureDefaults: true,
     systemPrompt: false,
     connectMcp: true,
   })
+  const prevOnEvent = session.onEvent
+  session.onEvent = (e) => {
+    events.push(e)
+    prevOnEvent(e)
+  }
+
   assert(mcp, 'mcp result present')
   assert(
     session.tools?.some((t) => t.name === 'mcp__echo__echo'),
@@ -213,6 +337,35 @@ async function testSessionWiring() {
   assert(
     slashPrompts.ok && slashPrompts.message.includes('greet'),
     `/mcp prompts: ${slashPrompts.message}`,
+  )
+
+  // 会话层 list_changed：mutate → 工具表 + SessionEvent
+  const mutate = session.tools!.find((x) => x.name === 'mcp__echo__mutate')!
+  assert(mutate, 'session has mutate')
+  const mr = await mutate.call(
+    { kind: 'tools', action: 'add' },
+    { cwd: projectCwd },
+  )
+  assert(mr.ok, `session mutate ${mr.output}`)
+  await waitFor(
+    () =>
+      events.some(
+        (e) =>
+          e.type === 'mcp_list_changed' &&
+          e.kind === 'tools' &&
+          e.server === 'echo',
+      ),
+    'session mcp_list_changed event',
+  )
+  assert(
+    session.tools?.some((x) => x.name === 'mcp__echo__extra'),
+    'session tools hot-refreshed with extra',
+  )
+
+  const slashTools = await dispatchSlashCommand(session, 'mcp', 'tools')
+  assert(
+    slashTools.ok && slashTools.message.includes('mcp__echo__extra'),
+    `/mcp tools after refresh: ${slashTools.message}`,
   )
 
   await closeSessionMcp(session)
@@ -245,6 +398,7 @@ async function main() {
   await testNamesAndConfig()
   await testStdioListCall()
   await testConnectHost()
+  await testListChangedHotRefresh()
   await testSessionWiring()
   console.log('MCP STDIO TESTS PASS')
 }

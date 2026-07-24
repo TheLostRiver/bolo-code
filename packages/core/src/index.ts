@@ -25,8 +25,10 @@ import {
 import {
   closeMcpConnections,
   connectMcpServers,
+  mergeSessionToolsWithMcp,
   type ConnectedMcpServer,
   type ConnectMcpResult,
+  type McpListChangedEvent,
 } from '../../mcp/src/index.ts'
 import type { LoadedSkill } from '../../skills/src/index.ts'
 import type { BoloTool } from '../../tools/src/index.ts'
@@ -252,6 +254,14 @@ export type SessionEvent =
   | { type: 'permission_decision'; mode: string; behavior: string; reason: string }
   | { type: 'error'; message: string }
   | { type: 'warning'; message: string }
+  | {
+      type: 'mcp_list_changed'
+      server: string
+      kind: 'tools' | 'resources' | 'prompts'
+      toolCount: number
+      resourceCount: number
+      promptCount: number
+    }
   | {
       type: 'ptl_retry'
       attempt: number
@@ -717,15 +727,37 @@ export async function createSessionFromWorkspace(
       servers: workspace.mcpServers,
       cwd: opts.cwd,
       timeoutMs: opts.mcpTimeoutMs,
+      onListChanged: async (event: McpListChangedEvent) => {
+        // 对照 HC list_changed：再 list 后同步会话工具表 + 事件（无遥测）
+        if (session.mcpConnections?.length) {
+          session.tools = mergeSessionToolsWithMcp(
+            session.tools,
+            session.mcpConnections,
+          )
+        }
+        emit(session, {
+          type: 'mcp_list_changed',
+          server: event.server,
+          kind: event.kind,
+          toolCount: event.tools.length,
+          resourceCount: event.resources.length,
+          promptCount: event.prompts.length,
+        })
+      },
     })
     for (const w of mcp.warnings) {
       emit(session, { type: 'warning', message: w })
       // eslint-disable-next-line no-console
       console.warn(`[bolo mcp] ${w}`)
     }
-    if (mcp.tools.length > 0) {
-      session.tools = [...(session.tools ?? createDefaultTools(session.agentDefinitions)), ...mcp.tools]
+    if (mcp.servers.length > 0) {
       session.mcpConnections = mcp.servers
+    }
+    if (mcp.tools.length > 0) {
+      session.tools = [
+        ...(session.tools ?? createDefaultTools(session.agentDefinitions)),
+        ...mcp.tools,
+      ]
     }
   }
 

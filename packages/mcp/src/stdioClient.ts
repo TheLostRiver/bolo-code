@@ -1,6 +1,7 @@
 /**
  * MCP stdio JSON-RPC client — Content-Length framing（对照 MCP SDK / HC mcp client 语义）
  * 无遥测；能力：initialize → tools/list|call · resources/list|read · prompts/list|get
+ * 通知：notifications/{tools,resources,prompts}/list_changed（热刷新由 host 接线）
  */
 
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
@@ -153,6 +154,17 @@ export type StdioClientOptions = {
   env?: Record<string, string>
 }
 
+/** 服务端 → 客户端 JSON-RPC 通知（无 id） */
+export type McpNotificationHandler = (
+  method: string,
+  params: unknown,
+) => void | Promise<void>
+
+/** MCP list_changed 通知 method（spec 名） */
+export const MCP_TOOLS_LIST_CHANGED = 'notifications/tools/list_changed'
+export const MCP_RESOURCES_LIST_CHANGED = 'notifications/resources/list_changed'
+export const MCP_PROMPTS_LIST_CHANGED = 'notifications/prompts/list_changed'
+
 export class McpStdioClient {
   readonly serverName: string
   private proc: ChildProcessWithoutNullStreams | null = null
@@ -171,6 +183,8 @@ export class McpStdioClient {
   private readonly opts: StdioClientOptions
   /** initialize 返回的 server capabilities（可能为空对象） */
   private _capabilities: McpServerCapabilities = {}
+  /** method → handlers（对照 HC setNotificationHandler，无遥测） */
+  private notificationHandlers = new Map<string, Set<McpNotificationHandler>>()
 
   constructor(opts: StdioClientOptions) {
     this.opts = opts
@@ -196,6 +210,23 @@ export class McpStdioClient {
 
   get supportsPrompts(): boolean {
     return this._capabilities.prompts != null
+  }
+
+  /**
+   * 订阅服务端通知。可对同一 method 挂多个 handler。
+   * 返回取消订阅函数。
+   */
+  onNotification(method: string, handler: McpNotificationHandler): () => void {
+    let set = this.notificationHandlers.get(method)
+    if (!set) {
+      set = new Set()
+      this.notificationHandlers.set(method, set)
+    }
+    set.add(handler)
+    return () => {
+      set!.delete(handler)
+      if (set!.size === 0) this.notificationHandlers.delete(method)
+    }
   }
 
   async connect(): Promise<void> {
@@ -251,17 +282,39 @@ export class McpStdioClient {
     }
   }
 
-  private handleMessage(msg: JsonRpcResponse) {
-    if (msg.id === undefined || msg.id === null) {
-      // notification — ignore for minimal host
+  private handleMessage(msg: JsonRpcResponse & { method?: string; params?: unknown }) {
+    // 通知：无 id（或显式 null）且带 method
+    if (
+      (msg.id === undefined || msg.id === null) &&
+      typeof msg.method === 'string'
+    ) {
+      this.dispatchNotification(msg.method, msg.params)
       return
     }
+    if (msg.id === undefined || msg.id === null) return
     const key = String(msg.id)
     const p = this.pending.get(key)
     if (!p) return
     clearTimeout(p.timer)
     this.pending.delete(key)
     p.resolve(msg)
+  }
+
+  private dispatchNotification(method: string, params: unknown) {
+    const set = this.notificationHandlers.get(method)
+    if (!set?.size) return
+    for (const handler of [...set]) {
+      try {
+        const r = handler(method, params)
+        if (r && typeof (r as Promise<void>).then === 'function') {
+          void (r as Promise<void>).catch(() => {
+            /* 通知 handler 失败不杀连接 */
+          })
+        }
+      } catch {
+        /* ignore */
+      }
+    }
   }
 
   private failAll(err: Error) {
@@ -428,6 +481,7 @@ export class McpStdioClient {
 
   async close(): Promise<void> {
     this.closed = true
+    this.notificationHandlers.clear()
     this.failAll(new Error(`MCP server "${this.serverName}" closed`))
     if (!this.proc) return
     try {

@@ -1,9 +1,10 @@
 /**
  * MCP host：连 stdio servers → listTools/listResources/listPrompts
  * → 注册 BoloTool（mcp__server__tool + 可选 ListMcpResources / ReadMcpResource / GetMcpPrompt）
+ * → list_changed 通知热刷新（tools/resources/prompts 缓存 + 可选会话工具表同步）
  * 单 server 失败 warn，不阻断其它 server / 会话
  *
- * 对照 HC 语义（非复制）：capabilities 门控 · resources/list|read · prompts/list|get · 全局 meta 工具
+ * 对照 HC 语义（非复制）：capabilities 门控 · list_changed 再 list · meta 工具 · 无遥测
  */
 
 import {
@@ -15,13 +16,27 @@ import {
   formatMcpCallOutput,
   formatMcpPromptResult,
   formatMcpResourceContents,
+  MCP_PROMPTS_LIST_CHANGED,
+  MCP_RESOURCES_LIST_CHANGED,
+  MCP_TOOLS_LIST_CHANGED,
   McpStdioClient,
   type McpPromptDef,
   type McpResourceDef,
   type McpToolDef,
 } from './stdioClient.ts'
-import { mcpToolName } from './names.ts'
+import { mcpToolName, parseMcpToolName } from './names.ts'
 import type { McpServerConfig, McpToolRegistration } from './types.ts'
+
+/** list_changed 刷新面（对照 HC tools|prompts|resources list_changed） */
+export type McpListChangedKind = 'tools' | 'resources' | 'prompts'
+
+export type McpListChangedEvent = {
+  server: string
+  kind: McpListChangedKind
+  tools: McpToolDef[]
+  resources: McpResourceDef[]
+  prompts: McpPromptDef[]
+}
 
 export type ConnectedMcpServer = {
   name: string
@@ -58,6 +73,164 @@ export type ConnectMcpOptions = {
    * 默认：任一 server 支持 resources 或 prompts 时注册。
    */
   registerMetaTools?: boolean
+  /**
+   * 收到 notifications/tools|resources|prompts/list_changed 并成功 re-list 后回调。
+   * 会话层用此同步 session.tools（mcp__*）；无遥测。
+   */
+  onListChanged?: (event: McpListChangedEvent) => void | Promise<void>
+}
+
+const META_TOOL_NAMES = new Set([
+  'ListMcpResources',
+  'ReadMcpResource',
+  'GetMcpPrompt',
+])
+
+/** 是否为 MCP 远端工具或全局 meta 工具（热刷新时从会话工具表剔除再重建） */
+export function isMcpManagedToolName(name: string): boolean {
+  return META_TOOL_NAMES.has(name) || parseMcpToolName(name) != null
+}
+
+/**
+ * 按当前 ConnectedMcpServer 缓存重建 mcp__* + meta 工具表。
+ * 不关连接；供 list_changed 后写回 session.tools。
+ */
+export function rebuildMcpBoloTools(
+  servers: ConnectedMcpServer[],
+  options?: { registerMetaTools?: boolean },
+): { tools: BoloTool[]; registrations: McpToolRegistration[] } {
+  const tools: BoloTool[] = []
+  const registrations: McpToolRegistration[] = []
+  const seen = new Set<string>()
+
+  for (const s of servers) {
+    if (!s.client.isConnected) continue
+    for (const t of s.tools) {
+      const reg = registrationFromListed(s.name, t)
+      if (seen.has(reg.name)) continue
+      seen.add(reg.name)
+      registrations.push(reg)
+      tools.push(boloToolFromMcp(reg, s.client))
+    }
+  }
+
+  const wantMeta =
+    options?.registerMetaTools !== false &&
+    servers.some((s) => s.capabilities.resources || s.capabilities.prompts)
+  if (wantMeta) {
+    for (const meta of createMcpMetaTools(servers)) {
+      if (seen.has(meta.name)) continue
+      seen.add(meta.name)
+      tools.push(meta)
+    }
+  }
+
+  return { tools, registrations }
+}
+
+/**
+ * 把非 MCP 工具 + 当前 MCP 重建结果合并。
+ * 保留内置 / Agent 等；替换全部 mcp 管理名。
+ */
+export function mergeSessionToolsWithMcp(
+  existing: BoloTool[] | undefined,
+  servers: ConnectedMcpServer[],
+  options?: { registerMetaTools?: boolean },
+): BoloTool[] {
+  const base = (existing ?? []).filter((t) => !isMcpManagedToolName(t.name))
+  const { tools: mcpTools } = rebuildMcpBoloTools(servers, options)
+  return [...base, ...mcpTools]
+}
+
+/**
+ * 对已连接 server 挂 list_changed 监听：再 list → 更新缓存 → onListChanged。
+ * 对照 HC：capabilities.listChanged 时注册；Bolo 更宽：凡支持该面即监听（server 可发）。
+ */
+export function attachMcpListChangedHandlers(
+  servers: ConnectedMcpServer[],
+  onListChanged?: (event: McpListChangedEvent) => void | Promise<void>,
+): () => void {
+  const unsubs: Array<() => void> = []
+
+  for (const conn of servers) {
+    const client = conn.client
+
+    const refreshTools = async () => {
+      try {
+        const listed = await client.listTools()
+        conn.tools = listed
+        conn.capabilities.tools = client.supportsTools || listed.length > 0
+        await onListChanged?.({
+          server: conn.name,
+          kind: 'tools',
+          tools: conn.tools,
+          resources: conn.resources,
+          prompts: conn.prompts,
+        })
+      } catch {
+        /* re-list 失败保留旧缓存 */
+      }
+    }
+
+    const refreshResources = async () => {
+      if (!client.supportsResources) return
+      try {
+        conn.resources = await client.listResources()
+        await onListChanged?.({
+          server: conn.name,
+          kind: 'resources',
+          tools: conn.tools,
+          resources: conn.resources,
+          prompts: conn.prompts,
+        })
+      } catch {
+        /* keep */
+      }
+    }
+
+    const refreshPrompts = async () => {
+      if (!client.supportsPrompts) return
+      try {
+        conn.prompts = await client.listPrompts()
+        await onListChanged?.({
+          server: conn.name,
+          kind: 'prompts',
+          tools: conn.tools,
+          resources: conn.resources,
+          prompts: conn.prompts,
+        })
+      } catch {
+        /* keep */
+      }
+    }
+
+    // 串行同 server 刷新，避免并发 list 互相覆盖
+    let chain: Promise<void> = Promise.resolve()
+    const enqueue = (fn: () => Promise<void>) => {
+      chain = chain.then(fn).catch(() => {})
+      return chain
+    }
+
+    unsubs.push(
+      client.onNotification(MCP_TOOLS_LIST_CHANGED, () =>
+        enqueue(refreshTools),
+      ),
+    )
+    unsubs.push(
+      client.onNotification(MCP_RESOURCES_LIST_CHANGED, () =>
+        enqueue(refreshResources),
+      ),
+    )
+    unsubs.push(
+      client.onNotification(MCP_PROMPTS_LIST_CHANGED, () =>
+        enqueue(refreshPrompts),
+      ),
+    )
+  }
+
+  return () => {
+    for (const u of unsubs) u()
+  }
 }
 
 function asInputSchema(raw: unknown): JsonSchema {
@@ -381,8 +554,8 @@ export function createMcpMetaTools(servers: ConnectedMcpServer[]): BoloTool[] {
 }
 
 /**
- * 连接配置中的 MCP servers（stdio），list tools/resources/prompts 后注册 BoloTool。
- * 任一 server 失败只记 warning。
+ * 连接配置中的 MCP servers（stdio），list tools/resources/prompts 后注册 BoloTool，
+ * 并挂 list_changed 热刷新。任一 server 失败只记 warning。
  */
 export async function connectMcpServers(
   options: ConnectMcpOptions,
@@ -506,6 +679,9 @@ export async function connectMcpServers(
       tools.push(meta)
     }
   }
+
+  // 热刷新：再 list + 回调；会话层通常再 mergeSessionToolsWithMcp
+  attachMcpListChangedHandlers(servers, options.onListChanged)
 
   return { servers, tools, registrations, warnings }
 }

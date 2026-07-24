@@ -133,7 +133,7 @@ idle
 ### 6.2 MCP
 
 - 传输：stdio ✅；SSE / HTTP ⬜
-- 能力：tools ✅；resources / prompts ✅（stdio + meta 工具）；list_changed 热刷新 ⬜
+- 能力：tools ✅；resources / prompts ✅（stdio + meta 工具）；list_changed 热刷新 ✅
 - 命名：远端 `mcp__<server>__<tool>`；meta：`ListMcpResources` / `ReadMcpResource` / `GetMcpPrompt`
 - PermissionRequest / PreToolUse matcher 可匹配 `mcp__*`
 

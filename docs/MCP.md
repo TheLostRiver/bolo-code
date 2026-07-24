@@ -32,7 +32,8 @@ Bolo 以 **stdio JSON-RPC** 连接外部 MCP server，把远端 tools / resource
 3. `tools/list` → 注册 `BoloTool`，名：`mcp__<server>__<tool>`
 4. 若 `capabilities.resources`：`resources/list` 缓存到连接；注册 meta 工具 `ListMcpResources` / `ReadMcpResource`
 5. 若 `capabilities.prompts`：`prompts/list` 缓存；注册 meta 工具 `GetMcpPrompt`
-6. 模型 `tools/call` 经会话工具表 → JSON-RPC `tools/call`；资源/提示词经 meta 工具 → `resources/*` / `prompts/get`
+6. 挂 `notifications/{tools,resources,prompts}/list_changed`：再 list → 更新连接缓存；会话层 `mergeSessionToolsWithMcp` 同步 `session.tools`，并发 `mcp_list_changed` 事件（无遥测）
+7. 模型 `tools/call` 经会话工具表 → JSON-RPC `tools/call`；资源/提示词经 meta 工具 → `resources/*` / `prompts/get`
 
 单 server 失败只 **warn**（`console.warn` + session event `warning`），不中断会话。
 
@@ -61,8 +62,9 @@ Bolo 以 **stdio JSON-RPC** 连接外部 MCP server，把远端 tools / resource
 | API | 作用 |
 |-----|------|
 | `loadMcpConfigFile` | 读 mcp.json |
-| `McpStdioClient` | 单 server stdio：tools / resources / prompts |
-| `connectMcpServers` | 批量连接 + 产出 `BoloTool[]`（含 meta） |
+| `McpStdioClient` | 单 server stdio：tools / resources / prompts；`onNotification` |
+| `connectMcpServers` | 批量连接 + 产出 `BoloTool[]`（含 meta）+ list_changed 挂接 |
+| `attachMcpListChangedHandlers` / `mergeSessionToolsWithMcp` | 热刷新缓存与会话工具表 |
 | `createMcpMetaTools` | List/Read resource · Get prompt |
 | `mcpToolName` / `parseMcpToolName` | 命名 |
 
@@ -72,7 +74,7 @@ Bolo 以 **stdio JSON-RPC** 连接外部 MCP server，把远端 tools / resource
 npx tsx scripts/test-mcp-stdio.ts
 ```
 
-本地 fixture：`scripts/fixtures/mcp-echo-server.mjs`（initialize · tools · resources · prompts）。
+本地 fixture：`scripts/fixtures/mcp-echo-server.mjs`（initialize · tools · resources · prompts · `mutate` + list_changed）。
 
 ## 已做 / 未做
 
@@ -82,8 +84,8 @@ npx tsx scripts/test-mcp-stdio.ts
 | capabilities 门控 + resources list/read | ✅ MCP2 部分 |
 | prompts list/get + GetMcpPrompt | ✅ MCP2 部分 |
 | `/mcp` resources/prompts | ✅ |
+| `list_changed` 热刷新（tools/resources/prompts → 缓存 + session.tools） | ✅ MCP2 部分 |
 | SSE / HTTP transport | ⬜ |
-| resources/prompts 变更通知热刷新 | ⬜ |
 | 插件热重载 MCP | ⬜（PL2） |
 
-> 语义对照 HelsincyCode MCP client（capabilities 门控、List/Read resource meta 工具），**重新实现**，非 SDK 大段复制。
+> 语义对照 HelsincyCode MCP client（capabilities 门控、List/Read resource meta 工具、list_changed 再 list），**重新实现**，非 SDK 大段复制。

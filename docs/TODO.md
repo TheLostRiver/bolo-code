@@ -68,7 +68,7 @@
 | **S0–S7** | `runSubagent` + Agent 工具 + `.bolo/agents` + `/agents` | ✅ |
 | **S7+ / S12 partial** | 侧链 `agent-*.jsonl`；`run_in_background` + `/bg`；fork 继承父 messages 最小 | ✅ 最小 |
 | **MCP1** | MCP stdio listTools/call → tools 表 | ✅ |
-| **MCP2** | resources/prompts（stdio）+ meta 工具 + `/mcp` 子命令；SSE/HTTP · 热重载仍 ⬜ | 🟡 部分 |
+| **MCP2** | resources/prompts（stdio）+ meta + `/mcp`；**list_changed 热刷新** ✅；SSE/HTTP 仍 ⬜ | 🟡 部分 |
 | **PL1** | 本地 plugins 发现 + skills/hooks/mcp 合并（非市场） | ✅ 最小 |
 | **OR1–OR5** | OpenAI Responses HTTP SSE 直连 | ✅ |
 | 其它 | 真 `apply_patch` 最小 · usage 本地 `/cost` · always-allow · tool_result 预算 · 快照持久化 permissionRules/effort/usage | ✅ / 🟡 |
@@ -90,7 +90,7 @@
 
 | ID | 主题 | 状态 |
 |----|------|------|
-| **MCP2** | SSE/HTTP transport · resources/prompts 热通知 · 插件热重载 | 🟡 部分（stdio resources/prompts ✅） |
+| **MCP2** | SSE/HTTP transport · 插件热重载 MCP | 🟡 部分（stdio resources/prompts + list_changed ✅） |
 | **PL2** | 插件热加载 / 市场（若做）· 贡献 slash 深化 | ⬜ |
 | **S8+** | 子 agent 权限细化 · 并行策略文档化 · worktree | 🟡 / ⬜ |
 | **OR6** | Responses **WebSocket** | ⬜ **后置**（HTTP SSE 已够用） |
@@ -119,13 +119,14 @@
   RS* · SL* · SL-polish · T0–T7 · R* · C1–C5 · J-A/B/C · K* · S0–S7 · MCP1 · MCP2(resources/prompts) · PL1 · OR1–OR5
 
 下一阶段串行候选（择一为主刀）：
-  ① MCP2 余量    SSE/HTTP transport · list_changed 热刷新（stdio resources/prompts 已交付）
+  ① MCP2 余量    SSE/HTTP transport（list_changed 热刷新已交付）
   ② PL2          plugins 热加载 / slash 贡献深化
   ③ Usage+       本地 usage breakdown（可选）
   ④ T8           Ink TUI（可选，不挡 headless）
   ⑤ C6+ / OR6    cache 后置 / Responses WS —— 明确后置
   ⑥ M4           Electron —— 门禁后置
   （J-D T3 已交付：默认 jsonl 写 + migrate + meta 切片）
+  （MCP2 list_changed 已交付：tools/resources/prompts 通知热刷新）
 ```
 
 ---
@@ -135,13 +136,13 @@
 若只开一刀（**非 Electron**）：
 
 > **主推候选：**  
-> 1. **MCP2 余量 / PL2** — SSE/HTTP 或 plugins 深度（禁止 mock 冒充）  
+> 1. **MCP2 SSE/HTTP · PL2** — 远程 transport 或 plugins 深度（禁止 mock 冒充）  
 > 2. **Usage+** — 本地 usage breakdown（可选）  
 >
 > **可选支线：** JSONL entry 类型 / CLI `migrate-session` 包装。  
 > **明确后置：** OR6 WebSocket · C6+ cache TTL/break · T8 Ink · Electron。
 
-已齐：resume / slash（含 **SL-polish**）/ BOLO TUI 最小 / rules（含 path-scoped 刷新）/ cache C1–C5 / JSONL 双写+**J-D T3**（默认 jsonl、migrate、meta 切片）/ creators / Subagent / MCP stdio + **resources/prompts 最小** / plugins 最小 / usage+effort / always-allow / apply_patch / **openai-responses HTTP SSE**。
+已齐：resume / slash（含 **SL-polish**）/ BOLO TUI 最小 / rules（含 path-scoped 刷新）/ cache C1–C5 / JSONL 双写+**J-D T3**（默认 jsonl、migrate、meta 切片）/ creators / Subagent / MCP stdio + **resources/prompts** + **list_changed 热刷新** / plugins 最小 / usage+effort / always-allow / apply_patch / **openai-responses HTTP SSE**。
 
 ---
 
@@ -173,4 +174,4 @@
 ---
 
 **一句话：**  
-可日用 headless 主路径已齐；**MCP2 部分**（stdio resources/prompts + meta 工具 + `/mcp`）已交付；**J-D T3**（默认 jsonl 写 + migrate + meta 切片）已交付；下一刀优先 **MCP SSE/PL2 / Usage+**；**Electron · Ink · Responses WS · cache TTL** 后置。
+可日用 headless 主路径已齐；**MCP2**（stdio resources/prompts + meta + `/mcp` + **list_changed 热刷新**）已交付；**J-D T3** 已交付；下一刀优先 **MCP SSE/HTTP · PL2 / Usage+**；**Electron · Ink · Responses WS · cache TTL** 后置。

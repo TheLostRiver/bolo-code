@@ -26,7 +26,7 @@
 
 1. ~~斜杠总线~~ ✅ · ~~Rules~~ ✅ · ~~Creators~~ ✅ · ~~C1–C5~~ ✅  
 2. ~~resume 列表 / TUI 最小 / JSONL 双写 / Subagent / MCP / plugins / Responses HTTP~~ ✅  
-3. **下一刀候选：** MCP SSE/PL2 · Usage+（J-D T3 默认 jsonl 已交付）；slash 体验打磨 ✅  
+3. **下一刀候选：** MCP SSE/HTTP · PL2 · Usage+（J-D T3 + list_changed 已交付）；slash 体验打磨 ✅  
 4. **后置：** OR6 WS · cache TTL/break · T8 Ink · Electron  
 
 ---
@@ -151,7 +151,7 @@
 |------|------|
 | MCP stdio tools | ✅ |
 | MCP resources/prompts（stdio）+ meta 工具 | ✅ 最小 |
-| MCP SSE/HTTP · list_changed 热刷新 | ⬜ |
+| MCP SSE/HTTP · list_changed 热刷新 | 🟡 | list_changed ✅；SSE/HTTP ⬜ |
 | Plugins 本地加载 | ✅ 最小 |
 | Subagent 真 loop | ✅ |
 | Electron | ⬜ |
@@ -199,7 +199,7 @@ K1–K2 + slash 回落 ✅；rule-creator 可选 ⬜。
 |---|------|------|
 | 3.1 Skills | ✅ catalog + 工具 + slash；远程 ⬜ |
 | 3.2 MCP stdio tools | ✅ |
-| 3.2b MCP resources/prompts | ✅ 最小（stdio + meta 工具）；SSE/热刷新 ⬜ |
+| 3.2b MCP resources/prompts + list_changed | ✅ 最小（stdio + meta + 热刷新）；SSE/HTTP ⬜ |
 | 3.3 Plugins 真加载 | ✅ 最小（本地） |
 | 3.4 Subagent | ✅ 见 M-Subagent |
 
@@ -407,12 +407,12 @@ flowchart TB
 | A 交互 | 斜杠 · rules · skills · creators | ✅ |
 | B 成本 | C1–C5 | ✅；C6+ 后置 |
 | C 存盘 | JSONL A–D + J-D T3（默认 jsonl / migrate / meta） | ✅ |
-| D 扩展 | Subagent · MCP（含 resources/prompts）· plugins | ✅ 最小；SSE/热重载 🟡 |
+| D 扩展 | Subagent · MCP（resources/prompts + list_changed）· plugins | ✅ 最小；SSE/HTTP 🟡 |
 | E TUI | T0–T7 | ✅；T8 ⬜ |
 | F GUI | Electron | ⬜ 后置 |
 | G 协议 | Responses HTTP | ✅；WS 后置 |
 
-**默认下一刀：** 见 **`docs/TODO.md` §7**（MCP SSE·PL2 / Usage+）。
+**默认下一刀：** 见 **`docs/TODO.md` §7**（MCP SSE/HTTP · PL2 / Usage+）。
 
 ---
 
@@ -471,12 +471,12 @@ flowchart TB
 | **M-Subagent** | ✅/🟡 | S0–S7 + async/fork/侧链最小 |
 | **M-TUI** | 🟡 | T0–T7 ✅；T8 Ink ⬜ |
 | **M-Cost** | 🟡 | C1–C5 ✅；TTL/break 后置 |
-| **M3** | 🟡 | MCP stdio+resources/prompts 最小；SSE/PL2 未完 |
+| **M3** | 🟡 | MCP stdio+resources/prompts+list_changed；SSE/PL2 未完 |
 | **M5** | 🟡 | 会话/CLI 日用齐；JSONL 主路径 T3 ✅；entry 可选再深 |
 | **Responses** | 🟡 | HTTP SSE ✅；WS ⬜ |
 | M4–M6 | ⬜ | Electron 与体验打磨 |
 
 **一句话：**  
 **可日用 headless coding agent 主路径已齐**（CLI + slash + rules + cache 标记 + 会话 + 扩展最小 + Subagent + Responses HTTP）。  
-下一刀优先 **MCP SSE·PL2 / Usage+**；**Electron · 完整 Ink · Responses WS · cache TTL** 后置。  
+下一刀优先 **MCP SSE/HTTP · PL2 / Usage+**；**Electron · 完整 Ink · Responses WS · cache TTL** 后置。  
 执行序 → **`docs/TODO.md`**。
