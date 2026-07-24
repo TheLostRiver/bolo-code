@@ -77,7 +77,8 @@
 | SMOKE | ✅ |
 
 **本轨圆满：** §4 条件已满足。  
-**下一动作：** 仅当用户新指令时开 OUT 项（Electron / OAuth / 企业 YOLO 等）。
+**下一动作：** 整盘后续见 **`docs/TODO_PRODUCT.md`**（产品级执行轨）。  
+OUT（Electron / OAuth / 企业 YOLO 等）仍须用户点名。
 
 ---
 
