@@ -1,5 +1,5 @@
 /**
- * 危险 shell 模式（Y3）
+ * 危险 shell 模式（Y3 + Y4.3 PowerShell/cmd）
  * 对照 HC dangerousPatterns：过宽解释器 allow 与破坏性命令。
  * 用于 auto 门控硬 deny（不调用分类器）；无遥测。
  */
@@ -27,8 +27,27 @@ export const DANGEROUS_BASH_COMMAND_PATTERNS: readonly RegExp[] = [
   /\bufw\s+disable\b/i,
 ]
 
+/** Y4.3 PowerShell / cmd 危险模式（Bash 工具也可能执行 ps） */
+export const DANGEROUS_POWERSHELL_COMMAND_PATTERNS: readonly RegExp[] = [
+  /\bInvoke-Expression\b/i,
+  /\bIEX\s*\(/i,
+  /\bDownloadString\b/i,
+  /\bDownloadFile\b/i,
+  /\bFromBase64String\b/i,
+  /\bInvoke-WebRequest\b[^|\n]*\|\s*IEX/i,
+  /\bInvoke-RestMethod\b[^|\n]*\|\s*IEX/i,
+  /\bStart-Process\b[^;\n]*-Verb\s+RunAs/i,
+  /\bRemove-Item\b[^;\n]*-Recurse[^;\n]*-Force[^;\n]*C:\\?\s*$/i,
+  /\bRemove-Item\b[^;\n]*-Recurse[^;\n]*-Force[^;\n]*\/\s*$/i,
+  /\bSet-ExecutionPolicy\b[^;\n]*Unrestricted/i,
+  /\bNew-Object\b[^;\n]*Net\.WebClient/i,
+  // cmd
+  /\bformat\s+[a-z]:/i,
+  /\bdel\s+\/[fsq]+\s+[a-z]:\\/i,
+]
+
 /**
- * 若 always-allow 前缀会放行任意解释器代码，视为危险（strip 用，已在 stripDangerousAllows）
+ * 若 always-allow 前缀会放行任意解释器代码，视为危险（strip 用）
  */
 export const DANGEROUS_BASH_ALLOW_PREFIXES: readonly string[] = [
   'python',
@@ -45,6 +64,9 @@ export const DANGEROUS_BASH_ALLOW_PREFIXES: readonly string[] = [
   'curl',
   'wget',
   'ssh',
+  'powershell',
+  'pwsh',
+  'cmd',
 ]
 
 export function matchDangerousBashCommand(
@@ -55,6 +77,11 @@ export function matchDangerousBashCommand(
   for (const re of DANGEROUS_BASH_COMMAND_PATTERNS) {
     if (re.test(cmd)) {
       return { matched: true, pattern: re.source }
+    }
+  }
+  for (const re of DANGEROUS_POWERSHELL_COMMAND_PATTERNS) {
+    if (re.test(cmd)) {
+      return { matched: true, pattern: `ps:${re.source}` }
     }
   }
   return { matched: false }

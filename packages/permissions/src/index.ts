@@ -778,10 +778,15 @@ export {
 export {
   parseAutoClassifierResponse,
   buildAutoClassifierSystemPrompt,
+  buildAutoClassifierFastSystemPrompt,
   buildAutoClassifierUserPrompt,
   buildClassifierMessages,
   createAutoClassifyFromCompleteText,
+  truncateForClassifier,
+  serializeToolInputForClassifier,
   DEFAULT_AUTO_CLASSIFY_TIMEOUT_MS,
+  MAX_CLASSIFIER_SUMMARY_CHARS,
+  MAX_CLASSIFIER_INPUT_JSON_CHARS,
   type AutoClassifyInput,
   type AutoClassifyResult,
   type AutoClassifyFn,
@@ -791,6 +796,7 @@ export {
   matchDangerousBashCommand,
   isDangerousBashAllowPrefix,
   DANGEROUS_BASH_COMMAND_PATTERNS,
+  DANGEROUS_POWERSHELL_COMMAND_PATTERNS,
 } from './dangerousPatterns.ts'
 export {
   checkSensitivePath,

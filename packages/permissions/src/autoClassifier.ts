@@ -1,7 +1,7 @@
 /**
- * Auto 权限分类器（Y2 单阶段）
- * 对照 HC yoloClassifier 语义：侧路模型决策 allow/deny；失败 deny。
- * 无遥测、无两阶段（Y4）、无 GrowthBook。
+ * Auto 权限分类器（Y2 单阶段 + Y4 两阶段）
+ * 对照 HC yoloClassifier：侧路模型决策；fast 否决 / deep 再评；失败 deny。
+ * 无遥测、无 GrowthBook。
  */
 
 import type { ChatMessage } from '../../shared/src/index.ts'
@@ -22,12 +22,15 @@ export type AutoClassifyResult =
       model?: string
       durationMs?: number
       unavailable?: false
+      /** Y4：fast | deep | single */
+      stage?: 'fast' | 'deep' | 'single'
     }
   | {
       decision: 'deny'
       reason: string
       unavailable: true
       durationMs?: number
+      stage?: 'fast' | 'deep' | 'single'
     }
 
 export type AutoClassifyFn = (
@@ -37,7 +40,12 @@ export type AutoClassifyFn = (
 
 export const DEFAULT_AUTO_CLASSIFY_TIMEOUT_MS = 20_000
 
-/** 分类器 system 提示（精炼；对照 HC 安全评估意图） */
+/** Y4.2 分类器上下文上限（字符，非 tokenizer） */
+export const MAX_CLASSIFIER_SUMMARY_CHARS = 2_500
+export const MAX_CLASSIFIER_INPUT_JSON_CHARS = 2_000
+export const MAX_CLASSIFIER_RULES_HINT_CHARS = 500
+
+/** 分类器 system 提示（deep / single） */
 export function buildAutoClassifierSystemPrompt(): string {
   return `You are a security permission classifier for a coding agent.
 Decide whether a single tool invocation is SAFE to auto-approve.
@@ -52,13 +60,58 @@ Rules:
 - Do not include any other keys or text.`
 }
 
-export function buildAutoClassifierUserPrompt(input: AutoClassifyInput): string {
-  const payload = {
+/** Y4.1 fast stage：更短、更严（宁可 deny） */
+export function buildAutoClassifierFastSystemPrompt(): string {
+  return `You are a FAST security screen for a coding agent tool call.
+Reply ONLY JSON: {"decision":"allow"|"deny","reason":"<short>"}
+Deny anything destructive, network-pipe-to-shell, privilege escalation, or unclear.
+Only allow if clearly safe (e.g. simple echo, list files, non-destructive).
+When unsure, deny.`
+}
+
+export function truncateForClassifier(
+  text: string,
+  maxChars: number,
+): string {
+  const t = text ?? ''
+  if (t.length <= maxChars) return t
+  return `${t.slice(0, maxChars)}…`
+}
+
+export function serializeToolInputForClassifier(toolInput: unknown): unknown {
+  try {
+    const s = JSON.stringify(toolInput ?? {})
+    if (s.length <= MAX_CLASSIFIER_INPUT_JSON_CHARS) {
+      return toolInput ?? {}
+    }
+    return {
+      _truncated: true,
+      preview: s.slice(0, MAX_CLASSIFIER_INPUT_JSON_CHARS),
+    }
+  } catch {
+    return { _error: 'unserializable' }
+  }
+}
+
+export function buildAutoClassifierUserPrompt(
+  input: AutoClassifyInput,
+  opts?: { includeSummary?: boolean },
+): string {
+  const includeSummary = opts?.includeSummary !== false
+  const payload: Record<string, unknown> = {
     toolName: input.toolName,
     cwd: input.cwd,
-    toolInput: input.toolInput,
-    recentSummary: (input.recentSummary ?? '').slice(0, 4000),
-    userRulesHint: (input.userRulesHint ?? '').slice(0, 1000),
+    toolInput: serializeToolInputForClassifier(input.toolInput),
+  }
+  if (includeSummary) {
+    payload.recentSummary = truncateForClassifier(
+      input.recentSummary ?? '',
+      MAX_CLASSIFIER_SUMMARY_CHARS,
+    )
+    payload.userRulesHint = truncateForClassifier(
+      input.userRulesHint ?? '',
+      MAX_CLASSIFIER_RULES_HINT_CHARS,
+    )
   }
   return `Classify this tool call:\n${JSON.stringify(payload, null, 2)}`
 }
@@ -72,11 +125,9 @@ export function parseAutoClassifierResponse(text: string): {
 } | null {
   const raw = text.trim()
   if (!raw) return null
-  // 剥 markdown fence
   let body = raw
   const fence = raw.match(/```(?:json)?\s*([\s\S]*?)```/i)
   if (fence?.[1]) body = fence[1].trim()
-  // 取第一个 {...}
   const start = body.indexOf('{')
   const end = body.lastIndexOf('}')
   if (start < 0 || end <= start) return null
@@ -99,23 +150,89 @@ export function parseAutoClassifierResponse(text: string): {
   }
 }
 
-export function buildClassifierMessages(input: AutoClassifyInput): ChatMessage[] {
+export function buildClassifierMessages(
+  input: AutoClassifyInput,
+  opts?: { stage?: 'fast' | 'deep' | 'single' },
+): ChatMessage[] {
+  const stage = opts?.stage ?? 'single'
+  if (stage === 'fast') {
+    return [
+      { role: 'system', content: buildAutoClassifierFastSystemPrompt() },
+      {
+        role: 'user',
+        content: buildAutoClassifierUserPrompt(input, {
+          includeSummary: false,
+        }),
+      },
+    ]
+  }
   return [
     { role: 'system', content: buildAutoClassifierSystemPrompt() },
-    { role: 'user', content: buildAutoClassifierUserPrompt(input) },
+    {
+      role: 'user',
+      content: buildAutoClassifierUserPrompt(input, { includeSummary: true }),
+    },
   ]
+}
+
+type CompleteTextFn = (
+  messages: ChatMessage[],
+  options?: { signal?: AbortSignal },
+) => Promise<string>
+
+async function runOneStage(
+  completeText: CompleteTextFn,
+  messages: ChatMessage[],
+  signal: AbortSignal,
+  model: string | undefined,
+  stage: 'fast' | 'deep' | 'single',
+  started: number,
+): Promise<AutoClassifyResult> {
+  try {
+    const text = await completeText(messages, { signal })
+    const parsed = parseAutoClassifierResponse(text)
+    const durationMs = Date.now() - started
+    if (!parsed) {
+      return {
+        decision: 'deny',
+        reason: 'invalid classifier response',
+        unavailable: true,
+        durationMs,
+        stage,
+      }
+    }
+    return {
+      decision: parsed.decision,
+      reason: parsed.reason,
+      model,
+      durationMs,
+      stage,
+    }
+  } catch (e) {
+    const durationMs = Date.now() - started
+    const msg = e instanceof Error ? e.message : String(e)
+    const aborted = signal.aborted || /abort/i.test(msg)
+    return {
+      decision: 'deny',
+      reason: aborted
+        ? `classifier timeout/abort: ${msg}`
+        : `classifier error: ${msg}`,
+      unavailable: true,
+      durationMs,
+      stage,
+    }
+  }
 }
 
 /**
  * 用 completeText 侧路调用做分类。
+ * @param opts.twoStage Y4 默认 true：fast 否决后不再 deep；fast allow 再 deep 确认
  */
 export function createAutoClassifyFromCompleteText(
-  completeText: (
-    messages: ChatMessage[],
-    options?: { signal?: AbortSignal },
-  ) => Promise<string>,
-  opts?: { model?: string },
+  completeText: CompleteTextFn,
+  opts?: { model?: string; twoStage?: boolean },
 ): AutoClassifyFn {
+  const twoStage = opts?.twoStage !== false
   return async (input, options) => {
     const timeoutMs = options?.timeoutMs ?? DEFAULT_AUTO_CLASSIFY_TIMEOUT_MS
     const started = Date.now()
@@ -124,37 +241,58 @@ export function createAutoClassifyFromCompleteText(
     options?.signal?.addEventListener('abort', onParent, { once: true })
     const timer = setTimeout(() => controller.abort(), timeoutMs)
     try {
-      const text = await completeText(buildClassifierMessages(input), {
-        signal: controller.signal,
-      })
-      const parsed = parseAutoClassifierResponse(text)
-      const durationMs = Date.now() - started
-      if (!parsed) {
+      if (!twoStage) {
+        return await runOneStage(
+          completeText,
+          buildClassifierMessages(input, { stage: 'single' }),
+          controller.signal,
+          opts?.model,
+          'single',
+          started,
+        )
+      }
+
+      // Stage 1 fast：deny 即终局（否决）
+      const fast = await runOneStage(
+        completeText,
+        buildClassifierMessages(input, { stage: 'fast' }),
+        controller.signal,
+        opts?.model,
+        'fast',
+        started,
+      )
+      if (fast.unavailable) return fast
+      if (fast.decision === 'deny') {
         return {
-          decision: 'deny',
-          reason: 'invalid classifier response',
-          unavailable: true,
-          durationMs,
+          ...fast,
+          reason: `fast: ${fast.reason}`,
+          stage: 'fast',
         }
       }
-      return {
-        decision: parsed.decision,
-        reason: parsed.reason,
-        model: opts?.model,
-        durationMs,
+
+      // Stage 2 deep：确认 allow（对照 HC stage2）
+      if (controller.signal.aborted) {
+        return {
+          decision: 'deny',
+          reason: 'classifier aborted before deep stage',
+          unavailable: true,
+          durationMs: Date.now() - started,
+          stage: 'deep',
+        }
       }
-    } catch (e) {
-      const durationMs = Date.now() - started
-      const msg = e instanceof Error ? e.message : String(e)
-      const aborted =
-        options?.signal?.aborted ||
-        controller.signal.aborted ||
-        /abort/i.test(msg)
+      const deep = await runOneStage(
+        completeText,
+        buildClassifierMessages(input, { stage: 'deep' }),
+        controller.signal,
+        opts?.model,
+        'deep',
+        started,
+      )
+      if (deep.unavailable) return deep
       return {
-        decision: 'deny',
-        reason: aborted ? `classifier timeout/abort: ${msg}` : `classifier error: ${msg}`,
-        unavailable: true,
-        durationMs,
+        ...deep,
+        reason: `deep: ${deep.reason}`,
+        stage: 'deep',
       }
     } finally {
       clearTimeout(timer)

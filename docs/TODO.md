@@ -265,12 +265,12 @@ P1：
 
 若只开一刀（**非 Electron**）：
 
-> **主推：Auto/YOLO 续作 Y4**（两阶段分类 / 对抗集 / PS 危险模式）— `docs/TODO_AUTO_PERMISSIONS.md`  
-> - **Y0–Y3 已落地**（可用 auto + 危险硬拦 + 熔断 demote + 敏感路径）  
-> - 测试：`npx tsx scripts/test-auto-permissions.ts`  
-> - 相对 HC auto 语义约 **~70%**；Y4 冲 ~90%  
+> **Auto/YOLO 主线 Y0–Y4 最小已齐**（专册 `docs/TODO_AUTO_PERMISSIONS.md`）  
+> - 相对 HC auto **行为**约 **~85–90%**（headless；非 UI/企业策略）  
+> - 测试：`test-auto-permissions` · `test-auto-classifier-adversarial`  
+> - **下一刀可：** 可选 Y3.6 审计 note · 完整官方市场深度 · OAuth · T8 · Electron  
 
-**已齐摘要：** … · **auto Y3 最小** · PL-MKT · …
+**已齐摘要：** … · **auto Y4 最小（两阶段+对抗）** · PL-MKT · …
 
 ---
 
@@ -301,4 +301,5 @@ P1：
 ---
 
 **一句话：**  
-规则权限 + **auto Y0–Y3 最小**已可用（危险硬拦、熔断 demote、敏感路径）；Y4 两阶段/对抗见 `docs/TODO_AUTO_PERMISSIONS.md`。
+**auto Y0–Y4 最小完成**（两阶段分类 + 危险/PS 硬拦 + 熔断 demote + 对抗测）；相对 HC auto 行为 ~85–90%。  
+可选余量：Y3.6 审计 note；后置：官方市场深度 / Electron。

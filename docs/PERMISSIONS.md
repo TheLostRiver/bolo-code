@@ -10,7 +10,7 @@
 | `default` | 请求批准 | 危险操作 → ask（UI / hook） |
 | `acceptEdits` | 自动审批（编辑） | 工作区内读/写/补丁 auto-allow；Bash/MCP 仍 ask |
 | `plan` | Plan | 只读类 allow；写/壳/MCP **deny**（规划不改系统） |
-| **`auto`** | 自动（分类器） | 白名单/读/cwd 内 edit 快路径 allow；其余 → **侧路分类器** allow/deny；失败 **deny** |
+| **auto** | 自动（分类器） | 白名单/读/安全 cwd 内 edit 快路径；危险 bash/PS **硬 deny**；敏感路径限制；其余 **fast→deep 两阶段分类器**；失败 deny + 熔断 demote |
 | `bypassPermissions` | 完全访问 | 尽量 allow（**仍可被 always-deny 硬规则挡住**） |
 
 可选后置（见 `TODO_AUTO_PERMISSIONS.md` Y4）：
@@ -40,11 +40,13 @@ PreToolUse (可 block)
 5. **`auto`**：白名单/读 allow；cwd 内 edit allow；其余 → **ask 标记**（由 `runToolUse` 调分类器）  
 6. `acceptEdits` / `default` 矩阵  
 
-**auto 异步路径（Y2）：** 规则层 `ask` + `mode=auto` → `classifyPermission` → allow/deny；`unavailable` → deny + 熔断；达阈值 **demote 到 default**。  
-**auto 同步硬拦（Y3）：** 危险 Bash 模式（rm -rf /、curl|sh…）→ deny；`.ssh` 私钥等敏感路径 hard deny；`.env` 等不快路径 allow。  
-进入 auto 时剥离 Bash/Agent always-allow 与解释器类 bash 前缀（python/node/…）。
+**auto 异步路径：** 规则层 `ask` + `mode=auto` → **两阶段分类器**（fast 否决 / deep 确认，`completeText` 侧路）→ allow/deny；`unavailable` → deny + 熔断；达阈值 **demote 到 default**。  
+**auto 同步硬拦（Y3+Y4.3）：** 危险 Bash/PowerShell 模式 → deny；`.ssh` 私钥 hard deny；`.env` 等不快路径 allow。  
+**plan 与 auto（Y4.4）：** 会话 mode **互斥**；`plan` 下写/壳/MCP **始终 deny**，不与 auto 叠加。  
+**上下文（Y4.2）：** summary ≤ 2500 chars、toolInput JSON ≤ 2000 chars。  
 
-费用：每个需分类的工具可能 **额外一次** 模型调用。详见 `docs/TODO_AUTO_PERMISSIONS.md`。
+进入 auto 时剥离 Bash/Agent always-allow 与解释器类 bash 前缀。  
+费用：每个需分类的工具可能 **1–2 次** 额外模型调用（fast+deep）。详见 `docs/TODO_AUTO_PERMISSIONS.md`。
 
 ## 3. 工具类别（Bolo）
 
