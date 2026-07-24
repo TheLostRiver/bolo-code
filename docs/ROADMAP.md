@@ -458,7 +458,7 @@ flowchart TB
 | H 韧性 | 错误分类 + model 退避 + PTL | 🟡 最小 |
 | I 权限 auto | Y0–Y4 最小 + Y3.6 审计 note | ✅ 最小（HC auto 语义 ~85–90%；UI/企业 ⬜） |
 
-**默认下一刀：** 见 **`docs/TODO.md` §8** + **`docs/TODO_SKILL_MCP_PLUGIN.md`**（**PL-SPEC**）。
+**默认下一刀：** 见 **`docs/TODO.md` §8**（扩展三层最小出口齐；后置 OAuth/IMPORT/市场深度/Electron）。
 
 ---
 

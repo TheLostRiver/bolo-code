@@ -197,13 +197,13 @@ PL-SPEC 出口 ────────► IMPORT-*（可选）
 
 | ID | 任务 | 验收 | 状态 |
 |----|------|------|------|
-| **PL-SPEC-0** | `PLUGINS.md` → **Bolo Plugin Spec v0** | 布局 · manifest schema · contributes · 覆盖序 | ⬜ |
-| **PL-SPEC-1** | **manifest 校验** | 缺 id/坏 JSON → 跳过 + errors；不拖垮会话 | ⬜ |
-| **PL-SPEC-2** | **contributes 契约** | skills/hooks/mcp/commands/agents 路径与默认目录 | ⬜ |
-| **PL-SPEC-3** | **plugin-creator 对齐 Spec v0** | 只产 bolo 规范脚手架 | ⬜ |
-| **PL-SPEC-4** | **PL2 reload ↔ skill/mcp 重挂** | 测绿 | ⬜ |
+| **PL-SPEC-0** | `PLUGINS.md` → **Bolo Plugin Spec v0** | 布局 · manifest schema · contributes · 覆盖序 | ✅ |
+| **PL-SPEC-1** | **manifest 校验** | `parsePluginManifest` · 坏 JSON/缺 id 跳过 · `discoverPluginsDetailed` | ✅ 最小 |
+| **PL-SPEC-2** | **contributes 契约** | skills/hooks/mcp/commands/agents 路径与默认目录（文档+校验） | ✅ 最小 |
+| **PL-SPEC-3** | **plugin-creator 对齐 Spec v0** | bundled creator 只产 bolo 规范 | ✅ 最小 |
+| **PL-SPEC-4** | **PL2 reload ↔ skill/mcp 重挂** | `test-plugins-pl2` 绿 | ✅ 既有回归 |
 | **PL-SPEC-5** | **PL-MKT 保持最小** | 仅清单/path；文档重申非官方市场 | ✅ 最小已有；保持 |
-| **PL-SPEC-6** | **边界图** | 插件 = 打包单元；skill/mcp 可独立存在 | ⬜ 文档 |
+| **PL-SPEC-6** | **边界图** | 插件 = 打包单元；skill/mcp 可独立 | ✅ 文档 |
 
 **出口：** 作者只读 Spec 能写出可加载插件；坏插件隔离；不宣传跨产品商店兼容。
 
@@ -230,10 +230,8 @@ PL-SPEC 出口 ────────► IMPORT-*（可选）
 | 序 | 刀 | 切片 |
 |----|----|------|
 | 1 | Skill 可移植 | ~~S-PORT-0..8~~ ✅ 最小出口 |
-| 2 | MCP 诊断卫生 | ~~M-GEN-0..6 + M-GEN-8~~ ✅ → **PL-SPEC** / OAuth 后置 |
-| 3 | MCP 诊断卫生 | M-GEN-0 · M-GEN-1 · M-GEN-2 · M-GEN-3 |
-| 4 | MCP 加固 | M-GEN-4 · M-GEN-5 · M-GEN-8（± M-GEN-6） |
-| 5 | Bolo Spec | PL-SPEC-0 · PL-SPEC-1 · PL-SPEC-2 · PL-SPEC-3 · PL-SPEC-4 |
+| 2 | MCP 诊断卫生 | ~~M-GEN-0..6 + M-GEN-8~~ ✅ |
+| 5 | Bolo Spec | ~~PL-SPEC-0..6~~ ✅ |
 
 **暂缓：** M-GEN-7 OAuth、自有市场 zip/git、IMPORT-P 全量、Electron。
 
@@ -292,6 +290,6 @@ PL-SPEC 出口 ────────► IMPORT-*（可选）
 
 > **Skill 先做成可移植内容标准；MCP 做成稳、可诊、无秘钥泄漏的协议客户端；插件始终以 `bolo.*` 为一等规范。官方市场与外来完整运行时兼容从长计议，且永不绑 Claude/Codex 商店。**
 
-**默认下一刀：** **PL-SPEC**（Bolo 插件规范）或 **M-GEN-7 OAuth**（后置，需确认）。  
+**默认下一刀：** 后置可选 — **M-GEN-7 OAuth** · **IMPORT** · **官方市场深度** · Electron（均需确认）。  
 
-**MCP 日用通用：** M-GEN-0..6 + M-GEN-8 ✅（OAuth 仍 ⬜）。
+**Skill / MCP / Plugin Spec：** S-PORT ✅ · M-GEN-0..6+8 ✅ · **PL-SPEC-0..6 ✅**。
