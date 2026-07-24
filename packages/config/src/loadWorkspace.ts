@@ -18,7 +18,7 @@ import {
   type McpServerConfig,
 } from '../../mcp/src/index.ts'
 import {
-  discoverPlugins,
+  discoverPluginsDetailed,
   mergePluginContributions,
   type LoadedPlugin,
   type MergeResult,
@@ -165,10 +165,14 @@ export async function loadWorkspace(
   let pluginMerge: MergeResult | undefined
 
   if (loadPluginsFlag) {
-    plugins = await discoverPlugins([
+    // PL-SPEC-1：坏 manifest 跳过并记 errors，不拖垮其它插件
+    const detailed = await discoverPluginsDetailed([
       { dir: user.pluginsDir, scope: 'user' },
       { dir: project.pluginsDir, scope: 'project' },
     ])
+    plugins = detailed.plugins
+    const pluginDiscoverErrors = detailed.errors
+
     // 每插件一层，label=plugin:<id>（project 插件后 discover，可盖 user 插件）
     for (const plugin of plugins) {
       const rel = plugin.manifest.contributes?.mcpServers
@@ -192,6 +196,12 @@ export async function loadWorkspace(
       agents: [],
       commands: [],
     })
+    if (pluginDiscoverErrors.length) {
+      pluginMerge.errors = [
+        ...pluginDiscoverErrors,
+        ...(pluginMerge.errors ?? []),
+      ]
+    }
     hooks = mergeHooks(hooks, pluginMerge.hooks)
     // S-PORT-3：plugin skills 盖过 bundled/user/project
     skills = mergeSkillsByPrecedence(skills, pluginMerge.skills)

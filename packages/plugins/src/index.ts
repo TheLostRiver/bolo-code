@@ -16,6 +16,22 @@ import path from 'node:path'
 import type { HooksConfig } from '../../shared/src/index.ts'
 import { discoverSkillsInDir, type LoadedSkill } from '../../skills/src/index.ts'
 import { loadMcpConfigFileDetailed, type McpServerConfig } from '../../mcp/src/index.ts'
+import {
+  parsePluginManifest,
+  formatPluginManifestIssues,
+  BOLO_PLUGIN_MANIFEST_FILE,
+  isValidPluginId,
+} from './manifest.ts'
+
+export {
+  parsePluginManifest,
+  formatPluginManifestIssues,
+  isValidPluginId,
+  normalizePluginIdCandidate,
+  BOLO_PLUGIN_MANIFEST_FILE,
+  type PluginManifestIssue,
+  type ParsePluginManifestResult,
+} from './manifest.ts'
 
 export type PluginManifest = {
   id: string
@@ -166,17 +182,70 @@ export async function discoverPluginCommandsInDir(
 export async function loadPluginFromDir(
   dir: string,
   scope: PluginScope,
-): Promise<LoadedPlugin | null> {
-  const manifestPath = path.join(dir, 'bolo.plugin.json')
-  const manifest = await readJson<PluginManifest>(manifestPath)
-  if (!manifest?.id) return null
-  return { manifest, root: dir, scope }
+): Promise<
+  | { ok: true; plugin: LoadedPlugin; warnings: string[] }
+  | { ok: false; errors: string[]; warnings: string[] }
+> {
+  const manifestPath = path.join(dir, BOLO_PLUGIN_MANIFEST_FILE)
+  let raw: unknown
+  try {
+    const text = await fs.readFile(manifestPath, 'utf8')
+    raw = JSON.parse(text) as unknown
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException)?.code
+    if (code === 'ENOENT') {
+      return {
+        ok: false,
+        errors: [
+          `plugin dir ${path.basename(dir)}: missing ${BOLO_PLUGIN_MANIFEST_FILE}`,
+        ],
+        warnings: [],
+      }
+    }
+    const msg = e instanceof Error ? e.message : String(e)
+    return {
+      ok: false,
+      errors: [
+        `plugin dir ${path.basename(dir)}: invalid ${BOLO_PLUGIN_MANIFEST_FILE}: ${msg}`,
+      ],
+      warnings: [],
+    }
+  }
+
+  const parsed = parsePluginManifest(raw)
+  const label = path.basename(dir)
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      errors: formatPluginManifestIssues(parsed.errors).map(
+        (m) => `plugin ${label}: ${m}`,
+      ),
+      warnings: formatPluginManifestIssues(parsed.warnings).map(
+        (m) => `plugin ${label}: ${m}`,
+      ),
+    }
+  }
+  return {
+    ok: true,
+    plugin: { manifest: parsed.manifest, root: dir, scope },
+    warnings: formatPluginManifestIssues(parsed.warnings).map(
+      (m) => `plugin ${parsed.manifest.id}: ${m}`,
+    ),
+  }
 }
 
-export async function discoverPlugins(
+export type DiscoverPluginsResult = {
+  plugins: LoadedPlugin[]
+  errors: string[]
+}
+
+/**
+ * 发现 plugins；坏 manifest 记入 errors 并跳过，不拖垮其它插件（PL-SPEC-1）。
+ */
+export async function discoverPluginsDetailed(
   roots: { dir: string; scope: PluginScope }[],
-): Promise<LoadedPlugin[]> {
-  const out: LoadedPlugin[] = []
+): Promise<DiscoverPluginsResult> {
+  const errors: string[] = []
   const byId = new Map<string, LoadedPlugin>()
   for (const { dir, scope } of roots) {
     let entries: string[] = []
@@ -193,14 +262,26 @@ export async function discoverPlugins(
       } catch {
         continue
       }
-      const p = await loadPluginFromDir(full, scope)
-      if (!p) continue
+      const loaded = await loadPluginFromDir(full, scope)
+      if (!loaded.ok) {
+        errors.push(...loaded.errors)
+        errors.push(...loaded.warnings)
+        continue
+      }
+      errors.push(...loaded.warnings)
       // 同 id：后扫覆盖前扫（project 覆盖 user）
-      byId.set(p.manifest.id, p)
+      byId.set(loaded.plugin.manifest.id, loaded.plugin)
     }
   }
-  for (const p of byId.values()) out.push(p)
-  return out
+  return { plugins: [...byId.values()], errors }
+}
+
+/** 兼容旧调用：仅返回成功加载的插件 */
+export async function discoverPlugins(
+  roots: { dir: string; scope: PluginScope }[],
+): Promise<LoadedPlugin[]> {
+  const r = await discoverPluginsDetailed(roots)
+  return r.plugins
 }
 
 function deepMergeHooks(base: HooksConfig, extra: HooksConfig): HooksConfig {
