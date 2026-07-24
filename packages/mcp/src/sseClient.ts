@@ -105,6 +105,12 @@ export class McpSseClient implements McpClient {
     resolve: (url: string) => void
     reject: (e: Error) => void
   }
+  /** 用户主动 close 后禁止自动重连 */
+  private userClosed = false
+  private reconnectAttemptsLeft: number
+  private readonly reconnectMax: number
+  private readonly reconnectDelayMs: number
+  private reconnecting = false
 
   constructor(opts: SseClientOptions) {
     const url = opts.server.url?.trim()
@@ -120,6 +126,17 @@ export class McpSseClient implements McpClient {
       ...(opts.server.headers ?? {}),
       ...(opts.headers ?? {}),
     }
+    const rawAttempts = opts.server.reconnectAttempts
+    this.reconnectMax =
+      typeof rawAttempts === 'number' && Number.isFinite(rawAttempts)
+        ? Math.min(10, Math.max(0, Math.floor(rawAttempts)))
+        : 0
+    this.reconnectAttemptsLeft = this.reconnectMax
+    const rawDelay = opts.server.reconnectDelayMs
+    this.reconnectDelayMs =
+      typeof rawDelay === 'number' && Number.isFinite(rawDelay)
+        ? Math.min(60_000, Math.max(100, Math.floor(rawDelay)))
+        : 1000
     this.endpointReady = this.makeEndpointGate()
   }
 
@@ -168,7 +185,9 @@ export class McpSseClient implements McpClient {
 
   async connect(): Promise<void> {
     if (this.isConnected) return
+    this.userClosed = false
     this.closed = false
+    this.reconnectAttemptsLeft = this.reconnectMax
     this.endpointReady = this.makeEndpointGate()
     this.messageUrl = undefined
     this.abort = new AbortController()
@@ -186,6 +205,46 @@ export class McpSseClient implements McpClient {
       await this.teardown(e instanceof Error ? e : new Error(String(e)))
       throw e
     }
+  }
+
+  /**
+   * 流意外断开后有限次重连（指数退避）。
+   * 用户 close / 已无次数 / 正在重连 → 跳过。
+   */
+  private scheduleReconnect(reason: Error): void {
+    if (this.userClosed || this.reconnecting) return
+    if (this.reconnectAttemptsLeft <= 0) return
+    this.reconnecting = true
+    const attempt = this.reconnectMax - this.reconnectAttemptsLeft + 1
+    this.reconnectAttemptsLeft -= 1
+    const delay = this.reconnectDelayMs * Math.max(1, attempt)
+    void (async () => {
+      try {
+        await new Promise((r) => setTimeout(r, delay))
+        if (this.userClosed) return
+        this.closed = false
+        this.endpointReady = this.makeEndpointGate()
+        this.messageUrl = undefined
+        this.abort = new AbortController()
+        this.streamTask = this.openSseStream()
+        this.messageUrl = await this.withTimeout(
+          this.endpointReady.promise,
+          this.timeoutMs,
+          `SSE reconnect endpoint timeout after ${reason.message}`,
+        )
+        await this.initialize()
+      } catch {
+        // 失败则再试（若还有次数）
+        if (!this.userClosed && this.reconnectAttemptsLeft > 0) {
+          this.reconnecting = false
+          this.scheduleReconnect(reason)
+          return
+        }
+        this.closed = true
+      } finally {
+        this.reconnecting = false
+      }
+    })()
   }
 
   private withTimeout<T>(
@@ -290,6 +349,8 @@ export class McpSseClient implements McpClient {
         if (!endpointSeen) this.endpointReady.reject(err)
         this.failAllPending(err)
         this.closed = true
+        // 有预算则自动重连（用户 close 不会走到这里：abort 后 closed 已 true）
+        this.scheduleReconnect(err)
       }
     }
   }
@@ -561,6 +622,8 @@ export class McpSseClient implements McpClient {
   }
 
   async close(): Promise<void> {
+    this.userClosed = true
+    this.reconnectAttemptsLeft = 0
     if (this.closed && !this.abort) return
     await this.teardown()
   }

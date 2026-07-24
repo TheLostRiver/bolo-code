@@ -58,7 +58,7 @@ export function toOpenAIMessages(messages: ChatMessage[]): OaiMessage[] {
       continue
     }
     if (m.role === 'assistant' && m.tool_calls?.length) {
-      out.push({
+      const row: OaiMessage & { reasoning_content?: string } = {
         role: 'assistant',
         content: m.content || null,
         tool_calls: m.tool_calls.map((tc) => ({
@@ -66,11 +66,27 @@ export function toOpenAIMessages(messages: ChatMessage[]): OaiMessage[] {
           type: 'function',
           function: { name: tc.name, arguments: tc.arguments },
         })),
-      })
+      }
+      if (m.reasoning_content?.trim()) {
+        ;(row as { reasoning_content?: string }).reasoning_content =
+          m.reasoning_content
+      }
+      out.push(row)
       continue
     }
     if (m.role === 'system' || m.role === 'user' || m.role === 'assistant') {
-      out.push({ role: m.role, content: m.content ?? '' })
+      const row: OaiMessage & { reasoning_content?: string } = {
+        role: m.role,
+        content: m.content ?? '',
+      }
+      if (
+        m.role === 'assistant' &&
+        m.reasoning_content?.trim()
+      ) {
+        ;(row as { reasoning_content?: string }).reasoning_content =
+          m.reasoning_content
+      }
+      out.push(row)
     }
   }
   return out

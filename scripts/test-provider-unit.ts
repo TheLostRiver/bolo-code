@@ -489,6 +489,31 @@ assert(
   'message breakpoint last only',
 )
 
+// Anthropic thinking budget (request-side minimal)
+const { resolveAnthropicThinking } = await import(
+  '../packages/providers/src/anthropic.ts'
+)
+const th = resolveAnthropicThinking(true, 8192)
+assert(th?.type === 'enabled' && th.budget_tokens > 0, 'thinking enabled')
+assert(
+  th!.budget_tokens < 8192,
+  'budget < max_tokens',
+)
+assert(resolveAnthropicThinking('off', 8192) === undefined, 'thinking off')
+assert(
+  resolveAnthropicThinking(5000, 4000)?.budget_tokens === 3999,
+  'budget capped by max_tokens-1',
+)
+const antThinkBody = buildAnthropicRequestBody(
+  [{ role: 'user', content: 'hi' }],
+  { model: 'claude-test', maxTokens: 4096 },
+  { anthropicThinking: true, stream: false },
+)
+const thinkField = antThinkBody.thinking as
+  | { type: string; budget_tokens: number }
+  | undefined
+assert(thinkField?.type === 'enabled', 'body has thinking')
+
 const cacheMsgs: ChatMessage[] = [
   { role: 'system', content: '# Identity\nStable\n\n# Environment\nDate: z' },
   { role: 'user', content: 'u1' },

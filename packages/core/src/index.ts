@@ -392,6 +392,12 @@ export type CreateSessionOptions = {
    */
   showThinking?: boolean
   /**
+   * 是否把本轮 reasoning 写入 assistant.reasoning_content 供 openai-compatible 回灌。
+   * 默认 false（安全）；DeepSeek 等需要时可 session 打开。
+   * **不**用于 Anthropic 签名 thinking 块。
+   */
+  persistReasoning?: boolean
+  /**
    * 会话本地 token 累计种子；默认全 0。
    * resume 时由快照恢复（无遥测）。
    */
@@ -490,9 +496,13 @@ export type BoloSession = {
   /**
    * 是否在 CLI 渲染思考链（/thinking）。默认 true。
    * false 时 provider 仍解析并转发 reasoning 事件，仅打印机不渲染。
-   * 不回灌 ChatMessage。
    */
   showThinking?: boolean
+  /**
+   * 是否把本轮 reasoning 写入 assistant.reasoning_content（openai-compatible 回灌）。
+   * 默认 false。DeepSeek 等可开；**勿**用于 Anthropic 签名 thinking。
+   */
+  persistReasoning?: boolean
   /** 会话级 auto compact 开关（prepareMessages） */
   autoCompactEnabled: boolean
   contextWindowTokens: number
@@ -644,6 +654,7 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
         ? opts.effortLevel.trim()
         : undefined,
     showThinking: opts.showThinking === false ? false : true,
+    persistReasoning: opts.persistReasoning === true,
     // 默认开 auto（对照参考全局 config）；显式 false 关闭
     autoCompactEnabled: opts.autoCompactEnabled !== false,
     contextWindowTokens: opts.contextWindowTokens ?? 128_000,
@@ -1122,6 +1133,7 @@ export async function submitPrompt(
     usage: session.usage,
     model: session.model,
     effortLevel: session.effortLevel,
+    persistReasoning: session.persistReasoning === true,
     signal: options?.signal,
     onEvent: (e) => mapLoopEvent(session, e),
   })
@@ -1209,6 +1221,9 @@ export async function resumeSession(
     showThinking:
       opts.create?.showThinking ??
       (snapshot.showThinking === false ? false : true),
+    persistReasoning:
+      opts.create?.persistReasoning ??
+      snapshot.persistReasoning === true,
     usage: opts.create?.usage ?? snapshot.usage,
     provider: opts.provider ?? opts.create?.provider,
     hooks: opts.hooks ?? opts.create?.hooks,

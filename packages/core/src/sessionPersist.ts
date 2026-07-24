@@ -66,6 +66,11 @@ export type PersistableSession = {
    * undefined / true = on；false = off。
    */
   showThinking?: boolean
+  /**
+   * 是否 persist reasoning_content（openai-compatible 回灌）；可选落盘。
+   * 仅 true 时写入；缺省 false。
+   */
+  persistReasoning?: boolean
   /** 本地 token 累计；可选落盘，无遥测 */
   usage?: SessionUsage
   onEvent?: (e: { type: 'error'; message: string }) => void
@@ -100,6 +105,8 @@ export type SessionSnapshot = {
   effortLevel?: string
   /** 思考链显示（可选；缺省视为 on） */
   showThinking?: boolean
+  /** reasoning_content 回灌（可选；仅 true 落盘） */
+  persistReasoning?: boolean
   /** 本地 token 累计（可选；无遥测） */
   usage?: SessionUsage
 }
@@ -248,6 +255,12 @@ function isChatMessage(x: unknown): x is ChatMessage {
         return false
       }
     }
+  }
+  if (
+    m.reasoning_content !== undefined &&
+    typeof m.reasoning_content !== 'string'
+  ) {
+    return false
   }
   return true
 }
@@ -423,6 +436,7 @@ export function toSnapshot(
       : undefined
   // 仅显式 false 落盘；默认 on 不写字段，兼容旧快照
   const showThinkingOff = session.showThinking === false
+  const persistReasoningOn = session.persistReasoning === true
   return {
     version: SESSION_SNAPSHOT_VERSION,
     id: session.id,
@@ -440,6 +454,7 @@ export function toSnapshot(
     ...(permissionRules ? { permissionRules } : {}),
     ...(effort ? { effortLevel: effort } : {}),
     ...(showThinkingOff ? { showThinking: false } : {}),
+    ...(persistReasoningOn ? { persistReasoning: true } : {}),
     ...(usage ? { usage } : {}),
   }
 }
@@ -454,6 +469,9 @@ function cloneMessage(m: ChatMessage): ChatMessage {
       name: tc.name,
       arguments: tc.arguments,
     }))
+  }
+  if (m.reasoning_content?.trim()) {
+    out.reasoning_content = m.reasoning_content
   }
   return out
 }
@@ -492,6 +510,7 @@ export function parseSessionSnapshot(raw: unknown): SessionSnapshot {
       : undefined
   const showThinking =
     o.showThinking === false ? false : o.showThinking === true ? true : undefined
+  const persistReasoning = o.persistReasoning === true ? true : undefined
 
   return {
     version: SESSION_SNAPSHOT_VERSION,
@@ -519,6 +538,7 @@ export function parseSessionSnapshot(raw: unknown): SessionSnapshot {
     ...(permissionRules ? { permissionRules } : {}),
     ...(effortLevel ? { effortLevel } : {}),
     ...(showThinking === false ? { showThinking: false } : {}),
+    ...(persistReasoning ? { persistReasoning: true } : {}),
     ...(usage ? { usage } : {}),
   }
 }
@@ -1122,6 +1142,9 @@ export function applySnapshotToSession(
   }
   if (snapshot.showThinking !== undefined) {
     session.showThinking = snapshot.showThinking
+  }
+  if (snapshot.persistReasoning !== undefined) {
+    session.persistReasoning = snapshot.persistReasoning
   }
   if (snapshot.usage) {
     session.usage = cloneUsage(snapshot.usage)

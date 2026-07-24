@@ -46,8 +46,10 @@
 13. ~~**CP-SNIP：snip 最小**~~ ✅ 最小（门槛裁前缀 · 安全 cut · prepare 写回）  
 14. ~~**J-D 余量：title entry + CLI list/migrate**~~ ✅ 最小  
 15. ~~**J-D 再余量：system_note + lite list**~~ ✅ 最小  
-16. **下一刀 P1 余量：** 其它 TP/CP 余量  
-17. **后置（动手前叫用户）：** 完整 YOLO 分类器 · 插件市场 · 思考回灌 · Anthropic budget · OR6 WS · cache TTL · cached MC · SnipTool/UUID · T8 Ink · Electron  
+16. ~~**TP-STE+ / HK / S8**~~ ✅ 最小  
+17. ~~**TP-PATCH+ · RC3 · MCP-SSE 重连**~~ ✅ 最小（本刀）  
+18. **下一刀（需用户确认）：** 完整 YOLO 分类器 · 插件市场  
+19. **后置：** OAuth · adaptive thinking · OR6 WS · cache TTL · cached MC · SnipTool/UUID · T8 Ink · Electron · worktree  
 
 ---
 
@@ -92,7 +94,7 @@
 | **StreamingToolExecutor**（边流边跑） | 🟡 最小+ | queryLoop 收 `tool_call` 即调度；保序 drain；Bash 级联；`discard`；**tool_progress**；**interruptBehavior**（Bash=cancel，默认 block） |
 | tool 中段 AbortSignal | 🟡 最小 | Bash/Read/Write/Edit/apply_patch 尊重 abort |
 | Provider：OpenAI 兼容 / Anthropic / **openai-responses** / mock | ✅ | Responses：**HTTP SSE** ✅；WS ⬜ |
-| **思考链流式显示**（reasoning / thinking） | 🟡 最小 | RC1+RC2：`reasoning_delta`→CLI dim；Responses reasoning SSE；`/thinking` 开关；**不**回灌 ChatMessage；budget ⬜ |
+| **思考链流式显示**（reasoning / thinking） | 🟡 最小+ | RC1–RC3：显示 + `/thinking persist` 回灌 + Anthropic budget 最小；adaptive ⬜ |
 | System prompt + BOLO.md + Rules | ✅ | |
 | Skill catalog + Skill 工具 + slash 调 skill | ✅ | 远程 skill ⬜ |
 
@@ -450,7 +452,7 @@ flowchart TB
 | G 协议 | Responses HTTP | ✅；WS 后置 |
 | H 韧性 | 错误分类 + model 退避 + PTL | 🟡 最小（本刀） |
 
-**默认下一刀：** 见 **`docs/TODO.md` §8**（**P1 余量：其它 CP·TP**；完整 YOLO/市场后置待确认）。
+**默认下一刀：** 见 **`docs/TODO.md` §8**（**完整 YOLO / 插件市场 —— 需用户确认**）。
 
 ---
 
@@ -531,6 +533,6 @@ flowchart TB
 
 **一句话：**  
 Headless **主路径可日用**，相对参考实现约 **40–55%**（文档不再写 ~70% 乐观数）。  
-**P0 切片** LR / TP / CP 日用均 🟡 最小；**MCP HTTP+SSE · PL2 · Usage+ · RC2 · CP5 · STE · TP-PERM · CP-SNIP · J-D title/CLI · system_note+lite 🟡 最小**；**下一刀：其它 CP·TP 余量**。  
-**完整 YOLO / 插件市场：后置，开工前叫用户。**  
+**P1 可闭环余量已齐**（含 apply_patch Move · reasoning persist · SSE 重连 · hooks · S8）。  
+**下一刀：完整 YOLO / 插件市场 —— 需用户确认后再开。**  
 执行序 → **`docs/TODO.md`**。

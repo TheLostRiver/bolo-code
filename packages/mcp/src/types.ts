@@ -23,6 +23,15 @@ export type McpServerConfig = {
   /** http / sse：静态请求头（如 Authorization） */
   headers?: Record<string, string>
   /**
+   * sse：流意外断开后自动重连次数（默认 0 = 不重连）。
+   * 上限 10；仅经典 SSE GET 流。
+   */
+  reconnectAttempts?: number
+  /**
+   * sse：重连基础延迟 ms（默认 1000；指数退避 × attempt）。
+   */
+  reconnectDelayMs?: number
+  /**
    * 声明式工具列表（仅无真连接 / 失败回退时用；真连接以 listTools 为准）
    * @deprecated 优先 listTools
    */

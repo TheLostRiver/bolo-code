@@ -53,6 +53,9 @@ export type McpFileJson = {
       /** http / sse endpoint */
       url?: string
       headers?: Record<string, string>
+      /** sse 自动重连次数（0–10） */
+      reconnectAttempts?: number
+      reconnectDelayMs?: number
       tools?: { name: string; description?: string }[]
     }
   >
@@ -64,6 +67,8 @@ export type McpFileJson = {
     env?: Record<string, string>
     url?: string
     headers?: Record<string, string>
+    reconnectAttempts?: number
+    reconnectDelayMs?: number
     tools?: { name: string; description?: string }[]
   }>
 }

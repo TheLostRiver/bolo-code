@@ -128,6 +128,11 @@ export type QueryLoopParams = {
    * 会话 effort 档位（/effort）；透传 callModel → provider max_tokens 映射。
    */
   effortLevel?: string
+  /**
+   * 是否把本轮 reasoning 写入 assistant.reasoning_content（openai-compatible 回灌）。
+   * 默认 false。
+   */
+  persistReasoning?: boolean
   onEvent?: (e: QueryLoopEvent) => void
   signal?: AbortSignal
 }
@@ -207,6 +212,7 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
     // 同一 turn 内：callModel 失败且为 PTL 时截断后 continue，不额外消耗 maxTurns
     let modelOk = false
     let assistantText = ''
+    let assistantReasoning = ''
     const toolBlocks: ToolUseBlock[] = []
     /** 边流边跑；PTL/错误回退时 discard */
     let streamTools: StreamingToolExecutor | null = null
@@ -232,6 +238,7 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
       )
 
       assistantText = ''
+      assistantReasoning = ''
       toolBlocks.length = 0
       streamTools?.discard()
       streamTools = new StreamingToolExecutor({
@@ -287,8 +294,11 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
             assistantText += ev.text
             emit(params, { type: 'text', text: ev.text })
           } else if (ev.type === 'reasoning_delta') {
-            // 仅转发展示；不并入 assistantText / ChatMessage（避免签名回灌坑）
-            if (ev.text) emit(params, { type: 'reasoning', text: ev.text })
+            // 展示始终转发；可选累加供 openai-compatible 回灌
+            if (ev.text) {
+              if (params.persistReasoning) assistantReasoning += ev.text
+              emit(params, { type: 'reasoning', text: ev.text })
+            }
           } else if (ev.type === 'reasoning_end') {
             // 分段标记：CLI 用空 reasoning 或仅靠后续 text 换行；此处不发噪声
           } else if (ev.type === 'tool_call') {
@@ -407,7 +417,7 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
 
     // OpenAI 回灌：assistant 需带 tool_calls 结构
     if (toolBlocks.length > 0) {
-      params.messages.push({
+      const msg: (typeof params.messages)[number] = {
         role: 'assistant',
         content: assistantText || '',
         tool_calls: toolBlocks.map((t) => ({
@@ -415,9 +425,20 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
           name: t.name,
           arguments: t.argumentsJson ?? JSON.stringify(t.input ?? {}),
         })),
-      })
-    } else if (assistantText) {
-      params.messages.push({ role: 'assistant', content: assistantText })
+      }
+      if (params.persistReasoning && assistantReasoning.trim()) {
+        msg.reasoning_content = assistantReasoning
+      }
+      params.messages.push(msg)
+    } else if (assistantText || (params.persistReasoning && assistantReasoning.trim())) {
+      const msg: (typeof params.messages)[number] = {
+        role: 'assistant',
+        content: assistantText || '',
+      }
+      if (params.persistReasoning && assistantReasoning.trim()) {
+        msg.reasoning_content = assistantReasoning
+      }
+      params.messages.push(msg)
     }
 
     if (toolBlocks.length === 0) {

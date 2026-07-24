@@ -248,10 +248,11 @@ P1：
   · J-D 再余量 system_note + /note + scanTranscriptLite list
   · TP-STE+ tool_progress + interruptBehavior（Bash cancel）
   · HK1–HK2 hooks 超时/abort · S8 子权限不升级
+  · TP-PATCH+ Move/Rename · RC3 reasoning persist + Anthropic thinking budget · MCP-SSE 重连
 
 下一阶段：
-  ① 其它 CP·TP 余量   ← 默认主刀区（P1 余量）
-  ② C6+ / OR6 / T8 / Electron / 完整 YOLO / 插件市场  （后置；**完整 YOLO·市场开工前需用户确认**）
+  ① 仅余：**完整 YOLO / 插件市场**（及 GUI / OR6 / OAuth 等后置）— **开工前需用户确认**
+  ② T8 / Electron / C6+ TTL / worktree / 远程 skill 等后置
 ```
 
 ---
@@ -260,13 +261,13 @@ P1：
 
 若只开一刀（**非 Electron**）：
 
-> **主推：其它 CP/TP 余量**（勿抢完整 YOLO / 市场）  
-> - 勿一口做完整市场 / OAuth MCP / 完整 Ink / 完整 YOLO  
+> **主推已尽：P1 可闭环余量已齐**（见本刀勾选）。  
+> **下一刀需用户确认：完整 YOLO / auto 分类器 · 插件市场**  
 >
-> **本刀已勾选：** **HK1–HK2 + S8**（hooks timeout/abort · 子 agent 权限不升级 · `test-hooks-s8`）。  
-> **明确后置（开工前叫用户）：** **完整 YOLO / auto 分类器** · **插件市场** · 思考链安全回灌 · Anthropic thinking budget · OAuth · SSE 自动重连 · cached MC · SnipTool/UUID · 真 tokenizer · OR6 · C6+ · T8 · Electron · 远程 USD 账单。
+> **本刀已勾选：** **TP-PATCH+**（Move/Rename）· **RC3**（`/thinking persist` + openai-compatible `reasoning_content` 回灌 + Anthropic `budget_tokens` 最小）· **MCP-SSE 重连**（`reconnectAttempts`）。  
+> **明确后置（开工前叫用户）：** **完整 YOLO / auto 分类器** · **插件市场** · OAuth · adaptive thinking · cached MC · SnipTool/UUID · 真 tokenizer · OR6 · C6+ · T8 · Electron · worktree · 远程 USD 账单。
 
-**已齐摘要：** resume · slash · BOLO TUI 最小 · rules · C1–C5 · JSONL 主路径（**title + system_note**）· creators · Subagent（**S8 权限不升级**）· MCP stdio+HTTP+**SSE** 最小 · **plugins PL1+PL2 最小** · Responses HTTP · Loop 韧性最小 · Tool+Permission 日用 + **STE + progress/interrupt** + **规则匹配小步** · Compact 日用加深 + **默认 auto** + **snip 最小** · **RC1+RC2 思考链** · **Usage+ 最小** · **Hooks 超时/abort** · CLI `--list` / migrate · lite list。
+**已齐摘要：** … · **apply_patch Move** · **reasoning persist** · **SSE reconnect** · **Hooks 超时/abort** · **S8** …
 
 ---
 
@@ -275,21 +276,13 @@ P1：
 | TODO | ROADMAP |
 |------|---------|
 | LR* | M-Loop 韧性 🟡 |
-| TP* · **TP-STE** · **TP-STE+** · **TP-PERM** | M-Tool+Permission 🟡（STE + progress/interrupt + 规则匹配） |
-| CP* · **CP5** · **CP-SNIP** | 长会话 compact 🟡（默认 auto ✅ · snip 最小 ✅） |
-| RS* · T* | M5.2 / M-TUI（T0–T7 ✅；T8 ⬜） |
-| SL* · SL-polish | M-Slash ✅ |
-| R* | M-Rules ✅ |
-| C* | M-Cost（C1–C5 ✅；C6+ 后置） |
-| **Usage+** | 本地 usage breakdown ✅ 最小 |
-| **RC1 · RC2** | 思考链流式 + Responses reasoning + `/thinking` ✅ 最小 |
-| J* | M5.1 / `TODO_SESSION_JSONL`（J-D T3 ✅ · title/CLI ✅ · system_note+lite ✅） |
-| K* | M-Creators ✅ |
-| S* · **S8** | M-Subagent（S0–S7 ✅；S8 权限不升级 ✅；S12 partial） |
-| **HK*** | Hooks 硬化（timeout + signal）✅ 最小 |
-| MCP* · PL* | M3（stdio + HTTP ✅；**PL2 ✅ 最小**；**SSE ✅ 最小**；市场 ⬜） |
-| **OR*** | Responses：HTTP SSE ✅；WS 后置 |
-| M4 | Electron ⬜ |
+| TP* · STE · STE+ · PERM · **PATCH+** | M-Tool+Permission 🟡 |
+| CP* · CP5 · SNIP | 长会话 compact 🟡 |
+| **RC1–RC3** | 思考链显示 + persist + Anthropic budget 最小 |
+| **MCP-SSE+** | SSE + 可选重连 |
+| S* · **S8** · **HK*** | Subagent + Hooks 硬化 |
+| MCP* · PL* | M3（**市场 ⬜ 需确认**） |
+| M4 / T8 | Electron / Ink ⬜ |
 
 ---
 
@@ -306,5 +299,4 @@ P1：
 ---
 
 **一句话：**  
-**HK1–HK2 + S8** 已落地；**下一刀：其它 CP/TP 余量**。  
-**完整 YOLO / 插件市场** 后置——**动手前先叫用户确认**。
+**P1 可闭环余量已齐**；**完整 YOLO / 插件市场** —— **动手前先叫用户确认**。

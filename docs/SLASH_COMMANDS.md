@@ -34,7 +34,8 @@
 | `/cost` · `/usage` | 会话内本地 token 累计 + **cache + by-model breakdown**（`session.usage`）；无遥测、不上报；`/usage` 为隐藏别名 |
 | `/model [name]` | 无参显示；有参设 `session.model` |
 | `/effort [low\|medium\|high\|max\|auto]` | 会话字段 `effortLevel`；`auto` 清除覆盖；非法参数返回 **Usage** 文案 |
-| `/thinking [on\|off]` | 会话字段 `showThinking`（默认 **on**）：仅控制 CLI 是否渲染思考链；**off 仍解析** provider 事件，不写终端；**不**回灌 ChatMessage |
+| `/thinking [on\|off]` | 会话 `showThinking`（默认 **on**）：CLI 是否渲染思考链；off 仍解析不渲染 |
+| `/thinking persist [on\|off]` | 会话 `persistReasoning`（默认 **off**）：是否写入 `assistant.reasoning_content` 供 openai-compatible 回灌 |
 | `/plan` | `permissionMode = plan` |
 | `/permissions [mode]` | 无参列出四档；有参切换；非法参数返回 **Usage** 文案 |
 | `/allow [ToolName \| path:GLOB \| bash:PATTERN]` | 会话 always-allow：工具名 / 路径 glob / Bash 模式（前缀·通配·`:*`）；无参列出 |
@@ -48,12 +49,13 @@ REPL 额外：`/exit` `/quit` 由 CLI 处理（退出循环，不进总线）。
 - **参数错误**：`/effort`、`/thinking`、`/permissions` 等返回明确 Usage，而非含糊 “unknown”。
 - **别名**：`/status`→`/doctor`，`/usage`→`/cost`；`/help` 不单独占行，脚注说明。
 
-## 思考链显示（`/thinking`）— RC2
+## 思考链显示（`/thinking`）— RC2 + RC3
 
 - 默认 **on**；`session.showThinking !== false` 时 CLI 打印机渲染 `SessionEvent.reasoning`（dim + `thinking ` 前缀）。
-- `/thinking off`：打印机跳过 reasoning；provider **仍解析**并转发事件（queryLoop 不改）。
-- **不**把 thinking 写入 `ChatMessage`（避免 Anthropic 签名/回灌 400）；安全回灌后置。
-- 快照 / JSONL meta：仅当 `false` 时落盘 `showThinking: false`（缺省 = on）。
+- `/thinking off`：打印机跳过 reasoning；provider **仍解析**并转发事件。
+- `/thinking persist on`：写入 `assistant.reasoning_content`（openai-compatible 回灌）；**默认 off**；**勿**用于 Anthropic 签名块。
+- Anthropic 请求侧：`anthropicThinking` → `budget_tokens`（最小）；adaptive 后置。
+- 快照 / JSONL meta：`showThinking: false` / `persistReasoning: true` 显式落盘。
 
 ## 本地 usage（`/cost`）— Usage+
 

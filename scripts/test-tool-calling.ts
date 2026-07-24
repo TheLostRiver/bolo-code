@@ -135,8 +135,29 @@ async function main() {
     },
     { cwd: patchTmp },
   )
-  assert(!escape.ok && escape.isError, 'escape cwd fails')
+  assert(escape.ok === false && escape.isError, 'escape cwd fails')
   assert(String(escape.output).includes('escapes cwd'), 'escape error message')
+
+  // Move / Rename File
+  await fs.writeFile(path.join(patchTmp, 'from.txt'), 'move-me\n', 'utf8')
+  const moveRes = await apply.call(
+    {
+      patch: `*** Begin Patch
+*** Move File: from.txt -> to/dir.txt
+*** End Patch`,
+    },
+    { cwd: patchTmp },
+  )
+  assert(moveRes.ok, `move patch ok: ${moveRes.output}`)
+  const moved = await fs.readFile(path.join(patchTmp, 'to', 'dir.txt'), 'utf8')
+  assert(moved.includes('move-me'), 'move content')
+  let fromGone = false
+  try {
+    await fs.access(path.join(patchTmp, 'from.txt'))
+  } catch {
+    fromGone = true
+  }
+  assert(fromGone, 'move removes source')
 
   // Edit: unique replace + not unique + not found + abort
   const editTmp = await fs.mkdtemp(path.join(os.tmpdir(), 'bolo-edit-'))

@@ -19,7 +19,7 @@
 | Skill 按需 | `Skill` 工具 + catalog |
 | **Edit** | `old_string` / `new_string`；默认**唯一**匹配；`replace_all` 可选；清晰错误 |
 | Write | 全文写入；`resolveSafe` 不逃出 cwd |
-| apply_patch | `*** Begin Patch` / Add\|Update\|Delete，或简易 unified diff |
+| apply_patch | `*** Begin Patch`：Add / Update / Delete / **Move|Rename File**；或简易 unified diff |
 | AbortSignal | Bash / Read / Write / Edit / apply_patch 尊重中段 abort → `Error: tool cancelled` |
 | interruptBehavior | 默认 **block**；**Bash = cancel**（用户 interrupt 可杀 shell） |
 | tool_progress | `ToolContext.onProgress` → `tool_progress` 事件；CLI dim `… Tool msg` |

@@ -55,6 +55,14 @@ export type CompleteStreamOptions = {
    * 缺省时由 model + system 稳定前缀派生；设空串可关闭 key。
    */
   promptCacheKey?: string
+  /**
+   * Anthropic 请求侧 thinking 最小开关（对照 HC budget thinking）。
+   * - false / 'off'：不写 thinking 字段
+   * - true / 'enabled'：enabled + budget_tokens（默认 min(10000, max_tokens-1)）
+   * - number：budget_tokens（至少 1024，且 < max_tokens）
+   * 仅 anthropic provider 使用；其它 provider 忽略。
+   */
+  anthropicThinking?: boolean | 'off' | 'enabled' | number
 }
 
 export interface LlmProvider {

@@ -40,6 +40,7 @@ export {
   toAnthropicMessages,
   buildAnthropicRequestBody,
   eventsFromAnthropicSseEvent,
+  resolveAnthropicThinking,
   type AnthropicConfig,
 } from './anthropic.ts'
 export {

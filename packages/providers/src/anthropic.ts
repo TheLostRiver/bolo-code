@@ -225,6 +225,7 @@ export function eventsFromAnthropicSseEvent(
 /**
  * 组装 Anthropic Messages 请求体（含最小 cache_control 断点）。
  * 断点策略：system 稳定段末尾 + tools 末项（若有）+ messages 最后一条末块。
+ * 可选 thinking: { type:'enabled', budget_tokens }（options.anthropicThinking）。
  */
 export function buildAnthropicRequestBody(
   messages: ChatMessage[],
@@ -247,7 +248,25 @@ export function buildAnthropicRequestBody(
       caching,
     )
   }
+  const thinking = resolveAnthropicThinking(options?.anthropicThinking, config.maxTokens)
+  if (thinking) body.thinking = thinking
   return body
+}
+
+/** 最小 thinking 请求块；budget 必须 < max_tokens */
+export function resolveAnthropicThinking(
+  opt: CompleteStreamOptions['anthropicThinking'],
+  maxTokens: number,
+): { type: 'enabled'; budget_tokens: number } | undefined {
+  if (opt === undefined || opt === false || opt === 'off') return undefined
+  let budget = 10_000
+  if (typeof opt === 'number' && Number.isFinite(opt)) {
+    budget = Math.floor(opt)
+  }
+  // API 约束：max_tokens > budget_tokens
+  const cap = Math.max(1024, Math.min(budget, maxTokens - 1))
+  if (cap < 1024 || maxTokens <= 1024) return undefined
+  return { type: 'enabled', budget_tokens: cap }
 }
 
 export function createAnthropicProvider(config: AnthropicConfig): LlmProvider {

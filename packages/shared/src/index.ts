@@ -119,6 +119,11 @@ export type ChatMessage = {
     name: string
     arguments: string
   }>
+  /**
+   * 可选思考链（DeepSeek 等 openai-compatible 回灌用）。
+   * 仅当显式开启 persist 时写入；默认不落盘、不进 transcript。
+   */
+  reasoning_content?: string
 }
 
 export type SessionPhase =

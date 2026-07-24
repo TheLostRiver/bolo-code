@@ -26,6 +26,8 @@ export type PatchOp =
   | { kind: 'add'; path: string; lines: string[] }
   | { kind: 'update'; path: string; hunks: PatchHunk[] }
   | { kind: 'delete'; path: string }
+  /** 对照 Codex Move/Rename：先读源再写目标并删源 */
+  | { kind: 'move'; from: string; to: string }
 
 export type PatchHunk = {
   /** 旧文件中按顺序匹配的行（不含前缀） */
@@ -106,6 +108,20 @@ export function parseApplyPatch(raw: string): PatchOp[] {
     m = line.match(/^\*\*\*\s*Delete File:\s*(.+)$/i)
     if (m) {
       ops.push({ kind: 'delete', path: cleanFilePath(m[1]!) })
+      i++
+      continue
+    }
+
+    // *** Move File: a -> b  /  *** Rename File: a -> b
+    m = line.match(
+      /^\*\*\*\s*(?:Move|Rename) File:\s*(.+?)\s*(?:->|→)\s*(.+)$/i,
+    )
+    if (m) {
+      ops.push({
+        kind: 'move',
+        from: cleanFilePath(m[1]!),
+        to: cleanFilePath(m[2]!),
+      })
       i++
       continue
     }
@@ -339,6 +355,40 @@ export async function applyPatchToCwd(
   const notes: string[] = []
 
   for (const op of ops) {
+    if (op.kind === 'move') {
+      const absFrom = resolveSafe(cwd, op.from)
+      const absTo = resolveSafe(cwd, op.to)
+      const relFrom = path.relative(path.resolve(cwd), absFrom) || op.from
+      const relTo = path.relative(path.resolve(cwd), absTo) || op.to
+      let body: string
+      try {
+        body = await fs.readFile(absFrom, 'utf8')
+      } catch (e) {
+        const code = (e as NodeJS.ErrnoException)?.code
+        if (code === 'ENOENT') {
+          throw new Error(`apply_patch: Move File source not found: ${relFrom}`)
+        }
+        throw e
+      }
+      let destExists = false
+      try {
+        await fs.access(absTo)
+        destExists = true
+      } catch (e) {
+        const code = (e as NodeJS.ErrnoException)?.code
+        if (code !== 'ENOENT') throw e
+      }
+      if (destExists) {
+        throw new Error(`apply_patch: Move File destination exists: ${relTo}`)
+      }
+      await fs.mkdir(path.dirname(absTo), { recursive: true })
+      await fs.writeFile(absTo, body, 'utf8')
+      await fs.unlink(absFrom)
+      changed.push(relFrom, relTo)
+      notes.push(`R ${relFrom} -> ${relTo}`)
+      continue
+    }
+
     const abs = resolveSafe(cwd, op.path)
     const rel = path.relative(path.resolve(cwd), abs) || op.path
 

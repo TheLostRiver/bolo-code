@@ -633,7 +633,7 @@ function cmdContext(session: SlashSession, _args: string): SlashDispatchResult {
     `permissionMode:  ${session.permissionMode}`,
     `model:           ${session.model ?? '(unset)'}`,
     `effort:          ${session.effortLevel ?? 'auto'}`,
-    `thinking:        ${session.showThinking === false ? 'off' : 'on'}  (display only; /thinking)`,
+    `thinking:        ${session.showThinking === false ? 'off' : 'on'}  (/thinking; persist=${session.persistReasoning === true ? 'on' : 'off'})`,
     `system sections: ${sections.length}`,
   ]
   if (sections.length) {
@@ -1116,17 +1116,43 @@ function cmdEffort(session: SlashSession, args: string): SlashDispatchResult {
 }
 
 /**
- * /thinking [on|off] — 仅控制 CLI 是否渲染 reasoning 事件。
- * 默认 on。off 时 provider 仍解析并转发 SessionEvent.reasoning，打印机跳过渲染。
- * 不回灌 ChatMessage；不改请求侧 budget。
+ * /thinking [on|off] — CLI 是否渲染 reasoning。
+ * /thinking persist [on|off] — 是否写入 assistant.reasoning_content（openai-compatible 回灌；默认 off）。
  */
 function cmdThinking(session: SlashSession, args: string): SlashDispatchResult {
   const raw = args.trim().toLowerCase()
   if (!raw) {
     const on = session.showThinking !== false
+    const persist = session.persistReasoning === true
     return {
       ok: true,
-      message: `thinking display: ${on ? 'on' : 'off'} (default on; does not affect API parse)`,
+      message: `thinking display: ${on ? 'on' : 'off'}; persist: ${persist ? 'on' : 'off'} (persist=openai-compatible reasoning_content only)`,
+    }
+  }
+  const parts = raw.split(/\s+/)
+  if (parts[0] === 'persist') {
+    const v = parts[1] ?? ''
+    if (!v || v === 'status') {
+      return {
+        ok: true,
+        message: `thinking persist: ${session.persistReasoning === true ? 'on' : 'off'} (default off)`,
+      }
+    }
+    if (v === 'on' || v === 'true' || v === '1' || v === 'yes') {
+      session.persistReasoning = true
+      return {
+        ok: true,
+        message:
+          'thinking persist: on (assistant.reasoning_content for openai-compatible; not for Anthropic signed blocks)',
+      }
+    }
+    if (v === 'off' || v === 'false' || v === '0' || v === 'no') {
+      session.persistReasoning = false
+      return { ok: true, message: 'thinking persist: off' }
+    }
+    return {
+      ok: false,
+      message: `Invalid. Usage: /thinking persist [on|off]`,
     }
   }
   if (raw === 'on' || raw === 'true' || raw === '1' || raw === 'yes') {
@@ -1135,11 +1161,14 @@ function cmdThinking(session: SlashSession, args: string): SlashDispatchResult {
   }
   if (raw === 'off' || raw === 'false' || raw === '0' || raw === 'no') {
     session.showThinking = false
-    return { ok: true, message: 'thinking display: off (events still parsed, not rendered)' }
+    return {
+      ok: true,
+      message: 'thinking display: off (events still parsed, not rendered)',
+    }
   }
   return {
     ok: false,
-    message: `Invalid thinking mode "${args.trim()}". Usage: /thinking [on|off]`,
+    message: `Invalid thinking mode "${args.trim()}". Usage: /thinking [on|off] | /thinking persist [on|off]`,
   }
 }
 
@@ -1703,8 +1732,9 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
   },
   {
     name: 'thinking',
-    summary: 'Show or hide streaming thinking/reasoning in CLI',
-    usage: '[on|off]',
+    summary:
+      'Show/hide thinking display; /thinking persist on|off for openai-compatible refeed',
+    usage: '[on|off] | persist [on|off]',
     group: 'model',
     run: cmdThinking,
   },
