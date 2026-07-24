@@ -7,6 +7,10 @@
 import { existsSync } from 'node:fs'
 import { getBoloHomeDir } from '../../config/src/paths.ts'
 import {
+  ensureAllLayouts,
+  ensureProjectLayout,
+} from '../../config/src/ensure.ts'
+import {
   addAlwaysAllowToolName,
   createEmptyPermissionRules,
   isPermissionMode,
@@ -375,6 +379,64 @@ function cmdHooks(session: SlashSession, args: string): SlashDispatchResult {
   lines.push(`total commands: ${totalCmds}`)
   lines.push('Use /hooks <EventName> for matchers and commands.')
   return { ok: true, message: lines.join('\n') }
+}
+
+/**
+ * 初始化 ~/.bolo + 项目 .bolo 布局（对照 HC /init 脚手架语义，仅布局不写 CLAUDE 长文）。
+ * `user` = 仅用户布局；`project` = 仅项目；默认两者。
+ */
+async function cmdInit(
+  session: SlashSession,
+  args: string,
+): Promise<SlashDispatchResult> {
+  const mode = args.trim().toLowerCase() || 'all'
+  const lines: string[] = []
+  try {
+    if (mode === 'user') {
+      const { ensureUserLayout } = await import('../../config/src/ensure.ts')
+      const r = await ensureUserLayout({ writeDefaults: true })
+      lines.push(`user layout: ${getBoloHomeDir()}`)
+      if (r.created.length) {
+        lines.push(`created (${r.created.length}):`)
+        for (const f of r.created) lines.push(`  + ${f}`)
+      } else {
+        lines.push('created: (already present)')
+      }
+    } else if (mode === 'project') {
+      const r = await ensureProjectLayout(session.cwd, { writeDefaults: true })
+      lines.push(`project layout: ${r.layout.root}`)
+      if (r.created.length) {
+        lines.push(`created (${r.created.length}):`)
+        for (const f of r.created) lines.push(`  + ${f}`)
+      } else {
+        lines.push('created: (already present)')
+      }
+    } else if (mode === 'all' || mode === '') {
+      const r = await ensureAllLayouts(session.cwd, { writeDefaults: true })
+      lines.push(`user:    ${r.user.layout.root}`)
+      lines.push(`project: ${r.project.layout.root}`)
+      const created = [...r.user.created, ...r.project.created]
+      if (created.length) {
+        lines.push(`created (${created.length}):`)
+        for (const f of created) lines.push(`  + ${f}`)
+      } else {
+        lines.push('created: (all defaults already present)')
+      }
+    } else {
+      return {
+        ok: false,
+        message: 'Usage: /init [all|user|project]',
+      }
+    }
+    lines.push('Dirs include skills/, plugins/, sessions/, rules/, agents/.')
+    lines.push('See docs/CONFIG.md')
+    return { ok: true, message: lines.join('\n') }
+  } catch (e) {
+    return {
+      ok: false,
+      message: `init failed: ${e instanceof Error ? e.message : String(e)}`,
+    }
+  }
 }
 
 function cmdCost(session: SlashSession, _args: string): SlashDispatchResult {
@@ -753,6 +815,12 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     summary: 'List configured hooks or details for one event',
     usage: '[EventName]',
     run: cmdHooks,
+  },
+  {
+    name: 'init',
+    summary: 'Ensure ~/.bolo and project .bolo layout (scaffold)',
+    usage: '[all|user|project]',
+    run: cmdInit,
   },
   {
     name: 'cost',

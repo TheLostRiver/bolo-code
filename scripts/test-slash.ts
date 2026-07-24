@@ -210,6 +210,26 @@ async function main() {
   assert(hooksBad.type === 'slash' && hooksBad.message.includes('Unknown'), 'hooks unknown')
   session.hooks = {}
 
+  // /init project (temp dir)
+  const { promises: fsp } = await import('node:fs')
+  const os = await import('node:os')
+  const path = await import('node:path')
+  const tmpInit = await fsp.mkdtemp(path.join(os.tmpdir(), 'bolo-init-slash-'))
+  const prevCwd = session.cwd
+  session.cwd = tmpInit
+  const initR = await submitUserInput(session, '/init project')
+  assert(initR.type === 'slash', 'init slash')
+  if (initR.type === 'slash') {
+    assert(
+      initR.message.includes('project') || initR.message.includes('.bolo'),
+      'init project message',
+    )
+  }
+  const st = await fsp.stat(path.join(tmpInit, '.bolo'))
+  assert(st.isDirectory(), '.bolo created by /init project')
+  session.cwd = prevCwd
+  await fsp.rm(tmpInit, { recursive: true, force: true })
+
   // /cost 初始为空
   const cost0 = await submitUserInput(session, '/cost')
   assert(cost0.type === 'slash', 'cost slash')

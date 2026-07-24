@@ -27,6 +27,7 @@
 | `/mcp` · `/mcp tools` | 列出已连接 MCP 服务器；`tools` 列出 `mcp__server__tool` 名 |
 | `/plugins` | 列出 workspace 已发现的本地插件（PL1；非市场） |
 | `/hooks` · `/hooks <Event>` | 列出已配置 hook 事件与命令数；指定事件打印 matcher/command |
+| `/init` · `/init all\|user\|project` | 确保 `~/.bolo` / 项目 `.bolo` 布局（skills/plugins/sessions/rules/agents + 默认 json） |
 | `/cost` · `/usage` | 会话内本地 token 累计（`session.usage`）；无遥测、不上报 |
 | `/model [name]` | 无参显示；有参设 `session.model` |
 | `/effort [low\|medium\|high\|max\|auto]` | 会话字段 `effortLevel`；`auto` 清除覆盖；经 `mapEffort` 映射为 `max_tokens` |
