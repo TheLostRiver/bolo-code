@@ -1,14 +1,16 @@
-# Subagent 契约（S0–S7）
+# Subagent 契约（S0–S7 · S12 最小）
 
-对照 HelsincyCode `tools/AgentTool`（`runAgent` / `resolveAgentTools` / `loadAgentsDir` / `Agent` 工具），**无遥测**、不抄 GrowthBook / fork / swarm。
+对照 HelsincyCode `tools/AgentTool`（`runAgent` / `resolveAgentTools` / `loadAgentsDir` / `Agent` 工具），**无遥测**、不抄 GrowthBook / swarm / worktree。
 
 ## 流程
 
 ```text
 主 queryLoop
-  → 模型调用工具 Agent（prompt + 可选 subagent_type）
+  → 模型调用工具 Agent（prompt + 可选 subagent_type / fork / run_in_background）
   → SubagentStart hook（agent_id / agent_type）
-  → 子 loop：独立 messages + 裁剪 tools + 子 system
+  → 子 loop：
+      · 普通：独立 messages + 裁剪 tools + 子 system
+      · fork：父 messages 浅拷贝 + 新 user 任务；tools=父集去掉 Agent
   → queryLoop（默认 maxTurns=8）
   → 汇总最后 assistant 文本 → 父 tool_result
   → SubagentStop hook
@@ -19,7 +21,7 @@
 
 | 字段 | 说明 |
 |------|------|
-| `agentType` | 如 `explore` / `general` / 项目自定义 |
+| `agentType` | 如 `explore` / `general` / `fork` / 项目自定义 |
 | `description` | 给主模型选类型用 |
 | `tools` | 白名单工具名，或 `'*'` |
 | `systemPrompt` | 子 agent 短 system |
@@ -31,13 +33,34 @@
 | `subagent_type` | 工具 | system 要点 |
 |-----------------|------|-------------|
 | `explore` | `Read` / `Glob` / `Grep` | 只调研，不改文件 |
-| `general`（默认） | 与主会话默认可写集相同，**排除 `Agent`** | 执行子任务并回报摘要 |
+| `general` | 与主会话默认可写集相同，**排除 `Agent`** | 执行子任务并回报摘要 |
+| `fork` | 与父相同工具，**排除 `Agent`** | 短提示「你是 fork 工作者」；或父 `systemPromptSections` |
+
+## Fork（S12 最小 · HC forkSubagent 语义极简）
+
+触发（任一）：
+
+1. **`subagent_type` 省略**（空 / 未传）
+2. **`subagent_type: "fork"`**
+3. **`fork: true`**（显式；优先于其它 type）
+
+行为：
+
+| 项 | 说明 |
+|----|------|
+| messages | 父会话 messages **浅拷贝** + 新 user 任务（directive = `prompt`） |
+| tools | 父 `allTools` 去掉 `Agent`（禁递归 fork） |
+| system | 有父 `systemPromptSections` 则用；否则用 `FORK_AGENT.systemPrompt` |
+| 串行 | 仍 `isConcurrencySafe=false`；可与 `run_in_background` 组合 |
+| 不做 | Electron、worktree、完整 prompt cache 共享、遥测 |
+
+`runSubagent({ fork: true, parentMessages, parentSystemPromptSections })` 与 Agent 工具路径一致。
 
 ## 项目 / 用户定义（S7 · `loadAgentsDir`）
 
 发现顺序与合并（**后者覆盖同名**）：
 
-1. 内置 `explore` / `general`
+1. 内置 `explore` / `general` / `fork`
 2. 可选 `~/.bolo/agents/*.md`（或 `$BOLO_CONFIG_DIR/agents/`）
 3. `{cwd}/.bolo/agents/*.md` — **项目覆盖同名内置 / 用户**
 
@@ -76,22 +99,26 @@ Optional system append / replacement body for the subagent.
 4. **始终排除 `Agent`**，防止子 agent 再 spawn（无限递归）。
 5. 未知白名单名字忽略（不抛）。
 
+fork 路径不走白名单表，直接 `parent.allTools` 去掉 `Agent`。
+
 ## Agent 工具（主会话 builtins）
 
 - **name:** `Agent`
-- **input:** `prompt`（必填）、`subagent_type`（可选，默认 `general`）、`run_in_background` / `async`（可选布尔）
+- **input:** `prompt`（必填）；`subagent_type`（可选：省略/`fork`=继承父会话，其它=独立子 agent）；`fork`（可选布尔）；`run_in_background` / `async`（可选布尔）
 - **`isConcurrencySafe`:** 恒 `false`（同轮多个 Agent 串行）
 - **结果：** 同步成功为摘要文本；`run_in_background=true` 时立即返回 `started agent <id>…`，结果写入 `session.backgroundAgents`，用 `/agents status` 或 `/bg` 轮询
 - **失败：** `isError` + 错误说明
 
 ## 刻意不做（P2+）
 
-- Fork 继承父 messages、完整 worktree / swarm
+- 完整 worktree / swarm / 跨会话 cache 共享
 - 遥测 / GrowthBook / teammate
 
 侧链 transcript（可选）：`runSubagent({ writeTranscript: true })` 写入 `{cwd}/.bolo/sessions/agent-{id}.jsonl`；`SubagentStop` 可带 `agent_transcript_path`。
 
 **S12 最小 async：** Agent 工具 `run_in_background` 后台 `runSubagent`；会话 `backgroundAgents.pendingAgents` / `backgroundAgentResults`；可选 system 通知进 `session.messages`。
+
+**S12 最小 fork：** 见上文；无 worktree / 无完整 cache 共享。
 
 ## 完成定义
 
@@ -99,4 +126,4 @@ Optional system append / replacement body for the subagent.
 
 - **S0–S6：** 文档 + `runSubagent` + Agent 工具 + 测试绿
 - **S7：** `.bolo/agents` 发现、覆盖内置、resolve + `/agents` + `ensure*Layout` 的 `agents/`
-- **S12 partial：** 可选后台 subagent（无 fork / 无 worktree）
+- **S12 partial：** 可选后台 subagent + **fork 继承父 messages**（无 worktree）

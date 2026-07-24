@@ -179,7 +179,7 @@
 | 工具裁剪 `resolveAgentTools` | ✅ | `agentToolUtils` | 白名单；**禁嵌套 Agent** |
 | 同步跑完回写主会话摘要 | ✅ | `finalizeAgentTool` | 最后 assistant 文本 → tool_result |
 | 异步 / 后台 agent | ⬜ | async lifecycle | **P2**；先做同步 |
-| Fork 继承父上下文 | ⬜ | `forkSubagent` | **P2**；缓存友好但复杂 |
+| Fork 继承父上下文 | 🟡 最小 | `fork` type / `fork:true` | 父 messages 浅拷贝 + 去 Agent；无 worktree / 无完整 cache 共享 |
 | 子会话 transcript 侧链 | ⬜ | `agent-*.jsonl` | 与 JSONL 规划 Phase G 对齐 |
 | `/agents` 或 slash 管理 | ⬜ | 可选 | P1 |
 | 遥测 / GrowthBook 门控 fork | 🚫 | HC 有 | **不抄** |
@@ -276,7 +276,7 @@ Creator 产出物（skill/plugin）挂 3.1/3.3；**子代理定义**可挂 `.bol
 | **S9** | 侧链落盘（可选）：`sessions/<parent>/agent-<id>.jsonl` 或同目录 sidecar | 依赖 JSONL 规划 |
 | **S10** | 并行：同轮多个 Agent tool_use → 受 `isConcurrencySafe` 约束（默认 **false** 串行更安全） | 文档写清 |
 | **S11** | `/agents` list 类型；主 system 的 session_guidance 提一句「可用 Agent 工具」 | 依赖 M-Slash / prompt |
-| **S12** | Fork 继承父 messages（HC fork） | **P2**；先不做 |
+| **S12** | Fork 继承父 messages（HC fork 极简） | ✅ 最小（`subagent_type` 省略/`fork`/`fork:true`；无 worktree） |
 | **S13** | 异步后台 + 通知 | **P2** |
 | **S14** | Worktree 隔离目录 | **P2** |
 

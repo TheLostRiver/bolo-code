@@ -350,6 +350,7 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
       agentDefinitions: params.agentDefinitions,
       backgroundStore: params.backgroundStore,
       parentMessages: params.messages,
+      parentSystemPromptSections: params.systemPromptSections,
       signal: params.signal,
       onEvent: params.onEvent,
     })

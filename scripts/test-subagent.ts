@@ -409,6 +409,9 @@ async function main() {
   // --- S12 background Agent ---
   await testBackgroundSubagent()
 
+  // --- S12 fork inherits parent messages ---
+  await testForkSubagent()
+
   // --- S7 project agents ---
   await testProjectAgentsDir()
   assert(
@@ -426,6 +429,172 @@ async function flushMicrotasks(times = 20): Promise<void> {
     await Promise.resolve()
     await new Promise((r) => setTimeout(r, 0))
   }
+}
+
+/** S12：父 2 条历史 → fork 子收到历史 + 新任务；子 tools 无 Agent */
+async function testForkSubagent(): Promise<void> {
+  const parentHistory: ChatMessage[] = [
+    { role: 'user', content: 'PARENT_HISTORY_USER_1' },
+    { role: 'assistant', content: 'PARENT_HISTORY_ASSISTANT_1' },
+  ]
+  let sawChildMessages: ChatMessage[] | undefined
+  let sawChildTools: string[] | undefined
+
+  const forkProvider: LlmProvider = {
+    id: 'mock',
+    async *completeStream(
+      messages: ChatMessage[],
+      options?: CompleteStreamOptions,
+    ): AsyncIterable<ProviderStreamEvent> {
+      sawChildMessages = messages.map((m) => ({ ...m }))
+      sawChildTools = toolNames(options)
+      yield { type: 'text_delta', text: 'FORK_CHILD_OK' }
+      yield { type: 'done' }
+    },
+    async completeText() {
+      return 'n/a'
+    },
+  }
+  const forkDeps: QueryDeps = {
+    callModel: async function* ({ messages, signal, tools }) {
+      yield* forkProvider.completeStream(messages, {
+        signal,
+        tools: tools as CompleteStreamOptions['tools'],
+      })
+    },
+    prepareMessages: identityPrepareMessages,
+    uuid: () => 'uuid_fork_1',
+  }
+
+  // 直接 runSubagent fork
+  const direct = await runSubagent({
+    def: getAgentDefinition('fork'),
+    prompt: 'FORK_NEW_TASK_DIRECTIVE',
+    parentSessionId: 'sess_fork_parent',
+    cwd: process.cwd(),
+    hooks: {},
+    deps: forkDeps,
+    permissionMode: 'bypassPermissions',
+    askPermission: async () => 'allow',
+    allTools: createDefaultTools(),
+    fork: true,
+    parentMessages: parentHistory,
+    parentSystemPromptSections: ['parent system section'],
+    writeTranscript: false,
+  })
+  assert(!direct.isError, `fork direct ok: ${direct.summary}`)
+  assert(direct.summary.includes('FORK_CHILD_OK'), 'fork summary')
+  assert(sawChildMessages, 'fork child saw messages')
+  // queryLoop 会把 system sections 前缀进 callModel；会话侧应有 2 历史 + 1 任务
+  const conv = sawChildMessages!.filter((m) => m.role !== 'system')
+  assert(conv.length === 3, `fork conv count: ${conv.length} (raw ${sawChildMessages!.length})`)
+  assert(
+    conv[0]!.content === 'PARENT_HISTORY_USER_1',
+    'fork keeps parent user',
+  )
+  assert(
+    conv[1]!.content === 'PARENT_HISTORY_ASSISTANT_1',
+    'fork keeps parent assistant',
+  )
+  assert(
+    conv[2]!.content === 'FORK_NEW_TASK_DIRECTIVE',
+    'fork appends directive',
+  )
+  assert(sawChildTools, 'fork child tools')
+  assert(
+    !sawChildTools!.includes(AGENT_TOOL_NAME),
+    `fork tools exclude Agent: ${sawChildTools!.join(',')}`,
+  )
+  assert(
+    sawChildTools!.includes('Read') || sawChildTools!.includes('Write'),
+    'fork keeps parent-like tools',
+  )
+
+  // Agent 工具：subagent_type=fork
+  sawChildMessages = undefined
+  sawChildTools = undefined
+  const tool = createAgentTool()
+  const viaType = await tool.call(
+    { prompt: 'FORK_VIA_TYPE', subagent_type: 'fork' },
+    {
+      cwd: process.cwd(),
+      sessionId: 'sess_fork_tool',
+      extras: {
+        writeTranscript: false,
+        subagentParent: {
+          parentSessionId: 'sess_fork_tool',
+          cwd: process.cwd(),
+          hooks: {},
+          deps: forkDeps,
+          permissionMode: 'bypassPermissions' as const,
+          askPermission: async () => 'allow' as const,
+          allTools: createDefaultTools(),
+          parentMessages: parentHistory,
+          parentSystemPromptSections: ['parent sys'],
+        },
+      },
+    },
+  )
+  assert(viaType.ok, `fork tool type: ${viaType.output}`)
+  assert(viaType.output.includes('[subagent fork'), `header: ${viaType.output}`)
+  const conv2 = (sawChildMessages ?? []).filter((m) => m.role !== 'system')
+  assert(conv2.length === 3, 'fork tool inherits 2 + directive')
+  assert(conv2[2]!.content === 'FORK_VIA_TYPE', 'fork tool directive')
+  assert(!sawChildTools!.includes(AGENT_TOOL_NAME), 'fork tool no Agent')
+
+  // 省略 subagent_type → fork
+  sawChildMessages = undefined
+  const viaOmit = await tool.call(
+    { prompt: 'FORK_VIA_OMIT' },
+    {
+      cwd: process.cwd(),
+      sessionId: 'sess_fork_omit',
+      extras: {
+        writeTranscript: false,
+        subagentParent: {
+          parentSessionId: 'sess_fork_omit',
+          cwd: process.cwd(),
+          hooks: {},
+          deps: forkDeps,
+          permissionMode: 'bypassPermissions' as const,
+          askPermission: async () => 'allow' as const,
+          allTools: createDefaultTools(),
+          parentMessages: parentHistory,
+        },
+      },
+    },
+  )
+  assert(viaOmit.ok, `fork omit type: ${viaOmit.output}`)
+  assert(viaOmit.output.includes('[subagent fork'), 'omit type is fork')
+  const conv3 = (sawChildMessages ?? []).filter((m) => m.role !== 'system')
+  assert(conv3[2]?.content === 'FORK_VIA_OMIT', 'omit path directive')
+
+  // 显式 fork: true
+  sawChildMessages = undefined
+  const viaFlag = await tool.call(
+    { prompt: 'FORK_VIA_FLAG', fork: true, subagent_type: 'general' },
+    {
+      cwd: process.cwd(),
+      sessionId: 'sess_fork_flag',
+      extras: {
+        writeTranscript: false,
+        subagentParent: {
+          parentSessionId: 'sess_fork_flag',
+          cwd: process.cwd(),
+          hooks: {},
+          deps: forkDeps,
+          permissionMode: 'bypassPermissions' as const,
+          askPermission: async () => 'allow' as const,
+          allTools: createDefaultTools(),
+          parentMessages: parentHistory,
+        },
+      },
+    },
+  )
+  assert(viaFlag.ok, `fork flag: ${viaFlag.output}`)
+  assert(viaFlag.output.includes('[subagent fork'), 'fork:true forces fork')
+  const conv4 = (sawChildMessages ?? []).filter((m) => m.role !== 'system')
+  assert(conv4.length === 3, 'fork:true inherits history')
 }
 
 async function testBackgroundSubagent(): Promise<void> {

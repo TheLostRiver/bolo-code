@@ -70,9 +70,20 @@ When done, reply with a concise report of what you did and key findings.`,
   source: 'builtin',
 }
 
+/** S12 最小 fork：继承父 messages；工具=父集去掉 Agent；无 worktree / 无完整 cache 共享 */
+export const FORK_AGENT: AgentDefinition = {
+  agentType: 'fork',
+  description:
+    'Fork of the current conversation: inherits parent messages, same tools minus Agent. Use for context-heavy subtasks.',
+  tools: '*',
+  systemPrompt: `你是 fork 工作者。继承父会话上下文，完成指派任务后给出简洁报告。不要再 spawn 子 agent。`,
+  source: 'builtin',
+}
+
 const BUILTIN_AGENTS: Record<string, AgentDefinition> = {
   explore: EXPLORE_AGENT,
   general: GENERAL_AGENT,
+  fork: FORK_AGENT,
 }
 
 export function listBuiltinAgents(): AgentDefinition[] {
@@ -433,6 +444,15 @@ export type RunSubagentParams = {
   writeTranscript?: boolean | string
   /** 可选固定 agent id（后台启动时先占位再跑） */
   agentId?: string
+  /**
+   * S12 fork：子 messages = 父 messages 浅拷贝 + 新 user 任务。
+   * 工具 = 父 allTools 去掉 Agent；system 优先用父 sections。
+   */
+  fork?: boolean
+  /** fork 时继承的父会话 messages（浅拷贝数组；不改父） */
+  parentMessages?: readonly ChatMessage[]
+  /** fork 时优先使用的父 system 段；缺省用 def.systemPrompt */
+  parentSystemPromptSections?: readonly string[]
 }
 
 export type RunSubagentResult = {
@@ -599,15 +619,34 @@ async function writeSubagentTranscript(opts: {
 
 /**
  * 真子 loop：SubagentStart → 独立 messages + queryLoop → 摘要 → SubagentStop
+ * fork 时 messages = 父浅拷贝 + directive；tools = 父集去 Agent。
  */
 export async function runSubagent(
   params: RunSubagentParams,
 ): Promise<RunSubagentResult> {
   const agentId = params.agentId?.trim() || newId('agent')
   const agentType = params.def.agentType
+  const isFork = params.fork === true || agentType === 'fork'
   const allTools = params.allTools ?? createDefaultTools()
-  const { resolvedTools } = resolveAgentTools(params.def, allTools)
-  const messages: ChatMessage[] = [{ role: 'user', content: params.prompt }]
+  const { resolvedTools } = isFork
+    ? {
+        // fork：与父相同工具，仅去掉 Agent（禁递归 fork）
+        resolvedTools: allTools.filter((t) => t.name !== AGENT_TOOL_NAME),
+      }
+    : resolveAgentTools(params.def, allTools)
+  const messages: ChatMessage[] = isFork
+    ? [
+        // 浅拷贝父 messages，再追加本任务 directive
+        ...(params.parentMessages ?? []).map((m) => ({ ...m })),
+        { role: 'user', content: params.prompt },
+      ]
+    : [{ role: 'user', content: params.prompt }]
+  const systemPromptSections =
+    isFork &&
+    params.parentSystemPromptSections &&
+    params.parentSystemPromptSections.length > 0
+      ? [...params.parentSystemPromptSections]
+      : [params.def.systemPrompt]
   const permissionMode = params.def.permissionMode ?? params.permissionMode
   const maxTurns = params.maxTurns ?? 8
 
@@ -631,7 +670,7 @@ export async function runSubagent(
       cwd: params.cwd,
       hooks: params.hooks,
       messages,
-      systemPromptSections: [params.def.systemPrompt],
+      systemPromptSections,
       deps: params.deps,
       permissionMode,
       askPermission: params.askPermission,
@@ -732,15 +771,18 @@ export type SubagentParentContext = {
   /**
    * 后台完成后可选通知：推一条 system 文本到父 messages。
    * 未传则只写 backgroundAgentResults。
+   * fork 时也作为继承上下文源。
    */
   parentMessages?: ChatMessage[]
+  /** fork 时继承的父 system 段 */
+  parentSystemPromptSections?: readonly string[]
 }
 
 function agentTypesHint(active?: ActiveAgentDefinitions | null): string {
   const types = listActiveAgents(active)
     .map((a) => a.agentType)
     .join('|')
-  return types || 'explore|general'
+  return types || 'explore|general|fork'
 }
 
 function isTruthyBackgroundFlag(v: unknown): boolean {
@@ -752,6 +794,18 @@ function isTruthyBackgroundFlag(v: unknown): boolean {
   return false
 }
 
+/** Agent 工具是否走 fork 路径：type 省略 / type=fork / fork:true */
+export function isForkAgentRequest(input: {
+  subagent_type?: unknown
+  fork?: unknown
+}): boolean {
+  if (isTruthyBackgroundFlag(input.fork)) return true
+  if (input.subagent_type == null) return true
+  const t = String(input.subagent_type).trim().toLowerCase()
+  if (!t) return true
+  return t === 'fork'
+}
+
 /**
  * 主会话 Agent 工具。须在 tool.call 的 extras.subagentParent 注入父上下文。
  */
@@ -761,7 +815,7 @@ export function createAgentTool(
   const hint = agentTypesHint(activeAgents)
   return buildTool({
     name: AGENT_TOOL_NAME,
-    description: `Spawn a subagent with an isolated message loop. Use for focused exploration or multi-step subtasks. Input: prompt, optional subagent_type (${hint}), optional run_in_background.`,
+    description: `Spawn a subagent. Omit subagent_type or use fork / fork:true to inherit parent messages. Types: ${hint}. Optional run_in_background.`,
     requiresPermission: false,
     isConcurrencySafe: () => false,
     isReadOnly: () => false,
@@ -774,7 +828,12 @@ export function createAgentTool(
         },
         subagent_type: {
           type: 'string',
-          description: `Agent type (${hint}); default general`,
+          description: `Agent type (${hint}); omit or "fork" = inherit parent conversation`,
+        },
+        fork: {
+          type: 'boolean',
+          description:
+            'If true, fork parent messages into the child (same as subagent_type=fork)',
         },
         run_in_background: {
           type: 'boolean',
@@ -815,12 +874,16 @@ export function createAgentTool(
       const active =
         parent.agentDefinitions ?? activeAgents ?? builtinAgentMap()
 
+      const useFork = isForkAgentRequest(input)
+
       let def: AgentDefinition
       try {
         def = getAgentDefinition(
-          input.subagent_type != null
-            ? String(input.subagent_type)
-            : 'general',
+          useFork
+            ? 'fork'
+            : input.subagent_type != null
+              ? String(input.subagent_type)
+              : 'general',
           active,
         )
       } catch (e) {
@@ -856,6 +919,13 @@ export function createAgentTool(
         onEvent: parent.onEvent,
         // 默认写侧链 transcript（S7+）；可用 extras.writeTranscript=false 关闭
         writeTranscript,
+        ...(useFork
+          ? {
+              fork: true,
+              parentMessages: parent.parentMessages,
+              parentSystemPromptSections: parent.parentSystemPromptSections,
+            }
+          : {}),
       }
 
       const runInBackground = isTruthyBackgroundFlag(

@@ -39,8 +39,10 @@ export type RunToolsParams = {
   agentDefinitions?: import('./subagent.ts').ActiveAgentDefinitions
   /** 后台 subagent 状态表 */
   backgroundStore?: import('./subagent.ts').BackgroundAgentStore
-  /** 父会话 messages；后台完成后可选推 system 通知 */
+  /** 父会话 messages；后台完成通知 + fork 继承 */
   parentMessages?: import('../../shared/src/index.ts').ChatMessage[]
+  /** fork 时注入子 agent 的父 system 段 */
+  parentSystemPromptSections?: readonly string[]
   signal?: AbortSignal
   onEvent?: (e: ToolExecutionEvent) => void
 }
@@ -101,6 +103,7 @@ export async function runTools(params: RunToolsParams): Promise<RunToolsResult> 
     agentDefinitions: params.agentDefinitions,
     backgroundStore: params.backgroundStore,
     parentMessages: params.parentMessages,
+    parentSystemPromptSections: params.parentSystemPromptSections,
     signal: params.signal,
     onEvent: params.onEvent,
   }

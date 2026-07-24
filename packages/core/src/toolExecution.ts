@@ -128,8 +128,10 @@ export type RunToolUseContext = {
   agentDefinitions?: import('./subagent.ts').ActiveAgentDefinitions
   /** 后台 subagent 状态表 */
   backgroundStore?: import('./subagent.ts').BackgroundAgentStore
-  /** 父会话 messages；后台完成后可选推 system 通知 */
+  /** 父会话 messages；后台完成通知 + fork 继承上下文 */
   parentMessages?: import('../../shared/src/index.ts').ChatMessage[]
+  /** fork 时注入子 agent 的父 system 段 */
+  parentSystemPromptSections?: readonly string[]
   signal?: AbortSignal
   onEvent?: (e: ToolExecutionEvent | QueryLoopEvent) => void
 }
@@ -456,6 +458,7 @@ export async function runToolUse(
               onEvent: ctx.onEvent,
               backgroundStore: ctx.backgroundStore,
               parentMessages: ctx.parentMessages,
+              parentSystemPromptSections: ctx.parentSystemPromptSections,
             }
           : undefined,
       },
