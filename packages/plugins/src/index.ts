@@ -431,6 +431,8 @@ export {
   installPluginFromPath,
   installPluginFromZip,
   installPluginFromUrl,
+  installPluginFromGitPath,
+  pluginUpdateHint,
   extractZipArchive,
   findPluginRootInExtract,
   looksLikeZipPath,

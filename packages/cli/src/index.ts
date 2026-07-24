@@ -43,6 +43,21 @@ export {
   type StatusLineOptions,
 } from './tui/statusLine.ts'
 export {
+  renderInkLayout,
+  type InkLayoutOptions,
+} from './tui/inkLayout.ts'
+export {
+  resolveTuiTheme,
+  type TuiTheme,
+  type TuiThemeId,
+} from './tui/theme.ts'
+export {
+  applyArrowPickerKey,
+  formatArrowPickerScreen,
+  runArrowPicker,
+  type ArrowPickItem,
+} from './tui/arrowPicker.ts'
+export {
   formatToolEventLine,
   formatSessionEventChunks,
   createSessionEventPrinter,

@@ -1,7 +1,8 @@
 # Prompt Cache 友好布局与 API 接线
 
 > 对照 HelsincyCode：`getCacheControl` / `buildSystemPromptBlocks` / `addCacheBreakpoints`，以及「静态段在前 / 动态段在后」。  
-> Bolo：**无遥测**、无 GrowthBook、无全局 cache scope / 1h TTL；**布局 + 最小 API 标记**，让上游 prefix cache 更容易命中。
+> Bolo：**无遥测**、无 GrowthBook；**布局 + API 标记 + F-C6 最小 TTL/前缀 break 检测**（`shouldBreakPromptCache`）。  
+> 无全局 cache scope 全家桶；真·厂商 TTL 行为以上游为准。
 
 ## 1. 为何布局影响 API prompt cache
 

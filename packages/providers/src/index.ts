@@ -34,6 +34,7 @@ export {
   parseResponsesUsage,
   type OpenAIResponsesConfig,
 } from './openaiResponses.ts'
+export { createOpenAIResponsesWsProvider } from './openaiResponsesWs.ts'
 export {
   createAnthropicProvider,
   toolsToAnthropic,

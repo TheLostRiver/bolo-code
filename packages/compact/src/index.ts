@@ -1043,3 +1043,124 @@ export function microcompactMessages(
     tokensSavedEstimate,
   }
 }
+
+// ── F-CP-CACHED-MC / F-CP-SNIP-UUID / F-C6 最小 ──
+
+/** 可回放 snip 边界：带可选 snip group id（非真 SnipTool） */
+export const SNIP_BOUNDARY_PREFIX = 'History snipped'
+
+export type CachedMicrocompactResult = {
+  messages: ChatMessage[]
+  /** 视为「缓存友好」清理：仅清旧 tool 正文，不改条数 */
+  cacheFriendly: true
+  tokensSavedEstimate: number
+  clearedToolUseIds: string[]
+}
+
+/**
+ * F-CP-CACHED-MC：cached microcompact 语义最小。
+ * 与 microcompact 相同 content-clear，标记 cacheFriendly（无 API cache_edits / 无遥测）。
+ */
+export function cachedMicrocompactMessages(
+  messages: ChatMessage[],
+  options?: MicrocompactOptions,
+): CachedMicrocompactResult {
+  const r = microcompactMessages(messages, options)
+  return {
+    messages: r.messages,
+    cacheFriendly: true,
+    tokensSavedEstimate: r.tokensSavedEstimate,
+    clearedToolUseIds: r.clearedToolUseIds,
+  }
+}
+
+export type SnipBoundaryMeta = {
+  snipId: string
+  removedCount: number
+  at: string
+}
+
+/** 从 system 边界消息解析 snipId（若有） */
+export function parseSnipBoundaryId(content: string): string | undefined {
+  const m = content.match(/snip_id=([a-zA-Z0-9_-]+)/)
+  return m?.[1]
+}
+
+/**
+ * F-CP-SNIP-UUID：生成带 snip_id 的边界文案（可回放标记，非完整 SnipTool）。
+ */
+export function formatSnipBoundaryContent(meta: SnipBoundaryMeta): string {
+  return `${SNIP_BOUNDARY_PREFIX} (snip_id=${meta.snipId} removed=${meta.removedCount} at=${meta.at})`
+}
+
+export function newSnipId(): string {
+  return `snip_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+}
+
+// ── F-C6-TTL prompt cache 可观测 ──
+
+export const DEFAULT_PROMPT_CACHE_TTL_MS = 60 * 60 * 1000 // 1h
+
+export type PromptCacheBreakReason =
+  | 'ttl_expired'
+  | 'system_prefix_changed'
+  | 'forced'
+  | 'none'
+
+export type PromptCacheSessionState = {
+  /** 上次成功标记 cache 的时间 */
+  lastCacheAt?: number
+  /** 稳定 system 前缀指纹 */
+  stablePrefixHash?: string
+  ttlMs: number
+}
+
+export function createPromptCacheSessionState(
+  ttlMs = DEFAULT_PROMPT_CACHE_TTL_MS,
+): PromptCacheSessionState {
+  return { ttlMs }
+}
+
+export function hashStablePrefix(text: string): string {
+  // 轻量非 crypto 指纹（避免强依赖）；足够 break detection
+  let h = 2166136261
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i)
+    h = Math.imul(h, 16777619)
+  }
+  return (h >>> 0).toString(16)
+}
+
+/**
+ * 是否应打断 prompt cache（1h TTL 或前缀变化）。
+ */
+export function shouldBreakPromptCache(
+  state: PromptCacheSessionState,
+  stablePrefix: string,
+  now = Date.now(),
+): { break: boolean; reason: PromptCacheBreakReason } {
+  const hash = hashStablePrefix(stablePrefix)
+  if (state.stablePrefixHash && state.stablePrefixHash !== hash) {
+    return { break: true, reason: 'system_prefix_changed' }
+  }
+  if (
+    state.lastCacheAt != null &&
+    now - state.lastCacheAt > (state.ttlMs || DEFAULT_PROMPT_CACHE_TTL_MS)
+  ) {
+    return { break: true, reason: 'ttl_expired' }
+  }
+  return { break: false, reason: 'none' }
+}
+
+/** 记录一次成功的 cache 标记 */
+export function touchPromptCacheSession(
+  state: PromptCacheSessionState,
+  stablePrefix: string,
+  now = Date.now(),
+): PromptCacheSessionState {
+  return {
+    ...state,
+    lastCacheAt: now,
+    stablePrefixHash: hashStablePrefix(stablePrefix),
+  }
+}

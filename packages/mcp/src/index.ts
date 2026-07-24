@@ -100,3 +100,10 @@ export {
   type McpListChangedKind,
   type McpListChangedEvent,
 } from './host.ts'
+export {
+  loadMcpOAuthTokenFile,
+  isMcpOAuthTokenExpired,
+  applyBearerAuthHeaders,
+  maybeInjectMcpOAuthHeaders,
+  type McpOAuthTokenFile,
+} from './oauth.ts'

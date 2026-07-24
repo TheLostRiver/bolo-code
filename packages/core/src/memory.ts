@@ -713,3 +713,46 @@ export function formatMemoryStatus(
   }
   return lines.join('\n')
 }
+
+// ── F-MEM-8：daily log + team 目录约定 ──
+
+export function getMemoryDailyLogPath(opts?: {
+  userBoloDir?: string
+  env?: NodeJS.ProcessEnv
+  day?: string
+}): string {
+  const dir = getMemoryDir(opts)
+  const day = opts?.day ?? new Date().toISOString().slice(0, 10)
+  return path.join(dir, 'daily', `${day}.md`)
+}
+
+export async function appendMemoryDailyLog(
+  line: string,
+  opts?: {
+    userBoloDir?: string
+    env?: NodeJS.ProcessEnv
+    day?: string
+  },
+): Promise<string> {
+  const file = getMemoryDailyLogPath(opts)
+  await fs.mkdir(path.dirname(file), { recursive: true })
+  const stamp = new Date().toISOString()
+  await fs.appendFile(file, `- ${stamp} ${line.trim()}\n`, 'utf8')
+  return file
+}
+
+export function getTeamMemoryDir(opts?: {
+  userBoloDir?: string
+  env?: NodeJS.ProcessEnv
+}): string {
+  return path.join(getMemoryDir(opts), 'team')
+}
+
+export async function ensureTeamMemoryDir(opts?: {
+  userBoloDir?: string
+  env?: NodeJS.ProcessEnv
+}): Promise<string> {
+  const dir = getTeamMemoryDir(opts)
+  await fs.mkdir(dir, { recursive: true })
+  return dir
+}

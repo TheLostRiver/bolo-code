@@ -419,7 +419,9 @@ type CompactSummarizer = (req: {
 | **已接线** | 默认 `autoCompactEnabled: true`；`BOLO_DISABLE_*` 环境熔断；`/autocompact` 运行时开关；`test-auto-compact` |
 | **已接线** | snip 最小：门槛 + 安全 cut + 边界 + prepare 写回；`test-snip` |
 | **已接线** | `/context` section 角色标签 + memory 预算提示（CP-OBS）；**不做** cached MC |
-| **OUT / 再后** | SnipTool / UUID 回放 / **cached microcompact** · partial compact · 真 tokenizer（AUTORUN 轨外） |
+| **已接线** | **F-CP-CACHED-MC** `cachedMicrocompactMessages`（content-clear + cacheFriendly 标记；无 API cache_edits） |
+| **已接线** | **F-CP-SNIP-UUID** 边界 `snip_id=` 可解析（非完整 SnipTool 回放） |
+| **OUT / 限制** | 真 tokenizer · 完整 SnipTool UUID 链 · 厂商 cache_edits API |
 
 ---
 

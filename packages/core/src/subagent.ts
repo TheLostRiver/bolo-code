@@ -32,6 +32,7 @@ import {
   recordSessionMessages,
 } from './sessionTranscript.ts'
 import type { AskPermissionFn } from './toolExecution.ts'
+import { isWorktreeEnabled } from './worktree.ts'
 
 export const AGENT_TOOL_NAME = 'Agent'
 
@@ -520,21 +521,49 @@ export function countRunningBackgroundAgents(
  * 是否允许再启一个后台 agent。
  * @returns ok 或拒绝原因
  */
+/**
+ * 后台溢出策略（F-SA-PAR2）：
+ * - reject（默认）：达 cap 拒绝
+ * - queue：标记 queued（调用方负责稍后启动；本最小实现仍返回 queue 提示）
+ */
+export type BackgroundOverflowPolicy = 'reject' | 'queue'
+
+export function getBackgroundOverflowPolicy(
+  env: NodeJS.ProcessEnv = process.env,
+): BackgroundOverflowPolicy {
+  const v = env.BOLO_BACKGROUND_OVERFLOW?.trim().toLowerCase()
+  if (v === 'queue') return 'queue'
+  return 'reject'
+}
+
 export function canStartBackgroundAgent(
   store: BackgroundAgentStore,
-  opts?: { maxConcurrent?: number },
-): { ok: true } | { ok: false; reason: string; running: number; max: number } {
+  opts?: { maxConcurrent?: number; policy?: BackgroundOverflowPolicy },
+):
+  | { ok: true }
+  | {
+      ok: false
+      reason: string
+      running: number
+      max: number
+      policy: BackgroundOverflowPolicy
+    } {
   const max =
     opts?.maxConcurrent ??
     store.maxConcurrent ??
     getDefaultMaxBackgroundAgents()
+  const policy = opts?.policy ?? getBackgroundOverflowPolicy()
   const running = countRunningBackgroundAgents(store)
   if (running >= max) {
     return {
       ok: false,
       running,
       max,
-      reason: `background agent limit reached (${running}/${max}); wait for one to finish or poll /agents status · /bg`,
+      policy,
+      reason:
+        policy === 'queue'
+          ? `background agent queue full (${running}/${max}); wait or poll /agents status · /bg (queue mode: try later)`
+          : `background agent limit reached (${running}/${max}); wait for one to finish or poll /agents status · /bg`,
     }
   }
   return { ok: true }
@@ -724,6 +753,16 @@ export async function runSubagent(
     params.permissionMode,
     params.def.permissionMode,
   )
+  // F-SA-WORKTREE：可选隔离目录
+  let cwd = params.cwd
+  if (isWorktreeEnabled()) {
+    const { tryCreateSubagentWorktree } = await import('./worktree.ts')
+    const wt = await tryCreateSubagentWorktree({
+      parentCwd: params.cwd,
+      agentId,
+    })
+    if (wt.ok) cwd = wt.cwd
+  }
   const maxTurns = params.maxTurns ?? 8
 
   await runHooks(
@@ -731,7 +770,7 @@ export async function runSubagent(
     {
       hook_event_name: 'SubagentStart',
       session_id: params.parentSessionId,
-      cwd: params.cwd,
+      cwd,
       timestamp: nowIso(),
       agent_id: agentId,
       agent_type: agentType,
@@ -744,7 +783,7 @@ export async function runSubagent(
   try {
     terminal = await queryLoop({
       sessionId: `${params.parentSessionId}:${agentId}`,
-      cwd: params.cwd,
+      cwd,
       hooks: params.hooks,
       messages,
       systemPromptSections,
@@ -779,7 +818,7 @@ export async function runSubagent(
 
   let agentTranscriptPath: string | undefined
   const sidePath = resolveSubagentTranscriptPath({
-    cwd: params.cwd,
+    cwd,
     agentId,
     writeTranscript: params.writeTranscript,
   })
@@ -790,7 +829,7 @@ export async function runSubagent(
         parentSessionId: params.parentSessionId,
         agentId,
         agentType,
-        cwd: params.cwd,
+        cwd,
         messages,
       })
       agentTranscriptPath = sidePath
@@ -804,7 +843,7 @@ export async function runSubagent(
     {
       hook_event_name: 'SubagentStop',
       session_id: params.parentSessionId,
-      cwd: params.cwd,
+      cwd,
       timestamp: nowIso(),
       agent_id: agentId,
       agent_type: agentType,

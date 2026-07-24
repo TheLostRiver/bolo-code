@@ -106,13 +106,41 @@ export function resolveSubagentPermissionMode(
     typeof defMode === 'string' ? defMode : undefined,
     parentMode,
   )
-  // parse 失败时若 def 非法会回退 parentMode，再取 min 仍是 parent
   if (typeof defMode === 'string' && !isPermissionMode(defMode)) {
     return parentMode
   }
   return permissionModeRank(child) <= permissionModeRank(parentMode)
     ? child
     : parentMode
+}
+
+/**
+ * F-S8-PLUS：子 agent 工具白名单相对父工具集再收紧。
+ * - def.tools === '*' 或未设 → 用 parentTools（fork 路径另处理）
+ * - 数组 → 仅保留名在列表且存在于 parentTools 的工具
+ */
+export function resolveSubagentToolNames(
+  defTools: string[] | '*' | undefined,
+  parentToolNames: readonly string[],
+): string[] | '*' {
+  if (defTools == null || defTools === '*') return '*'
+  if (!Array.isArray(defTools)) return '*'
+  const parent = new Set(parentToolNames)
+  return defTools.filter((n) => parent.has(n))
+}
+
+/** 子工具表：白名单 ∩ 父工具（去掉 Agent 由调用方决定） */
+export function filterToolsBySubagentAllowlist<T extends { name: string }>(
+  parentTools: readonly T[],
+  defTools: string[] | '*' | undefined,
+): T[] {
+  const allow = resolveSubagentToolNames(
+    defTools,
+    parentTools.map((t) => t.name),
+  )
+  if (allow === '*') return [...parentTools]
+  const set = new Set(allow)
+  return parentTools.filter((t) => set.has(t.name))
 }
 
 /** Shift+Tab 风格循环：default → acceptEdits → plan → auto → bypass → default */
@@ -808,3 +836,12 @@ export {
   checkSensitivePath,
   type SensitivePathResult,
 } from './sensitivePaths.ts'
+export {
+  loadBoloPolicyFile,
+  resolveBoloPolicy,
+  resolveSandboxMode,
+  applySandboxEnv,
+  mergePolicyDenyPrefixes,
+  type BoloPolicyFile,
+  type SandboxMode,
+} from './policy.ts'

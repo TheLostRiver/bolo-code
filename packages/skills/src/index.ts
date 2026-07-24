@@ -225,6 +225,17 @@ export async function discoverSkills(
     layers.push(await discoverSkillsInDir(root, 'extra'))
   }
 
+  // F-SKILLS-PLUS：可选远程 skill 根（默认 off；BOLO_REMOTE_SKILL_ROOTS=path1;path2）
+  const remote = process.env.BOLO_REMOTE_SKILL_ROOTS?.trim()
+  if (remote) {
+    for (const part of remote.split(/[;|]/)) {
+      const r = part.trim()
+      if (!r) continue
+      const abs = path.isAbsolute(r) ? r : path.resolve(opts.cwd, r)
+      layers.push(await discoverSkillsInDir(abs, 'extra'))
+    }
+  }
+
   layers.push(
     await discoverSkillsInDir(path.join(userRoot, 'skills'), 'user'),
   )

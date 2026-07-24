@@ -14,6 +14,7 @@ import { createCliProvider } from './provider.ts'
 import { createTtyAskPermission } from './tui/askPermissionTty.ts'
 import { renderWelcomeBanner } from './tui/banner.ts'
 import { formatSessionStatusLine } from './tui/statusLine.ts'
+import { renderInkLayout } from './tui/inkLayout.ts'
 import {
   attachSessionEventPrinter,
   createCliOnEvent,
@@ -99,15 +100,37 @@ export async function runNewSessionCli(
   })
 
   if (!opts.skipBanner) {
-    const banner = renderWelcomeBanner({
-      version: '0.0.1',
-      cwd: session.cwd,
-      model: session.model,
-      sessionId: session.id,
-      plain: opts.plainBanner,
-    })
-    writeOut(banner.endsWith('\n') ? banner : `${banner}\n`)
-    writeOut(`${formatSessionStatusLine(session)}\n`)
+    const useLayout =
+      process.env.BOLO_TUI_LAYOUT !== '0' &&
+      process.env.BOLO_TUI_LAYOUT !== 'false' &&
+      opts.plainBanner !== true
+    if (useLayout) {
+      const layout = renderInkLayout({
+        version: '0.0.1',
+        cwd: session.cwd,
+        model: session.model,
+        sessionId: session.id,
+        plain: opts.plainBanner,
+        session: {
+          permissionMode: session.permissionMode,
+          model: session.model,
+          effortLevel: session.effortLevel,
+          messages: session.messages,
+        },
+        hint: 'bolo> type a message or /help',
+      })
+      writeOut(layout.endsWith('\n') ? layout : `${layout}\n`)
+    } else {
+      const banner = renderWelcomeBanner({
+        version: '0.0.1',
+        cwd: session.cwd,
+        model: session.model,
+        sessionId: session.id,
+        plain: opts.plainBanner,
+      })
+      writeOut(banner.endsWith('\n') ? banner : `${banner}\n`)
+      writeOut(`${formatSessionStatusLine(session)}\n`)
+    }
   }
 
   const prompt = opts.prompt?.trim()

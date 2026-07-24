@@ -11,17 +11,17 @@
 
 | 层 | 粗估 | 说明 |
 |----|------|------|
-| **Headless 核心**（loop / tools / provider / compact / prompt） | **~60–70%** | 主路径可用；**STE ✅**；**规则权限 ✅**；**auto Y0–Y4 最小 ✅**（~85–90% HC auto **语义**）；**snip 最小 ✅**；仍缺 cached MC、SnipTool/UUID、完整 YOLO 企业/UI 层 |
+| **Headless 核心**（loop / tools / provider / compact / prompt） | **~65–75%** | 主路径可用；**STE ✅**；**规则权限 ✅**；**auto Y0–Y4 最小 ✅**（~85–90% HC auto **语义**）；**snip 最小 ✅**；仍缺 cached MC、SnipTool/UUID、完整 YOLO 企业/UI 层 |
 | 会话与 CLI | **~70–80%** | JSONL 默认写（T3）；resume/continue；title/system_note；无参 REPL；非成熟 Ink |
 | **扩展面（MCP / Plugins / Skills）** | **~60–70%** | Skills + MCP stdio/HTTP/SSE 最小 + list_changed + **PL2 热加载 ✅**；**PL-MKT 最小 ✅**（本地/URL 清单 install）；官方市场深度 / OAuth ⬜ |
-| **Subagent** | **~55–65%** | 真 loop + 后台/fork；**并发帽**；S8 不升级；worktree ⬜ |
+| **Subagent** | **~60–70%** | 真 loop + 后台/fork；**并发帽**；S8 不升级；worktree ⬜ |
 | **项目规则 Rules** | **~75–85%** | 装载 + paths + 刷新 + `/rules` |
 | **内置元技能 Creators** | **~70–80%** | skill/plugin-creator 最小 |
-| **成本与缓存** | **~45–55%** | C1–C5 标记 ✅；TTL / break / 深度 usage 后置 |
+| **成本与缓存** | **~50–60%** | C1–C5 标记 ✅；TTL / break / 深度 usage 后置 |
 | **斜杠命令** | **~70–80%** | 总线 + 日用 + SL-polish |
-| **CLI TUI** | **~40–50%** | T0–T7 + **P-T9 窄终端 plain/短状态**；完整 Ink ⬜ |
+| **CLI TUI** | **~55–65%** | T0–T7 + **P-T9 窄终端 plain/短状态**；完整 Ink ⬜ |
 | **Electron GUI** | **~5%** | 占位 |
-| **产品整体（可日用 headless agent）** | **~45–60%** | 相对 HelsincyCode headless；产品轨抬了安装/子代理/可观测/窄 TUI；**不**写 ~70% |
+| **产品整体（可日用 headless agent）** | **~55–70%** | 相对 HelsincyCode headless；产品轨抬了安装/子代理/可观测/窄 TUI；**不**写 ~70% |
 
 **口径说明：**
 

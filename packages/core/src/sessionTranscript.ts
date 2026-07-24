@@ -17,10 +17,13 @@ import type { PersistableSession } from './sessionPersist.ts'
 import type { SessionUsage } from './sessionUsage.ts'
 import { cloneSessionUsage } from './sessionUsage.ts'
 
-/** 公共头字段（线性 transcript，不强制 parentUuid） */
+/** 公共头字段（线性 transcript；可选 parentUuid 供分叉元数据） */
 export type TranscriptEntryBase = {
+  type?: string
   sessionId: string
   timestamp: string
+  /** F-JD-FORK：可选父消息/entry id；线性主路径可空 */
+  parentUuid?: string
   uuid?: string
 }
 

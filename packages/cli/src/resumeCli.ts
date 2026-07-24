@@ -23,6 +23,10 @@ import {
   type SessionEventPrinter,
 } from './tui/formatSessionEvent.ts'
 import { formatSessionStatusLine } from './tui/statusLine.ts'
+import {
+  runArrowPicker,
+  type ArrowPickItem,
+} from './tui/arrowPicker.ts'
 
 export type ResumeCliOptions = {
   /** session id / 路径；省略或 true 时进入项目列表选择 */
@@ -259,6 +263,9 @@ export async function pickProjectSessionId(opts: {
   writeOut?: (s: string) => void
   writeErr?: (s: string) => void
   readChoice?: (prompt: string) => Promise<string>
+  /** F-T8-PICKER：优先箭头键；false 强制编号 */
+  arrowPicker?: boolean
+  readKey?: () => Promise<string>
 }): Promise<string> {
   const writeOut = opts.writeOut ?? ((s) => process.stdout.write(s))
   const writeErr = opts.writeErr ?? ((s) => process.stderr.write(s))
@@ -284,6 +291,30 @@ export async function pickProjectSessionId(opts: {
       'non-interactive resume requires --resume <id>',
       2,
     )
+  }
+
+  const useArrow =
+    opts.arrowPicker !== false &&
+    process.env.BOLO_ARROW_PICKER !== '0' &&
+    (opts.readKey != null || process.stdin.isTTY === true)
+
+  if (useArrow) {
+    const pickItems: ArrowPickItem[] = items.map((it) => ({
+      id: it.id,
+      label:
+        `${it.id.slice(0, 12)}  ${(it.title ?? it.preview ?? '').slice(0, 40)}  n=${it.messageCount}`.trim(),
+    }))
+    const ar = await runArrowPicker({
+      items: pickItems,
+      writeOut,
+      readKey: opts.readKey,
+      isTty: true,
+    })
+    if (ar.ok) return ar.id
+    if (ar.reason === 'cancel') {
+      throw new ResumePickerError(ar.message || 'cancelled', 1)
+    }
+    // unsupported → fall through to number picker
   }
 
   const readChoice =
@@ -315,7 +346,6 @@ export async function pickProjectSessionId(opts: {
     if (resolved.reason === 'cancel') {
       throw new ResumePickerError(resolved.message, 1)
     }
-    // 过滤多命中：展示缩小列表再选
     if (resolved.reason === 'ambiguous') {
       const filtered = filterSessionListItems(items, raw.trim())
       writeOut(`${formatSessionList(filtered)}\n`)

@@ -1,29 +1,27 @@
 /**
  * BOLO 欢迎 banner（原创 Bolot 吉祥物，不抄第三方 IP）
- * plain / NO_COLOR / 窄终端 → 单行 BOLO
- * P-T9-NARROW：columns < 阈值时自动 plain（非完整 Ink）。
+ * plain / NO_COLOR / 窄终端 / theme=plain → 单行 BOLO
+ * P-T9 + F-T9-THEME：主题与吉祥物开关
  */
+
+import { resolveTuiTheme } from './theme.ts'
 
 export type BannerOptions = {
   version?: string
   cwd?: string
   model?: string
   sessionId?: string
-  /** 强制 plain（单行） */
   plain?: boolean
-  /** 缩略一行（resume 后） */
   condensed?: boolean
-  /** 终端列数；省略则读 process.stdout.columns / COLUMNS */
   columns?: number
   env?: NodeJS.ProcessEnv
+  /** 强制显示/隐藏吉祥物行 */
+  mascot?: boolean
 }
 
 const VERSION_DEFAULT = '0.0.1'
-
-/** 窄终端阈值：低于此列数用 plain banner（P-T9） */
 export const NARROW_TERMINAL_COLUMNS = 80
 
-/** 多行 ASCII 字标 + 小 Bolot（河豚/气球鱼，原创） */
 const BANNER_ART = `
  ____   ___  _      ___  
 | __ ) / _ \\| |    / _ \\ 
@@ -34,7 +32,14 @@ const BANNER_ART = `
   /|\\  puffer · balloon fish
 `.trim()
 
-/** 解析终端列数 */
+const BANNER_ART_NO_MASCOT = `
+ ____   ___  _      ___  
+| __ ) / _ \\| |    / _ \\ 
+|  _ \\| | | | |   | | | |
+| |_) | |_| | |___| |_| |
+|____/ \\___/|_____|\\___/ 
+`.trim()
+
 export function getTerminalColumns(opts?: {
   columns?: number
   env?: NodeJS.ProcessEnv
@@ -69,24 +74,24 @@ export function shouldUsePlainBanner(options?: {
   env?: NodeJS.ProcessEnv
   columns?: number
 }): boolean {
-  // 显式 plain: false → 全量；true → 单行；未指定 → 环境 / 窄终端
   if (options?.plain === true) return true
   if (options?.plain === false) return false
   const env = options?.env ?? process.env
   if (env.NO_COLOR !== undefined && env.NO_COLOR !== '') return true
   if (env.BOLO_PLAIN === '1' || env.BOLO_PLAIN === 'true') return true
+  const theme = resolveTuiTheme({ env })
+  if (theme.id === 'plain') return true
   if (isNarrowTerminal({ columns: options?.columns, env })) return true
   return false
 }
 
-/**
- * 渲染欢迎 banner 文本（末尾换行由调用方决定；本函数返回不带末尾多余空行的块）。
- */
 export function renderWelcomeBanner(options: BannerOptions = {}): string {
   const version = options.version ?? VERSION_DEFAULT
+  const env = options.env ?? process.env
+  const theme = resolveTuiTheme({ env, mascot: options.mascot })
   const plain = shouldUsePlainBanner({
     plain: options.plain,
-    env: options.env,
+    env,
     columns: options.columns,
   })
 
@@ -103,5 +108,6 @@ export function renderWelcomeBanner(options: BannerOptions = {}): string {
   if (options.model) info.push(`model ${options.model}`)
   if (options.sessionId) info.push(`session ${options.sessionId}`)
 
-  return `${BANNER_ART}\n${info.join('  ·  ')}`
+  const art = theme.mascot ? BANNER_ART : BANNER_ART_NO_MASCOT
+  return `${art}\n${info.join('  ·  ')}`
 }

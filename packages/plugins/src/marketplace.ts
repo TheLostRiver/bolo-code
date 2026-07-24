@@ -797,4 +797,38 @@ export async function listInstalledPlugins(
   return Object.values(file.plugins).sort((a, b) => a.id.localeCompare(b.id))
 }
 
+/**
+ * F-PL-DEPTH：从本地 git 仓库路径安装（clone 不在本最小实现；需已有目录）。
+ * 可选 BOLO 缓存目录记录 source。
+ */
+export async function installPluginFromGitPath(opts: {
+  /** 已 clone 的 git 工作树路径（含 bolo.plugin.json） */
+  gitPath: string
+  scope?: 'user' | 'project'
+  cwd?: string
+  boloRoot?: string
+  ref?: string
+}): Promise<InstalledPluginRecord> {
+  const rec = await installPluginFromPath({
+    path: opts.gitPath,
+    scope: opts.scope,
+    cwd: opts.cwd,
+    boloRoot: opts.boloRoot,
+  })
+  return {
+    ...rec,
+    source: `git:${path.resolve(opts.gitPath)}${opts.ref ? `@${opts.ref}` : ''}`,
+  }
+}
+
+/** 安装账本中检查是否有更新提示（版本字符串不等） */
+export function pluginUpdateHint(
+  installed: InstalledPluginRecord,
+  catalogVersion?: string,
+): string | undefined {
+  if (!catalogVersion || !installed.version) return undefined
+  if (catalogVersion === installed.version) return undefined
+  return `update available: ${installed.version} → ${catalogVersion}`
+}
+
 export type { LoadedPlugin }
