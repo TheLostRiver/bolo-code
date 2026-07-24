@@ -103,6 +103,7 @@ P3  GUI / 打磨 / 后置
 |----|------|----------|------|
 | R1–R2 | **`.bolo/rules` 发现 + 注入** | M-Rules | ✅ |
 | R3 | **frontmatter `paths` 作用域** | `activePaths` × globs | ✅ |
+| R3b | **submitPrompt 刷新 path-scoped rules** | 从 messages 推 activePaths → 替换 `# Project rules` | ✅ |
 | R4 | `/rules` | 依赖 Slash | ✅ |
 | C1–C4 | **Prompt 静态/动态边界 + 前缀稳定测试** | M-Cost（`PROMPT_CACHE.md` + stable/volatile + `test-prompt-cache`） | ✅ |
 | J-A/B | **JSONL 双写** | `TODO_SESSION_JSONL` Phase A+B（commit 19f7594） | ✅ |

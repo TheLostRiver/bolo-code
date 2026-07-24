@@ -64,6 +64,11 @@ import {
   type AssembleSessionSystemPromptOptions,
 } from './systemPrompt.ts'
 import {
+  loadBoloRules,
+  collectActivePathsFromMessages,
+  replaceProjectRulesSection,
+} from './rules.ts'
+import {
   applySnapshotToSession,
   getSessionPersistMeta,
   loadSession,
@@ -148,6 +153,9 @@ export {
   collectRuleCandidates,
   matchRulePathGlob,
   activePathsMatchGlobs,
+  collectActivePathsFromMessages,
+  extractPathTokensFromText,
+  replaceProjectRulesSection,
   BOLO_RULES_MAX_CHARS_PER_FILE,
   BOLO_RULES_MAX_TOTAL_CHARS,
   type BoloRuleSource,
@@ -325,6 +333,16 @@ export type BoloSession = {
    * callModel 时由 prepareModelMessages 前缀；对话历史尽量不混入 system。
    */
   systemPromptSections: string[]
+  /**
+   * 组装 system 时的 userConfigDir（测试/覆盖）；
+   * submitPrompt path-scope 刷新 rules 时透传。
+   */
+  systemPromptUserConfigDir?: string
+  /**
+   * 是否在 submitPrompt 时按 activePaths 重装 path-scoped rules。
+   * 默认 true；createSession(systemPrompt:false) 或显式 loadRules:false 时为 false。
+   */
+  refreshPathScopedRules?: boolean
   hooks: HooksConfig
   provider: LlmProvider
   deps: QueryDeps
@@ -424,11 +442,19 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
   const skills = opts.skills ?? []
 
   let systemPromptSections: string[] = []
+  let systemPromptUserConfigDir: string | undefined
+  let refreshPathScopedRules = false
   if (opts.systemPrompt !== false) {
     const extra =
       typeof opts.systemPrompt === 'object' && opts.systemPrompt
         ? opts.systemPrompt
         : {}
+    systemPromptUserConfigDir = extra.userConfigDir
+    // 默认装载 rules 且非 custom/override 时，submitPrompt 可按 activePaths 刷新 path-scope
+    refreshPathScopedRules =
+      extra.loadRules !== false &&
+      !extra.overrideSystemPrompt &&
+      !extra.customSystemPrompt
     systemPromptSections = await assembleSessionSystemPrompt({
       cwd: opts.cwd,
       permissionMode,
@@ -440,6 +466,7 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
       boloRules: extra.boloRules,
       loadRules: extra.loadRules,
       userConfigDir: extra.userConfigDir,
+      activePaths: extra.activePaths,
       mcpPlaceholder: extra.mcpPlaceholder,
       overrideSystemPrompt: extra.overrideSystemPrompt,
       customSystemPrompt: extra.customSystemPrompt,
@@ -460,6 +487,8 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
     phase: 'idle',
     messages: [],
     systemPromptSections,
+    systemPromptUserConfigDir,
+    refreshPathScopedRules,
     hooks: opts.hooks ?? {},
     provider,
     deps: opts.deps ?? productionDeps(provider),
@@ -706,6 +735,33 @@ export async function closeSessionMcp(session: BoloSession): Promise<void> {
 }
 
 /**
+ * 按当前 messages + 本轮输入刷新 path-scoped rules 段。
+ * 仅替换 `# Project rules`（volatile）；cache-stable 前缀不动。
+ * 对照 HC：触达文件时再装载 conditional paths 规则（Bolo 合入 system 段）。
+ */
+export async function refreshSessionPathScopedRules(
+  session: BoloSession,
+  opts?: { extraText?: string; activePaths?: string[] },
+): Promise<string[]> {
+  if (session.refreshPathScopedRules === false) {
+    return session.systemPromptSections
+  }
+  const activePaths =
+    opts?.activePaths ??
+    collectActivePathsFromMessages(session.messages, opts?.extraText)
+  const loaded = await loadBoloRules({
+    cwd: session.cwd,
+    userConfigDir: session.systemPromptUserConfigDir,
+    activePaths,
+  })
+  session.systemPromptSections = replaceProjectRulesSection(
+    session.systemPromptSections,
+    loaded.text,
+  )
+  return session.systemPromptSections
+}
+
+/**
  * UserPromptSubmit → queryLoop（对照：用户输入处理后进入 query）
  */
 export async function submitPrompt(
@@ -748,6 +804,9 @@ export async function submitPrompt(
   let userContent = prompt
   if (submit.injectText) userContent = `${prompt}\n\n${submit.injectText}`
   session.messages.push({ role: 'user', content: userContent })
+
+  // path-scope：发模型前按对话中的 active paths 刷新 rules 段
+  await refreshSessionPathScopedRules(session, { extraText: userContent })
 
   const terminal = await queryLoop({
     sessionId: session.id,

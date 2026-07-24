@@ -45,6 +45,18 @@ paths: ["**/*.ts", "src/**"]
 - `getSystemPrompt` / `assembleSessionSystemPrompt` 透传可选 `activePaths`
 - 简单 glob：`*` 不跨 `/`，`**` 匹配多层；路径用正斜杠归一化
 
+### submitPrompt 时刷新（path-scope）
+
+建会话时 `createSession` 只装载 **alwaysApply**（及当时传入的 `activePaths`）。  
+每轮 **`submitPrompt` 在进 queryLoop / 发模型前** 会：
+
+1. 从当前 `messages` + 本轮用户文本推导 `activePaths`（`collectActivePathsFromMessages`：user/assistant 文本、tool_calls 参数、tool 结果里的路径 token）
+2. 用该列表重新 `loadBoloRules`
+3. 仅替换 system 中的 **`# Project rules`** 段（`replaceProjectRulesSection`），**不改** Identity/System/Task/Tools 等 cache-stable 前缀
+
+关闭：`createSession({ systemPrompt: false })`、`loadRules: false`，或 `session.refreshPathScopedRules = false`。  
+也可直接调 `refreshSessionPathScopedRules(session, { activePaths? })`。
+
 ## 预算
 
 与 BOLO.md 类似：
@@ -66,6 +78,8 @@ paths: ["**/*.ts", "src/**"]
 
 - `loadBoloRules({ cwd, userConfigDir?, activePaths? })` → `{ text, sources[] }`
 - `getSystemPrompt` / `assembleSessionSystemPrompt` 默认自动装载（`loadRules: false` 可关）；可选 `activePaths`
+- `collectActivePathsFromMessages` / `replaceProjectRulesSection` / `refreshSessionPathScopedRules`
+- `submitPrompt` 默认在发模型前刷新 path-scoped rules
 - `ensureProjectLayout` 会创建 `rules/` 目录
 
 ## 测试

@@ -101,6 +101,7 @@
 | 用户级 `~/.bolo/rules/` | ⬜ | 可选全局规则 |
 | 启动/每轮装载进 system 或 userContext | ⬜ | 与 BOLO.md **分层**：BOLO.md=项目说明；rules=可拆分约束包 |
 | frontmatter：`paths` 作用域（仅匹配文件时注入） | ✅ | HC 语义最小版：`alwaysApply:false` + globs × `activePaths`；见 `docs/RULES.md` |
+| **submitPrompt 刷新 path-scoped rules** | ✅ | 每轮从 messages 推 activePaths，仅换 volatile 的 `# Project rules`；stable 前缀不变 |
 | `/rules` 列表 · 开/关 · 预览 | ⬜ | 斜杠入口 |
 | 与 prompt cache 协同 | ⬜ | rules 变更会 cache break；稳定排序 |
 

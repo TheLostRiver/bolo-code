@@ -422,3 +422,181 @@ export async function loadBoloRules(
 
   return { text, sources }
 }
+
+/** tool 参数里常见的路径字段 */
+const PATH_ARG_KEYS = new Set([
+  'path',
+  'file_path',
+  'filePath',
+  'filepath',
+  'target_file',
+  'targetFile',
+  'filename',
+  'file',
+])
+
+/**
+ * 从一段文本里捞「像路径」的 token（相对/绝对、含扩展名或分隔符）。
+ * 不解析 shell 语义；宁可多收再由 glob 过滤。
+ */
+export function extractPathTokensFromText(text: string): string[] {
+  if (!text?.trim()) return []
+  const out: string[] = []
+  // 反引号 / 引号包裹
+  const quoted =
+    /`([^`\r\n]{1,400})`|"([^"\r\n]{1,400})"|'([^'\r\n]{1,400})'/g
+  let m: RegExpExecArray | null
+  while ((m = quoted.exec(text)) !== null) {
+    const inner = (m[1] ?? m[2] ?? m[3] ?? '').trim()
+    if (looksLikePathToken(inner)) out.push(inner)
+  }
+  // 裸路径：含 / 或 \ 或常见扩展名
+  const bare =
+    /(?<![A-Za-z0-9_])((?:[A-Za-z]:)?(?:\.\/|\.\.\/|\/|\\)?(?:[\w.@-]+[\\/])+[\w.@-]+(?:\.\w{1,12})?|(?:[\w.@-]+\.(?:ts|tsx|js|jsx|mjs|cjs|json|md|py|rs|go|java|kt|css|scss|html|vue|svelte|yml|yaml|toml|xml|sh|ps1|sql|proto|gradle|swift|rb|php)))\b/g
+  while ((m = bare.exec(text)) !== null) {
+    const tok = m[1]!.trim()
+    if (looksLikePathToken(tok)) out.push(tok)
+  }
+  return out
+}
+
+function looksLikePathToken(s: string): boolean {
+  if (!s || s.length > 400) return false
+  if (/\s/.test(s)) return false
+  if (s.startsWith('http://') || s.startsWith('https://')) return false
+  if (s.includes('://')) return false
+  // 拒绝纯数字 / 版本号
+  if (/^\d+(\.\d+)*$/.test(s)) return false
+  const n = normalizeRulePath(s)
+  if (!n) return false
+  if (n.includes('/')) return true
+  // 单段但有扩展名
+  return /\.\w{1,12}$/.test(n)
+}
+
+function collectPathsFromJsonValue(v: unknown, out: string[]): void {
+  if (typeof v === 'string') {
+    if (looksLikePathToken(v)) out.push(v)
+    else {
+      for (const t of extractPathTokensFromText(v)) out.push(t)
+    }
+    return
+  }
+  if (Array.isArray(v)) {
+    for (const item of v) collectPathsFromJsonValue(item, out)
+    return
+  }
+  if (!v || typeof v !== 'object') return
+  for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+    if (PATH_ARG_KEYS.has(k) && typeof val === 'string') {
+      out.push(val)
+      continue
+    }
+    collectPathsFromJsonValue(val, out)
+  }
+}
+
+/**
+ * 从对话消息 + 可选本轮用户输入推导 activePaths（去重、正斜杠归一）。
+ * 来源：user/assistant 文本、assistant tool_calls.arguments、tool 结果文本。
+ */
+export function collectActivePathsFromMessages(
+  messages: readonly {
+    role: string
+    content?: string
+    tool_calls?: Array<{ arguments?: string }>
+  }[],
+  extraText?: string,
+): string[] {
+  const raw: string[] = []
+  if (extraText) raw.push(...extractPathTokensFromText(extraText))
+  for (const msg of messages) {
+    if (typeof msg.content === 'string' && msg.content) {
+      raw.push(...extractPathTokensFromText(msg.content))
+    }
+    if (msg.tool_calls?.length) {
+      for (const tc of msg.tool_calls) {
+        if (!tc.arguments?.trim()) continue
+        try {
+          collectPathsFromJsonValue(JSON.parse(tc.arguments), raw)
+        } catch {
+          raw.push(...extractPathTokensFromText(tc.arguments))
+        }
+      }
+    }
+  }
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const p of raw) {
+    const n = normalizeRulePath(p)
+    if (!n || seen.has(n)) continue
+    seen.add(n)
+    out.push(n)
+  }
+  return out
+}
+
+/**
+ * 在 system sections 中替换或插入 `# Project rules` 段。
+ * - rulesText 非空：替换已有 rules 段，或插在 Environment 后 / BOLO 前
+ * - rulesText 空：移除 rules 段（path-scope 全部不匹配时）
+ * 不触碰 Identity/System/Task/Tools 等 cache-stable 段内容。
+ */
+export function replaceProjectRulesSection(
+  sections: readonly string[],
+  rulesText: string | undefined,
+): string[] {
+  const RULES_HEAD = '# Project rules'
+  const isRules = (s: string) => {
+    const t = s.trimStart()
+    return t === RULES_HEAD || t.startsWith(RULES_HEAD + '\n') || t.startsWith(RULES_HEAD + '\r')
+  }
+  const isEnv = (s: string) => {
+    const t = s.trimStart()
+    return t === '# Environment' || t.startsWith('# Environment\n') || t.startsWith('# Environment\r')
+  }
+  const isBolo = (s: string) => {
+    const t = s.trimStart()
+    return (
+      t.startsWith('# Project & user instructions') ||
+      t.startsWith('# Project and user instructions')
+    )
+  }
+
+  const without = sections.filter((s) => !isRules(s))
+  const trimmed = rulesText?.trim() ?? ''
+  if (!trimmed) return without
+
+  // 已有位置：按 without 中 Environment 后 / BOLO 前插入
+  let insertAt = -1
+  for (let i = 0; i < without.length; i++) {
+    if (isEnv(without[i]!)) insertAt = i + 1
+  }
+  if (insertAt === -1) {
+    for (let i = 0; i < without.length; i++) {
+      if (isBolo(without[i]!)) {
+        insertAt = i
+        break
+      }
+    }
+  }
+  if (insertAt === -1) {
+    // 稳定段之后：找第一个非 Identity/System/Task/Tools
+    const stable = ['# Identity', '# System', '# Task style', '# Tools']
+    insertAt = without.length
+    for (let i = 0; i < without.length; i++) {
+      const t = without[i]!.trimStart()
+      const isStable = stable.some(
+        (h) => t === h || t.startsWith(h + '\n') || t.startsWith(h + '\r'),
+      )
+      if (!isStable) {
+        insertAt = i
+        break
+      }
+    }
+  }
+
+  const next = [...without]
+  next.splice(insertAt, 0, trimmed)
+  return next
+}

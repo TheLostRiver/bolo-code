@@ -243,6 +243,109 @@ async function main() {
   assert(disabled.sources.length === 0, 'env disable')
   delete process.env.BOLO_DISABLE_RULES
 
+  // ── path-scope refresh on submitPrompt ──
+  const {
+    collectActivePathsFromMessages,
+    extractPathTokensFromText,
+    replaceProjectRulesSection,
+    refreshSessionPathScopedRules,
+    submitPrompt,
+    getCacheStablePrefix,
+  } = await import('../packages/core/src/index.ts')
+
+  const tokens = extractPathTokensFromText(
+    'Please fix `src/a.ts` and also packages/core/src/foo.ts',
+  )
+  assert(tokens.some((t) => t.includes('src/a.ts')), 'extract backtick path')
+  assert(
+    tokens.some((t) => t.includes('packages/core/src/foo.ts')),
+    'extract bare path',
+  )
+  const fromMsgs = collectActivePathsFromMessages(
+    [
+      {
+        role: 'assistant',
+        content: '',
+        tool_calls: [
+          {
+            id: '1',
+            name: 'Read',
+            arguments: JSON.stringify({ path: 'src/b.ts' }),
+          },
+        ],
+      },
+    ],
+    'touch readme.md',
+  )
+  assert(fromMsgs.includes('src/b.ts'), 'active from tool_calls')
+  assert(fromMsgs.includes('readme.md'), 'active from extra text')
+
+  const replaced = replaceProjectRulesSection(
+    ['# Identity\nI', '# Environment\nE', '# Project & user instructions\nB'],
+    '# Project rules\nR',
+  )
+  assert(
+    replaced[1]!.includes('Environment') &&
+      replaced[2]!.includes('Project rules') &&
+      replaced[3]!.includes('Project & user'),
+    'replace inserts rules after Environment',
+  )
+  const removed = replaceProjectRulesSection(
+    ['# Identity\nI', '# Project rules\nR', '# Environment\nE'],
+    '',
+  )
+  assert(
+    !removed.some((s) => s.includes('Project rules')),
+    'empty rules removes section',
+  )
+
+  const sessRefresh = await createSession({
+    cwd: tmp,
+    systemPrompt: {
+      userConfigDir: userDir,
+      date: '2026-07-24',
+      loadInstructions: false,
+    },
+  })
+  const before = sessRefresh.systemPromptSections.join('\n\n')
+  assert(!before.includes('PATH_SCOPED_TS'), 'createSession no active path')
+  const stableBefore = getCacheStablePrefix(sessRefresh.systemPromptSections)
+
+  const term = await submitPrompt(
+    sessRefresh,
+    'please review packages/core/src/index.ts for style',
+    { maxTurns: 1 },
+  )
+  assert(term.reason === 'completed' || term.reason === 'max_turns', `terminal ${term.reason}`)
+  const after = sessRefresh.systemPromptSections.join('\n\n')
+  assert(after.includes('PATH_SCOPED_TS'), 'submitPrompt refreshed path-scoped rule')
+  const stableAfter = getCacheStablePrefix(sessRefresh.systemPromptSections)
+  assert(stableBefore === stableAfter, 'cache-stable prefix unchanged after rules refresh')
+
+  // 第二轮：仅 md 路径 → path-scoped 卸下
+  await submitPrompt(sessRefresh, 'edit readme.md only', { maxTurns: 1 })
+  const afterMd = sessRefresh.systemPromptSections.join('\n\n')
+  // 历史仍含 .ts 路径，故仍可能保留；显式用 refresh + 仅 md activePaths 验证卸下
+  await refreshSessionPathScopedRules(sessRefresh, {
+    activePaths: ['readme.md'],
+  })
+  assert(
+    !sessRefresh.systemPromptSections.join('\n\n').includes('PATH_SCOPED_TS'),
+    'refresh with md-only drops path-scoped',
+  )
+  assert(
+    afterMd.includes('# Project rules') || after.includes('# Project rules'),
+    'always-apply rules still present context',
+  )
+  // always-apply 规则仍在
+  await refreshSessionPathScopedRules(sessRefresh, {
+    activePaths: ['readme.md'],
+  })
+  assert(
+    sessRefresh.systemPromptSections.join('\n\n').includes('Use tabs for indentation'),
+    'always-apply rules remain after path-only drop',
+  )
+
   console.log('ok test-rules')
 }
 
