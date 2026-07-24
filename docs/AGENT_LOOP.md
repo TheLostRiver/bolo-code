@@ -45,7 +45,7 @@ Bolo **P0** 对齐：
 | **错误分类** | withRetry / errors | `packages/core/src/errorClassify.ts`：`retryable` / `fatal` / `user_abort` |
 | **模型退避重试** | `withRetry` | `wrapCallModelWithRetry`（默认 3 次、指数退避；`productionDeps` 默认包装） |
 | **系统提示词** | `getSystemPrompt` + query 前缀 | **`systemPromptSections` + `prepareModelMessages`**（见 `docs/SYSTEM_PROMPT.md`） |
-| 跑 tools | `runTools` | `toolOrchestration.ts`（**分区并发**：连续只读可并发，副作用串行） |
+| 跑 tools | `runTools` / **StreamingToolExecutor** | 主路径：`StreamingToolExecutor`（边流边跑 + 入队序 drain）；批后：`toolOrchestration.runTools` 仍可用 |
 | 单 tool | `runToolUse` | `toolExecution.ts` |
 | 结束 | stop hooks / terminal | Stop hooks + `Terminal` |
 | micro compact | `microcompactMessages` | `createMicrocompactPrepare`（默认开） |
@@ -75,7 +75,8 @@ Bolo **P0** 对齐：
 submitPrompt / createSession     packages/core/index.ts   会话外壳
 queryLoop                        packages/core/queryLoop.ts
 errorClassify / modelRetry       packages/core/errorClassify.ts · modelRetry.ts
-runTools (partition)             packages/core/toolOrchestration.ts
+StreamingToolExecutor            packages/core/streamingToolExecutor.ts  （主路径边流边跑）
+runTools (partition)             packages/core/toolOrchestration.ts     （批后 / 测试）
 runToolUse                       packages/core/toolExecution.ts
 QueryDeps                        packages/core/deps.ts
 HookBus                          packages/hooks
@@ -112,14 +113,15 @@ type TerminalReason =
 - `npx tsx scripts/smoke-turn.ts` 仍绿  
 - `npx tsx scripts/test-model-retry.ts`：429→成功、abort 不重试、PTL 不进 model retry  
 - `npx tsx scripts/test-ptl-retry.ts` 仍绿  
-- 代码路径可读：queryLoop →（retry 包装）callModel → runTools → runToolUse  
+- 代码路径可读：queryLoop →（retry 包装）callModel → **StreamingToolExecutor** → runToolUse  
+- `scripts/test-streaming-tool-executor.ts`：保序 · 并发 · 独占 · Bash 级联 · discard  
 - 文档本表与实现一致  
 
 ## 7. 明确不做（本切片 / 后置）
 
-- StreamingToolExecutor（流式边下发边跑 tool）  
+- StreamingToolExecutor **加深**（progress 通道 · interruptBehavior · 完整 streaming fallback UI）  
 - 遥测 / GrowthBook / 无限 unattended 429  
 - reactive compact / context collapse / snip  
 - 完整 Message 类型系统（assistant content blocks 数组）— v1 仍用简化 ChatMessage  
 
-后续 **P1 扩展面**（MCP SSE 等）优先不改 loop 骨架；compact 再深（cached MC / snip）见 `docs/COMPACTION.md` 后置项。
+后续 **P1 余量**：permission 分类器小步 · snip · J-D entry；compact 再深见 `docs/COMPACTION.md`。

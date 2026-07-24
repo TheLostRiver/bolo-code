@@ -165,8 +165,9 @@ export {
   type ModelUsageBucket,
   type UsageDelta,
 } from './sessionUsage.ts'
-export { runTools } from './toolOrchestration.ts'
+export { runTools, partitionToolCalls } from './toolOrchestration.ts'
 export { runToolUse } from './toolExecution.ts'
+export { StreamingToolExecutor } from './streamingToolExecutor.ts'
 export type { PermissionMode, SessionPermissionRules } from '../../permissions/src/index.ts'
 export {
   DEFAULT_MAX_TOOL_RESULT_CHARS,

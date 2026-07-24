@@ -13,7 +13,8 @@
 | `checkPermissions` 工具级 | 有默认 + 可覆盖 |
 | `runToolUse` 顺序 | find → schema → validate → Pre → Gate → call → **truncate** → Post |
 | 未知工具 / 校验错误 | `<tool_use_error>…</tool_use_error>`（对模型友好） |
-| `partitionToolCalls` | 只读批并发、写串行 |
+| `partitionToolCalls` | 只读批并发、写串行（`runTools` 批后执行） |
+| **StreamingToolExecutor** | 边收 `tool_call` 边调度；并发规则同上；**结果按入队序**；Bash 失败可取消兄弟；`discard` 放弃本轮 |
 | Glob / Grep 真实现 | `createGlobTool` / `createGrepTool` |
 | Skill 按需 | `Skill` 工具 + catalog |
 | **Edit** | `old_string` / `new_string`；默认**唯一**匹配；`replace_all` 可选；清晰错误 |
@@ -41,9 +42,12 @@ tool_use block
 ## 3. 并发策略
 
 ```
-Read, Glob, Grep, Skill           → isConcurrencySafe true  → 连续批 Promise.all
-Bash, Write, Edit, apply_patch    → false → 串行
+Read, Glob, Grep, Skill           → isConcurrencySafe true  → 可并行
+Bash, Write, Edit, apply_patch    → false → 独占串行
 ```
+
+**主路径（queryLoop）：** 流式 `tool_call` 事件一到即 `StreamingToolExecutor.addTool`，模型流结束后 `drain` 按入队序取 `tool_result`。  
+**批后路径（仍保留）：** `runTools` + `partitionToolCalls` 供脚本/测试/非流场景。
 
 ## 4. 编辑类工具怎么选
 
@@ -62,7 +66,7 @@ Edit 失败形态（示例）：
 ## 5. 仍未对齐（有意后置）
 
 - 完整 zod 与复杂 schema  
-- StreamingToolExecutor（边流边跑）  
+- StreamingToolExecutor 加深：progress 通道 · interruptBehavior · 完整 contextModifier  
 - 完整 permission 分类器  
 - UI renderToolResult  
 
@@ -70,6 +74,7 @@ Edit 失败形态（示例）：
 
 ```bash
 npx tsx scripts/test-tool-calling.ts
+npx tsx scripts/test-streaming-tool-executor.ts
 npx tsx scripts/test-permissions.ts
 npx tsx scripts/smoke-turn.ts
 ```

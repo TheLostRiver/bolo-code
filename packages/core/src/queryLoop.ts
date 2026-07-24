@@ -6,7 +6,7 @@
  *   callModel stream (+ tools)
  *     若 429/5xx/timeout：wrapCallModelWithRetry 退避（deps 默认包装）
  *     若 PTL：截断最旧 API 轮次 → 写回 session → 再 prepare → 重试（有限次）
- *   if tool_use → runTools → continue
+ *   if tool_use → StreamingToolExecutor（边流边跑）→ drain → continue
  *   else → Stop hooks → terminal
  */
 
@@ -35,7 +35,7 @@ import type {
   ToolExecutionEvent,
   ToolUseBlock,
 } from './toolExecution.ts'
-import { runTools } from './toolOrchestration.ts'
+import { StreamingToolExecutor } from './streamingToolExecutor.ts'
 import { prepareModelMessages } from './systemPrompt.ts'
 import {
   accumulateSessionUsage,
@@ -207,9 +207,12 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
     let modelOk = false
     let assistantText = ''
     const toolBlocks: ToolUseBlock[] = []
+    /** 边流边跑；PTL/错误回退时 discard */
+    let streamTools: StreamingToolExecutor | null = null
 
     while (!modelOk) {
       if (params.signal?.aborted) {
+        streamTools?.discard()
         const terminal: Terminal = { reason: 'aborted' }
         emit(params, { type: 'done', terminal })
         return terminal
@@ -229,6 +232,28 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
 
       assistantText = ''
       toolBlocks.length = 0
+      streamTools?.discard()
+      streamTools = new StreamingToolExecutor({
+        context: {
+          sessionId: params.sessionId,
+          cwd: params.cwd,
+          hooks: params.hooks,
+          permissionMode: params.permissionMode,
+          askPermission: params.askPermission,
+          permissionRules: params.permissionRules,
+          maxToolResultChars: params.maxToolResultChars,
+          spillTruncatedToolResults: params.spillTruncatedToolResults,
+          skills: params.skills,
+          tools,
+          deps: params.deps,
+          agentDefinitions: params.agentDefinitions,
+          backgroundStore: params.backgroundStore,
+          parentMessages: params.messages,
+          parentSystemPromptSections: params.systemPromptSections,
+          signal: params.signal,
+          onEvent: params.onEvent,
+        },
+      })
       let modelError: string | undefined
       let streamUsage: {
         inputTokens?: number
@@ -273,12 +298,15 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
               input = { raw: ev.arguments }
             }
             toolArgsChars += (ev.arguments ?? '').length
-            toolBlocks.push({
+            const block: ToolUseBlock = {
               id: ev.id || params.deps.uuid(),
               name: ev.name,
               input,
               argumentsJson: ev.arguments,
-            })
+            }
+            toolBlocks.push(block)
+            // 边流边入队执行（并发策略与 runTools 分区一致）
+            streamTools?.addTool(block)
           } else if (ev.type === 'usage') {
             streamUsage = {
               inputTokens: ev.usage?.inputTokens,
@@ -293,6 +321,7 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
+        streamTools?.discard()
         const classified = classifyError(e, { signal: params.signal })
         if (classified.class === 'user_abort' || params.signal?.aborted) {
           const terminal: Terminal = { reason: 'aborted', detail: msg }
@@ -316,6 +345,7 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
       }
 
       if (modelError && !assistantText && toolBlocks.length === 0) {
+        streamTools?.discard()
         const classified = classifyError(modelError, {
           signal: params.signal,
         })
@@ -343,6 +373,8 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
         return terminal
       }
 
+      // 流中途 modelError 但已有 tool：仍完成已入队 tool（与旧行为：整批 runTools 一致取结果）
+      // 若将来做 streaming fallback 再 discard；本最小切片保留 drain。
       modelOk = true
       ptlAttemptsThisTurn = 0
 
@@ -388,6 +420,7 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
     }
 
     if (toolBlocks.length === 0) {
+      streamTools?.discard()
       emit(params, { type: 'phase', phase: 'stopping' })
       await runStopHooks(params)
       const terminal: Terminal = { reason: 'completed' }
@@ -396,26 +429,10 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
       return terminal
     }
 
-    const { toolResultMessages } = await runTools({
-      blocks: toolBlocks,
-      sessionId: params.sessionId,
-      cwd: params.cwd,
-      hooks: params.hooks,
-      permissionMode: params.permissionMode,
-      askPermission: params.askPermission,
-      permissionRules: params.permissionRules,
-      maxToolResultChars: params.maxToolResultChars,
-      spillTruncatedToolResults: params.spillTruncatedToolResults,
-      skills: params.skills,
-      tools,
-      deps: params.deps,
-      agentDefinitions: params.agentDefinitions,
-      backgroundStore: params.backgroundStore,
-      parentMessages: params.messages,
-      parentSystemPromptSections: params.systemPromptSections,
-      signal: params.signal,
-      onEvent: params.onEvent,
-    })
+    // 流式已启动的 tool 按入队序收齐（与 runTools 分区并发语义一致）
+    const toolResultMessages = streamTools
+      ? await streamTools.drain()
+      : []
 
     for (const m of toolResultMessages) {
       params.messages.push(m)
