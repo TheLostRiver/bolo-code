@@ -142,10 +142,11 @@ createSessionFromWorkspace
 | 模块 | 职责 |
 |------|------|
 | `packages/skills` · `frontmatter.ts` | **S-PORT-1** 契约解析 · 别名折叠 |
-| `packages/skills` · `index.ts` | 发现、`mergeSkillsByPrecedence`、catalog、调用门控、format body |
+| `packages/skills` · `index.ts` | 发现、合并、catalog 预算、调用门控 |
 | `packages/tools` Skill | 按 id 加载；尊重 disable-model-invocation |
-| `packages/core` | session.skills + 注入 catalog · `/skill` 尊重 user-invocable |
-| `docs/CONFIG.md` | 目录布局 |
+| `packages/core` | session.skills + 注入 catalog · `/skill` / `/skills` / `/context` |
+| `packages/bundled-skills/skill-creator` | **S-PORT-6** 脚手架引导 |
+| `docs/CONFIG.md` | `extraSkillRoots` 等 |
 | `docs/TODO_SKILL_MCP_PLUGIN.md` | 可移植切片序 |
 
 ## 5. 测试
@@ -158,23 +159,32 @@ npx tsx scripts/test-skill-catalog.ts
 
 | id | 作用 |
 |----|------|
-| `skill-creator` | 引导写出可用的 `SKILL.md` 目录 |
+| `skill-creator` | 引导写出符合 **S-PORT** 的 `SKILL.md`（S-PORT-6） |
 | `plugin-creator` | 引导脚手架 `bolo.plugin.json` + contributes |
 
 路径：`packages/bundled-skills/<id>/SKILL.md`，由 `getBundledSkillsDir()`（`import.meta`）定位。  
 Slash：`/skill-creator`、`/plugin-creator`、`/skill <id>`、`/skills`（未知内置命令时回落到同名 user-invocable skill）。
 
-## 7. 仍未做 / 规划
+## 7. 明确不做 / 后置（S-PORT-7）
 
-- 远程 skill / MCP skill  
-- 与 HC 完全一致的动态 skill_discovery 预取  
-- ~~frontmatter 契约表~~ → **S-PORT-1 ✅**  
-- ~~覆盖序 / disable·user-invocable 矩阵~~ → **S-PORT-3/4 ✅**  
-- ~~可选旁路 skill 根~~ → **S-PORT-2 ✅**（`extraSkillRoots`，默认 off）  
-- ~~catalog 预算可观测~~ → **S-PORT-5 ✅**  
+| 项 | 状态 |
+|----|------|
+| 远程 skill 商店 / URL 安装 skill | **不做**（本阶段） |
+| MCP-hosted skill 分发 | **不做**（本阶段） |
+| 与 HC 完全一致的动态 skill_discovery 预取 | 后置 |
+| 自动展开 Claude/Codex 插件包为 skill | IMPORT 附录，非默认 |
 
-**后续：** S-PORT-6 creator · S-PORT-7 文档约束 — 见 **`docs/TODO_SKILL_MCP_PLUGIN.md`**。
+作者应只交付**本地目录** `…/skills/<id>/SKILL.md`。需要共享时用 git/path 拷贝或 **Bolo 插件**（`bolo.plugin.json`），不接 Claude/Codex 官方市场。
+
+## 8. 仍未做 / 规划
+
+- ~~frontmatter 契约~~ S-PORT-1 ✅  
+- ~~旁路根 / 覆盖序 / 调用矩阵 / 预算~~ S-PORT-2..5 ✅  
+- ~~skill-creator 对齐~~ S-PORT-6 ✅  
+- ~~拒绝远程 skill 文档~~ S-PORT-7 ✅  
+
+更深层扩展（MCP 通用、Bolo 插件 Spec）见 **`docs/TODO_SKILL_MCP_PLUGIN.md`**。
 
 ---
 
-**一句话：** 有 bundled + `~/.bolo/skills`；skill **进目录、不进全文**；全文靠 **Skill** 工具或 slash `/<id>` 按需加载，避免 token 爆炸。
+**一句话：** 有 bundled + `~/.bolo/skills`；skill **进目录、不进全文**；全文靠 **Skill** 工具或 slash `/<id>` 按需加载；契约可移植、**无远程 skill 商店**。

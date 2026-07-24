@@ -707,4 +707,47 @@ assert(
   'line shows no-model',
 )
 
+// ── S-PORT-6 skill-creator 对齐契约 ──
+const creatorPath = path.join(
+  getBundledSkillsDir(),
+  'skill-creator',
+  'SKILL.md',
+)
+const creatorRaw = await fs.readFile(creatorPath, 'utf8')
+const creatorParsed = parseSkillMarkdown(creatorRaw, {
+  fallbackId: 'skill-creator',
+})
+assert(creatorParsed.fields.id === 'skill-creator', 'creator id')
+assert(
+  creatorParsed.fields.whenToUse?.toLowerCase().includes('use when'),
+  'creator when_to_use style',
+)
+assert(creatorParsed.fields.userInvocable === true, 'creator user-invocable')
+assert(
+  creatorParsed.fields.disableModelInvocation === false,
+  'creator model ok',
+)
+assert(
+  creatorParsed.body.includes('S-PORT') ||
+    creatorParsed.body.includes('when_to_use'),
+  'creator body teaches contract',
+)
+assert(
+  creatorParsed.body.includes('remote') ||
+    creatorParsed.body.includes('S-PORT-7') ||
+    creatorParsed.body.includes('URL'),
+  'creator mentions no remote skills',
+)
+// 自身可被 frontmatter 契约加载
+const creatorLoaded = await discoverSkills({
+  cwd: process.cwd(),
+  userBoloDir: path.join(os.tmpdir(), `bolo-sc-${Date.now()}`),
+})
+const sc = findSkillById(creatorLoaded, 'skill-creator')
+assert(sc?.source === 'bundled', 'creator discoverable bundled')
+assert(
+  formatSkillCatalog([sc!]).includes('skill-creator'),
+  'creator in model catalog',
+)
+
 console.log('SKILL CATALOG TESTS PASS')
