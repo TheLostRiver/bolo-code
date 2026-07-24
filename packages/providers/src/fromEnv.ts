@@ -1,9 +1,10 @@
 /**
  * 从环境变量 / 显式 kind 创建 Provider
  *
- * BOLO_PROVIDER = mock | openai-compatible | openai | anthropic | claude
+ * BOLO_PROVIDER = mock | openai-compatible | openai | openai-responses | responses
+ *               | anthropic | claude
  *
- * OpenAI:
+ * OpenAI Chat Completions / Responses 共用 key 与 base：
  *   BOLO_API_KEY / OPENAI_API_KEY
  *   BOLO_BASE_URL / OPENAI_BASE_URL
  *   BOLO_MODEL / OPENAI_MODEL
@@ -19,6 +20,10 @@ import {
   createOpenAICompatibleProvider,
   type OpenAICompatibleConfig,
 } from './openaiCompatible.ts'
+import {
+  createOpenAIResponsesProvider,
+  type OpenAIResponsesConfig,
+} from './openaiResponses.ts'
 import {
   createAnthropicProvider,
   type AnthropicConfig,
@@ -43,6 +48,9 @@ function normalizeKind(raw?: string): ProviderKind | undefined {
   if (!raw) return undefined
   const k = raw.toLowerCase().trim()
   if (k === 'mock') return 'mock'
+  if (k === 'openai-responses' || k === 'responses' || k === 'openai_responses') {
+    return 'openai-responses'
+  }
   if (k === 'openai' || k === 'openai-compatible') return 'openai-compatible'
   if (k === 'anthropic' || k === 'claude') return 'anthropic'
   return undefined
@@ -116,7 +124,7 @@ export function createProviderFromEnv(
     }
   }
 
-  // openai-compatible
+  // openai-compatible | openai-responses（共用 key / base / model）
   const apiKey =
     overrides?.apiKey ?? env('BOLO_API_KEY') ?? env('OPENAI_API_KEY')
   if (!apiKey) {
@@ -129,6 +137,22 @@ export function createProviderFromEnv(
     env('BOLO_MODEL') ??
     env('OPENAI_MODEL') ??
     'gpt-4o-mini'
+
+  if (kind === 'openai-responses') {
+    const cfg: OpenAIResponsesConfig = {
+      apiKey,
+      baseUrl,
+      model,
+      timeoutMs: overrides?.timeoutMs,
+      maxTokens: overrides?.maxTokens,
+    }
+    return {
+      provider: createOpenAIResponsesProvider(cfg),
+      kind: 'openai-responses',
+      model,
+      baseUrl: baseUrl ?? 'https://api.openai.com/v1',
+    }
+  }
 
   return {
     provider: createOpenAICompatibleProvider({

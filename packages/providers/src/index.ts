@@ -2,6 +2,7 @@
  * LLM Provider 适配层
  * - mock
  * - openai-compatible（Chat Completions）
+ * - openai-responses（Responses API 原生直连）
  * - anthropic（Messages API，对照 HelsincyCode 事件）
  */
 
@@ -20,6 +21,15 @@ export {
   toOpenAIMessages,
   type OpenAICompatibleConfig,
 } from './openaiCompatible.ts'
+export {
+  createOpenAIResponsesProvider,
+  toResponsesPayload,
+  toolsToResponses,
+  buildResponsesRequest,
+  processResponsesSseJson,
+  parseResponsesUsage,
+  type OpenAIResponsesConfig,
+} from './openaiResponses.ts'
 export {
   createAnthropicProvider,
   toolsToAnthropic,

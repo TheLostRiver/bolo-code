@@ -176,10 +176,10 @@ npx tsx scripts/smoke-live.ts
 
 | ID | 切片 | 状态 |
 |----|------|------|
-| OR0 | 文档/契约（本文 + TODO） | ✅ 规划 |
-| OR1 | `openaiResponses.ts`：request 映射 + SSE 解析 → `ProviderStreamEvent` | ⬜ |
-| OR2 | tools / function_call 往返 | ⬜ |
-| OR3 | usage + effort→max_output_tokens（或等价字段） | ⬜ |
-| OR4 | `fromEnv` / config `kind: openai-responses` | ⬜ |
-| OR5 | 单测（fixture SSE，无真 key）+ smoke-live 可选 | ⬜ |
+| OR0 | 文档/契约（本文 + TODO） | ✅ |
+| OR1 | `openaiResponses.ts`：request 映射 + SSE 解析 → `ProviderStreamEvent` | ✅ |
+| OR2 | tools / function_call 往返 | ✅ |
+| OR3 | usage + effort→max_output_tokens | ✅ |
+| OR4 | `fromEnv` / config `kind: openai-responses` | ✅ |
+| OR5 | 单测（fixture SSE，无真 key） | ✅ |
 | OR6 | Responses WebSocket | ⬜ 后置 |

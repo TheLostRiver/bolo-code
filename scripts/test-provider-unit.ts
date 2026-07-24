@@ -16,6 +16,13 @@ import {
   parseOpenAIStreamUsage,
   parseAnthropicStreamUsage,
   mergeProviderUsage,
+  toResponsesPayload,
+  toolsToResponses,
+  buildResponsesRequest,
+  processResponsesSseJson,
+  parseResponsesUsage,
+  createOpenAIResponsesProvider,
+  detectProviderKind,
 } from '../packages/providers/src/index.ts'
 import type { ChatMessage } from '../packages/shared/src/index.ts'
 import { BUILTIN_TOOLS } from '../packages/tools/src/index.ts'
@@ -125,4 +132,114 @@ assert(mapEffort(undefined, base).maxTokens === base, 'effort default')
 assert(mapEffort('low', 1000).maxTokens === 500, 'effort low custom base')
 assert(mapEffort('high', 1000).maxTokens !== mapEffort('low', 1000).maxTokens, 'effort differs')
 
-console.log('PROVIDER UNIT PASS (converters + sse usage + mapEffort)')
+// --- OpenAI Responses 映射 + SSE（不联网）---
+const rsp = toResponsesPayload(msgs)
+assert(rsp.instructions.includes('helpful'), 'responses instructions from system')
+assert(
+  rsp.input.some(
+    (i) => 'type' in i && i.type === 'function_call' && i.name === 'Bash',
+  ),
+  'responses function_call',
+)
+assert(
+  rsp.input.some(
+    (i) => 'type' in i && i.type === 'function_call_output' && i.call_id === 'c1',
+  ),
+  'responses function_call_output',
+)
+
+const rspTools = toolsToResponses(BUILTIN_TOOLS)
+assert(
+  Array.isArray(rspTools) &&
+    rspTools.some((t) => (t as { name?: string }).name === 'Bash'),
+  'responses tools Bash',
+)
+
+const reqBody = buildResponsesRequest(msgs, { model: 'gpt-test' }, {
+  tools: BUILTIN_TOOLS,
+  maxOutputTokens: 1024,
+})
+assert(reqBody.stream === true, 'responses stream true')
+assert(reqBody.store === false, 'responses store default false')
+assert(reqBody.max_output_tokens === 1024, 'responses max_output_tokens')
+assert(Array.isArray(reqBody.tools) && reqBody.tools!.length > 0, 'responses body tools')
+
+const sseState = {
+  toolAcc: new Map<string, { id: string; name: string; arguments: string }>(),
+}
+const textEv = processResponsesSseJson(
+  { type: 'response.output_text.delta', delta: 'Hello' },
+  sseState,
+)
+assert(
+  textEv.events.some((e) => e.type === 'text_delta' && e.text === 'Hello'),
+  'responses text delta',
+)
+
+const toolDone = processResponsesSseJson(
+  {
+    type: 'response.output_item.done',
+    item: {
+      type: 'function_call',
+      call_id: 'call_abc',
+      name: 'Read',
+      arguments: '{"path":"a.ts"}',
+    },
+  },
+  sseState,
+)
+assert(
+  toolDone.events.some(
+    (e) =>
+      e.type === 'tool_call' &&
+      e.id === 'call_abc' &&
+      e.name === 'Read' &&
+      e.arguments.includes('a.ts'),
+  ),
+  'responses tool_call from output_item.done',
+)
+
+const completed = processResponsesSseJson(
+  {
+    type: 'response.completed',
+    response: {
+      usage: { input_tokens: 10, output_tokens: 20, total_tokens: 30 },
+    },
+  },
+  sseState,
+)
+assert(completed.completed === true, 'responses completed')
+assert(completed.usage?.inputTokens === 10, 'responses usage input')
+assert(completed.usage?.outputTokens === 20, 'responses usage output')
+
+const fail = processResponsesSseJson(
+  {
+    type: 'response.failed',
+    response: { error: { message: 'boom' } },
+  },
+  sseState,
+)
+assert(fail.failed === 'boom', 'responses failed message')
+
+assert(
+  parseResponsesUsage({
+    response: { usage: { input_tokens: 1, output_tokens: 2 } },
+  })?.totalTokens === 3,
+  'parseResponsesUsage total',
+)
+
+assert(
+  detectProviderKind({ kind: 'openai-responses' }) === 'openai-responses',
+  'detect responses kind',
+)
+assert(
+  createOpenAIResponsesProvider({
+    apiKey: 'sk-test',
+    model: 'gpt-4o-mini',
+  }).id === 'openai-responses',
+  'provider id openai-responses',
+)
+
+console.log(
+  'PROVIDER UNIT PASS (converters + sse usage + mapEffort + responses)',
+)

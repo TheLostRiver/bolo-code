@@ -164,10 +164,10 @@ P3  GUI / 打磨 / 后置
 
 若只开一刀：
 
-> **OpenAI Responses API 直连**（`docs/PROVIDERS.md` OR1–OR5；定点参考 Codex `codex-api` responses SSE，禁止通读全仓）。  
+> **OpenAI Responses HTTP SSE 已实现**（OR1–OR5）；OR6 WebSocket 后置。  
 > **Electron / 完整 Ink T8** 后置。
 
-已齐：resume / slash / BOLO TUI / rules / cache / JSONL / creators / Subagent / MCP / plugins / usage+effort / always-allow / apply_patch 等日用 CLI 主路径。
+已齐：resume / slash / BOLO TUI / rules / cache / JSONL / creators / Subagent / MCP / plugins / usage+effort / always-allow / apply_patch / **openai-responses 直连**。
 
 ---
 
@@ -184,7 +184,7 @@ P3  GUI / 打磨 / 后置
 | K* | M-Creators |
 | S* | M-Subagent |
 | MCP* | M3.2 |
-| **OR*** | **OpenAI Responses 直连**（`PROVIDERS.md`） |
+| **OR*** | **OpenAI Responses 直连** ✅ HTTP SSE；WS 后置 |
 | M4 | Electron |
 
 ---

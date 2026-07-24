@@ -1,7 +1,11 @@
 import type { ChatMessage } from '../../shared/src/index.ts'
 import type { ToolSpec } from '../../tools/src/index.ts'
 
-export type ProviderId = 'openai-compatible' | 'anthropic' | 'mock'
+export type ProviderId =
+  | 'openai-compatible'
+  | 'openai-responses'
+  | 'anthropic'
+  | 'mock'
 
 /** 可选 token 用量（本地累计；无遥测） */
 export type ProviderUsage = {

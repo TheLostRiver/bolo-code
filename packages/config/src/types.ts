@@ -6,8 +6,8 @@ import type { HooksConfig } from '../../shared/src/index.ts'
 import type { PermissionMode } from '../../permissions/src/index.ts'
 
 export type ProviderConfigJson = {
-  /** mock | openai-compatible | anthropic */
-  kind?: 'mock' | 'openai-compatible' | 'anthropic'
+  /** mock | openai-compatible | openai-responses | anthropic */
+  kind?: 'mock' | 'openai-compatible' | 'openai-responses' | 'anthropic'
   apiKey?: string
   baseUrl?: string
   model?: string
