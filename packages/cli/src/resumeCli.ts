@@ -1,6 +1,7 @@
 /**
  * resume 接线：load/resumeSession + 摘要 + 可选单轮 submit / 极简 REPL
  * 无 id 时 listProjectSessions → TTY 选择 / 非 TTY 列表
+ * T4 流式 text/tool 行；T5 TTY 权限 y/N；T6 slash 经 submitUserInput
  */
 
 import * as readline from 'node:readline'
@@ -9,12 +10,18 @@ import {
   resumeSession,
   submitUserInput,
   type BoloSession,
+  type SessionEvent,
   type SessionListItem,
   type SessionSnapshot,
 } from '../../core/src/index.ts'
 import type { ChatMessage } from '../../shared/src/index.ts'
 import { createCliProvider } from './provider.ts'
+import { createTtyAskPermission } from './tui/askPermissionTty.ts'
 import { renderWelcomeBanner } from './tui/banner.ts'
+import {
+  createSessionEventPrinter,
+  type SessionEventPrinter,
+} from './tui/formatSessionEvent.ts'
 import { formatSessionStatusLine } from './tui/statusLine.ts'
 
 export type ResumeCliOptions = {
@@ -32,12 +39,15 @@ export type ResumeCliOptions = {
   systemPrompt?: boolean
   /** 覆盖 sessionsDir（测试） */
   sessionsDir?: string
+  /** 原始 SessionEvent（测试钩子；默认已走 T4 打印机） */
+  onSessionEvent?: (e: SessionEvent) => void
+  /** @deprecated 用 onSessionEvent；text 事件时回调 e.text */
   onEvent?: (line: string) => void
   /** 注入 stdout 便于测试 */
   writeOut?: (s: string) => void
   writeErr?: (s: string) => void
   /**
-   * 是否 TTY（选择器）。默认 process.stdin.isTTY。
+   * 是否 TTY（选择器 / 权限 ask）。默认 process.stdin.isTTY。
    * 测试可强制 false。
    */
   isTty?: boolean
@@ -46,6 +56,14 @@ export type ResumeCliOptions = {
    * 未注入时用 readline。
    */
   readChoice?: (prompt: string) => Promise<string>
+  /**
+   * 注入权限问答（测试）；默认 TTY readline / 非 TTY deny
+   */
+  readPermissionAnswer?: (prompt: string) => Promise<string>
+  /**
+   * 非 TTY 权限决策；默认 deny
+   */
+  nonTtyPermission?: 'allow' | 'deny'
 }
 
 export type ResumeCliResult = {
@@ -246,6 +264,52 @@ export function lastAssistantText(
   return ''
 }
 
+/** 挂 session 上的 T4 打印机（CLI 内部） */
+const EVENT_PRINTER = Symbol.for('bolo.cli.eventPrinter')
+
+export function getSessionEventPrinter(
+  session: BoloSession,
+): SessionEventPrinter | undefined {
+  return (session as BoloSession & { [EVENT_PRINTER]?: SessionEventPrinter })[
+    EVENT_PRINTER
+  ]
+}
+
+export function attachSessionEventPrinter(
+  session: BoloSession,
+  printer: SessionEventPrinter,
+): void {
+  ;(session as BoloSession & { [EVENT_PRINTER]?: SessionEventPrinter })[
+    EVENT_PRINTER
+  ] = printer
+}
+
+/**
+ * 组装 CLI onEvent：T4 打印机 + 可选测试钩子
+ */
+export function createCliOnEvent(opts: {
+  writeOut: (s: string) => void
+  writeErr: (s: string) => void
+  onSessionEvent?: (e: SessionEvent) => void
+  onEvent?: (line: string) => void
+}): {
+  printer: SessionEventPrinter
+  onEvent: (e: SessionEvent) => void
+} {
+  const printer = createSessionEventPrinter({
+    writeOut: opts.writeOut,
+    writeErr: opts.writeErr,
+  })
+  return {
+    printer,
+    onEvent: (e) => {
+      printer.onEvent(e)
+      opts.onSessionEvent?.(e)
+      if (e.type === 'text' && e.text) opts.onEvent?.(e.text)
+    },
+  }
+}
+
 /**
  * 仅加载并 resume（不跑 prompt）— 测试与 CLI 共用
  */
@@ -255,7 +319,22 @@ export async function resumeFromIdOrPath(
   const { provider, missingKey, kind, model } = createCliProvider({
     forceMock: opts.forceMock,
   })
+  const writeOut = opts.writeOut ?? ((s) => process.stdout.write(s))
   const writeErr = opts.writeErr ?? ((s) => process.stderr.write(s))
+  const isTty = opts.isTty ?? process.stdin.isTTY === true
+
+  const { printer, onEvent } = createCliOnEvent({
+    writeOut,
+    writeErr,
+    onSessionEvent: opts.onSessionEvent,
+    onEvent: opts.onEvent,
+  })
+
+  const askPermission = createTtyAskPermission({
+    isTty,
+    readAnswer: opts.readPermissionAnswer,
+    nonTtyDecision: opts.nonTtyPermission ?? 'deny',
+  })
 
   const { session, snapshot, path: filePath } = await resumeSession({
     idOrPath: opts.idOrPath,
@@ -266,16 +345,11 @@ export async function resumeFromIdOrPath(
     systemPrompt: opts.systemPrompt,
     create: model ? { model } : undefined,
     autoSave: true,
-    onEvent: (e) => {
-      if (e.type === 'text' && e.text) {
-        opts.onEvent?.(e.text)
-      }
-      if (e.type === 'error') {
-        writeErr(`error: ${e.message}\n`)
-      }
-    },
-    askPermission: async () => 'allow',
+    onEvent,
+    askPermission,
   })
+
+  attachSessionEventPrinter(session, printer)
 
   // 快照加载成功后再提示无 key（callModel 时才会失败）
   if (missingKey) {
@@ -298,45 +372,57 @@ export async function runOnePrompt(
 ): Promise<{ terminalReason: string; assistantText: string }> {
   const writeOut = options?.writeOut ?? ((s) => process.stdout.write(s))
   const writeErr = options?.writeErr ?? ((s) => process.stderr.write(s))
+  const printer = getSessionEventPrinter(session)
+  printer?.beginTurn()
   const before = session.messages.length
-  const result = await submitUserInput(session, prompt)
+  try {
+    const result = await submitUserInput(session, prompt)
 
-  if (result.type === 'empty') {
-    return { terminalReason: 'empty', assistantText: '' }
-  }
+    if (result.type === 'empty') {
+      return { terminalReason: 'empty', assistantText: '' }
+    }
 
-  if (result.type === 'slash') {
-    const msg = result.message
-    writeOut(msg.endsWith('\n') ? msg : `${msg}\n`)
-    return { terminalReason: 'slash', assistantText: msg }
-  }
+    if (result.type === 'slash') {
+      const msg = result.message
+      writeOut(msg.endsWith('\n') ? msg : `${msg}\n`)
+      return { terminalReason: 'slash', assistantText: msg }
+    }
 
-  const terminal = result.terminal
-  const assistantText = lastAssistantText(session.messages, before)
-  if (assistantText) {
-    writeOut(assistantText.endsWith('\n') ? assistantText : `${assistantText}\n`)
+    const terminal = result.terminal
+    const assistantText = lastAssistantText(session.messages, before)
+    // T4：已流式打印 text 则不再整段回放；未流式则整段输出
+    if (assistantText && !printer?.didStreamText()) {
+      writeOut(
+        assistantText.endsWith('\n') ? assistantText : `${assistantText}\n`,
+      )
+    }
+    if (terminal.reason !== 'completed') {
+      const detail = terminal.detail ? `: ${terminal.detail}` : ''
+      writeErr(`warn: turn ended with ${terminal.reason}${detail}\n`)
+    }
+    return { terminalReason: terminal.reason, assistantText }
+  } finally {
+    printer?.endTurn()
   }
-  if (terminal.reason !== 'completed') {
-    const detail = terminal.detail ? `: ${terminal.detail}` : ''
-    writeErr(`warn: turn ended with ${terminal.reason}${detail}\n`)
-  }
-  return { terminalReason: terminal.reason, assistantText }
 }
 
 /**
- * 极简 REPL：一行输入 → submit → 打印
- * 每次 prompt 前打印 T3 状态行。
+ * 极简 REPL：一行输入 → submitUserInput（含 slash）→ 流式/工具行
+ * 每次 prompt 前打印 T3 状态行；权限 ask 共用同一 readline。
  */
 export async function runRepl(
   session: BoloSession,
   options?: {
     writeOut?: (s: string) => void
     writeErr?: (s: string) => void
+    isTty?: boolean
   },
 ): Promise<void> {
   const writeOut = options?.writeOut ?? ((s) => process.stdout.write(s))
   const writeErr = options?.writeErr ?? ((s) => process.stderr.write(s))
-  writeOut('Interactive mode (empty line or /exit to quit). Type /help for commands.\n')
+  writeOut(
+    'Interactive mode (empty line or /exit to quit). Type /help for commands.\n',
+  )
 
   const rl = readline.createInterface({
     input: process.stdin,
@@ -348,6 +434,14 @@ export async function runRepl(
     new Promise<string>((resolve) => {
       rl.question(q, resolve)
     })
+
+  // T5：REPL 内权限与输入共用 readline，避免双 Interface 抢 stdin
+  const isTty = options?.isTty ?? process.stdin.isTTY === true
+  session.askPermission = createTtyAskPermission({
+    isTty,
+    readAnswer: question,
+    nonTtyDecision: 'deny',
+  })
 
   try {
     for (;;) {

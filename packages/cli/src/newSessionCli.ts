@@ -1,5 +1,6 @@
 /**
  * 新会话 CLI：banner + createSessionFromWorkspace + REPL
+ * T4 流式事件行 · T5 TTY 权限 · T6 slash 经 REPL/submitUserInput
  */
 
 import {
@@ -7,11 +8,18 @@ import {
   productionDeps,
   setSessionPersistMeta,
   type BoloSession,
+  type SessionEvent,
 } from '../../core/src/index.ts'
 import { createCliProvider } from './provider.ts'
+import { createTtyAskPermission } from './tui/askPermissionTty.ts'
 import { renderWelcomeBanner } from './tui/banner.ts'
 import { formatSessionStatusLine } from './tui/statusLine.ts'
-import { runOnePrompt, runRepl } from './resumeCli.ts'
+import {
+  attachSessionEventPrinter,
+  createCliOnEvent,
+  runOnePrompt,
+  runRepl,
+} from './resumeCli.ts'
 
 export type NewSessionCliOptions = {
   cwd?: string
@@ -23,6 +31,9 @@ export type NewSessionCliOptions = {
   isTty?: boolean
   skipBanner?: boolean
   plainBanner?: boolean
+  onSessionEvent?: (e: SessionEvent) => void
+  readPermissionAnswer?: (prompt: string) => Promise<string>
+  nonTtyPermission?: 'allow' | 'deny'
 }
 
 export type NewSessionCliResult = {
@@ -51,16 +62,26 @@ export async function runNewSessionCli(
     )
   }
 
+  const { printer, onEvent } = createCliOnEvent({
+    writeOut,
+    writeErr,
+    onSessionEvent: opts.onSessionEvent,
+  })
+
+  const askPermission = createTtyAskPermission({
+    isTty,
+    readAnswer: opts.readPermissionAnswer,
+    nonTtyDecision: opts.nonTtyPermission ?? 'deny',
+  })
+
   const { session } = await createSessionFromWorkspace({
     cwd,
     ensureDefaults: true,
-    askPermission: async () => 'allow',
-    onEvent: (e) => {
-      if (e.type === 'error') {
-        writeErr(`error: ${e.message}\n`)
-      }
-    },
+    askPermission,
+    onEvent,
   })
+
+  attachSessionEventPrinter(session, printer)
 
   // CLI 控制 provider：forceMock / 无 key 时覆盖 workspace 装配结果
   if (opts.forceMock || missingKey) {
@@ -96,7 +117,7 @@ export async function runNewSessionCli(
   }
 
   if (interactive) {
-    await runRepl(session, { writeOut, writeErr })
+    await runRepl(session, { writeOut, writeErr, isTty })
     return { session }
   }
 

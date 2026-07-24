@@ -18,6 +18,9 @@ export {
   buildSessionSummary,
   formatSessionSummary,
   lastAssistantText,
+  createCliOnEvent,
+  attachSessionEventPrinter,
+  getSessionEventPrinter,
   ResumePickerError,
   type ResumeCliOptions,
   type ResumeCliResult,
@@ -33,4 +36,19 @@ export {
   formatSessionStatusLine,
   type StatusLineSession,
 } from './tui/statusLine.ts'
+export {
+  formatToolEventLine,
+  formatSessionEventChunks,
+  createSessionEventPrinter,
+  type CliSessionEvent,
+  type SessionEventPrinter,
+} from './tui/formatSessionEvent.ts'
+export {
+  createTtyAskPermission,
+  parsePermissionAnswer,
+  formatPermissionPrompt,
+  type AskPermissionFn,
+  type AskPermissionRequest,
+  type AskPermissionDecision,
+} from './tui/askPermissionTty.ts'
 export { createCliProvider, NO_KEY_MSG } from './provider.ts'
