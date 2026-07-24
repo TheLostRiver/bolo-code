@@ -90,7 +90,7 @@ P3  GUI / 打磨 / 后置
 | T0 | `docs/TUI.md` + `docs/BRAND.md`（吉祥物定稿） | ✅ |
 | T1 | `renderWelcomeBanner`：**大写 BOLO** + 原创吉祥物 ASCII | ✅ |
 | T2 | `bolo` **无参 TTY** → 新会话 + banner + 输入循环 | ✅ |
-| T3–T6 | 状态行 / 流式工具行 / 权限 y/n / 接 slash | T3 ✅ 状态行；T4–T6 ⬜ |
+| T3–T6 | 状态行 / 流式工具行 / 权限 y/n / 接 slash | ✅（T4–T6：`23b51c7`） |
 | T7 | 与 **RS\*** 合流：resume 路径也显示缩略 banner | ✅（轻量一行） |
 
 吉祥物候选：Bolot / Nyxkit / Pipkin / Glim（**择一**，禁止抄第三方 IP）。
