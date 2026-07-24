@@ -89,6 +89,7 @@ defaults
 | `contextWindowTokens` | `128000` | 用于 `getAutoCompactThreshold` / `getContextPressure`；token 估见 `estimateTokens`（加权启发式，非 tokenizer） |
 | `microcompactEnabled` | `true` | 为 true 时 prepare 链先跑 microcompact（清旧 tool 正文，无 LLM）；`false` 关闭 |
 | `maxPtlRetries` | `3` | callModel / compact summarizer 命中上下文过长时截断最旧轮次再试的次数；`0` 关闭 |
+| `extraSkillRoots` | 省略/`[]` | **可选**旁路 skill 根；默认 **off**；见 SKILLS.md S-PORT-2 |
 
 `createSessionFromWorkspace` 会读上述字段；也可用 `createSession({ autoCompactEnabled, contextWindowTokens, compactSummarizer, microcompact, maxPtlRetries })` 直接开。未显式传 `autoCompactEnabled` 时默认 **开**。
 
