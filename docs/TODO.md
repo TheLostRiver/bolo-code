@@ -131,7 +131,7 @@ P3  GUI / 打磨 / 后置
 | M4 | Electron GUI | ⬜ |
 | T8 | 完整 Ink TUI | ⬜ |
 | S12+ | Fork 继承上下文 / 异步 agent / worktree | ⬜ |
-| 其它 | 真 apply_patch ✅ 最小 · **usage 本地累计** `/cost` ✅ · 企业策略… | 🟡 |
+| 其它 | 真 apply_patch ✅ 最小 · **usage 本地累计** `/cost` ✅ · 会话 always-allow + tool_result 预算 ✅ · 企业策略… | 🟡 |
 
 **不做：** 远程遥测、GrowthBook、抄 Claude 商标/IP。
 

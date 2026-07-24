@@ -67,6 +67,55 @@ async function main() {
   assert(d('plan', 'mcp__x__y').behavior === 'deny', 'mcp plan deny')
   assert(d('bypassPermissions', 'mcp__x__y').behavior === 'allow', 'mcp bypass')
 
+  // session always-allow rules（bypass 后、plan 仍 deny 写）
+  const rules = {
+    alwaysAllowToolNames: ['Bash'],
+    alwaysAllowPrefixes: ['mcp__trusted'],
+  }
+  assert(
+    decidePermission({
+      mode: 'default',
+      toolName: 'Bash',
+      toolInput: { command: 'ls' },
+      cwd,
+      requiresPermission: true,
+      rules,
+    }).behavior === 'allow',
+    'rules: Bash always-allow',
+  )
+  assert(
+    decidePermission({
+      mode: 'default',
+      toolName: 'mcp__trusted__t',
+      toolInput: {},
+      cwd,
+      rules,
+    }).behavior === 'allow',
+    'rules: prefix always-allow',
+  )
+  assert(
+    decidePermission({
+      mode: 'plan',
+      toolName: 'Bash',
+      toolInput: { command: 'ls' },
+      cwd,
+      requiresPermission: true,
+      rules,
+    }).behavior === 'deny',
+    'rules: plan still denies Bash',
+  )
+  assert(
+    decidePermission({
+      mode: 'default',
+      toolName: 'Write',
+      toolInput: { path: 'a.ts' },
+      cwd,
+      requiresPermission: true,
+      rules,
+    }).behavior === 'ask',
+    'rules: unlisted tool still ask',
+  )
+
   console.log('PERMISSION TESTS PASS')
 }
 

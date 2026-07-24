@@ -1,11 +1,12 @@
 /**
- * T5：权限 ask — TTY 下 readline y/N；非 TTY 默认 deny
+ * T5：权限 ask — TTY 下 readline y/N/a；非 TTY 默认 deny
  * 对接 core AskPermissionFn / PermissionRequest 流程。
+ * a = allow always for this tool name this session
  */
 
 import * as readline from 'node:readline'
 
-export type AskPermissionDecision = 'allow' | 'deny'
+export type AskPermissionDecision = 'allow' | 'deny' | 'allow_always'
 
 export type AskPermissionRequest = {
   toolName: string
@@ -18,16 +19,17 @@ export type AskPermissionFn = (
 ) => Promise<AskPermissionDecision>
 
 /**
- * 解析用户回答：y/yes → allow；空或其它 → deny
+ * 解析用户回答：y/yes → allow；a/always → allow_always；空或其它 → deny
  */
 export function parsePermissionAnswer(raw: string): AskPermissionDecision {
   const a = raw.trim().toLowerCase()
   if (a === 'y' || a === 'yes') return 'allow'
+  if (a === 'a' || a === 'always') return 'allow_always'
   return 'deny'
 }
 
 export function formatPermissionPrompt(toolName: string): string {
-  return `Allow ${toolName}? [y/N] `
+  return `Allow ${toolName}? [y/a/N] `
 }
 
 export type CreateTtyAskPermissionOptions = {
@@ -44,7 +46,7 @@ export type CreateTtyAskPermissionOptions = {
 
 /**
  * 创建 askPermission：
- * - TTY：`Allow <tool>? [y/N]`，默认 N
+ * - TTY：`Allow <tool>? [y/a/N]`，默认 N；a = 本会话 always-allow 该工具
  * - 非 TTY：deny（或 nonTtyDecision），不挂起
  */
 export function createTtyAskPermission(

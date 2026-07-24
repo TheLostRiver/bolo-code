@@ -114,6 +114,47 @@ export function isPathInsideCwd(cwd: string, filePath: string): boolean {
   }
 }
 
+/**
+ * 会话级 Always-allow 规则（对照 HC session permission rules；无遥测、不持久化 DSL）。
+ * plan 模式下写/壳/MCP 仍 deny，不受 alwaysAllow 覆盖。
+ */
+export type SessionPermissionRules = {
+  alwaysAllowToolNames: string[]
+  alwaysAllowPrefixes?: string[]
+}
+
+export function createEmptyPermissionRules(): SessionPermissionRules {
+  return { alwaysAllowToolNames: [] }
+}
+
+/** toolName 是否命中 always-allow（精确名或前缀） */
+export function matchesAlwaysAllow(
+  toolName: string,
+  rules?: SessionPermissionRules | null,
+): boolean {
+  if (!rules) return false
+  if (rules.alwaysAllowToolNames.includes(toolName)) return true
+  const prefixes = rules.alwaysAllowPrefixes
+  if (prefixes?.length) {
+    for (const p of prefixes) {
+      if (p && toolName.startsWith(p)) return true
+    }
+  }
+  return false
+}
+
+/** 就地加入会话 always-allow 工具名（去重） */
+export function addAlwaysAllowToolName(
+  rules: SessionPermissionRules,
+  toolName: string,
+): SessionPermissionRules {
+  const name = toolName.trim()
+  if (name && !rules.alwaysAllowToolNames.includes(name)) {
+    rules.alwaysAllowToolNames.push(name)
+  }
+  return rules
+}
+
 export type GateInput = {
   mode: PermissionMode
   toolName: string
@@ -124,6 +165,8 @@ export type GateInput = {
    * 对 unknown 工具更保守。
    */
   requiresPermission?: boolean
+  /** 会话 Always-allow 规则；bypass 之后、plan 仍优先 deny 写操作 */
+  rules?: SessionPermissionRules | null
 }
 
 export type GateResult = {
@@ -135,6 +178,8 @@ export type GateResult = {
 
 /**
  * 纯函数门控 — 对照 HC 模式变换的最小表驱动版
+ *
+ * 顺序：bypass → plan（写仍 deny）→ alwaysAllow rules → acceptEdits / default
  */
 export function decidePermission(input: GateInput): GateResult {
   const category = classifyTool(input.toolName)
@@ -149,6 +194,7 @@ export function decidePermission(input: GateInput): GateResult {
     }
   }
 
+  // plan 优先于 always-allow：规划态仍禁止写/壳/MCP
   if (mode === 'plan') {
     if (category === 'read') {
       return { ...base, behavior: 'allow', reason: 'plan: read allowed' }
@@ -157,6 +203,14 @@ export function decidePermission(input: GateInput): GateResult {
       ...base,
       behavior: 'deny',
       reason: `plan: ${category} not allowed (planning only)`,
+    }
+  }
+
+  if (matchesAlwaysAllow(input.toolName, input.rules)) {
+    return {
+      ...base,
+      behavior: 'allow',
+      reason: 'session always-allow rule',
     }
   }
 

@@ -61,19 +61,20 @@ packages/permissions/
 
 runToolUse 调用 gate，再 hooks/UI
 Session.permissionMode 可切换
+Session.permissionRules：会话 Always-allow（`alwaysAllowToolNames` / 可选 prefixes）；CLI 答 `a` 或 `/allow ToolName` 写入，plan 下写操作仍 deny
 ```
 
 系统提示词（System + Environment）会注入模式行为说明，见 `docs/PROMPT_CATALOG.md` / `docs/SYSTEM_PROMPT.md`。
 
 ## 6. 验收
 
-- gate 单测：四模式 × Bash/Write/Read  
+- gate 单测：四模式 × Bash/Write/Read + always-allow rules  
 - smoke：default 或 bypass 下仍可跑 Bash  
 - 无遥测  
 
 ## 7. 明确不做
 
-- 持久 allow 规则 DSL  
+- 持久 allow 规则 DSL（跨会话）  
 - YOLO 分类器  
 - sandbox 网络策略  
 - 完整 path allowlist 引擎（仅 cwd 内外判断）

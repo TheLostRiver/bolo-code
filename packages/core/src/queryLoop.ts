@@ -21,7 +21,10 @@ import {
   type HooksConfig,
 } from '../../shared/src/index.ts'
 import { createBuiltinTools, type BoloTool } from '../../tools/src/index.ts'
-import type { PermissionMode } from '../../permissions/src/index.ts'
+import type {
+  PermissionMode,
+  SessionPermissionRules,
+} from '../../permissions/src/index.ts'
 import type { LoadedSkill } from '../../skills/src/index.ts'
 import type { QueryDeps } from './deps.ts'
 import type {
@@ -78,6 +81,11 @@ export type QueryLoopParams = {
   deps: QueryDeps
   permissionMode: PermissionMode
   askPermission: AskPermissionFn
+  /** 会话 Always-allow；透传 runTools */
+  permissionRules?: SessionPermissionRules
+  /** tool_result 字符预算 */
+  maxToolResultChars?: number
+  spillTruncatedToolResults?: boolean
   maxTurns?: number
   querySource?: string
   /** 默认内置工具集（HC buildTool 契约） */
@@ -331,6 +339,9 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
       hooks: params.hooks,
       permissionMode: params.permissionMode,
       askPermission: params.askPermission,
+      permissionRules: params.permissionRules,
+      maxToolResultChars: params.maxToolResultChars,
+      spillTruncatedToolResults: params.spillTruncatedToolResults,
       skills: params.skills,
       tools,
       deps: params.deps,

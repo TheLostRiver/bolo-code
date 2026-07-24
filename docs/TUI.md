@@ -50,7 +50,7 @@
 ### T5 权限 ask（TTY）
 
 - `createSession` / CLI 创建 session 时注入 `askPermission`（对接 gate → `PermissionRequest` hook → UI）。
-- **TTY**：readline 问 `Allow <tool>? [y/N]`（默认 N；`y`/`yes` 为 allow）。
+- **TTY**：readline 问 `Allow <tool>? [y/a/N]`（默认 N；`y`/`yes` 为 allow；`a`/`always` 为本会话 always-allow 该工具名）。
 - **非 TTY**：默认 **deny**（不挂起）；测试可注入 `readPermissionAnswer` 或 `nonTtyPermission`。
 - REPL 内权限与 `bolo>` **共用同一 readline**，避免抢 stdin。
 - 实现：`packages/cli/src/tui/askPermissionTty.ts`
@@ -66,7 +66,7 @@
 - `packages/cli/src/tui/banner.ts` — `renderWelcomeBanner`
 - `packages/cli/src/tui/statusLine.ts` — 状态行
 - `packages/cli/src/tui/formatSessionEvent.ts` — 事件格式化
-- `packages/cli/src/tui/askPermissionTty.ts` — 权限 y/N
+- `packages/cli/src/tui/askPermissionTty.ts` — 权限 y/a/N
 - `packages/cli/src/newSessionCli.ts` — 新会话入口
 - `packages/cli/src/resumeCli.ts` — resume / REPL / `runOnePrompt`
 - `packages/cli/src/main.ts` — 路由 bare / resume

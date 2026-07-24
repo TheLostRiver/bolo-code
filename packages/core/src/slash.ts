@@ -5,10 +5,13 @@
  */
 
 import {
+  addAlwaysAllowToolName,
+  createEmptyPermissionRules,
   isPermissionMode,
   PERMISSION_MODES,
   PERMISSION_MODE_META,
   type PermissionMode,
+  type SessionPermissionRules,
 } from '../../permissions/src/index.ts'
 import type { ChatMessage } from '../../shared/src/index.ts'
 import type { CompactSummarizer } from '../../compact/src/index.ts'
@@ -31,6 +34,8 @@ export type SlashSession = {
   messages: ChatMessage[]
   systemPromptSections: string[]
   permissionMode: PermissionMode
+  /** 会话 Always-allow；/allow 读写 */
+  permissionRules?: SessionPermissionRules
   model?: string
   effortLevel?: string
   compactSummarizer?: CompactSummarizer
@@ -258,6 +263,46 @@ function cmdPermissions(
   }
   session.permissionMode = raw
   return { ok: true, message: `permissionMode set to ${raw}` }
+}
+
+function ensurePermissionRules(session: SlashSession): SessionPermissionRules {
+  if (!session.permissionRules) {
+    session.permissionRules = createEmptyPermissionRules()
+  }
+  return session.permissionRules
+}
+
+/**
+ * /allow [ToolName] — 列出会话 always-allow，或添加工具名
+ */
+function cmdAllow(session: SlashSession, args: string): SlashDispatchResult {
+  const rules = ensurePermissionRules(session)
+  const name = args.trim()
+  if (!name) {
+    const names = rules.alwaysAllowToolNames
+    const prefixes = rules.alwaysAllowPrefixes ?? []
+    if (!names.length && !prefixes.length) {
+      return {
+        ok: true,
+        message:
+          'Session always-allow: (empty)\nUsage: /allow ToolName\nTip: at permission prompt, answer a = allow always this session.',
+      }
+    }
+    const lines = ['Session always-allow:']
+    if (names.length) {
+      lines.push(`  tools: ${names.join(', ')}`)
+    }
+    if (prefixes.length) {
+      lines.push(`  prefixes: ${prefixes.join(', ')}`)
+    }
+    lines.push('Add: /allow ToolName')
+    return { ok: true, message: lines.join('\n') }
+  }
+  addAlwaysAllowToolName(rules, name)
+  return {
+    ok: true,
+    message: `always-allow added for this session: ${name}\ncurrent: ${rules.alwaysAllowToolNames.join(', ')}`,
+  }
 }
 
 async function cmdRules(
@@ -515,6 +560,12 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     summary: 'Show or set permission mode (four tiers)',
     usage: '[mode]',
     run: cmdPermissions,
+  },
+  {
+    name: 'allow',
+    summary: 'List or add session always-allow tool names',
+    usage: '[ToolName]',
+    run: cmdAllow,
   },
   {
     name: 'rules',

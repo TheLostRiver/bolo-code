@@ -148,6 +148,38 @@ async function main() {
   assert(custom.isConcurrencySafe({}) === false, 'default not concurrent')
   assert(custom.requiresPermission === true, 'default requires permission')
 
+  // C6: 超长 tool_result 截断
+  const longOut = 'x'.repeat(120)
+  const bigTool = buildTool({
+    name: 'BigOut',
+    description: 'long',
+    requiresPermission: false,
+    isConcurrencySafe: () => true,
+    isReadOnly: () => true,
+    inputJSONSchema: { type: 'object', properties: {} },
+    async call() {
+      return { ok: true, output: longOut }
+    },
+  })
+  const bigRes = await runToolUse(
+    { id: 'big1', name: 'BigOut', input: {} },
+    {
+      sessionId: 's',
+      cwd: process.cwd(),
+      hooks: {},
+      permissionMode: 'bypassPermissions',
+      askPermission: async () => 'allow',
+      tools: [bigTool],
+      maxToolResultChars: 50,
+      spillTruncatedToolResults: false,
+    },
+  )
+  const bigContent = bigRes.toolResultMessage.content
+  assert(bigContent.includes('truncated'), 'long output truncated marker')
+  assert(bigContent.includes('full result not stored in transcript'), 'trunc note')
+  assert(bigContent.length < longOut.length, 'content shorter than full')
+  assert(bigContent.startsWith('x'.repeat(50)), 'keeps first maxChars')
+
   console.log('TOOL CALLING ALIGN TESTS PASS')
 }
 

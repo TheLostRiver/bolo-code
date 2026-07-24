@@ -28,6 +28,9 @@ export type RunToolsParams = {
   hooks: HooksConfig
   permissionMode: import('../../permissions/src/index.ts').PermissionMode
   askPermission: AskPermissionFn
+  permissionRules?: import('../../permissions/src/index.ts').SessionPermissionRules
+  maxToolResultChars?: number
+  spillTruncatedToolResults?: boolean
   skills?: LoadedSkill[]
   tools?: readonly BoloTool[]
   /** 供 Agent 工具启动子 loop */
@@ -85,6 +88,9 @@ export async function runTools(params: RunToolsParams): Promise<RunToolsResult> 
     hooks: params.hooks,
     permissionMode: params.permissionMode,
     askPermission: params.askPermission,
+    permissionRules: params.permissionRules,
+    maxToolResultChars: params.maxToolResultChars,
+    spillTruncatedToolResults: params.spillTruncatedToolResults,
     skills: params.skills,
     tools,
     deps: params.deps,

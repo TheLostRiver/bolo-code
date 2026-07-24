@@ -53,8 +53,10 @@ import {
   type ActiveAgentDefinitions,
 } from './subagent.ts'
 import {
+  createEmptyPermissionRules,
   parsePermissionMode,
   type PermissionMode,
+  type SessionPermissionRules,
 } from '../../permissions/src/index.ts'
 import {
   assembleSessionSystemPrompt,
@@ -112,7 +114,11 @@ export {
 } from './sessionUsage.ts'
 export { runTools } from './toolOrchestration.ts'
 export { runToolUse } from './toolExecution.ts'
-export type { PermissionMode } from '../../permissions/src/index.ts'
+export type { PermissionMode, SessionPermissionRules } from '../../permissions/src/index.ts'
+export {
+  DEFAULT_MAX_TOOL_RESULT_CHARS,
+  truncateToolResultOutput,
+} from './toolExecution.ts'
 export {
   loadBoloMd,
   getSystemPrompt,
@@ -166,6 +172,9 @@ export {
   PERMISSION_MODE_META,
   getNextPermissionMode,
   decidePermission,
+  createEmptyPermissionRules,
+  matchesAlwaysAllow,
+  addAlwaysAllowToolName,
 } from '../../permissions/src/index.ts'
 export {
   SESSION_SNAPSHOT_VERSION,
@@ -244,6 +253,10 @@ export type CreateSessionOptions = {
   /** 对照 HC PermissionMode；默认 default（请求批准） */
   permissionMode?: PermissionMode
   askPermission?: AskPermissionFn
+  /** 会话 Always-allow 规则；默认空表 */
+  permissionRules?: SessionPermissionRules
+  /** tool_result 写入 transcript 的字符上限；默认 50_000 */
+  maxToolResultChars?: number
   compactSummarizer?: CompactSummarizer
   /** 会话 skill 全文表；默认不进 system，仅 Skill 工具按需加载 */
   skills?: LoadedSkill[]
@@ -304,6 +317,10 @@ export type BoloSession = {
   deps: QueryDeps
   permissionMode: PermissionMode
   askPermission: AskPermissionFn
+  /** 会话 Always-allow（/allow 与 CLI `a`） */
+  permissionRules: SessionPermissionRules
+  /** tool_result 字符预算（C6） */
+  maxToolResultChars: number
   compactSummarizer?: CompactSummarizer
   skills: LoadedSkill[]
   model?: string
@@ -423,6 +440,8 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
     // smoke 可注入；default 模式下 ask 会走到这里。未注入则 deny 更安全；
     // 测试/smoke 显式传 allow。
     askPermission: opts.askPermission ?? (async () => 'deny'),
+    permissionRules: opts.permissionRules ?? createEmptyPermissionRules(),
+    maxToolResultChars: opts.maxToolResultChars ?? 50_000,
     compactSummarizer: opts.compactSummarizer,
     skills,
     model: opts.model,
@@ -698,6 +717,8 @@ export async function submitPrompt(
     deps: session.deps,
     permissionMode: session.permissionMode,
     askPermission: session.askPermission,
+    permissionRules: session.permissionRules,
+    maxToolResultChars: session.maxToolResultChars,
     skills: session.skills,
     tools: session.tools ?? createDefaultTools(session.agentDefinitions),
     agentDefinitions: session.agentDefinitions,

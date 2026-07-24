@@ -22,6 +22,7 @@ import {
 import {
   isPermissionMode,
   type PermissionMode,
+  type SessionPermissionRules,
 } from '../../permissions/src/index.ts'
 import type { QueryDeps } from './deps.ts'
 import { queryLoop, type QueryLoopEvent, type Terminal } from './queryLoop.ts'
@@ -414,6 +415,9 @@ export type RunSubagentParams = {
   deps: QueryDeps
   permissionMode: PermissionMode
   askPermission: AskPermissionFn
+  /** 父会话 always-allow；子 agent 共享引用 */
+  permissionRules?: SessionPermissionRules
+  maxToolResultChars?: number
   /** 父侧全量工具（含 Agent）；内部会 resolve 并去掉 Agent */
   allTools?: readonly BoloTool[]
   skills?: LoadedSkill[]
@@ -511,6 +515,8 @@ export async function runSubagent(
       deps: params.deps,
       permissionMode,
       askPermission: params.askPermission,
+      permissionRules: params.permissionRules,
+      maxToolResultChars: params.maxToolResultChars,
       skills: params.skills,
       tools: resolvedTools,
       maxTurns,
@@ -591,6 +597,8 @@ export type SubagentParentContext = {
   deps: QueryDeps
   permissionMode: PermissionMode
   askPermission: AskPermissionFn
+  permissionRules?: SessionPermissionRules
+  maxToolResultChars?: number
   allTools: readonly BoloTool[]
   skills?: LoadedSkill[]
   /** 会话 active agent 定义（含 .bolo/agents） */
@@ -688,6 +696,8 @@ export function createAgentTool(
         deps: parent.deps,
         permissionMode: parent.permissionMode,
         askPermission: parent.askPermission,
+        permissionRules: parent.permissionRules,
+        maxToolResultChars: parent.maxToolResultChars,
         allTools: parent.allTools,
         skills: parent.skills,
         signal: parent.signal ?? ctx.signal,
@@ -735,6 +745,8 @@ export async function spawnSubagent(
     deps: QueryDeps
     permissionMode: PermissionMode
     askPermission: AskPermissionFn
+    permissionRules?: SessionPermissionRules
+    maxToolResultChars?: number
     skills?: LoadedSkill[]
     agentDefinitions?: ActiveAgentDefinitions
     onEvent?: (e: QueryLoopEvent) => void
@@ -754,6 +766,8 @@ export async function spawnSubagent(
     deps: parent.deps,
     permissionMode: parent.permissionMode,
     askPermission: parent.askPermission,
+    permissionRules: parent.permissionRules,
+    maxToolResultChars: parent.maxToolResultChars,
     allTools: createDefaultTools(parent.agentDefinitions),
     skills: parent.skills,
     onEvent: parent.onEvent,

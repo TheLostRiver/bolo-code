@@ -11,12 +11,13 @@
 | `inputSchema` / JSON Schema | `inputJSONSchema` + `validateAgainstJsonSchema` |
 | `isConcurrencySafe` / `isReadOnly` | 每工具声明；默认 fail-closed |
 | `checkPermissions` 工具级 | 有默认 + 可覆盖 |
-| `runToolUse` 顺序 | find → schema → validate → Pre → Gate → call → Post |
+| `runToolUse` 顺序 | find → schema → validate → Pre → Gate → call → **truncate** → Post |
 | 未知工具 / 校验错误 | `<tool_use_error>…</tool_use_error>` |
 | `partitionToolCalls` | 只读批并发、写串行 |
 | Glob / Grep 真实现 | `createGlobTool` / `createGrepTool` |
 | Skill 按需 | `Skill` 工具 + catalog |
 | apply_patch | 真补丁：`*** Begin Patch` / Add|Update|Delete File，或简易 unified diff；`resolveSafe` 不逃出 cwd |
+| tool_result 字符预算 | 默认 50_000；超长截断并注 `…(truncated N chars; full result not stored in transcript)`；可选 spill 到 `.bolo/sessions/tool-results/` |
 
 ## 2. 管道
 
@@ -26,9 +27,10 @@ tool_use block
   → validateAgainstJsonSchema
   → validateInput?
   → PreToolUse hooks
-  → decidePermission(mode) + tool.checkPermissions
-  → PermissionRequest hooks / UI if ask
+  → decidePermission(mode, rules?) + tool.checkPermissions
+  → PermissionRequest hooks / UI if ask（a = session always-allow）
   → tool.call
+  → truncate tool_result if over maxToolResultChars
   → PostToolUse hooks
   → role:tool message
 ```
@@ -44,7 +46,6 @@ Bash, Write, apply_patch → false → 串行
 
 - 完整 zod 与复杂 schema  
 - StreamingToolExecutor（边流边跑）  
-- maxResultSizeChars 落盘预览  
 - MCP 真 call 注册进同一 Tools 列表  
 - UI renderToolResult  
 

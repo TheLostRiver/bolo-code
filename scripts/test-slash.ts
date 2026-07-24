@@ -145,6 +145,14 @@ async function main() {
   const perm = await dispatchSlashCommand(session, 'permissions', 'default')
   assert(perm.ok && session.permissionMode === 'default', 'permissions set')
 
+  // /allow
+  const allow0 = await dispatchSlashCommand(session, 'allow', '')
+  assert(allow0.ok && allow0.message.includes('always-allow'), 'allow list empty')
+  const allow1 = await dispatchSlashCommand(session, 'allow', 'Bash')
+  assert(allow1.ok && session.permissionRules?.alwaysAllowToolNames.includes('Bash'), 'allow add Bash')
+  const allow2 = await dispatchSlashCommand(session, 'allow', '')
+  assert(allow2.message.includes('Bash'), 'allow list has Bash')
+
   // /clear — 保留 system
   const sysBefore = session.systemPromptSections.length
   const clear = await submitUserInput(session, '/clear')

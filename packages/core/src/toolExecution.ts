@@ -4,14 +4,18 @@
  * 顺序：
  *   findTool → inputSchema validate → validateInput?
  *   → PreToolUse → PermissionGate(mode) + tool.checkPermissions
- *   → hooks/UI → call → PostToolUse → tool_result
+ *   → hooks/UI → call → truncate tool_result → PostToolUse → tool_result
  *
  * 无遥测。
  */
 
+import { promises as fs } from 'node:fs'
+import path from 'node:path'
 import {
+  addAlwaysAllowToolName,
   decidePermission,
   type PermissionMode,
+  type SessionPermissionRules,
 } from '../../permissions/src/index.ts'
 import { runHooks } from '../../hooks/src/index.ts'
 import { nowIso, type ChatMessage, type HooksConfig } from '../../shared/src/index.ts'
@@ -26,6 +30,48 @@ import {
 } from '../../tools/src/index.ts'
 import type { QueryDeps } from './deps.ts'
 import type { QueryLoopEvent } from './queryLoop.ts'
+
+/** 单条 tool_result 写入 transcript 的字符上限（C6 类；可配置） */
+export const DEFAULT_MAX_TOOL_RESULT_CHARS = 50_000
+
+/**
+ * 超长 tool 输出截断；对照 HC maxResultSizeChars 语义（无遥测）。
+ * 后缀说明完整结果未进 transcript。
+ */
+export function truncateToolResultOutput(
+  output: string,
+  maxChars: number = DEFAULT_MAX_TOOL_RESULT_CHARS,
+): { text: string; truncated: boolean; omittedChars: number } {
+  const limit = Math.max(0, maxChars)
+  if (output.length <= limit) {
+    return { text: output, truncated: false, omittedChars: 0 }
+  }
+  const omitted = output.length - limit
+  return {
+    text:
+      output.slice(0, limit) +
+      `\n…(truncated ${omitted} chars; full result not stored in transcript)`,
+    truncated: true,
+    omittedChars: omitted,
+  }
+}
+
+async function maybeSpillTruncatedToolResult(opts: {
+  cwd: string
+  toolUseId: string
+  fullOutput: string
+}): Promise<string | undefined> {
+  try {
+    const dir = path.join(opts.cwd, '.bolo', 'sessions', 'tool-results')
+    await fs.mkdir(dir, { recursive: true })
+    const safeId = opts.toolUseId.replace(/[^a-zA-Z0-9._-]+/g, '_')
+    const filePath = path.join(dir, `${safeId || 'tool'}.txt`)
+    await fs.writeFile(filePath, opts.fullOutput, 'utf8')
+    return filePath
+  } catch {
+    return undefined
+  }
+}
 
 export type ToolUseBlock = {
   id: string
@@ -49,11 +95,14 @@ export type ToolExecutionEvent =
       isError?: boolean
     }
 
+/** UI/CLI 权限应答：allow_always = 本会话记住该 tool 名 */
+export type AskPermissionDecision = 'allow' | 'deny' | 'allow_always'
+
 export type AskPermissionFn = (req: {
   toolName: string
   toolInput: unknown
   toolUseId: string
-}) => Promise<'allow' | 'deny'>
+}) => Promise<AskPermissionDecision>
 
 export type RunToolUseContext = {
   sessionId: string
@@ -61,6 +110,15 @@ export type RunToolUseContext = {
   hooks: HooksConfig
   permissionMode: PermissionMode
   askPermission: AskPermissionFn
+  /** 会话 Always-allow；ask 选 a 时就地写入 */
+  permissionRules?: SessionPermissionRules
+  /** tool_result 字符预算；默认 DEFAULT_MAX_TOOL_RESULT_CHARS */
+  maxToolResultChars?: number
+  /**
+   * 截断后是否把全文落到 `.bolo/sessions/tool-results/<id>.txt`。
+   * 默认 true。
+   */
+  spillTruncatedToolResults?: boolean
   skills?: LoadedSkill[]
   /** 默认：内置 + Agent */
   tools?: readonly BoloTool[]
@@ -240,6 +298,7 @@ export async function runToolUse(
     toolInput,
     cwd: ctx.cwd,
     requiresPermission: tool.requiresPermission,
+    rules: ctx.permissionRules,
   })
   emit(ctx, {
     type: 'permission_decision',
@@ -258,8 +317,10 @@ export async function runToolUse(
   if (toolPerm.behavior === 'deny') {
     finalBehavior = 'deny'
   } else if (toolPerm.behavior === 'ask' && finalBehavior === 'allow') {
-    // 工具要求 ask 时不能比全局更松
-    finalBehavior = 'ask'
+    // 工具要求 ask 时不能比全局更松（会话 always-allow 仍可被工具硬 deny 挡住）
+    if (!gate.reason.includes('always-allow')) {
+      finalBehavior = 'ask'
+    }
   }
 
   if (finalBehavior === 'deny') {
@@ -319,7 +380,14 @@ export async function runToolUse(
         toolInput,
         toolUseId,
       })
-      finalBehavior = user
+      if (user === 'allow_always') {
+        if (ctx.permissionRules) {
+          addAlwaysAllowToolName(ctx.permissionRules, name)
+        }
+        finalBehavior = 'allow'
+      } else {
+        finalBehavior = user
+      }
     }
 
     if (finalBehavior === 'deny') {
@@ -375,6 +443,8 @@ export async function runToolUse(
               deps: ctx.deps,
               permissionMode: ctx.permissionMode,
               askPermission: ctx.askPermission,
+              permissionRules: ctx.permissionRules,
+              maxToolResultChars: ctx.maxToolResultChars,
               allTools: tools,
               skills: ctx.skills,
               agentDefinitions: ctx.agentDefinitions,
@@ -393,10 +463,28 @@ export async function runToolUse(
     }
   }
 
-  const content =
+  let content =
     result.isError && !result.output.includes('tool_use_error')
       ? formatToolUseError(result.output)
       : result.output
+
+  // --- tool_result 字符预算（C6）---
+  const maxChars = ctx.maxToolResultChars ?? DEFAULT_MAX_TOOL_RESULT_CHARS
+  const trunc = truncateToolResultOutput(content, maxChars)
+  if (trunc.truncated) {
+    let note = trunc.text
+    if (ctx.spillTruncatedToolResults !== false) {
+      const spillPath = await maybeSpillTruncatedToolResult({
+        cwd: ctx.cwd,
+        toolUseId,
+        fullOutput: content,
+      })
+      if (spillPath) {
+        note += `\n[full result: ${spillPath}]`
+      }
+    }
+    content = note
+  }
 
   emit(ctx, {
     type: 'tool_end',

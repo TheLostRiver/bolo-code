@@ -118,7 +118,7 @@ async function main() {
   assert(parsePermissionAnswer('') === 'deny', 'empty deny')
   assert(parsePermissionAnswer('n') === 'deny', 'n deny')
   assert(
-    formatPermissionPrompt('Bash') === 'Allow Bash? [y/N] ',
+    formatPermissionPrompt('Bash') === 'Allow Bash? [y/a/N] ',
     'prompt format',
   )
 
@@ -142,6 +142,17 @@ async function main() {
     toolUseId: 'u2',
   })
   assert(a === 'allow', 'tty y allow')
+
+  const alwaysFn = createTtyAskPermission({
+    isTty: true,
+    readAnswer: async () => 'a',
+  })
+  const al = await alwaysFn({
+    toolName: 'Bash',
+    toolInput: {},
+    toolUseId: 'u2a',
+  })
+  assert(al === 'allow_always', 'tty a allow_always')
 
   const noFn = createTtyAskPermission({
     isTty: true,
