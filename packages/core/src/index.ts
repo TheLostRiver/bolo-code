@@ -370,6 +370,15 @@ export type BoloSession = {
   backgroundAgents?: import('./subagent.ts').BackgroundAgentStore
   /** 已连接的 MCP stdio 进程；endSession 时关闭 */
   mcpConnections?: ConnectedMcpServer[]
+  /**
+   * workspace 发现的插件列表（PL1）；供 /plugins。
+   * 不参与运行时 hot-reload。
+   */
+  plugins?: Array<{
+    manifest: { id: string; name?: string; version?: string }
+    root: string
+    scope: string
+  }>
   onEvent: (e: SessionEvent) => void
 }
 
@@ -665,6 +674,7 @@ export async function createSessionFromWorkspace(
 
   // 全文注册表给 Skill 工具（catalog 已在 systemPromptSections）
   session.skills = workspace.skills
+  session.plugins = workspace.plugins
   // tools 已在 createSession 按 agentDefinitions 装配；MCP 再追加
 
   let mcp: ConnectMcpResult | undefined

@@ -62,6 +62,12 @@ export type SlashSession = {
     name: string
     tools?: Array<{ name: string; description?: string }>
   }>
+  /** workspace 插件；/plugins · /doctor */
+  plugins?: Array<{
+    manifest: { id: string; name?: string; version?: string }
+    root?: string
+    scope?: string
+  }>
 }
 
 export type ParseSlashResult =
@@ -226,6 +232,7 @@ function cmdDoctor(session: SlashSession, _args: string): SlashDispatchResult {
     ? Object.keys(session.agentDefinitions).length
     : 0
   const mcpCount = session.mcpConnections?.length ?? 0
+  const pluginsCount = session.plugins?.length ?? 0
   const autoCompact =
     session.autoCompactEnabled === true ? 'on' : 'off'
   const maxPtl =
@@ -245,6 +252,7 @@ function cmdDoctor(session: SlashSession, _args: string): SlashDispatchResult {
     `tools:           ${toolsCount}`,
     `skills:          ${skillsCount}`,
     `agent types:     ${agentTypesCount}`,
+    `plugins:         ${pluginsCount}`,
   ]
   lines.push(`mcp connections: ${mcpCount}`)
   lines.push(
@@ -287,6 +295,26 @@ function cmdMcp(session: SlashSession, args: string): SlashDispatchResult {
     lines.push(`  ${s.name}  tools=${n}`)
   }
   lines.push('Use /mcp tools for full tool names (mcp__server__tool).')
+  return { ok: true, message: lines.join('\n') }
+}
+
+function cmdPlugins(session: SlashSession, _args: string): SlashDispatchResult {
+  const plugins = session.plugins ?? []
+  if (!plugins.length) {
+    return {
+      ok: true,
+      message:
+        'plugins: (none loaded)\nPlace plugins under ~/.bolo/plugins/<id>/ or .bolo/plugins/<id>/ with bolo.plugin.json (PL1 local only; no marketplace).',
+    }
+  }
+  const lines = [`plugins (${plugins.length}):`]
+  for (const p of plugins) {
+    const id = p.manifest?.id ?? '(unknown)'
+    const name = p.manifest?.name ? ` — ${p.manifest.name}` : ''
+    const ver = p.manifest?.version ? ` v${p.manifest.version}` : ''
+    const scope = p.scope ? ` [${p.scope}]` : ''
+    lines.push(`  ${id}${ver}${scope}${name}`)
+  }
   return { ok: true, message: lines.join('\n') }
 }
 
@@ -655,6 +683,11 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     summary: 'List connected MCP servers or tools',
     usage: '[tools]',
     run: cmdMcp,
+  },
+  {
+    name: 'plugins',
+    summary: 'List loaded local plugins (PL1)',
+    run: cmdPlugins,
   },
   {
     name: 'cost',

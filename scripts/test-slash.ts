@@ -105,6 +105,10 @@ async function main() {
       doctor.message.includes('mcp connections:'),
       'doctor always shows mcp line',
     )
+    assert(
+      doctor.message.includes('plugins:'),
+      'doctor has plugins count',
+    )
     assert(doctor.message.includes('usage:'), 'doctor has usage line')
     assert(doctor.message.includes('autoCompact:'), 'doctor has autoCompact')
     assert(doctor.message.includes('maxPtlRetries:'), 'doctor has maxPtlRetries')
@@ -148,6 +152,30 @@ async function main() {
     'mcp tools namespaced',
   )
   session.mcpConnections = []
+
+  // /plugins
+  const pluginsNone = await submitUserInput(session, '/plugins')
+  assert(pluginsNone.type === 'slash', 'plugins slash')
+  if (pluginsNone.type === 'slash') {
+    assert(
+      pluginsNone.message.includes('none') ||
+        pluginsNone.message.includes('plugin'),
+      'plugins empty message',
+    )
+  }
+  session.plugins = [
+    {
+      manifest: { id: 'demo-plugin', name: 'Demo', version: '0.1.0' },
+      scope: 'project',
+    },
+  ]
+  const pluginsList = await submitUserInput(session, '/plugins')
+  assert(
+    pluginsList.type === 'slash' &&
+      pluginsList.message.includes('demo-plugin'),
+    'plugins list id',
+  )
+  session.plugins = []
 
   // /cost 初始为空
   const cost0 = await submitUserInput(session, '/cost')
