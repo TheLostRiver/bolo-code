@@ -36,6 +36,11 @@ export type McpServerConfig = {
    * @deprecated 优先 listTools
    */
   tools?: { name: string; description?: string }[]
+  /**
+   * M-GEN-8：配置来源（诊断 / 合并）。
+   * user | project | plugin — 不参与协议 wire。
+   */
+  scope?: 'user' | 'project' | 'plugin'
 }
 
 export type McpToolRegistration = {

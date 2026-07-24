@@ -25,6 +25,13 @@ export {
   formatMcpServerConfigSummary,
   type McpConfigIssue,
 } from './validate.ts'
+export {
+  mergeMcpServerLayers,
+  mergeMcpServerLists,
+  tagMcpServerScope,
+  type McpServerLayer,
+  type MergeMcpServerLayersResult,
+} from './merge.ts'
 export type {
   McpClient,
   McpToolDef,

@@ -7,6 +7,8 @@
  * 非市场、非远程安装。
  *
  * 后写覆盖前写；同名 mcp 冲突时记录 error 并覆盖。
+ * MCP 全量合并序见 `mergeMcpServerLayers` / loadWorkspace（M-GEN-8）：
+ * user → project → plugins（后层赢）。
  */
 
 import { promises as fs } from 'node:fs'
@@ -269,6 +271,7 @@ export async function mergePluginContributions(
         errors.push(`plugin ${plugin.manifest.id} mcp: ${w}`)
       }
       for (const s of loaded.servers) {
+        const tagged = { ...s, scope: 'plugin' as const }
         if (seenMcp.has(s.name)) {
           errors.push(
             `mcp server name conflict: ${s.name} (plugin ${plugin.manifest.id}) — override`,
@@ -276,7 +279,7 @@ export async function mergePluginContributions(
           mcpServers = mcpServers.filter((x) => x.name !== s.name)
         }
         seenMcp.add(s.name)
-        mcpServers.push(s)
+        mcpServers.push(tagged)
       }
     }
 

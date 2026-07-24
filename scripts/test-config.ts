@@ -107,6 +107,7 @@ async function main() {
   assert(ws.config.provider?.baseUrl === 'https://user.example/v1', 'user base kept')
   assert(ws.permissionMode === 'plan', 'project permissionMode')
   assert(ws.mcpServers.find((s) => s.name === 'u')?.args?.[0] === 'project-wins', 'mcp project wins')
+  assert(ws.mcpServers.find((s) => s.name === 'u')?.scope === 'project', 'mcp u scope project')
   assert(ws.mcpServers.some((s) => s.name === 'p'), 'project mcp present')
   assert(ws.skills.some((s) => s.meta.id === 'demo'), 'user skill found')
   assert(
@@ -118,6 +119,45 @@ async function main() {
     'plugin skill merged into catalog',
   )
   assert(ws.providerKind === 'mock', 'no key → mock')
+
+  // M-GEN-8：plugin mcp 覆盖 project 同名
+  const pluginRoot2 = path.join(
+    getProjectBoloDir(projectCwd),
+    'plugins',
+    'mcp-plugin',
+  )
+  await fs.mkdir(pluginRoot2, { recursive: true })
+  await writeJsonFile(path.join(pluginRoot2, 'bolo.plugin.json'), {
+    id: 'mcp-plugin',
+    name: 'MCP Plugin',
+    version: '0.0.1',
+    contributes: { mcpServers: 'mcp.json' },
+  })
+  await writeJsonFile(path.join(pluginRoot2, 'mcp.json'), {
+    mcpServers: {
+      u: { command: 'echo', args: ['plugin-wins'], tools: [{ name: 'tp' }] },
+      fromPlug: { command: 'true', tools: [{ name: 'x' }] },
+    },
+  })
+  const ws2 = await loadWorkspace({ cwd: projectCwd })
+  assert(
+    ws2.mcpServers.find((s) => s.name === 'u')?.args?.[0] === 'plugin-wins',
+    'plugin mcp overrides project',
+  )
+  assert(
+    ws2.mcpServers.find((s) => s.name === 'u')?.scope === 'plugin',
+    'plugin scope on u',
+  )
+  assert(
+    ws2.mcpServers.some((s) => s.name === 'fromPlug' && s.scope === 'plugin'),
+    'plugin-only server present',
+  )
+  assert(
+    (ws2.mcpConfigWarnings ?? []).some((w) =>
+      w.includes('overridden') && w.includes('u'),
+    ),
+    'override warning recorded',
+  )
 
   // openai-responses kind 经 resolveProviderFromConfig 识别
   process.env.OPENAI_API_KEY = 'sk-test-responses'

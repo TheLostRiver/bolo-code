@@ -181,7 +181,7 @@ PL-SPEC 出口 ────────► IMPORT-*（可选）
 | **M-GEN-5** | **list_changed 回归** | stdio/sse 热刷新绿；http 仅响应内嵌 SSE 文档+测 | ✅ 最小 |
 | **M-GEN-6** | **env/headers `${VAR}` 插值最小** | 可选；无远程脚本执行 | ⬜（D2） |
 | **M-GEN-7** | **OAuth / headersHelper** | 浏览器流 / 刷新令牌 | ⬜ **后置** |
-| **M-GEN-8** | 插件 mcp 与 `mcp.json` **合并序** | 文档 + 测；冲突策略 | ⬜ |
+| **M-GEN-8** | 插件 mcp 与 `mcp.json` **合并序** | `mergeMcpServerLayers` · scope 标签 · override warnings · 测 | ✅ 最小 |
 
 **出口：** stdio/http/sse + resources/prompts + list_changed 文档/测一致；配置可诊；无秘钥泄漏；OAuth 可仍 ⬜。
 
@@ -230,7 +230,7 @@ PL-SPEC 出口 ────────► IMPORT-*（可选）
 | 序 | 刀 | 切片 |
 |----|----|------|
 | 1 | Skill 可移植 | ~~S-PORT-0..8~~ ✅ 最小出口 |
-| 2 | MCP 诊断卫生 | ~~M-GEN-0/1/2/3~~ ✅ → **M-GEN-4/5** 或 **M-GEN-8** |
+| 2 | MCP 诊断卫生 | ~~M-GEN-0..5~~ ✅ → **M-GEN-8** 或 **M-GEN-6** |
 | 3 | MCP 诊断卫生 | M-GEN-0 · M-GEN-1 · M-GEN-2 · M-GEN-3 |
 | 4 | MCP 加固 | M-GEN-4 · M-GEN-5 · M-GEN-8（± M-GEN-6） |
 | 5 | Bolo Spec | PL-SPEC-0 · PL-SPEC-1 · PL-SPEC-2 · PL-SPEC-3 · PL-SPEC-4 |
@@ -292,7 +292,7 @@ PL-SPEC 出口 ────────► IMPORT-*（可选）
 
 > **Skill 先做成可移植内容标准；MCP 做成稳、可诊、无秘钥泄漏的协议客户端；插件始终以 `bolo.*` 为一等规范。官方市场与外来完整运行时兼容从长计议，且永不绑 Claude/Codex 商店。**
 
-**默认下一刀：** **M-GEN-4/5**（resources/prompts 加固 · list_changed 回归）或 **M-GEN-8**（插件 mcp 合并序）。  
+**默认下一刀：** **M-GEN-8**（插件 mcp 与 `mcp.json` 合并序）或 **M-GEN-6**（`${VAR}` 插值，需确认）。  
 
 **Skill 专题：** S-PORT-0..8 最小出口 ✅。  
-**MCP：** M-GEN-0/1/2/3 最小 ✅（边界 · 校验 · 诊断 · headers 脱敏）。
+**MCP：** M-GEN-0..5 最小 ✅（边界·校验·诊断·脱敏·resources/prompts·list_changed）。

@@ -5,6 +5,7 @@
 
 import type { HooksConfig } from '../../shared/src/index.ts'
 import type { PermissionMode } from '../../permissions/src/index.ts'
+import path from 'node:path'
 import {
   discoverSkills,
   mergeSkillsByPrecedence,
@@ -12,6 +13,8 @@ import {
 } from '../../skills/src/index.ts'
 import {
   loadMcpConfigFileDetailed,
+  mergeMcpServerLayers,
+  tagMcpServerScope,
   type McpServerConfig,
 } from '../../mcp/src/index.ts'
 import {
@@ -64,16 +67,6 @@ function mergeHooks(a: HooksConfig, b: HooksConfig): HooksConfig {
     out[k] = [...(out[k] ?? []), ...groups]
   }
   return out
-}
-
-function mergeMcpServers(
-  user: McpServerConfig[],
-  project: McpServerConfig[],
-): McpServerConfig[] {
-  const map = new Map<string, McpServerConfig>()
-  for (const s of user) map.set(s.name, s)
-  for (const s of project) map.set(s.name, s)
-  return [...map.values()]
 }
 
 /**
@@ -145,7 +138,21 @@ export async function loadWorkspace(
     ...userMcp.warnings.map((w) => `user mcp: ${w}`),
     ...projectMcp.warnings.map((w) => `project mcp: ${w}`),
   ]
-  let mcpServers = mergeMcpServers(userMcp.servers, projectMcp.servers)
+
+  // M-GEN-8：user → project → plugins（后层赢）；同名覆盖记 warning
+  const mcpLayers: Array<{
+    label: string
+    servers: McpServerConfig[]
+  }> = [
+    {
+      label: 'user',
+      servers: tagMcpServerScope(userMcp.servers, 'user'),
+    },
+    {
+      label: 'project',
+      servers: tagMcpServerScope(projectMcp.servers, 'project'),
+    },
+  ]
 
   let skills = await discoverSkills({
     cwd,
@@ -162,18 +169,37 @@ export async function loadWorkspace(
       { dir: user.pluginsDir, scope: 'user' },
       { dir: project.pluginsDir, scope: 'project' },
     ])
+    // 每插件一层，label=plugin:<id>（project 插件后 discover，可盖 user 插件）
+    for (const plugin of plugins) {
+      const rel = plugin.manifest.contributes?.mcpServers
+      if (!rel) continue
+      const mcpPath = path.resolve(plugin.root, rel)
+      const loaded = await loadMcpConfigFileDetailed(mcpPath)
+      for (const w of loaded.warnings) {
+        mcpConfigWarnings.push(`plugin ${plugin.manifest.id} mcp: ${w}`)
+      }
+      mcpLayers.push({
+        label: `plugin:${plugin.manifest.id}`,
+        servers: tagMcpServerScope(loaded.servers, 'plugin'),
+      })
+    }
+
     pluginMerge = await mergePluginContributions(plugins, {
       skills: [],
       hooks: {},
+      // MCP 已在上方分层合并；此处传空避免双重合并
       mcpServers: [],
       agents: [],
       commands: [],
     })
     hooks = mergeHooks(hooks, pluginMerge.hooks)
-    mcpServers = mergeMcpServers(mcpServers, pluginMerge.mcpServers)
-    // S-PORT-3：plugin 盖过 bundled/user/project（同 id）
+    // S-PORT-3：plugin skills 盖过 bundled/user/project
     skills = mergeSkillsByPrecedence(skills, pluginMerge.skills)
   }
+
+  const mcpMerged = mergeMcpServerLayers(mcpLayers)
+  mcpConfigWarnings.push(...mcpMerged.warnings)
+  const mcpServers = mcpMerged.servers
 
   const { provider, kind, model, baseUrl } = resolveProviderFromConfig(config)
   const permissionMode = (config.permissionMode ?? 'default') as PermissionMode

@@ -171,4 +171,42 @@ const dups = validateMcpServerConfigs([
 ])
 assert(dups.some((i) => i.message.includes('duplicate')), 'duplicate name')
 
+// M-GEN-8 merge layers
+const {
+  mergeMcpServerLayers,
+  mergeMcpServerLists,
+  tagMcpServerScope,
+} = await import('../packages/mcp/src/index.ts')
+const m = mergeMcpServerLayers([
+  {
+    label: 'user',
+    servers: tagMcpServerScope(
+      [{ name: 'a', command: 'u' }, { name: 'b', command: 'u' }],
+      'user',
+    ),
+  },
+  {
+    label: 'project',
+    servers: tagMcpServerScope([{ name: 'a', command: 'p' }], 'project'),
+  },
+  {
+    label: 'plugin:x',
+    servers: tagMcpServerScope([{ name: 'a', command: 'plug' }], 'plugin'),
+  },
+])
+assert(m.servers.find((s) => s.name === 'a')?.command === 'plug', 'plugin wins a')
+assert(m.servers.find((s) => s.name === 'a')?.scope === 'plugin', 'scope plugin')
+assert(m.servers.find((s) => s.name === 'b')?.command === 'u', 'b from user')
+assert(
+  m.warnings.filter((w) => w.includes('"a"')).length >= 2,
+  'two override warnings for a',
+)
+const pair = mergeMcpServerLists(
+  [{ name: 'x', command: '1' }],
+  [{ name: 'x', command: '2' }],
+  { base: 'user', over: 'project' },
+)
+assert(pair.servers[0]!.command === '2', 'list merge over')
+assert(pair.warnings.some((w) => w.includes('user → project')), 'list warn')
+
 console.log('MCP CONFIG VALIDATE TESTS PASS')
