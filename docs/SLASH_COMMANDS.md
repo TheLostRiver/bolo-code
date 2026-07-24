@@ -26,6 +26,7 @@
 | `/doctor` · `/status` | 本地诊断：node/platform、cwd/id/**provider**/mode/model/effort、tools/skills/agent types、**mcp 连接数**、usage、autoCompact/maxPtlRetries、`getBoloHomeDir()` 是否存在；无遥测 |
 | `/mcp` · `/mcp tools` | 列出已连接 MCP 服务器；`tools` 列出 `mcp__server__tool` 名 |
 | `/plugins` | 列出 workspace 已发现的本地插件（PL1；非市场） |
+| `/hooks` · `/hooks <Event>` | 列出已配置 hook 事件与命令数；指定事件打印 matcher/command |
 | `/cost` · `/usage` | 会话内本地 token 累计（`session.usage`）；无遥测、不上报 |
 | `/model [name]` | 无参显示；有参设 `session.model` |
 | `/effort [low\|medium\|high\|max\|auto]` | 会话字段 `effortLevel`；`auto` 清除覆盖；经 `mapEffort` 映射为 `max_tokens` |

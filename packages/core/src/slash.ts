@@ -15,7 +15,8 @@ import {
   type PermissionMode,
   type SessionPermissionRules,
 } from '../../permissions/src/index.ts'
-import type { ChatMessage } from '../../shared/src/index.ts'
+import type { ChatMessage, HooksConfig, HookEvent } from '../../shared/src/index.ts'
+import { HOOK_EVENTS } from '../../shared/src/index.ts'
 import type { CompactSummarizer } from '../../compact/src/index.ts'
 import {
   findSkillById,
@@ -68,6 +69,8 @@ export type SlashSession = {
     root?: string
     scope?: string
   }>
+  /** hooks 配置；/hooks */
+  hooks?: HooksConfig
 }
 
 export type ParseSlashResult =
@@ -315,6 +318,62 @@ function cmdPlugins(session: SlashSession, _args: string): SlashDispatchResult {
     const scope = p.scope ? ` [${p.scope}]` : ''
     lines.push(`  ${id}${ver}${scope}${name}`)
   }
+  return { ok: true, message: lines.join('\n') }
+}
+
+/**
+ * 列出会话 hooks 配置（只读）。
+ * 无参：各事件 matcher 组数 / command 数；有参：该事件详情。
+ */
+function cmdHooks(session: SlashSession, args: string): SlashDispatchResult {
+  const hooks: HooksConfig = session.hooks ?? {}
+  const want = args.trim()
+  if (want) {
+    const event = HOOK_EVENTS.find(
+      (e) => e.toLowerCase() === want.toLowerCase(),
+    ) as HookEvent | undefined
+    if (!event) {
+      return {
+        ok: false,
+        message: `Unknown hook event "${want}". Known: ${HOOK_EVENTS.join(', ')}`,
+      }
+    }
+    const groups = hooks[event] ?? []
+    if (!groups.length) {
+      return { ok: true, message: `${event}: (no handlers configured)` }
+    }
+    const lines = [`${event} (${groups.length} matcher group(s)):`]
+    groups.forEach((g, i) => {
+      const matcher = g.matcher ? `matcher=${JSON.stringify(g.matcher)}` : 'matcher=*'
+      lines.push(`  [${i}] ${matcher}`)
+      for (const h of g.hooks ?? []) {
+        const t = h.timeout != null ? ` timeout=${h.timeout}` : ''
+        const a = h.async ? ' async' : ''
+        lines.push(`      - ${h.type}: ${h.command}${t}${a}`)
+      }
+    })
+    return { ok: true, message: lines.join('\n') }
+  }
+
+  let totalCmds = 0
+  const lines = ['hooks (configured events):']
+  for (const event of HOOK_EVENTS) {
+    const groups = hooks[event] ?? []
+    if (!groups.length) continue
+    let cmds = 0
+    for (const g of groups) cmds += g.hooks?.length ?? 0
+    totalCmds += cmds
+    lines.push(`  ${event}: ${groups.length} group(s), ${cmds} command(s)`)
+  }
+  if (totalCmds === 0) {
+    return {
+      ok: true,
+      message:
+        'hooks: (none configured)\nConfigure ~/.bolo/hooks.json or .bolo/hooks.json. Use /hooks <EventName> for details.',
+    }
+  }
+  lines.push(`total commands: ${totalCmds}`)
+  lines.push('Use /hooks <EventName> for matchers and commands.')
   return { ok: true, message: lines.join('\n') }
 }
 
@@ -688,6 +747,12 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     name: 'plugins',
     summary: 'List loaded local plugins (PL1)',
     run: cmdPlugins,
+  },
+  {
+    name: 'hooks',
+    summary: 'List configured hooks or details for one event',
+    usage: '[EventName]',
+    run: cmdHooks,
   },
   {
     name: 'cost',

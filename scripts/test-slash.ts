@@ -177,6 +177,39 @@ async function main() {
   )
   session.plugins = []
 
+  // /hooks
+  const hooksNone = await submitUserInput(session, '/hooks')
+  assert(hooksNone.type === 'slash', 'hooks slash')
+  if (hooksNone.type === 'slash') {
+    assert(
+      hooksNone.message.includes('none') || hooksNone.message.includes('hooks'),
+      'hooks empty message',
+    )
+  }
+  session.hooks = {
+    PreToolUse: [
+      {
+        matcher: 'Bash',
+        hooks: [{ type: 'command', command: 'echo pre' }],
+      },
+    ],
+  }
+  const hooksList = await submitUserInput(session, '/hooks')
+  assert(
+    hooksList.type === 'slash' && hooksList.message.includes('PreToolUse'),
+    'hooks list event',
+  )
+  const hooksDetail = await submitUserInput(session, '/hooks PreToolUse')
+  assert(
+    hooksDetail.type === 'slash' &&
+      hooksDetail.message.includes('echo pre') &&
+      hooksDetail.message.includes('Bash'),
+    'hooks detail',
+  )
+  const hooksBad = await submitUserInput(session, '/hooks NotAnEvent')
+  assert(hooksBad.type === 'slash' && hooksBad.message.includes('Unknown'), 'hooks unknown')
+  session.hooks = {}
+
   // /cost 初始为空
   const cost0 = await submitUserInput(session, '/cost')
   assert(cost0.type === 'slash', 'cost slash')
