@@ -12,9 +12,19 @@ export { resolveMcpTransport } from './types.ts'
 export { mcpToolName, parseMcpToolName } from './names.ts'
 export {
   loadMcpConfigFile,
+  loadMcpConfigFileDetailed,
   registerToolsFromServers,
   findMcpTool,
+  type LoadMcpConfigResult,
 } from './config.ts'
+export {
+  validateMcpServerConfig,
+  validateMcpServerConfigs,
+  mcpConfigIssuesToWarnings,
+  redactMcpHeaders,
+  formatMcpServerConfigSummary,
+  type McpConfigIssue,
+} from './validate.ts'
 export type {
   McpClient,
   McpToolDef,

@@ -11,7 +11,7 @@ import {
   type LoadedSkill,
 } from '../../skills/src/index.ts'
 import {
-  loadMcpConfigFile,
+  loadMcpConfigFileDetailed,
   type McpServerConfig,
 } from '../../mcp/src/index.ts'
 import {
@@ -42,6 +42,8 @@ export type ResolvedWorkspace = {
   permissionMode: PermissionMode
   hooks: HooksConfig
   mcpServers: McpServerConfig[]
+  /** M-GEN-1：mcp.json 校验 / 解析 warnings（不阻断会话） */
+  mcpConfigWarnings?: string[]
   skills: LoadedSkill[]
   plugins: LoadedPlugin[]
   pluginMerge?: MergeResult
@@ -137,10 +139,13 @@ export async function loadWorkspace(
     await loadHooksJson(project),
   )
 
-  let mcpServers = mergeMcpServers(
-    await loadMcpConfigFile(user.mcpJson),
-    await loadMcpConfigFile(project.mcpJson),
-  )
+  const userMcp = await loadMcpConfigFileDetailed(user.mcpJson)
+  const projectMcp = await loadMcpConfigFileDetailed(project.mcpJson)
+  const mcpConfigWarnings = [
+    ...userMcp.warnings.map((w) => `user mcp: ${w}`),
+    ...projectMcp.warnings.map((w) => `project mcp: ${w}`),
+  ]
+  let mcpServers = mergeMcpServers(userMcp.servers, projectMcp.servers)
 
   let skills = await discoverSkills({
     cwd,
@@ -181,6 +186,7 @@ export async function loadWorkspace(
     permissionMode,
     hooks,
     mcpServers,
+    ...(mcpConfigWarnings.length ? { mcpConfigWarnings } : {}),
     skills,
     plugins,
     pluginMerge,

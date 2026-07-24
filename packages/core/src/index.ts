@@ -893,6 +893,14 @@ export async function createSessionFromWorkspace(
   // tools 已在 createSession 按 agentDefinitions 装配；MCP 再追加
 
   let mcp: ConnectMcpResult | undefined
+  // M-GEN-1：配置层 warnings（坏 JSON / 无效 server）先于连接
+  if (workspace.mcpConfigWarnings?.length) {
+    for (const w of workspace.mcpConfigWarnings) {
+      emit(session, { type: 'warning', message: w })
+      // eslint-disable-next-line no-console
+      console.warn(`[bolo mcp] ${w}`)
+    }
+  }
   if (opts.connectMcp !== false && workspace.mcpServers.length > 0) {
     mcp = await connectMcpServers({
       servers: workspace.mcpServers,

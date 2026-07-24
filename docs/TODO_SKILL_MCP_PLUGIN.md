@@ -173,10 +173,10 @@ PL-SPEC 出口 ────────► IMPORT-*（可选）
 
 | ID | 任务 | 验收 | 状态 |
 |----|------|------|------|
-| **M-GEN-0** | `MCP.md`「通用性边界」 | 协议 ✅ / 与官方商店无关 / OAuth 后置 | ⬜ |
-| **M-GEN-1** | **配置校验与友好错误** | 缺 command/url、type 冲突 → 明确 warn | ⬜ |
+| **M-GEN-0** | `MCP.md`「通用性边界」 | 协议 ✅ / 与官方商店无关 / OAuth 后置 | ✅ |
+| **M-GEN-1** | **配置校验与友好错误** | `validateMcpServerConfig` · `loadMcpConfigFileDetailed` · 坏项跳过 + warn | ✅ 最小 |
 | **M-GEN-2** | **`/doctor` 或 `/mcp` 诊断加深** | transport · last error · 计数 · capability 可读 | ⬜ |
-| **M-GEN-3** | **headers 秘钥卫生** | 日志/事件不打印 Authorization 全文 | ⬜ |
+| **M-GEN-3** | **headers 秘钥卫生** | `redactMcpHeaders` · summary 不打印全文 | ✅ 最小 |
 | **M-GEN-4** | **resources/prompts 日用加固** | list/read 测；空 capability 不报错 | ⬜ |
 | **M-GEN-5** | **list_changed 回归** | stdio/sse 测绿；http 行为写清 | ⬜ |
 | **M-GEN-6** | **env/headers `${VAR}` 插值最小** | 可选；无远程脚本执行 | ⬜（D2） |

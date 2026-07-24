@@ -13,7 +13,7 @@ import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import type { HooksConfig } from '../../shared/src/index.ts'
 import { discoverSkillsInDir, type LoadedSkill } from '../../skills/src/index.ts'
-import { loadMcpConfigFile, type McpServerConfig } from '../../mcp/src/index.ts'
+import { loadMcpConfigFileDetailed, type McpServerConfig } from '../../mcp/src/index.ts'
 
 export type PluginManifest = {
   id: string
@@ -264,8 +264,11 @@ export async function mergePluginContributions(
 
     if (c?.mcpServers) {
       const mcpPath = path.resolve(plugin.root, c.mcpServers)
-      const servers = await loadMcpConfigFile(mcpPath)
-      for (const s of servers) {
+      const loaded = await loadMcpConfigFileDetailed(mcpPath)
+      for (const w of loaded.warnings) {
+        errors.push(`plugin ${plugin.manifest.id} mcp: ${w}`)
+      }
+      for (const s of loaded.servers) {
         if (seenMcp.has(s.name)) {
           errors.push(
             `mcp server name conflict: ${s.name} (plugin ${plugin.manifest.id}) — override`,

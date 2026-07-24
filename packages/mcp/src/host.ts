@@ -34,6 +34,7 @@ import {
   type McpToolRegistration,
   type McpTransportKind,
 } from './types.ts'
+import { validateMcpServerConfig } from './validate.ts'
 
 /** list_changed 刷新面（对照 tools|prompts|resources list_changed） */
 export type McpListChangedKind = 'tools' | 'resources' | 'prompts'
@@ -608,6 +609,16 @@ export async function connectMcpServers(
         `skip MCP server with empty name: ${JSON.stringify(cfg.name)}`,
       )
       continue
+    }
+
+    const issues = validateMcpServerConfig(cfg)
+    const errors = issues.filter((i) => i.level === 'error')
+    if (errors.length) {
+      for (const e of errors) warnings.push(e.message)
+      continue
+    }
+    for (const w of issues.filter((i) => i.level === 'warning')) {
+      warnings.push(w.message)
     }
 
     const transport = resolveMcpTransport(cfg)
