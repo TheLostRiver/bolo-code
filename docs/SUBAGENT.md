@@ -1,6 +1,10 @@
 # Subagent 契约（S0–S7 · S12 最小）
 
-对照 HelsincyCode `tools/AgentTool`（`runAgent` / `resolveAgentTools` / `loadAgentsDir` / `Agent` 工具），**无遥测**、不抄 GrowthBook / swarm / worktree。
+对照 HelsincyCode `tools/AgentTool`（`runAgent` / `resolveAgentTools` / `loadAgentsDir` / `Agent` 工具），**无遥测**、不抄 GrowthBook / swarm。
+
+**F-SA-WORKTREE：** `BOLO_SUBAGENT_WORKTREE=1` 时尝试 `git worktree add --detach`；失败回落父 cwd。  
+**F-SA-PAR2：** `BOLO_BACKGROUND_OVERFLOW=queue|reject`（默认 reject）。  
+**F-S8-PLUS：** `filterToolsBySubagentAllowlist` 收紧子工具表。
 
 ## 流程
 
