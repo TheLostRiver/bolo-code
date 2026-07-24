@@ -145,6 +145,8 @@ export async function loadWorkspace(
   let skills = await discoverSkills({
     cwd,
     userBoloDir: user.root,
+    // S-PORT-2：仅配置显式列出的旁路根；默认空 = off
+    extraSkillRoots: config.extraSkillRoots,
   })
 
   let plugins: LoadedPlugin[] = []

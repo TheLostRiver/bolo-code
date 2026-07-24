@@ -59,7 +59,7 @@ defaults
 
 - **MCP server 同名**：项目覆盖用户  
 - **Hooks**：数组合并（用户 + 项目 + 插件 contributes）  
-- **Skills 同 id**：项目覆盖用户；插件 contributes 再覆盖  
+- **Skills 同 id**：bundled ← **extra**（可选）← user ← project ← plugin（见 [SKILLS.md](./SKILLS.md)）  
 - **Subagent 类型同名**（S7）：内置 ← 用户 `agents/*.md` ← 项目 `.bolo/agents/*.md`（见 [SUBAGENT.md](./SUBAGENT.md)）  
 - **Plugins（PL1+PL2）**：扫 user/project `plugins/<id>/bolo.plugin.json`；合并 skills（默认 `skills/`）、hooks、mcp、**commands**（默认 `commands/*.md`）；会话内 `/plugins reload` 热刷新；**无**市场/远程安装
 
@@ -75,9 +75,12 @@ defaults
   },
   "permissionMode": "default",
   "autoCompactEnabled": true,
-  "contextWindowTokens": 128000
+  "contextWindowTokens": 128000,
+  "extraSkillRoots": []
 }
 ```
+
+`extraSkillRoots`（**S-PORT-2**，可选）：旁路 skill 根目录列表（每根：`<id>/SKILL.md`）。**默认省略或 `[]` = 不扫描**（不静默加载 `~/.agents/skills` 等）。支持 `~` 与相对项目 cwd 的路径；user + project 数组合并去重。位次：bundled → **extra** → user → project → plugin。
 
 `provider.kind` 还可为：`openai-responses`（原生 Responses `/responses`）、`anthropic`、`mock`。详见 [PROVIDERS.md](./PROVIDERS.md)。
 | 字段 | 默认 | 说明 |

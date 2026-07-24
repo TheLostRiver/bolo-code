@@ -1815,7 +1815,7 @@ function cmdSkills(session: SlashSession, args: string): SlashDispatchResult {
     'Flags: no-model = disable-model-invocation; no-user = user-invocable:false',
   )
   lines.push(
-    `Source precedence (later wins): ${['bundled', 'user', 'project', 'plugin'].join(' → ')}`,
+    `Source precedence (later wins): ${['bundled', 'extra', 'user', 'project', 'plugin'].join(' → ')}`,
   )
   lines.push('Invoke: /<skill-id>  or  /skill <id>')
   return { ok: true, message: lines.join('\n') }

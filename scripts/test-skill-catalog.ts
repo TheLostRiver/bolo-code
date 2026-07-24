@@ -14,6 +14,7 @@ import {
   parseSkillMarkdown,
   parseSkillFrontmatterFields,
   mergeSkillsByPrecedence,
+  resolveExtraSkillRoots,
   isSkillModelInvocable,
   isSkillUserInvocable,
   skillModelInvokeBlockReason,
@@ -305,7 +306,7 @@ assert(st.isDirectory(), 'bundled-skills dir exists')
 
 // ── S-PORT-3 覆盖序 ──
 assert(
-  SKILL_SOURCE_PRECEDENCE.join(',') === 'bundled,user,project,plugin',
+  SKILL_SOURCE_PRECEDENCE.join(',') === 'bundled,extra,user,project,plugin',
   'precedence list',
 )
 const layerLow: LoadedSkill = {
@@ -506,5 +507,119 @@ const slashN = invokeSkillBySlash(
   'neither',
 )
 assert(!slashN.ok, 'slash neither blocked')
+
+// ── S-PORT-2 旁路 extra 根（默认 off）──
+const resolvedEmpty = resolveExtraSkillRoots(undefined)
+assert(resolvedEmpty.length === 0, 'no roots default empty')
+assert(resolveExtraSkillRoots([]).length === 0, 'empty list')
+const homeish = resolveExtraSkillRoots(['~/skills-x', '~/skills-x'], {
+  homeDir: path.join(os.tmpdir(), 'fake-home'),
+  cwd: os.tmpdir(),
+})
+assert(homeish.length === 1, 'dedupe ~ roots')
+assert(homeish[0]!.includes('fake-home'), 'expand tilde')
+
+const rel = resolveExtraSkillRoots(['./rel-skills'], {
+  cwd: path.join(os.tmpdir(), 'proj-root'),
+})
+assert(rel[0]!.includes('proj-root'), 'relative to cwd')
+assert(path.isAbsolute(rel[0]!), 'abs path')
+
+// 默认 discover 不扫额外根
+const emptyCwd = await fs.mkdtemp(path.join(os.tmpdir(), 'bolo-no-extra-'))
+const noExtra = await discoverSkills({
+  cwd: emptyCwd,
+  userBoloDir: path.join(os.tmpdir(), `bolo-empty-user-${Date.now()}`),
+  bundledSkillsDir: false,
+})
+assert(
+  !noExtra.some((s) => s.source === 'extra'),
+  'default discover has no extra source',
+)
+
+// 显式 extra 根
+const extraRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'bolo-extra-skills-'))
+const extraSkillDir = path.join(extraRoot, 'from-extra')
+await fs.mkdir(extraSkillDir, { recursive: true })
+await fs.writeFile(
+  path.join(extraSkillDir, 'SKILL.md'),
+  `---
+name: from-extra
+description: bypass root
+---
+EXTRA BODY
+`,
+  'utf8',
+)
+const withExtra = await discoverSkills({
+  cwd: emptyCwd,
+  userBoloDir: path.join(os.tmpdir(), `bolo-empty-user2-${Date.now()}`),
+  bundledSkillsDir: false,
+  extraSkillRoots: [extraRoot],
+})
+const ex = findSkillById(withExtra, 'from-extra')
+assert(ex, 'extra skill found')
+assert(ex!.source === 'extra', 'source=extra')
+assert(ex!.body.includes('EXTRA BODY'), 'extra body')
+
+// user 盖过 extra（同 id）
+const userRoot2 = await fs.mkdtemp(path.join(os.tmpdir(), 'bolo-user-over-'))
+const userSkill = path.join(userRoot2, 'skills', 'from-extra')
+await fs.mkdir(userSkill, { recursive: true })
+await fs.writeFile(
+  path.join(userSkill, 'SKILL.md'),
+  `---
+name: from-extra
+description: user wins
+---
+USER WINS
+`,
+  'utf8',
+)
+const userOverExtra = await discoverSkills({
+  cwd: emptyCwd,
+  userBoloDir: userRoot2,
+  bundledSkillsDir: false,
+  extraSkillRoots: [extraRoot],
+})
+const won = findSkillById(userOverExtra, 'from-extra')
+assert(won?.source === 'user', 'user overrides extra')
+assert(won?.body.includes('USER WINS'), 'user body')
+
+// extra 盖过 bundled
+const bundledTmp = await fs.mkdtemp(path.join(os.tmpdir(), 'bolo-bund-'))
+const bSkill = path.join(bundledTmp, 'shared-id')
+await fs.mkdir(bSkill, { recursive: true })
+await fs.writeFile(
+  path.join(bSkill, 'SKILL.md'),
+  `---
+name: shared-id
+---
+BUNDLED
+`,
+  'utf8',
+)
+const eRoot2 = await fs.mkdtemp(path.join(os.tmpdir(), 'bolo-ex2-'))
+const eSkill2 = path.join(eRoot2, 'shared-id')
+await fs.mkdir(eSkill2, { recursive: true })
+await fs.writeFile(
+  path.join(eSkill2, 'SKILL.md'),
+  `---
+name: shared-id
+---
+EXTRA WINS BUNDLED
+`,
+  'utf8',
+)
+const extraOverBundled = await discoverSkills({
+  cwd: emptyCwd,
+  userBoloDir: path.join(os.tmpdir(), `bolo-eu-${Date.now()}`),
+  bundledSkillsDir: bundledTmp,
+  extraSkillRoots: [eRoot2],
+})
+assert(
+  findSkillById(extraOverBundled, 'shared-id')?.body.includes('EXTRA WINS'),
+  'extra overrides bundled',
+)
 
 console.log('SKILL CATALOG TESTS PASS')

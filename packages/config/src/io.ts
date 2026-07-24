@@ -45,11 +45,15 @@ export async function loadHooksJson(
   return (await readJsonFile<HooksFileJson>(layout.hooksJson)) ?? {}
 }
 
-/** 浅合并 config：后写覆盖前写；provider 字段深度合并 */
+/** 浅合并 config：后写覆盖前写；provider 字段深度合并；extraSkillRoots 拼接去重 */
 export function mergeConfigJson(
   base: BoloConfigJson,
   over: BoloConfigJson,
 ): BoloConfigJson {
+  const extraSkillRoots = mergeStringListsUnique(
+    base.extraSkillRoots,
+    over.extraSkillRoots,
+  )
   return {
     ...base,
     ...over,
@@ -57,7 +61,23 @@ export function mergeConfigJson(
       ...base.provider,
       ...over.provider,
     },
+    ...(extraSkillRoots.length ? { extraSkillRoots } : { extraSkillRoots: undefined }),
   }
+}
+
+function mergeStringListsUnique(
+  a?: string[],
+  b?: string[],
+): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const raw of [...(a ?? []), ...(b ?? [])]) {
+    const t = raw?.trim()
+    if (!t || seen.has(t)) continue
+    seen.add(t)
+    out.push(t)
+  }
+  return out
 }
 
 /**

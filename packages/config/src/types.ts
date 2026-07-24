@@ -39,6 +39,13 @@ export type BoloConfigJson = {
    * 默认 3；0 = 关闭。
    */
   maxPtlRetries?: number
+  /**
+   * S-PORT-2：可选旁路 skill 根目录列表（每根：`<id>/SKILL.md`）。
+   * **默认省略/空 = 不扫描**（不静默吃 `~/.agents/skills` 等）。
+   * user + project 数组合并去重；相对路径相对**项目 cwd**。
+   * 合并位次：bundled → extra → user → project → plugin。
+   */
+  extraSkillRoots?: string[]
 }
 
 export type McpFileJson = {

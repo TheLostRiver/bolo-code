@@ -58,7 +58,7 @@ export type SkillMeta = {
   userInvocable?: boolean
 }
 
-export type SkillSource = 'user' | 'project' | 'plugin' | 'bundled'
+export type SkillSource = 'user' | 'project' | 'plugin' | 'bundled' | 'extra'
 
 export type LoadedSkill = {
   meta: SkillMeta
@@ -161,11 +161,46 @@ export type DiscoverSkillsOptions = {
    * 传 `false` 跳过 bundled（测试用）。
    */
   bundledSkillsDir?: string | false
+  /**
+   * S-PORT-2：可选旁路 skill 根（每根下为 `<id>/SKILL.md`）。
+   * **默认不传 / 空 = 关闭**；不静默扫描 `~/.agents/skills` 等。
+   * 合并位次：bundled → **extra** → user → project（→ plugin 在 workspace）。
+   */
+  extraSkillRoots?: readonly string[]
+}
+
+/**
+ * 规范化旁路根：去空、expand `~`、相对路径相对 cwd、去重保序。
+ * 不检查目录是否存在（discover 时空目录自然无 skill）。
+ */
+export function resolveExtraSkillRoots(
+  roots: readonly string[] | undefined,
+  opts?: { cwd?: string; homeDir?: string },
+): string[] {
+  if (!roots?.length) return []
+  const cwd = opts?.cwd ?? process.cwd()
+  const home = opts?.homeDir ?? os.homedir()
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const raw of roots) {
+    let p = (raw ?? '').trim()
+    if (!p) continue
+    if (p === '~') p = home
+    else if (p.startsWith('~/') || p.startsWith('~\\')) {
+      p = path.join(home, p.slice(2))
+    }
+    const abs = path.isAbsolute(p) ? path.normalize(p) : path.resolve(cwd, p)
+    const key = process.platform === 'win32' ? abs.toLowerCase() : abs
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(abs)
+  }
+  return out
 }
 
 /**
  * 发现 skills。合并优先级（同 id，后者覆盖前者）：
- *   bundled → user → project
+ *   bundled → extra(旁路) → user → project
  * 插件层由 `mergeSkillsByPrecedence(..., pluginSkills)` / loadWorkspace 再盖。
  */
 export async function discoverSkills(
@@ -181,6 +216,13 @@ export async function discoverSkills(
   if (opts.bundledSkillsDir !== false) {
     const bundledDir = opts.bundledSkillsDir ?? getBundledSkillsDir()
     layers.push(await discoverSkillsInDir(bundledDir, 'bundled'))
+  }
+
+  const extras = resolveExtraSkillRoots(opts.extraSkillRoots, {
+    cwd: opts.cwd,
+  })
+  for (const root of extras) {
+    layers.push(await discoverSkillsInDir(root, 'extra'))
   }
 
   layers.push(
@@ -217,6 +259,7 @@ export function mergeSkillsByPrecedence(
 /** 覆盖源从低到高（文档 / /skills 说明用） */
 export const SKILL_SOURCE_PRECEDENCE: readonly SkillSource[] = [
   'bundled',
+  'extra',
   'user',
   'project',
   'plugin',
