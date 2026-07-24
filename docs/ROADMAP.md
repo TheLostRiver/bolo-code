@@ -1,8 +1,8 @@
 # Bolo Code 整体路线图（详细版）
 
-> 更新：与 **已交付代码** 对齐（含 path-scoped rules 刷新、prompt cache C1–C5 API 标记、openai-responses HTTP SSE）。  
+> 更新：与 **已交付代码** 对齐（SL-polish、J-D T3 默认 JSONL、MCP2 resources/prompts + list_changed、C1–C5、openai-responses HTTP SSE、Subagent、plugins 最小）。  
 > **勾选与「下一刀」以 `docs/TODO.md` 为准**；本文件回答：**做到哪 / 缺什么 / 验收 / 里程碑**。  
-> 原则：借鉴 HelsincyCode / pi / Codex **语义**再实现；**无遥测**；文档无本机绝对路径。
+> 原则：借鉴 HelsincyCode / pi / Codex **语义**再实现；**无遥测**；文档无本机绝对路径；**状态按代码行为**，不按错误 commit subject。
 
 ---
 
@@ -11,22 +11,22 @@
 | 层 | 粗估 | 说明 |
 |----|------|------|
 | **Headless 核心**（loop / tools / provider / compact / prompt） | **~85–90%** | M0–M2 齐；effort、apply_patch 最小、权限 always-allow 已接 |
-| 会话与 CLI | **~85–90%** | JSONL 默认写（T3）；旧 JSON 只读；`--resume` 列表；`--continue`；无参 `bolo` REPL |
-| **扩展面（MCP / Plugins / Skills）** | **~70–75%** | Skills catalog + bundled creators；MCP stdio tools+resources/prompts ✅；plugins 本地最小 ✅ |
+| 会话与 CLI | **~88–92%** | JSONL **默认写**（T3）；旧 JSON 只读；R1 boundary；migrate；`--resume` / `--continue`；无参 `bolo` REPL |
+| **扩展面（MCP / Plugins / Skills）** | **~72–78%** | Skills + creators；MCP stdio tools+resources/prompts+list_changed ✅；plugins 本地最小 ✅；SSE/HTTP · PL2 ⬜ |
 | **Subagent** | **~75–80%** | S0–S7 真 loop + Agent + `.bolo/agents`；async/fork/侧链最小；worktree ⬜ |
 | **项目规则 Rules** | **~90%** | 装载 + `paths` + submitPrompt 刷新 + `/rules`；enable/disable 持久化可加深 |
 | **内置元技能 Creators** | **~85%** | skill-creator / plugin-creator bundled + slash 回落 |
 | **成本与缓存** | **~70–75%** | C1–C5 ✅；TTL / break detection / cached MC 后置 |
-| **斜杠命令** | **~85%** | 总线 + 日用命令 + SL-polish（分组 help / 建议 / context）；工程类 slash 部分后置 |
+| **斜杠命令** | **~88%** | 总线 + 日用命令 + **SL-polish**；工程类 slash 后置 |
 | **CLI TUI** | **~60–65%** | T0–T7 最小可用；完整 Ink（T8）⬜ |
 | **Electron GUI** | **~5%** | 占位 |
-| **产品整体（可日用 headless agent）** | **~65–70%** | 脚本/CLI 可日用；非成熟 GUI agent |
+| **产品整体（可日用 headless agent）** | **~68–72%** | 脚本/CLI 可日用；非成熟 GUI agent |
 
 **当前主线（执行序见 `TODO.md`）：**
 
-1. ~~斜杠总线~~ ✅ · ~~Rules~~ ✅ · ~~Creators~~ ✅ · ~~C1–C5~~ ✅  
-2. ~~resume 列表 / TUI 最小 / JSONL 双写 / Subagent / MCP / plugins / Responses HTTP~~ ✅  
-3. **下一刀候选：** MCP SSE/HTTP · PL2 · Usage+（J-D T3 + list_changed 已交付）；slash 体验打磨 ✅  
+1. ~~斜杠总线 + SL-polish~~ ✅ · ~~Rules~~ ✅ · ~~Creators~~ ✅ · ~~C1–C5~~ ✅  
+2. ~~resume / TUI 最小 / JSONL 主路径 T3 / Subagent / MCP stdio 面 / plugins / Responses HTTP~~ ✅  
+3. **下一刀候选：** **MCP SSE/HTTP · PL2 · Usage+**  
 4. **后置：** OR6 WS · cache TTL/break · T8 Ink · Electron  
 
 ---
@@ -50,7 +50,7 @@
   → 会话持久化 + CLI/TUI 最小
   → 斜杠 + Rules + Creators + Cache 标记
   → Skills / MCP / Plugins / Subagent
-  → JSONL 深化 · 扩展深度
+  → 扩展深度（SSE/HTTP · PL2）
   → Electron · 完整 Ink · 生产化打磨
 ```
 
@@ -79,7 +79,7 @@
 | **Effort** low/medium/high/max/auto | ✅ | session + `/effort` → max_tokens |
 | Prompt Cache 布局 + **API 标记** | ✅ | C1–C5：`cache_control` / `prompt_cache_key` |
 | 大 tool_result 预算 | ✅ | 截断 + 可选 spill |
-| `/context` `/cost` 本地可见 | ✅ | 无遥测 |
+| `/context` `/cost` 本地可见 | ✅ | 无遥测；Usage breakdown 可加深 |
 
 ### 2.3 项目规则 Rules
 
@@ -105,11 +105,11 @@
 
 | 能力 | 状态 |
 |------|------|
-| JSON 快照 + `bolo --resume <id\|path>` | ✅ |
+| JSON 快照 + `bolo --resume <id\|path>` | ✅ 只读兼容 |
 | **`bolo --resume` 无 id → 项目列表选择** | ✅ |
-| `listProjectSessions`（json + jsonl 去重） | ✅ |
+| `listProjectSessions`（json + jsonl 去重；count/preview 跟 jsonl R1） | ✅ |
 | `bolo --continue` | ✅ |
-| JSONL **默认写** + resume（messages 优先 jsonl；R1；meta 配置切片；旧 JSON 只读） | ✅ J-D T3 |
+| JSONL **默认写** + R1 boundary + meta 配置切片 + migrate + 旧 JSON 只读 | ✅ J-D T3 |
 | **无参 `bolo` TTY 新会话 + banner** | ✅ |
 | 状态行 / 流式工具行 / 权限 y/n / slash | ✅ |
 | 完整 Ink 级 TUI | ⬜ T8 |
@@ -124,7 +124,7 @@
 | 模型与推理 | `/model` **`/effort`** `/plan` `/permissions` `/allow` | ✅ |
 | 扩展 | `/skills` `/mcp` `/plugins` `/hooks` **`/rules`** `/agents` `/bg` | ✅ |
 | 诊断脚手架 | `/doctor` `/status` `/init` | ✅ |
-| 体验打磨 | `/help` 分组 · 未知建议 · `/context` 加深 · 别名隐藏 | ✅ SL-polish |
+| 体验打磨 | `/help` 分组 · 未知建议 · `/context` 加深 · 别名隐藏 | ✅ **SL-polish** |
 | 元技能 | `/skill-creator` `/plugin-creator`（skill 回落） | ✅ |
 | 工程 | `/diff` `/commit` `/review`… | ⬜ 后置 |
 | 产品周边 | login/theme/vim/remote… | 🚫 或后置 |
@@ -150,9 +150,11 @@
 | 能力 | 状态 |
 |------|------|
 | MCP stdio tools | ✅ |
-| MCP resources/prompts（stdio）+ meta 工具 | ✅ 最小 |
-| MCP SSE/HTTP · list_changed 热刷新 | 🟡 | list_changed ✅；SSE/HTTP ⬜ |
+| MCP resources/prompts（stdio）+ meta 工具 + `/mcp` | ✅ |
+| MCP **list_changed 热刷新**（tools/resources/prompts） | ✅ |
+| MCP SSE/HTTP transport | ⬜ |
 | Plugins 本地加载 | ✅ 最小 |
+| Plugins 热加载 / 市场（PL2） | ⬜ |
 | Subagent 真 loop | ✅ |
 | Electron | ⬜ |
 
@@ -175,9 +177,9 @@
 
 Effort：`/effort` + provider 映射 ✅。
 
-### M2.10 / M-Slash — 斜杠命令 ✅（最小日用 + SL-polish）
+### M2.10 / M-Slash — 斜杠命令 ✅
 
-总线 + P0/P1 日用命令 + 体验打磨（分组 `/help`、未知命令建议、`/context` token/sections/cache、参数 Usage、隐藏别名）已落地（见 §2.6、`docs/SLASH_COMMANDS.md`）。工程类 slash 后置。
+总线 + 日用命令 + **SL-polish**（分组 `/help`、未知建议、`/context` token/sections/cache、参数 Usage、隐藏别名）已落地（见 §2.6、`docs/SLASH_COMMANDS.md`）。工程类 slash 后置。
 
 ### M2.11 / M-Rules — 项目规则 ✅
 
@@ -199,8 +201,10 @@ K1–K2 + slash 回落 ✅；rule-creator 可选 ⬜。
 |---|------|------|
 | 3.1 Skills | ✅ catalog + 工具 + slash；远程 ⬜ |
 | 3.2 MCP stdio tools | ✅ |
-| 3.2b MCP resources/prompts + list_changed | ✅ 最小（stdio + meta + 热刷新）；SSE/HTTP ⬜ |
-| 3.3 Plugins 真加载 | ✅ 最小（本地） |
+| 3.2b MCP resources/prompts + meta + `/mcp` | ✅ |
+| 3.2c MCP list_changed 热刷新 | ✅（stdio） |
+| 3.2d MCP SSE/HTTP | ⬜ |
+| 3.3 Plugins 真加载 | ✅ 最小（本地）；PL2 热加载 ⬜ |
 | 3.4 Subagent | ✅ 见 M-Subagent |
 
 ### M3.4 / M-Subagent ✅（最小完成线 + partial 加深）
@@ -225,7 +229,7 @@ K1–K2 + slash 回落 ✅；rule-creator 可选 ⬜。
 
 | # | 切片 | 状态 |
 |---|------|------|
-| 5.1 会话持久化 | ✅ JSON 只读兼容 + JSONL 默认写（T3）+ migrate + R1 resume |
+| 5.1 会话持久化 | ✅ JSON 只读兼容 + **JSONL 默认写（T3）** + migrate + R1 resume + list 跟 jsonl |
 | 5.2 CLI 入口 | ✅ resume 无 id / continue / 无参新建 |
 | 5.3 多平台构建 | ⬜（GUI 后；CLI 已跨平台可用） |
 | 5.4 micro + PTL | ✅ |
@@ -306,15 +310,15 @@ flowchart TB
 输入以 / 开头
   → 内置注册表
   → 同名 skill（user-invocable）  ← skill-creator / plugin-creator
-  → 未知：help 提示
+  → 未知：建议 + help 提示
 ```
 
 ### 5.2 已落地（日用）
 
 | 命令 | 行为 |
 |------|------|
-| `/help` | 列命令 |
-| `/compact` `/clear` `/context` | 压缩 / 清对话 / 上下文概览 |
+| `/help` | 分组列命令 |
+| `/compact` `/clear` `/context` | 压缩 / 清对话 / 上下文概览（token/sections/cache） |
 | `/model` `/effort` `/plan` `/permissions` `/allow` | 模型 · 档位 · 模式 · 权限 |
 | `/rules` `/skills` `/skill` · `/<id>` | 规则与技能 |
 | `/mcp` `/plugins` `/hooks` | 扩展状态 |
@@ -372,15 +376,16 @@ flowchart TB
 
 | 模块 | 状态 |
 |------|------|
-| 斜杠总线 · `/effort` · `/rules` | ✅ |
+| 斜杠总线 · SL-polish · `/effort` · `/rules` | ✅ |
 | `.bolo/rules` + path-scoped 刷新 | ✅ |
 | skill-creator / plugin-creator | ✅ |
 | Subagent 真 loop / Agent | ✅；worktree ⬜ |
 | Prompt cache C1–C5 | ✅ |
-| JSONL 默认写 + 最小 resume + R1/list + migrate + meta 切片 | ✅ J-D T3 |
-| Usage 本地记账 | ✅ 最小 |
+| JSONL 默认写 + R1/list + migrate + meta 切片 | ✅ J-D T3 |
+| Usage 本地记账 | ✅ 最小；breakdown 🟡 |
 | openai-responses HTTP SSE | ✅；WS ⬜ |
-| MCP stdio / resources·prompts 最小 / plugins 最小 | ✅ |
+| MCP stdio + resources/prompts + list_changed | ✅；SSE/HTTP ⬜ |
+| Plugins 本地最小 | ✅；PL2 ⬜ |
 | Undo / 多模态 / 沙箱 | ⬜ 后置 |
 | 遥测 | 🚫 |
 
@@ -394,7 +399,7 @@ flowchart TB
 | `config` | layout（rules/agents/skills…）· workspace 加载 |
 | `tools` | builtins · Agent · apply_patch |
 | `skills` | 发现 · catalog · bundled |
-| `plugins` / `mcp` | 本地加载 · stdio host |
+| `plugins` / `mcp` | 本地加载 · stdio host（resources/prompts/list_changed） |
 | `cli` | banner · REPL · resume picker · `submitUserInput` |
 | `providers` | effort · usage · **promptCache** · openai-responses |
 
@@ -404,15 +409,15 @@ flowchart TB
 
 | 轨道 | 内容 | 状态 |
 |------|------|------|
-| A 交互 | 斜杠 · rules · skills · creators | ✅ |
+| A 交互 | 斜杠 · SL-polish · rules · skills · creators | ✅ |
 | B 成本 | C1–C5 | ✅；C6+ 后置 |
-| C 存盘 | JSONL A–D + J-D T3（默认 jsonl / migrate / meta） | ✅ |
-| D 扩展 | Subagent · MCP（resources/prompts + list_changed）· plugins | ✅ 最小；SSE/HTTP 🟡 |
+| C 存盘 | JSONL A–D + **J-D T3**（默认 jsonl / migrate / meta / R1） | ✅ 主路径 |
+| D 扩展 | Subagent · MCP（stdio 面 + list_changed）· plugins 最小 | ✅ 最小；**SSE/HTTP · PL2 ⬜** |
 | E TUI | T0–T7 | ✅；T8 ⬜ |
 | F GUI | Electron | ⬜ 后置 |
 | G 协议 | Responses HTTP | ✅；WS 后置 |
 
-**默认下一刀：** 见 **`docs/TODO.md` §7**（MCP SSE/HTTP · PL2 / Usage+）。
+**默认下一刀：** 见 **`docs/TODO.md` §7**（MCP SSE/HTTP · PL2 · Usage+）。
 
 ---
 
@@ -426,6 +431,7 @@ flowchart TB
 6. rules/creator **不**要求联网市场  
 7. Subagent **禁止**无限递归  
 8. TUI **禁止**抄袭第三方 IP；提供 plain 模式  
+9. commit message **与 tree 一致**（勿复用陈旧 `COMMITMSG` 文件）  
 
 ---
 
@@ -435,7 +441,7 @@ flowchart TB
 |------|------|
 | **本文件** | 里程碑 / 能力矩阵 / 验收 |
 | **`TODO.md`** | **执行入口 + 下一刀** |
-| `TODO_SESSION_JSONL.md` | JSONL 深化 |
+| `TODO_SESSION_JSONL.md` | JSONL 专项（主路径已齐） |
 | `PROMPT_CACHE.md` | C1–C5 与后置 |
 | `SLASH_COMMANDS.md` · `RULES.md` · `SUBAGENT.md` | 契约 |
 | `TUI.md` · `BRAND.md` | 欢迎与品牌 |
@@ -446,17 +452,21 @@ flowchart TB
 
 ## 12. 近期 main 水位（节选）
 
-| commit | 内容 |
-|--------|------|
+> 按 **代码行为** 标注；个别 commit subject 曾与 tree 不符，以本表与代码为准。
+
+| commit | 内容（代码行为） |
+|--------|------------------|
+| `b7a4ccc` | **MCP2 list_changed 热刷新**（tools/resources/prompts → 缓存 + session.tools）；subject 曾误写为 J-D T3 |
+| `11ded88` | **J-D T3**：默认 JSONL 写、meta 配置切片、`migrateSessionToJsonl` |
+| `a8aed34` | MCP2 resources/prompts（stdio）+ meta 工具 + `/mcp` |
+| `2c02ef8` | J-D：R1 compact_boundary、双文件冲突/回退、list 更准 |
+| `2b6721e` | SL-polish：分组 help / 建议 / richer `/context` |
 | `12ec371` | C5 prompt cache API 标记 |
 | `5b0251f` | path-scoped rules submitPrompt 刷新 |
-| `4bf6f8f` | `/init` |
-| `66616cf` / `50688eb` | `/plugins` + 会话挂载 plugins |
-| `22180d1` | `/mcp` · doctor 显示 provider |
-| `6c85212` | rules `paths` 作用域 |
 | `ee3eaff` | openai-responses HTTP SSE |
 | `1fe6060` | 快照持久化 permissionRules/effort/usage |
 | `eef3b90` / `c04280f` | fork / 后台 subagent |
+| `66616cf` 等 | `/plugins` + 会话挂载 plugins |
 
 ---
 
@@ -465,18 +475,18 @@ flowchart TB
 | 里程碑 | 状态 | 一句话 |
 |--------|------|--------|
 | M0–M2 | ✅ | headless 真干活 |
-| **M-Slash** | ✅ | 日用 `/` 齐 |
+| **M-Slash** | ✅ | 日用 `/` + SL-polish |
 | **M-Rules** | ✅ | `.bolo/rules` + path-scoped + `/rules` |
 | **M-Creators** | ✅ | bundled creators |
 | **M-Subagent** | ✅/🟡 | S0–S7 + async/fork/侧链最小 |
 | **M-TUI** | 🟡 | T0–T7 ✅；T8 Ink ⬜ |
 | **M-Cost** | 🟡 | C1–C5 ✅；TTL/break 后置 |
-| **M3** | 🟡 | MCP stdio+resources/prompts+list_changed；SSE/PL2 未完 |
-| **M5** | 🟡 | 会话/CLI 日用齐；JSONL 主路径 T3 ✅；entry 可选再深 |
+| **M3** | 🟡 | MCP stdio 全量面 + list_changed；**SSE/HTTP · PL2 未完** |
+| **M5** | 🟡 | 会话/CLI 日用齐；**JSONL 主路径 T3 ✅**；entry 可选再深 |
 | **Responses** | 🟡 | HTTP SSE ✅；WS ⬜ |
 | M4–M6 | ⬜ | Electron 与体验打磨 |
 
 **一句话：**  
-**可日用 headless coding agent 主路径已齐**（CLI + slash + rules + cache 标记 + 会话 + 扩展最小 + Subagent + Responses HTTP）。  
-下一刀优先 **MCP SSE/HTTP · PL2 / Usage+**；**Electron · 完整 Ink · Responses WS · cache TTL** 后置。  
+**可日用 headless coding agent 主路径已齐**（CLI + slash 打磨 + rules + cache 标记 + JSONL 主路径 + MCP stdio 面含 list_changed + Subagent + Responses HTTP）。  
+下一刀优先 **MCP SSE/HTTP · PL2 · Usage+**；**Electron · 完整 Ink · Responses WS · cache TTL** 后置。  
 执行序 → **`docs/TODO.md`**。
