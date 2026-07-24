@@ -11,6 +11,9 @@ import {
   createAutoModeState,
   recordAutoClassifyFailure,
   createEmptyPermissionRules,
+  formatAutoClassifyAuditNote,
+  previewToolInputForAudit,
+  AUTO_CLASSIFY_NOTE_KIND,
   type PermissionMode,
   type AutoClassifyFn,
 } from '../packages/permissions/src/index.ts'
@@ -208,6 +211,64 @@ async function main() {
   recordAutoClassifyFailure(st2, 'e1', 2)
   recordAutoClassifyFailure(st2, 'e2', 2)
   assert(st2.circuitBroken && st2.demoteToDefault, 'demote flag')
+
+  // Y3.6 format audit note (pure)
+  const noteText = formatAutoClassifyAuditNote({
+    toolName: 'Bash',
+    toolUseId: 'tu1',
+    decision: 'allow',
+    reason: 'safe list',
+    stage: 'deep',
+    inputPreview: previewToolInputForAudit({ command: 'echo hi' }),
+  })
+  assert(noteText.includes('auto classify: allow Bash'), 'audit prefix')
+  assert(noteText.includes('id=tu1'), 'audit id')
+  assert(noteText.includes('stage=deep'), 'audit stage')
+  assert(noteText.includes('safe list'), 'audit reason')
+  assert(AUTO_CLASSIFY_NOTE_KIND === 'auto_classify', 'kind const')
+
+  // Y3.6 runToolUse writes audit via callback
+  const audits: Array<{ text: string; kind: string }> = []
+  const rAudit = await runToolUse(
+    { id: 'ta', name: 'Bash', input: { command: 'echo audit' } },
+    {
+      sessionId: 's',
+      cwd,
+      hooks: {},
+      permissionMode: 'auto',
+      askPermission: async () => 'deny',
+      tools: [bashTool],
+      classifyPermission: classifyAllow,
+      autoModeState: createAutoModeState('deny'),
+      onAutoClassifyAudit: (n) => {
+        audits.push(n)
+      },
+    },
+  )
+  assert(!rAudit.denied, 'audit path still allows')
+  assert(audits.length === 1, 'one audit note')
+  assert(audits[0]!.kind === 'auto_classify', 'audit kind')
+  assert(audits[0]!.text.includes('allow Bash'), 'audit text allow')
+  assert(audits[0]!.text.includes('echo audit'), 'audit input preview')
+
+  const auditsDeny: string[] = []
+  await runToolUse(
+    { id: 'tb', name: 'Bash', input: { command: 'x' } },
+    {
+      sessionId: 's',
+      cwd,
+      hooks: {},
+      permissionMode: 'auto',
+      askPermission: async () => 'allow',
+      tools: [bashTool],
+      onAutoClassifyAudit: (n) => {
+        auditsDeny.push(n.text)
+      },
+    },
+  )
+  assert(auditsDeny.length === 1, 'no-classifier audit')
+  assert(auditsDeny[0]!.includes('deny'), 'no-classifier deny note')
+  assert(auditsDeny[0]!.includes('no classifier'), 'no-classifier reason')
 
   console.log('AUTO PERMISSIONS TESTS PASS')
 }

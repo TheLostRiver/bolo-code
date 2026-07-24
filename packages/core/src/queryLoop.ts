@@ -105,6 +105,11 @@ export type QueryLoopParams = {
     permissionMode: import('../../permissions/src/index.ts').PermissionMode
     autoModeState?: import('../../permissions/src/index.ts').AutoModeState
   }
+  /** Y3.6 auto 分类审计 → system_note */
+  onAutoClassifyAudit?: (note: {
+    text: string
+    kind: 'auto_classify'
+  }) => void | Promise<void>
   /** tool_result 字符预算 */
   maxToolResultChars?: number
   spillTruncatedToolResults?: boolean
@@ -260,6 +265,7 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
           classifyPermission: params.classifyPermission,
           autoModeState: params.autoModeState,
           sessionRef: params.sessionRef,
+          onAutoClassifyAudit: params.onAutoClassifyAudit,
           maxToolResultChars: params.maxToolResultChars,
           spillTruncatedToolResults: params.spillTruncatedToolResults,
           skills: params.skills,

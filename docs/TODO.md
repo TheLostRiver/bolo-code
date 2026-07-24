@@ -1,7 +1,7 @@
 # Bolo Code 总任务清单（TODO）
 
 > **执行入口**：勾选与优先级以本文为准；里程碑/能力矩阵见 `docs/ROADMAP.md`；专项细节见各 `docs/*.md`。  
-> 更新：对齐 **MCP Streamable HTTP + transport 抽象** + 已交付主路径；完成度按 **主路径 vs 相对 HC** 诚实口径。  
+> 更新：对齐 **auto Y0–Y4 最小 + PL-MKT 最小 + Y3.6 审计 note**；完成度按 **主路径 vs 相对 HC vs auto 语义** 三口径。  
 > 原则：无遥测；对照参考实现语义再实现；不把 stub 当完成；**状态按代码行为写**，不按错误 commit subject。
 
 ---
@@ -40,37 +40,24 @@
   · Usage+ 本地 breakdown（cache · byModel · /cost）
   · RC2 思考链二期（Responses reasoning SSE · /thinking 显示开关）
   · MCP-SSE 经典 SSE 长连接（type:sse · endpoint 事件 · list_changed）
+  · **PL-MKT** 插件市场最小（register/search/install）
+  · **auto Y0–Y4 最小**（两阶段分类 · 危险/PS 硬拦 · 熔断 demote · 对抗测 · **Y3.6 system_note 审计**）
 
-相对参考实现 headless 约 40–55%（勿再写 ~70% 乐观数）。
-P0 抬水位：
-  1. ~~Loop 韧性~~ ✅ 最小
-  2. ~~Tool+Permission 日用~~ ✅ 最小
-  3. ~~长会话 compact 加深~~ ✅ 最小
-P1：
-  4. ~~MCP 远程 transport（HTTP + 抽象）~~ ✅ 最小
-  5. ~~思考链流式显示~~ ✅ 最小
-  6. ~~PL2 插件深化~~ ✅ 最小
-  7. ~~Usage+ 本地 breakdown~~ ✅ 最小
-  8. ~~RC2 思考链二期~~ ✅ 最小
-  9. ~~MCP-SSE 经典 SSE~~ ✅ 最小
-  10. ~~CP 余量：默认 auto + 环境熔断 + /autocompact~~ ✅ 最小
-  11. ~~TP 余量：StreamingToolExecutor 最小~~ ✅ 最小
-  12. ~~TP-PERM：permission 规则匹配小步~~ ✅ 最小
-  13. ~~CP-SNIP：snip 最小~~ ✅ 最小
-  14. ~~J-D 余量：title entry + CLI list/migrate~~ ✅ 最小
-  15. ~~J-D 再余量：system_note + lite list + /note~~ ✅ 最小
-  16. ~~TP-STE+：tool_progress + interruptBehavior~~ ✅ 最小（本刀）
-  下一刀：其它 CP/TP 余量 ·（完整 YOLO / 市场 **后置，需你确认再开**）
+相对参考实现 headless 约 **40–55%**（勿再写 ~70% 乐观数）。
+auto **语义**（仅对照 HC YOLO 行为，非 UI/企业）：**~85–90%**。
+P0 抬水位：~~LR / TP 日用 / CP 日用~~ ✅ 最小
+P1 主切片：~~MCP HTTP/SSE · PL2 · PL-MKT · Usage+ · RC* · STE · PERM · snip · J-D · auto Y0–Y4+Y3.6~~ ✅ 最小
+  下一刀（后置/需确认）：官方市场深度 · OAuth · T8 · Electron · 完整 YOLO 企业策略
 ```
 
 | 优先级 | 含义（当前） |
 |--------|----------------|
-| **P0** | 抬 headless 水位：韧性 / TP / **CP 日用** 已 🟡 |
-| **P1** | 扩展深度（… · **TP-STE+ ✅** · **system_note+lite ✅**）— **默认下一刀区：其它 CP·TP 余量** |
+| **P0** | 抬 headless 水位：韧性 / TP / CP 日用 已 🟡 |
+| **P1** | 扩展深度 + **auto 最小 ✅** + **PL-MKT 最小 ✅** — **默认下一刀区：后置项（需确认）** |
 | **P2** | 未做或仅最小的子项 |
 | **P3** | GUI / 完整 Ink / 后置协议 |
 
-粗估（相对 HC headless）：**~40–55%**。主路径可日用 ≠ 产品完成。
+粗估（相对 HC headless 整体）：**~40–55%**。主路径可日用 ≠ 产品完成。
 
 ---
 
@@ -200,12 +187,14 @@ P1：
 | **RC1** | 思考链流式显示 | provider 解析 → queryLoop → CLI dim；不持久化回灌 | ✅ 最小 |
 | **RC2** | Reasoning 加深 | openai-responses reasoning SSE；`/thinking` 显示开关；**跳过** ChatMessage 回灌 | ✅ 最小 |
 | **PL2** | plugins 深度 | 热加载 / commands 贡献 / `/plugins reload` | ✅ 最小 |
-| **PL-MKT** | 插件市场最小 | 本地/URL 清单 · register/search/install/uninstall · 无官方策略 | ✅ 最小（本刀） |
+| **PL-MKT** | 插件市场最小 | 本地/URL 清单 · register/search/install/uninstall · 无官方策略 | ✅ 最小 |
+| **YOLO-Y0…Y4** | auto 分类器 | 模式 · 白名单 · 两阶段 · 硬拦 · 熔断 demote · 对抗测 | ✅ 最小（~85–90% HC auto 语义） |
+| **Y3.6** | auto 审计 note | `kind=auto_classify` system_note；不进模型链；失败静默 | ✅ 最小（本刀） |
 | **Usage+** | 本地 usage 展示 | cache 字段 + byModel + `/cost` breakdown；快照/meta 持久化 | ✅ 最小 |
 | **J-D 余量** | entry / CLI | **title** + `/title` + list title + `--list` + `--migrate-session` | ✅ 最小 |
-| **J-D 再余量** | system_note / lite | **system_note** + `/note` + `scanTranscriptLite` list | ✅ 最小（本刀） |
+| **J-D 再余量** | system_note / lite | **system_note** + `/note` + `scanTranscriptLite` list | ✅ 最小 |
 | **C6+** | Cache 后置 | 1h TTL / global scope / break detection / cached MC | ⬜ **后置** |
-| **TP 余量** | permission / STE | **STE ✅** · **TP-STE+ progress/interrupt ✅** · **TP-PERM ✅**；完整 YOLO / 更强 apply_patch | 🟡 YOLO ⬜（需确认） |
+| **TP 余量** | permission / STE | **STE ✅** · **TP-STE+ ✅** · **TP-PERM ✅** · **auto Y4 ✅**；完整企业 YOLO / sandbox 仍后置 | 🟡 企业层 ⬜（需确认） |
 | **CP 余量** | compact 再深 | **默认开 auto ✅**；**snip 最小 ✅**；cached MC · SnipTool/UUID · 真 tokenizer 仍后置 | 🟡 snip 最小已齐；其余 ⬜ |
 
 ---
@@ -253,10 +242,12 @@ P1：
   · HK1–HK2 hooks 超时/abort · S8 子权限不升级
   · TP-PATCH+ Move/Rename · RC3 reasoning persist + Anthropic thinking budget · MCP-SSE 重连
   · **PL-MKT** 插件市场最小（register/search/install）
+  · **auto Y0–Y4 + Y3.6**（两阶段 · 硬拦 · 熔断 · 对抗 · system_note 审计）
 
-下一阶段：
-  ① **Auto/YOLO** — `docs/TODO_AUTO_PERMISSIONS.md`（Y0→Y4）
-  ② 完整官方市场深度 / OAuth / OR6 / T8 / Electron 等后置
+下一阶段（后置 / 需确认再开）：
+  ① 官方市场深度 / OAuth
+  ② OR6 WS · T8 Ink · Electron
+  ③ 完整 YOLO 企业策略 / sandbox（非 Y0–Y4 范围）
 ```
 
 ---
@@ -265,12 +256,12 @@ P1：
 
 若只开一刀（**非 Electron**）：
 
-> **Auto/YOLO 主线 Y0–Y4 最小已齐**（专册 `docs/TODO_AUTO_PERMISSIONS.md`）  
+> **水位已校准：** auto Y0–Y4 + **Y3.6 审计 note** + **PL-MKT 最小** 均 ✅  
 > - 相对 HC auto **行为**约 **~85–90%**（headless；非 UI/企业策略）  
 > - 测试：`test-auto-permissions` · `test-auto-classifier-adversarial`  
-> - **下一刀可：** 可选 Y3.6 审计 note · 完整官方市场深度 · OAuth · T8 · Electron  
+> - **默认下一刀：** 后置项需你点名（官方市场深度 / OAuth / T8 / Electron / 更深 YOLO）  
 
-**已齐摘要：** … · **auto Y4 最小（两阶段+对抗）** · PL-MKT · …
+**已齐摘要：** … · **auto Y4 最小 + Y3.6** · **PL-MKT 最小** · …
 
 ---
 
@@ -279,11 +270,11 @@ P1：
 | TODO | ROADMAP |
 |------|---------|
 | LR* | M-Loop 韧性 🟡 |
-| TP* · STE · PERM · PATCH+ | M-Tool+Permission 🟡 |
-| **YOLO-Y0…Y4** | **`TODO_AUTO_PERMISSIONS.md` / M-AutoPermission** |
+| TP* · STE · PERM · PATCH+ | M-Tool+Permission 🟡/✅ auto |
+| **YOLO-Y0…Y4 · Y3.6** | **`TODO_AUTO_PERMISSIONS.md` / M-Tool+Permission auto** |
 | CP* · SNIP | 长会话 compact 🟡 |
 | RC1–RC3 | 思考链 |
-| MCP* · **PL-MKT** | M3 扩展（官方市场深度 ⬜） |
+| MCP* · **PL-MKT** | M3 扩展（**PL-MKT 最小 ✅**；官方市场深度 ⬜） |
 | M4 / T8 | Electron / Ink ⬜ |
 
 ---
@@ -301,5 +292,5 @@ P1：
 ---
 
 **一句话：**  
-**auto Y0–Y4 最小完成**（两阶段分类 + 危险/PS 硬拦 + 熔断 demote + 对抗测）；相对 HC auto 行为 ~85–90%。  
-可选余量：Y3.6 审计 note；后置：官方市场深度 / Electron。
+**auto Y0–Y4 + Y3.6 最小完成**（两阶段 + 硬拦 + 熔断 + 对抗 + `system_note` 审计）；**PL-MKT 最小完成**。  
+相对 HC headless 整体 **~40–55%**；auto 语义 **~85–90%**。后置：官方市场深度 / OAuth / T8 / Electron。

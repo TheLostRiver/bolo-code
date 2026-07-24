@@ -791,6 +791,12 @@ export {
   type AutoClassifyResult,
   type AutoClassifyFn,
 } from './autoClassifier.ts'
+export {
+  formatAutoClassifyAuditNote,
+  previewToolInputForAudit,
+  AUTO_CLASSIFY_NOTE_KIND,
+  type AutoClassifyAuditInput,
+} from './autoAudit.ts'
 export { stripDangerousAllowsForAuto } from './stripDangerousAllows.ts'
 export {
   matchDangerousBashCommand,

@@ -1,7 +1,8 @@
 # 权限模式 — 对照参考实现语义
 
 > 参考 PermissionMode 与 permissions 决策链。  
-> **不抄**遥测、GrowthBook、YOLO / `auto` 分类器。
+> **不抄**遥测、GrowthBook、企业 YOLO UI。  
+> **已实现** headless `auto` 分类器（Y0–Y4 最小 + Y3.6 审计 note）。
 
 ## 1. 外部模式（产品四档 + default）
 
@@ -46,7 +47,9 @@ PreToolUse (可 block)
 **上下文（Y4.2）：** summary ≤ 2500 chars、toolInput JSON ≤ 2000 chars。  
 
 进入 auto 时剥离 Bash/Agent always-allow 与解释器类 bash 前缀。  
-费用：每个需分类的工具可能 **1–2 次** 额外模型调用（fast+deep）。详见 `docs/TODO_AUTO_PERMISSIONS.md`。
+费用：每个需分类的工具可能 **1–2 次** 额外模型调用（fast+deep）。  
+**审计（Y3.6）：** 分类结果（含 fail-closed / 熔断 / demote）追加 JSONL `system_note`，`kind=auto_classify`；**不进**模型 messages；落盘失败静默。  
+详见 `docs/TODO_AUTO_PERMISSIONS.md`。
 
 ## 3. 工具类别（Bolo）
 
@@ -120,7 +123,7 @@ PreToolUse (可 block)
 
 - always-deny **优先于** always-allow 与 `bypassPermissions`  
 - `plan` 下写/壳/MCP 仍 **deny**，always-allow **不能** 覆盖  
-- 无遥测；**非**完整 YOLO / auto 分类器  
+- 无遥测；auto 为 **headless 最小**（非企业 UI / sandbox） 
 
 ## 6. 模块
 
@@ -131,9 +134,10 @@ packages/permissions/src/index.ts
   matchPathGlob · matchBashPattern
   addAlwaysAllow* / addAlwaysDeny*
 
-runToolUse 调用 gate，再 hooks/UI
-Session.permissionMode / permissionRules
-/allow · /deny（slash）
+runToolUse 调用 gate，再 hooks/UI；auto → classify + system_note 审计
+Session.permissionMode / permissionRules / autoModeState
+packages/permissions/src/autoClassifier.ts · autoAudit.ts
+/allow · /deny · /permissions auto
 ```
 
 系统提示词注入模式说明，见 `docs/PROMPT_CATALOG.md` / `docs/SYSTEM_PROMPT.md`。
@@ -147,9 +151,9 @@ Session.permissionMode / permissionRules
 ## 8. 明确不做（本文件范围） / 后置
 
 - 跨会话全局 allow 规则 DSL  
-- **YOLO Y3+**（危险模式库加深、两阶段分类器）— 见 `TODO_AUTO_PERMISSIONS.md`  
+- 企业 YOLO UI / GrowthBook / 遥测  
 - sandbox 网络策略  
 - 完整 path allowlist 引擎  
 
-> **Y0–Y3 已落地**：模式 + 白名单 + 真分类器 + 危险命令/敏感路径 + 熔断 demote。  
-> **Y4**（两阶段 / 对抗集）见 `TODO_AUTO_PERMISSIONS.md`。
+> **Y0–Y4 最小 + Y3.6 已落地**：模式 + 白名单 + 两阶段分类器 + 危险/PS 硬拦 + 敏感路径 + 熔断 demote + `system_note` 审计。  
+> 更深项见 `TODO_AUTO_PERMISSIONS.md` 后置表。

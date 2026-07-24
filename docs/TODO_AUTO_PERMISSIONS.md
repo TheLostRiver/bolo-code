@@ -1,7 +1,7 @@
 # TODO / 路线图：Auto 权限分类器（YOLO 语义）
 
 > **专项规划**（与 `docs/PERMISSIONS.md` 规则门控正交；与 `docs/TODO.md` 全局下一刀衔接）。  
-> 更新：初版规划（对照 HelsincyCode `utils/permissions/*` + `yoloClassifier`，**重新实现**；无遥测 / 无 GrowthBook）。  
+> 更新：**Y0–Y4 最小 + Y3.6 审计 note 已齐**（对照 HelsincyCode `utils/permissions/*` + `yoloClassifier` 语义重实现；无遥测 / 无 GrowthBook）。  
 > 原则：fail-closed；不把 stub 当完成；完成度分 **规则层 / auto 语义 / 产品整体** 三口径。
 
 ---
@@ -15,13 +15,13 @@
 | 目标 | 用户期望接近 **HC auto/YOLO 行为的 ~90%（headless 语义）**，非抄全套 UI/遥测 |
 | 依赖 | 已有：四档 mode、always-allow/deny、Bash 通配、S8 子权限不升级、hooks PermissionRequest |
 
-**现状粗估（分析结论，见会话审计）：**
+**现状粗估（交付后）：**
 
 | 口径 | 相对 HC | 说明 |
 |------|---------|------|
 | 规则门控日用 | ~55–70% | `decidePermission` 可用 |
-| **auto/YOLO 子系统** | **~0–5%** | 无分类器 |
-| 权限产品整体（含 UI） | ~15–25% | CLI 极简 |
+| **auto/YOLO 子系统（headless 语义）** | **~85–90%** | Y0–Y4 最小 + Y3.6 审计 note |
+| 权限产品整体（含 UI/企业） | ~25–35% | CLI 极简；无 sandbox/GrowthBook/完整 Permission UI |
 
 本专题 **只规划 auto/YOLO 子系统 + 为 auto 服务的规则加固**；不吞掉 Electron 权限对话框全家桶。
 
@@ -188,8 +188,8 @@ type AutoClassifyResult =
 
 | 阶段 | 状态 |
 |------|------|
-| Y3 清洗/熔断/危险库 | ✅ 最小：strip + 解释器前缀清洗 · 熔断 demote→default · dangerous bash 硬 deny · 敏感路径 · Agent 强制分类 |
-| Y4 两阶段/对抗 | ⬜ |
+| Y3 清洗/熔断/危险库 | ✅ 最小：strip + 解释器前缀清洗 · 熔断 demote→default · dangerous bash 硬 deny · 敏感路径 · Agent 强制分类 · **Y3.6 审计 note** |
+| Y4 两阶段/对抗 | ✅ 最小：fast/deep · 上下文上限 · PS 危险 · plan 互斥 · 对抗测 |
 
 ---
 
@@ -202,7 +202,7 @@ type AutoClassifyResult =
 | **Y3.3** | `dangerousPatterns`（rm -rf /、curl\|sh 等）→ 硬 deny | 单测 | ✅ 最小 |
 | **Y3.4** | 敏感路径（.ssh 硬 deny；.env 不快路径） | 单测 | ✅ 最小 |
 | **Y3.5** | Agent 不在白名单 → 强制分类器 | 单测 | ✅ |
-| **Y3.6** | system_note 审计 | 可选 | ⬜ |
+| **Y3.6** | system_note 审计（对照 HC decision 事件；本地无遥测） | 分类结果写 `kind=auto_classify`；不进模型链；失败静默 | ✅ 最小 |
 
 **出口：** 误配置 allow 不易架空 auto；明显破坏性命令硬拦；故障可熔断退 default。  
 **相对 HC YOLO 语义：~65–75%（Y3 最小完成）。**
@@ -222,14 +222,14 @@ type AutoClassifyResult =
 **出口：** 行为接近 HC auto **日用路径** ~85–90%（headless 语义）。  
 **仍不宣称** 权限 UI/企业策略/GrowthBook 90%。
 
-**Y3.6** system_note 审计仍为可选 ⬜。
+**Y3.6** system_note 审计 ✅（`formatAutoClassifyAuditNote` + `runToolUse.onAutoClassifyAudit` → `appendSessionSystemNote`）。
 
 ### 完成度（相对 HC auto **行为**）
 
 | 阶段 | 粗估 |
 |------|------|
 | Y0–Y2 | ~45% |
-| +Y3 | ~70% |
+| +Y3 | ~70%（含 Y3.6 审计） |
 | **+Y4 最小** | **~85–90%** |
 
 ---
@@ -302,7 +302,7 @@ Y0 规格 ──► Y1 模式+白名单 ──► Y2 真分类器（首个可发
 |---|--------|----------|
 | D1 | auto 下分类失败：deny 还是 ask？ | **deny**（headless 更安全）；CLI 可配置 ask |
 | D2 | 分类器用哪个 model？ | 默认 `session.model`；可选更小/更便宜 model |
-| D3 | 是否把分类对话写入 transcript？ | **默认否**；可选 system_note 审计 |
+| D3 | 是否把分类对话写入 transcript？ | **默认否**（不写分类对话全文）；**Y3.6** 写精简 `system_note`（decision/tool/reason） |
 | D4 | mode 循环是否包含 auto？ | 是，夹在 acceptEdits 与 bypass 之间 |
 | D5 | bypass 是否可与分类器并存？ | **否**；bypass 仍绕过分类器（但 always-deny 仍生效） |
 
@@ -311,7 +311,7 @@ Y0 规格 ──► Y1 模式+白名单 ──► Y2 真分类器（首个可发
 ## 10. 完成定义（本专题 Done）
 
 1. **Y2 全部验收 ✅**（可用 auto，fail-closed）  
-2. **Y3 全部验收 ✅**（清洗 + 熔断 demote + 危险/路径；Y3.6 可选可缺）  
+2. **Y3 全部验收 ✅**（清洗 + 熔断 demote + 危险/路径 + Y3.6 审计 note）  
 3. **Y4.1–Y4.5 ✅**（两阶段 + 上下文上限 + PS + plan 钉死 + 对抗测）  
 4. 现有四档权限回归绿  
 5. 文档与代码一致  
@@ -326,8 +326,8 @@ Y0 规格 ──► Y1 模式+白名单 ──► Y2 真分类器（首个可发
 
 | 全局 | 本专题 |
 |------|--------|
-| M-Tool+Permission 🟡 | 规则层已 🟡；**auto 走 Y0–Y4** |
-| `TODO.md` 下一刀 | 指向本文 Y0 开工 |
+| M-Tool+Permission 🟡/✅ auto | 规则层 ✅；**auto Y0–Y4 + Y3.6 ✅** |
+| `TODO.md` 下一刀 | 后置项需确认（非 auto 主线） |
 | 插件市场 PL-MKT | **无关**；已最小交付 |
 | Electron / T8 | 权限 UI 后置，不阻塞 Y2 |
 
@@ -335,7 +335,7 @@ Y0 规格 ──► Y1 模式+白名单 ──► Y2 真分类器（首个可发
 
 ## 12. 一句话
 
-> **规则权限已有半成品；auto/YOLO 从零按 Y0→Y4 专册推进。Y2 为第一个可发布「真自动」；Y3+Y4 才谈相对 HC auto 语义的九成。**
+> **Y0–Y4 最小 + Y3.6 已交付。** 相对 HC auto **行为** ~85–90%（headless）。更深企业 YOLO / UI / sandbox 需另开刀并确认。
 
 **开工默认第一刀：Y0.1–Y0.3 落文档类型 → 立即 Y1.1–Y1.3。**  
 实现时对照 HC 语义重写，禁止大段复制；文档无本机绝对路径。

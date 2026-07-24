@@ -69,7 +69,7 @@ Edit 失败形态（示例）：
 
 - 完整 zod 与复杂 schema  
 - StreamingToolExecutor 再深：完整 contextModifier · 多级 progress 结构化 payload  
-- 完整 YOLO / auto 分类器（**开工前需用户确认**）  
+- 企业级 YOLO / sandbox / Permission UI（headless **auto Y0–Y4 最小已齐**，见 `PERMISSIONS.md`）  
 - UI renderToolResult  
 
 ## 6. 测试

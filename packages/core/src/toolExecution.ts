@@ -17,6 +17,9 @@ import {
   createAutoModeState,
   recordAutoClassifySuccess,
   recordAutoClassifyFailure,
+  formatAutoClassifyAuditNote,
+  previewToolInputForAudit,
+  AUTO_CLASSIFY_NOTE_KIND,
   type PermissionMode,
   type SessionPermissionRules,
   type AutoModeState,
@@ -158,8 +161,48 @@ export type RunToolUseContext = {
     permissionMode: PermissionMode
     autoModeState?: AutoModeState
   }
+  /**
+   * Y3.6：auto 分类结果审计（对照 HC decision 事件；本地 system_note，无遥测）。
+   * 失败必须静默，不得阻断 tool 路径。
+   */
+  onAutoClassifyAudit?: (note: {
+    text: string
+    kind: typeof AUTO_CLASSIFY_NOTE_KIND
+  }) => void | Promise<void>
   signal?: AbortSignal
   onEvent?: (e: ToolExecutionEvent | QueryLoopEvent) => void
+}
+
+async function auditAutoClassify(
+  ctx: RunToolUseContext,
+  input: {
+    toolName: string
+    toolUseId: string
+    toolInput: unknown
+    decision: 'allow' | 'deny'
+    reason: string
+    stage?: string
+    unavailable?: boolean
+    demoted?: boolean
+  },
+): Promise<void> {
+  const fn = ctx.onAutoClassifyAudit
+  if (!fn) return
+  try {
+    const text = formatAutoClassifyAuditNote({
+      toolName: input.toolName,
+      toolUseId: input.toolUseId,
+      decision: input.decision,
+      reason: input.reason,
+      stage: input.stage,
+      unavailable: input.unavailable,
+      demoted: input.demoted,
+      inputPreview: previewToolInputForAudit(input.toolInput),
+    })
+    await fn({ text, kind: AUTO_CLASSIFY_NOTE_KIND })
+  } catch {
+    // 审计失败不拖垮权限路径
+  }
 }
 
 export type RunToolUseResult = {
@@ -401,6 +444,15 @@ export async function runToolUse(
         if (autoState.fallback === 'ask') {
           // 熔断后回退 UI ask：fall through 到下方 hooks/UI
         } else {
+          await auditAutoClassify(ctx, {
+            toolName: name,
+            toolUseId,
+            toolInput,
+            decision: 'deny',
+            reason:
+              autoState.lastReason ?? 'classifier unavailable',
+            stage: 'circuit',
+          })
           return endResult(
             ctx,
             toolUseId,
@@ -427,6 +479,15 @@ export async function runToolUse(
               'no classifyPermission injected',
             )
           }
+          await auditAutoClassify(ctx, {
+            toolName: name,
+            toolUseId,
+            toolInput,
+            decision: 'deny',
+            reason: 'no classifier; fail-closed',
+            stage: 'no_classifier',
+            unavailable: true,
+          })
           return endResult(
             ctx,
             toolUseId,
@@ -454,12 +515,14 @@ export async function runToolUse(
           signal: ctx.signal,
         })
         if (result.unavailable) {
+          let demoted = false
           if (autoState) {
             recordAutoClassifyFailure(autoState, result.reason)
             if (autoState.demoteToDefault && ctx.sessionRef) {
               ctx.sessionRef.permissionMode = 'default'
               autoState.demoteToDefault = false
               autoState.lastReason = `demoted to default: ${result.reason}`
+              demoted = true
             }
           }
           emit(ctx, {
@@ -467,6 +530,16 @@ export async function runToolUse(
             mode: 'auto',
             behavior: 'deny',
             reason: result.reason,
+          })
+          await auditAutoClassify(ctx, {
+            toolName: name,
+            toolUseId,
+            toolInput,
+            decision: 'deny',
+            reason: result.reason,
+            stage: result.stage ?? 'single',
+            unavailable: true,
+            demoted,
           })
           return endResult(
             ctx,
@@ -490,6 +563,14 @@ export async function runToolUse(
           mode: 'auto',
           behavior: result.decision,
           reason: result.reason,
+        })
+        await auditAutoClassify(ctx, {
+          toolName: name,
+          toolUseId,
+          toolInput,
+          decision: result.decision,
+          reason: result.reason,
+          stage: result.stage ?? 'single',
         })
         if (result.decision === 'deny') {
           return endResult(

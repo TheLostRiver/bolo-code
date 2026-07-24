@@ -1152,6 +1152,13 @@ export async function submitPrompt(
     classifyPermission: session.classifyPermission,
     autoModeState: session.autoModeState,
     sessionRef: session,
+    onAutoClassifyAudit: async (note) => {
+      try {
+        await appendSessionSystemNote(session, note.text, { kind: note.kind })
+      } catch {
+        // 审计落盘失败不阻断主路径
+      }
+    },
     maxToolResultChars: session.maxToolResultChars,
     skills: session.skills,
     tools: session.tools ?? createDefaultTools(session.agentDefinitions),

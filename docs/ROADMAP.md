@@ -1,6 +1,6 @@
 # Bolo Code 整体路线图（详细版）
 
-> 更新：对齐 **MCP Streamable HTTP + transport 抽象** 与已交付主路径（含 CP / TP / LR）。  
+> 更新：对齐 **auto Y0–Y4 最小 + PL-MKT 最小 + Y3.6 审计 note**；主路径与相对 HC 分口径。  
 > **勾选与「下一刀」以 `docs/TODO.md` 为准**；本文件回答：**做到哪 / 缺什么 / 验收 / 里程碑**。  
 > 原则：借鉴参考实现 **语义**再实现；**无遥测**；文档无本机绝对路径；**状态按代码行为**，不按错误 commit subject。
 
@@ -10,17 +10,17 @@
 
 | 层 | 粗估 | 说明 |
 |----|------|------|
-| **Headless 核心**（loop / tools / provider / compact / prompt） | **~55–65%** | 主路径可用；compact 日用加深已 🟡；**STE ✅**；**permission 规则匹配小步 ✅**；**snip 最小 ✅**；仍缺 cached MC、SnipTool/UUID、完整 YOLO 分类器 |
-| 会话与 CLI | **~70–80%** | JSONL 默认写（T3）；resume/continue；无参 REPL；非成熟 Ink |
-| **扩展面（MCP / Plugins / Skills）** | **~55–65%** | Skills + MCP stdio 面 + list_changed + **HTTP transport** ✅；**SSE ✅ 最小**；**PL2 热加载 ✅ 最小**；市场 ⬜ |
-| **Subagent** | **~50–60%** | 真 loop + Agent + 目录定义；async/fork 最小；worktree ⬜ |
+| **Headless 核心**（loop / tools / provider / compact / prompt） | **~60–70%** | 主路径可用；**STE ✅**；**规则权限 ✅**；**auto Y0–Y4 最小 ✅**（~85–90% HC auto **语义**）；**snip 最小 ✅**；仍缺 cached MC、SnipTool/UUID、完整 YOLO 企业/UI 层 |
+| 会话与 CLI | **~70–80%** | JSONL 默认写（T3）；resume/continue；title/system_note；无参 REPL；非成熟 Ink |
+| **扩展面（MCP / Plugins / Skills）** | **~60–70%** | Skills + MCP stdio/HTTP/SSE 最小 + list_changed + **PL2 热加载 ✅**；**PL-MKT 最小 ✅**（本地/URL 清单 install）；官方市场深度 / OAuth ⬜ |
+| **Subagent** | **~50–60%** | 真 loop + Agent + 目录定义；async/fork 最小；S8 不升级；worktree ⬜ |
 | **项目规则 Rules** | **~75–85%** | 装载 + paths + 刷新 + `/rules` |
 | **内置元技能 Creators** | **~70–80%** | skill/plugin-creator 最小 |
 | **成本与缓存** | **~45–55%** | C1–C5 标记 ✅；TTL / break / 深度 usage 后置 |
 | **斜杠命令** | **~70–80%** | 总线 + 日用 + SL-polish |
 | **CLI TUI** | **~35–45%** | T0–T7 最小；完整 Ink ⬜ |
 | **Electron GUI** | **~5%** | 占位 |
-| **产品整体（可日用 headless agent）** | **~40–55%** | 相对 HelsincyCode headless；**主路径可脚本/CLI 跑**，文档不再用 ~70% 乐观口径 |
+| **产品整体（可日用 headless agent）** | **~40–55%** | 相对 HelsincyCode headless；**主路径可脚本/CLI 跑**；auto/PL-MKT 抬了权限与扩展水位，**不**把整体抬到 ~70% |
 
 **口径说明：**
 
@@ -28,6 +28,7 @@
 |------|------|
 | **主路径** | createSession → queryLoop → provider → tools → JSONL/CLI 可闭环 |
 | **相对 HC** | 对照参考实现能力密度（loop 韧性、tool/permission 日用、compact、MCP 面） |
+| **auto 语义** | 仅对照 HC auto/YOLO **行为**（headless）；见 `TODO_AUTO_PERMISSIONS.md`（**~85–90%**，非 UI/企业策略） |
 
 **当前主线（执行序见 `TODO.md`）：**
 
@@ -42,15 +43,15 @@
 9. ~~**MCP-SSE**（经典 SSE 长连接）~~ ✅ 最小  
 10. ~~**CP5**（默认开 auto · 环境熔断 · `/autocompact`）~~ ✅ 最小  
 11. ~~**TP 余量：StreamingToolExecutor 最小**~~ ✅ 最小  
-12. ~~**TP-PERM：permission 规则匹配小步**~~ ✅ 最小（always-deny + Bash 通配；非完整 YOLO）  
-13. ~~**CP-SNIP：snip 最小**~~ ✅ 最小（门槛裁前缀 · 安全 cut · prepare 写回）  
+12. ~~**TP-PERM：permission 规则匹配小步**~~ ✅ 最小（always-deny + Bash 通配）  
+13. ~~**CP-SNIP：snip 最小**~~ ✅ 最小  
 14. ~~**J-D 余量：title entry + CLI list/migrate**~~ ✅ 最小  
 15. ~~**J-D 再余量：system_note + lite list**~~ ✅ 最小  
 16. ~~**TP-STE+ / HK / S8**~~ ✅ 最小  
 18. ~~**TP-PATCH+ · RC3 · MCP-SSE 重连**~~ ✅ 最小  
 19. ~~**PL-MKT 插件市场最小**~~ ✅ 最小  
-20. **下一主线：Auto/YOLO 分类器** — 见 **`docs/TODO_AUTO_PERMISSIONS.md`（Y0–Y4）**  
-21. **后置：** 完整官方 marketplace 深度 · OAuth · OR6 · T8 · Electron · worktree  
+20. ~~**Auto/YOLO Y0–Y4 最小**~~ ✅（两阶段 + 危险/PS 硬拦 + 熔断 demote + 对抗测 + **Y3.6 审计 note**）  
+21. **下一主线（可选/后置）：** 官方 marketplace 深度 · OAuth · OR6 · T8 · Electron · worktree · 完整 YOLO 企业策略（需确认）  
 
 ---
 
@@ -88,7 +89,7 @@
 
 | 能力 | 状态 | 备注 |
 |------|------|------|
-| queryLoop / Hooks / 四档权限 | ✅/🟡 | always-allow + **always-deny**（工具/前缀/path/bash）；Bash **通配/`:*`**；deny 赢过 bypass；plan 仍 deny 写 |
+| queryLoop / Hooks / 权限 | ✅/🟡 | 四档 + **`auto`**；always-allow/deny；Bash 通配；**auto 两阶段分类器 + 硬拦 + 熔断 + system_note 审计**；plan 仍 deny 写 |
 | **Loop 韧性：错误分类 + model 退避** | 🟡 最小 | `errorClassify` + `wrapCallModelWithRetry`；默认 3 次；事件 `model_retry` |
 | PTL 截断重试 | ✅ | 与 model 退避正交 |
 | buildTool + 分区并发 + 常用工具 | ✅/🟡 | **Edit** ✅ 最小；真 apply_patch；Write；schema → tool_use_error |
@@ -185,7 +186,8 @@
 | MCP **transport 抽象 + Streamable HTTP** | ✅ 最小 |
 | MCP 经典 SSE 长连接（`type: sse`） | ✅ 最小 |
 | Plugins 本地加载 | ✅ 最小 |
-| Plugins 热加载 / commands（PL2） | ✅ 最小；市场 ⬜ |
+| Plugins 热加载 / commands（PL2） | ✅ 最小 |
+| Plugins 市场最小（PL-MKT） | ✅ 最小；官方市场深度 / OAuth ⬜ |
 | Subagent 真 loop | ✅ |
 | Electron | ⬜ |
 
@@ -236,7 +238,7 @@ K1–K2 + slash 回落 ✅；rule-creator 可选 ⬜。
 | 3.2c MCP list_changed 热刷新 | ✅（stdio） |
 | 3.2d MCP Streamable HTTP + client 抽象 | ✅ 最小 |
 | 3.2e MCP 经典 SSE 长连接 | ✅ 最小 |
-| 3.3 Plugins 真加载 | ✅ 最小（本地）；PL2 热加载 ⬜ |
+| 3.3 Plugins 真加载 | ✅ 最小（本地）；**PL2 热加载 ✅**；**PL-MKT 最小 ✅**；官方市场深度 ⬜ |
 | 3.4 Subagent | ✅ 见 M-Subagent |
 
 ### M3.4 / M-Subagent ✅（最小完成线 + partial 加深）
@@ -420,7 +422,8 @@ flowchart TB
 | MCP Streamable HTTP + `McpClient` 抽象 | ✅ 最小 |
 | MCP 经典 SSE 长连接（`type: sse`） | ✅ 最小 |
 | Plugins 本地最小 | ✅ |
-| Plugins 热加载 + commands（PL2） | ✅ 最小；市场 ⬜ |
+| Plugins 热加载 + commands（PL2） | ✅ 最小 |
+| Plugins 市场最小（PL-MKT） | ✅ 最小；官方深度 / OAuth ⬜ |
 | Undo / 多模态 / 沙箱 | ⬜ 后置 |
 | 遥测 | 🚫 |
 
@@ -447,13 +450,14 @@ flowchart TB
 | A 交互 | 斜杠 · SL-polish · rules · skills · creators | ✅ |
 | B 成本 | C1–C5 | ✅；C6+ 后置 |
 | C 存盘 | JSONL A–D + **J-D T3**（默认 jsonl / migrate / meta / R1） | ✅ 主路径 |
-| D 扩展 | Subagent · MCP（stdio + HTTP + **SSE 最小**）· plugins PL1+PL2 最小 | ✅ 最小；**市场 · OAuth ⬜** |
+| D 扩展 | Subagent · MCP（stdio + HTTP + **SSE 最小**）· plugins PL1+PL2 · **PL-MKT 最小** | ✅ 最小；**官方市场深度 · OAuth ⬜** |
 | E TUI | T0–T7 | ✅；T8 ⬜ |
 | F GUI | Electron | ⬜ 后置 |
 | G 协议 | Responses HTTP | ✅；WS 后置 |
-| H 韧性 | 错误分类 + model 退避 + PTL | 🟡 最小（本刀） |
+| H 韧性 | 错误分类 + model 退避 + PTL | 🟡 最小 |
+| I 权限 auto | Y0–Y4 最小 + Y3.6 审计 note | ✅ 最小（HC auto 语义 ~85–90%；UI/企业 ⬜） |
 
-**默认下一刀：** 见 **`docs/TODO.md` §8** + **`docs/TODO_AUTO_PERMISSIONS.md`**（Auto/YOLO Y0→Y2 优先）。
+**默认下一刀：** 见 **`docs/TODO.md` §8**（后置：官方市场深度 / OAuth / T8 / Electron；完整 YOLO 需确认）。
 
 ---
 
@@ -479,7 +483,7 @@ flowchart TB
 | **本文件** | 里程碑 / 能力矩阵 / 验收 |
 | **`TODO.md`** | **执行入口 + 下一刀** |
 | **`TODO_AUTO_PERMISSIONS.md`** | **Auto/YOLO 分类器专项（Y0–Y4）** |
-| `PERMISSIONS.md` | 四档规则门控（与 auto 正交） |
+| `PERMISSIONS.md` | 规则门控 + **auto 分类器路径**（与 YOLO 企业层正交） |
 | `AGENT_LOOP.md` | loop · 错误分类 · model/PTL 重试 |
 | `TODO_SESSION_JSONL.md` | JSONL 专项（主路径已齐） |
 | `PROMPT_CACHE.md` | C1–C5 与后置 |
@@ -497,7 +501,9 @@ flowchart TB
 
 | commit | 内容（代码行为） |
 |--------|------------------|
-| *(本刀)* | **J-D 余量**：`title` entry last-wins · `/title` · list title · CLI `--list` / `--migrate-session` |
+| *(本刀)* | **Y3.6**：auto 分类 `system_note` 审计（`kind=auto_classify`；不进模型链） |
+| *(近主线)* | **auto Y0–Y4 最小** + **PL-MKT 最小**（见 TODO；subject 以代码为准） |
+| *(近主线)* | **J-D 余量**：`title` entry · `/title` · list · CLI `--list` / `--migrate-session` |
 | `08047b7` | **CP-SNIP**：snip 最小（门槛裁前缀 · tool 安全 cut · `History snipped` · prepare 写回 · snip→micro→auto） |
 | `bd99c95` | **TP-STE**：StreamingToolExecutor 最小（边流边跑 · 保序 · Bash 级联 · discard · queryLoop 接入） |
 | `19cf680` | **CP5**：默认 auto compact + 环境熔断 + `/autocompact` |
@@ -530,14 +536,14 @@ flowchart TB
 | **M-Subagent** | 🟡 | S0–S7 + **S8 权限不升级** + async/fork/侧链最小 |
 | **M-TUI** | 🟡 | T0–T7 ✅；T8 Ink ⬜ |
 | **M-Cost** | 🟡 | C1–C5 ✅；TTL/break 后置 |
-| **M3** | 🟡 | MCP stdio + list_changed + **HTTP 最小** + **SSE 最小** + **PL2 热加载最小**；市场 ⬜ |
+| **M3** | 🟡 | MCP stdio + list_changed + **HTTP/SSE 最小** + **PL2 热加载最小** + **PL-MKT 最小**；官方市场深度 / OAuth ⬜ |
 | **M5** | 🟡 | 会话/CLI 可用；JSONL 主路径 T3 ✅；title/list/migrate ✅；**system_note+lite list ✅** |
 | **Responses** | 🟡 | HTTP SSE ✅；WS ⬜ |
 | M4–M6 | ⬜ | Electron 与体验打磨 |
 
 **一句话：**  
 Headless **主路径可日用**，相对参考实现约 **40–55%**（文档不再写 ~70% 乐观数）。  
-**P1 可闭环余量已齐**（含 apply_patch Move · reasoning persist · SSE 重连 · hooks · S8）。  
-**规则权限 + auto Y0–Y4 最小已齐**（HC auto 语义 ~85–90%；非权限 UI 全家桶）。  
-**PL-MKT 最小已齐。** 下一刀：官方市场深度 / OAuth / T8 / Electron 等后置。  
+**规则权限 + auto Y0–Y4 最小已齐**（HC auto **语义** ~85–90%；Y3.6 审计 note ✅；UI/企业策略 ⬜）。  
+**PL-MKT 最小已齐**（本地/URL 清单 install；非官方市场全家桶）。  
+下一刀后置：官方市场深度 / OAuth / T8 / Electron / 更深 YOLO（需确认）。  
 执行序 → **`docs/TODO.md`**。
