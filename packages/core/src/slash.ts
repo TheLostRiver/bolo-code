@@ -861,7 +861,8 @@ function cmdMcp(session: SlashSession, args: string): SlashDispatchResult {
 }
 
 function cmdPlugins(session: SlashSession, args: string): Promise<SlashDispatchResult> | SlashDispatchResult {
-  const sub = args.trim().split(/\s+/)[0]?.toLowerCase() ?? ''
+  const parts = args.trim().split(/\s+/).filter(Boolean)
+  const sub = (parts[0] ?? '').toLowerCase()
 
   if (sub === 'reload' || sub === 'refresh') {
     return cmdPluginsReload(session)
@@ -885,13 +886,29 @@ function cmdPlugins(session: SlashSession, args: string): Promise<SlashDispatchR
     return { ok: true, message: lines.join('\n') }
   }
 
+  if (sub === 'market' || sub === 'marketplace') {
+    return cmdPluginsMarket(session, parts.slice(1))
+  }
+
+  if (sub === 'install') {
+    return cmdPluginsInstall(session, parts.slice(1))
+  }
+
+  if (sub === 'uninstall' || sub === 'remove') {
+    return cmdPluginsUninstall(session, parts.slice(1))
+  }
+
+  if (sub === 'search') {
+    return cmdPluginsSearch(parts.slice(1).join(' '))
+  }
+
   // list（默认）
   const plugins = session.plugins ?? []
   if (!plugins.length) {
     return {
       ok: true,
       message:
-        'plugins: (none loaded)\nPlace plugins under ~/.bolo/plugins/<id>/ or .bolo/plugins/<id>/ with bolo.plugin.json (PL1 local only; no marketplace).\nUse /plugins reload after adding files mid-session (PL2).',
+        'plugins: (none loaded)\nPlace plugins under ~/.bolo/plugins/<id>/ or .bolo/plugins/<id>/ with bolo.plugin.json.\nMarket: /plugins market add <path|url> · /plugins search · /plugins install <id>@<market>\nUse /plugins reload after adding files mid-session.',
     }
   }
   const lines = [`plugins (${plugins.length}):`]
@@ -904,8 +921,213 @@ function cmdPlugins(session: SlashSession, args: string): Promise<SlashDispatchR
   }
   const cmdN = session.pluginCommands?.length ?? 0
   lines.push(`plugin commands: ${cmdN}  (see /plugins commands)`)
-  lines.push('Subcommands: list (default) | commands | reload')
+  lines.push(
+    'Subcommands: list | commands | reload | market | search | install | uninstall',
+  )
   return { ok: true, message: lines.join('\n') }
+}
+
+async function cmdPluginsMarket(
+  session: SlashSession,
+  parts: string[],
+): Promise<SlashDispatchResult> {
+  const {
+    registerMarketplace,
+    listKnownMarketplaces,
+    loadCatalogForKnown,
+  } = await import('../../plugins/src/marketplace.ts')
+  const action = (parts[0] ?? 'list').toLowerCase()
+  try {
+    if (action === 'list' || action === '') {
+      const known = await listKnownMarketplaces()
+      if (!known.length) {
+        return {
+          ok: true,
+          message:
+            'marketplaces: (none)\nAdd: /plugins market add <local-path-or-https-url>',
+        }
+      }
+      const lines = [`marketplaces (${known.length}):`]
+      for (const k of known) {
+        lines.push(`  ${k.name}  ← ${k.source}`)
+      }
+      lines.push('Search: /plugins search [query]  ·  Install: /plugins install <id>@<market>')
+      return { ok: true, message: lines.join('\n') }
+    }
+    if (action === 'add' || action === 'register') {
+      const source = parts.slice(1).join(' ').trim()
+      if (!source) {
+        return {
+          ok: false,
+          message: 'Usage: /plugins market add <path-or-url> [name]',
+        }
+      }
+      // optional trailing name if last token has no / or :
+      let name: string | undefined
+      const tokens = parts.slice(1)
+      if (
+        tokens.length >= 2 &&
+        !tokens[tokens.length - 1]!.includes('/') &&
+        !tokens[tokens.length - 1]!.includes(':') &&
+        !tokens[tokens.length - 1]!.includes('\\')
+      ) {
+        name = tokens.pop()
+      }
+      const src = tokens.join(' ').trim() || source
+      const r = await registerMarketplace({ source: src, name })
+      return {
+        ok: true,
+        message: `Registered marketplace "${r.known.name}" (${r.catalog.plugins.length} plugin(s))\nSource: ${r.known.source}\nNext: /plugins search  or  /plugins install <id>@${r.known.name}`,
+      }
+    }
+    if (action === 'show' || action === 'info') {
+      const name = parts[1]
+      if (!name) {
+        return { ok: false, message: 'Usage: /plugins market show <name>' }
+      }
+      const known = (await listKnownMarketplaces()).find((k) => k.name === name)
+      if (!known) {
+        return { ok: false, message: `Unknown marketplace: ${name}` }
+      }
+      const catalog = await loadCatalogForKnown(known)
+      const lines = [
+        `marketplace: ${known.name}`,
+        `source: ${known.source}`,
+        `plugins (${catalog.plugins.length}):`,
+      ]
+      for (const p of catalog.plugins.slice(0, 40)) {
+        const ver = p.version ? ` v${p.version}` : ''
+        const desc = p.description ? ` — ${p.description}` : ''
+        lines.push(`  ${p.id}${ver}${desc}`)
+      }
+      if (catalog.plugins.length > 40) {
+        lines.push(`  … +${catalog.plugins.length - 40} more`)
+      }
+      return { ok: true, message: lines.join('\n') }
+    }
+    return {
+      ok: false,
+      message:
+        'Usage: /plugins market list | add <path|url> | show <name>',
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return { ok: false, message: `market failed: ${msg}` }
+  }
+}
+
+async function cmdPluginsSearch(query: string): Promise<SlashDispatchResult> {
+  const { searchMarketplacePlugins } = await import(
+    '../../plugins/src/marketplace.ts'
+  )
+  try {
+    const hits = await searchMarketplacePlugins({ query: query || undefined })
+    if (!hits.length) {
+      return {
+        ok: true,
+        message: query
+          ? `No plugins matching "${query}". Register a market first: /plugins market add <path>`
+          : 'No plugins in registered markets. /plugins market add <path>',
+      }
+    }
+    const lines = [`search results (${hits.length}):`]
+    for (const h of hits.slice(0, 30)) {
+      const ver = h.entry.version ? ` v${h.entry.version}` : ''
+      const desc = h.entry.description ? ` — ${h.entry.description}` : ''
+      lines.push(`  ${h.entry.id}@${h.marketplace}${ver}${desc}`)
+    }
+    if (hits.length > 30) lines.push(`  … +${hits.length - 30} more`)
+    lines.push('Install: /plugins install <id>@<marketplace>  then /plugins reload')
+    return { ok: true, message: lines.join('\n') }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return { ok: false, message: `search failed: ${msg}` }
+  }
+}
+
+async function cmdPluginsInstall(
+  session: SlashSession,
+  parts: string[],
+): Promise<SlashDispatchResult> {
+  const {
+    installPluginFromMarketplace,
+    installPluginFromPath,
+  } = await import('../../plugins/src/marketplace.ts')
+  const raw = parts[0] ?? ''
+  if (!raw) {
+    return {
+      ok: false,
+      message:
+        'Usage: /plugins install <id>@<marketplace> | /plugins install path:<dir>  [--project]',
+    }
+  }
+  const scope = parts.includes('--project') ? 'project' : 'user'
+  try {
+    if (raw.startsWith('path:') || raw.startsWith('file:')) {
+      const p = raw.replace(/^(path|file):/i, '')
+      const rec = await installPluginFromPath({
+        path: p,
+        scope,
+        cwd: session.cwd,
+      })
+      return {
+        ok: true,
+        message: `Installed ${rec.id} → ${rec.installPath}\nRun /plugins reload to activate.`,
+      }
+    }
+    const at = raw.lastIndexOf('@')
+    if (at <= 0) {
+      return {
+        ok: false,
+        message:
+          'Usage: /plugins install <id>@<marketplace>  or  path:<plugin-dir>',
+      }
+    }
+    const pluginId = raw.slice(0, at)
+    const marketplace = raw.slice(at + 1)
+    const rec = await installPluginFromMarketplace({
+      pluginId,
+      marketplace,
+      scope,
+      cwd: session.cwd,
+    })
+    return {
+      ok: true,
+      message: `Installed ${rec.id}@${rec.marketplace} → ${rec.installPath}\nRun /plugins reload to activate.`,
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return { ok: false, message: `install failed: ${msg}` }
+  }
+}
+
+async function cmdPluginsUninstall(
+  session: SlashSession,
+  parts: string[],
+): Promise<SlashDispatchResult> {
+  const { uninstallPlugin } = await import('../../plugins/src/marketplace.ts')
+  const id = parts[0]
+  if (!id) {
+    return {
+      ok: false,
+      message: 'Usage: /plugins uninstall <id> [--project]',
+    }
+  }
+  const scope = parts.includes('--project') ? 'project' : 'user'
+  try {
+    const r = await uninstallPlugin({
+      id,
+      scope,
+      cwd: session.cwd,
+    })
+    return {
+      ok: true,
+      message: `Uninstalled ${id} (${r.removedPath})\nRun /plugins reload to drop from session.`,
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return { ok: false, message: `uninstall failed: ${msg}` }
+  }
 }
 
 async function cmdPluginsReload(session: SlashSession): Promise<SlashDispatchResult> {
@@ -1690,8 +1912,10 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
   },
   {
     name: 'plugins',
-    summary: 'List local plugins; reload mid-session; list plugin commands (PL2)',
-    usage: '[list|commands|reload]',
+    summary:
+      'Plugins + minimal marketplace (list/reload/market/search/install)',
+    usage:
+      '[list|commands|reload|market|search|install|uninstall]',
     group: 'extensions',
     run: cmdPlugins,
   },

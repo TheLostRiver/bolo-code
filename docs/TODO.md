@@ -198,6 +198,7 @@ P1：
 | **RC1** | 思考链流式显示 | provider 解析 → queryLoop → CLI dim；不持久化回灌 | ✅ 最小 |
 | **RC2** | Reasoning 加深 | openai-responses reasoning SSE；`/thinking` 显示开关；**跳过** ChatMessage 回灌 | ✅ 最小 |
 | **PL2** | plugins 深度 | 热加载 / commands 贡献 / `/plugins reload` | ✅ 最小 |
+| **PL-MKT** | 插件市场最小 | 本地/URL 清单 · register/search/install/uninstall · 无官方策略 | ✅ 最小（本刀） |
 | **Usage+** | 本地 usage 展示 | cache 字段 + byModel + `/cost` breakdown；快照/meta 持久化 | ✅ 最小 |
 | **J-D 余量** | entry / CLI | **title** + `/title` + list title + `--list` + `--migrate-session` | ✅ 最小 |
 | **J-D 再余量** | system_note / lite | **system_note** + `/note` + `scanTranscriptLite` list | ✅ 最小（本刀） |
@@ -249,10 +250,11 @@ P1：
   · TP-STE+ tool_progress + interruptBehavior（Bash cancel）
   · HK1–HK2 hooks 超时/abort · S8 子权限不升级
   · TP-PATCH+ Move/Rename · RC3 reasoning persist + Anthropic thinking budget · MCP-SSE 重连
+  · **PL-MKT** 插件市场最小（register/search/install）
 
 下一阶段：
-  ① 仅余：**完整 YOLO / 插件市场**（及 GUI / OR6 / OAuth 等后置）— **开工前需用户确认**
-  ② T8 / Electron / C6+ TTL / worktree / 远程 skill 等后置
+  ① **完整 YOLO / auto 权限分类器**（需用户确认）
+  ② 完整官方市场深度 / OAuth / OR6 / T8 / Electron 等后置
 ```
 
 ---
@@ -261,13 +263,12 @@ P1：
 
 若只开一刀（**非 Electron**）：
 
-> **主推已尽：P1 可闭环余量已齐**（见本刀勾选）。  
-> **下一刀需用户确认：完整 YOLO / auto 分类器 · 插件市场**  
->
-> **本刀已勾选：** **TP-PATCH+**（Move/Rename）· **RC3**（`/thinking persist` + openai-compatible `reasoning_content` 回灌 + Anthropic `budget_tokens` 最小）· **MCP-SSE 重连**（`reconnectAttempts`）。  
-> **明确后置（开工前叫用户）：** **完整 YOLO / auto 分类器** · **插件市场** · OAuth · adaptive thinking · cached MC · SnipTool/UUID · 真 tokenizer · OR6 · C6+ · T8 · Electron · worktree · 远程 USD 账单。
+> **本刀已勾选：PL-MKT 插件市场最小**（`docs/PLUGINS.md` · `/plugins market|search|install` · `test-plugins-market`）。  
+> **下一刀需用户确认：完整 YOLO / auto 权限分类器**  
+>  
+> **后置：** 完整官方 marketplace 策略 · OAuth · adaptive thinking · OR6 · C6+ · T8 · Electron · worktree  
 
-**已齐摘要：** … · **apply_patch Move** · **reasoning persist** · **SSE reconnect** · **Hooks 超时/abort** · **S8** …
+**已齐摘要：** … · **PL1+PL2+PL-MKT 最小** · …
 
 ---
 
@@ -299,4 +300,5 @@ P1：
 ---
 
 **一句话：**  
-**P1 可闭环余量已齐**；**完整 YOLO / 插件市场** —— **动手前先叫用户确认**。
+**PL-MKT 插件市场最小**已落地；**下一刀：完整 YOLO / auto 权限分类器（需确认）**。  
+完整官方市场深度 / OAuth / Electron 仍后置。

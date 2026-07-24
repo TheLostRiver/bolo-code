@@ -323,3 +323,24 @@ export function findPluginCommand(
     commands.find((c) => c.name.endsWith(':' + n))
   )
 }
+
+// ── 插件市场（PL-MKT 最小）──
+export {
+  registerMarketplace,
+  listKnownMarketplaces,
+  loadCatalogForKnown,
+  searchMarketplacePlugins,
+  installPluginFromMarketplace,
+  installPluginFromPath,
+  uninstallPlugin,
+  listInstalledPlugins,
+  parseMarketplaceCatalog,
+  loadMarketplaceCatalogFromPath,
+  knownMarketplacesPath,
+  installedPluginsPath,
+  type MarketplaceCatalog,
+  type MarketplacePluginEntry,
+  type KnownMarketplace,
+  type InstalledPluginRecord,
+  type MarketplaceSearchHit,
+} from './marketplace.ts'

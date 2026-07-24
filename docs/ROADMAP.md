@@ -47,9 +47,10 @@
 14. ~~**J-D 余量：title entry + CLI list/migrate**~~ ✅ 最小  
 15. ~~**J-D 再余量：system_note + lite list**~~ ✅ 最小  
 16. ~~**TP-STE+ / HK / S8**~~ ✅ 最小  
-17. ~~**TP-PATCH+ · RC3 · MCP-SSE 重连**~~ ✅ 最小（本刀）  
-18. **下一刀（需用户确认）：** 完整 YOLO 分类器 · 插件市场  
-19. **后置：** OAuth · adaptive thinking · OR6 WS · cache TTL · cached MC · SnipTool/UUID · T8 Ink · Electron · worktree  
+18. ~~**TP-PATCH+ · RC3 · MCP-SSE 重连**~~ ✅ 最小  
+19. ~~**PL-MKT 插件市场最小**~~ ✅ 最小（本刀）  
+20. **下一刀（需用户确认）：** 完整 YOLO / auto 权限分类器  
+21. **后置：** 完整官方 marketplace 深度 · OAuth · OR6 · T8 · Electron  
 
 ---
 
@@ -452,7 +453,7 @@ flowchart TB
 | G 协议 | Responses HTTP | ✅；WS 后置 |
 | H 韧性 | 错误分类 + model 退避 + PTL | 🟡 最小（本刀） |
 
-**默认下一刀：** 见 **`docs/TODO.md` §8**（**完整 YOLO / 插件市场 —— 需用户确认**）。
+**默认下一刀：** 见 **`docs/TODO.md` §8**（**完整 YOLO / auto 分类器 —— 需用户确认**；插件市场最小已齐）。
 
 ---
 
