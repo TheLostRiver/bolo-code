@@ -6,6 +6,8 @@
 
 import path from 'node:path'
 import { isAutoAllowlistedTool } from './autoAllowlist.ts'
+import { matchDangerousBashCommand } from './dangerousPatterns.ts'
+import { checkSensitivePath } from './sensitivePaths.ts'
 
 export const PERMISSION_MODES = [
   'default',
@@ -630,8 +632,35 @@ export function decidePermission(input: GateInput): GateResult {
     }
   }
 
-  // auto：同步快路径；其余 ask → 分类器（toolExecution）
+  // auto：同步快路径 + 危险硬 deny；其余 ask → 分类器（toolExecution）
   if (mode === 'auto') {
+    // Y3.3 危险 Bash 命令 → 硬 deny（不调分类器）
+    if (input.toolName === 'Bash') {
+      const cmd =
+        input.toolInput &&
+        typeof input.toolInput === 'object' &&
+        typeof (input.toolInput as { command?: unknown }).command === 'string'
+          ? String((input.toolInput as { command: string }).command)
+          : ''
+      const dang = matchDangerousBashCommand(cmd)
+      if (dang.matched) {
+        return {
+          ...base,
+          behavior: 'deny',
+          reason: `auto: dangerous bash pattern (${dang.pattern})`,
+        }
+      }
+    }
+
+    // Y3.5 Agent 不在白名单：强制分类器
+    if (input.toolName === 'Agent') {
+      return {
+        ...base,
+        behavior: 'ask',
+        reason: 'auto: Agent requires classifier',
+      }
+    }
+
     if (isAutoAllowlistedTool(input.toolName) || category === 'read') {
       return {
         ...base,
@@ -641,11 +670,29 @@ export function decidePermission(input: GateInput): GateResult {
     }
     if (category === 'edit') {
       const p = extractPathFromInput(input.toolInput)
-      if (p && isPathInsideCwd(input.cwd, p)) {
-        return {
-          ...base,
-          behavior: 'allow',
-          reason: 'auto: edit inside cwd (acceptEdits fast-path)',
+      if (p) {
+        const sens = checkSensitivePath(p, input.cwd)
+        if (sens.sensitive && sens.hardDeny) {
+          return {
+            ...base,
+            behavior: 'deny',
+            reason: `auto: ${sens.reason}`,
+          }
+        }
+        if (sens.sensitive) {
+          // 不快路径 allow；走分类器
+          return {
+            ...base,
+            behavior: 'ask',
+            reason: `auto: sensitive path needs classifier (${sens.reason})`,
+          }
+        }
+        if (isPathInsideCwd(input.cwd, p)) {
+          return {
+            ...base,
+            behavior: 'allow',
+            reason: 'auto: edit inside cwd (acceptEdits fast-path)',
+          }
         }
       }
     }
@@ -740,3 +787,12 @@ export {
   type AutoClassifyFn,
 } from './autoClassifier.ts'
 export { stripDangerousAllowsForAuto } from './stripDangerousAllows.ts'
+export {
+  matchDangerousBashCommand,
+  isDangerousBashAllowPrefix,
+  DANGEROUS_BASH_COMMAND_PATTERNS,
+} from './dangerousPatterns.ts'
+export {
+  checkSensitivePath,
+  type SensitivePathResult,
+} from './sensitivePaths.ts'

@@ -1151,6 +1151,7 @@ export async function submitPrompt(
     permissionRules: session.permissionRules,
     classifyPermission: session.classifyPermission,
     autoModeState: session.autoModeState,
+    sessionRef: session,
     maxToolResultChars: session.maxToolResultChars,
     skills: session.skills,
     tools: session.tools ?? createDefaultTools(session.agentDefinitions),
@@ -1525,7 +1526,7 @@ export {
 
 /**
  * 切换权限模式（对照 HC cyclePermissionMode 的 session 侧）
- * 进入 auto 时剥离危险 always-allow（Y3.1 最小）。
+ * 进入 auto 时剥离危险 always-allow（Y3.1）；熔断 demote 时退回 default。
  */
 export function setPermissionMode(session: BoloSession, mode: PermissionMode) {
   const prev = session.permissionMode
@@ -1538,6 +1539,7 @@ export function setPermissionMode(session: BoloSession, mode: PermissionMode) {
       // 进 auto 重置熔断，给分类器新机会
       session.autoModeState.circuitBroken = false
       session.autoModeState.consecutiveFailures = 0
+      session.autoModeState.demoteToDefault = false
     }
     if (removed.length) {
       session.autoModeState.lastReason = `stripped dangerous allows: ${removed.join(', ')}`
@@ -1555,6 +1557,28 @@ export function setPermissionMode(session: BoloSession, mode: PermissionMode) {
     type: 'phase',
     phase: session.phase,
   })
+}
+
+/**
+ * 若 auto 熔断要求 demote：退回 default 并返回说明（供 toolExecution / slash）。
+ */
+export function maybeDemoteAutoMode(session: {
+  permissionMode: PermissionMode
+  autoModeState?: AutoModeState
+}): string | undefined {
+  const st = session.autoModeState
+  if (
+    session.permissionMode === 'auto' &&
+    st?.circuitBroken &&
+    st.demoteToDefault
+  ) {
+    session.permissionMode = 'default'
+    st.demoteToDefault = false
+    const reason = st.lastReason ?? 'auto circuit open'
+    st.lastReason = `demoted to default: ${reason}`
+    return st.lastReason
+  }
+  return undefined
 }
 
 // ── slash 总线（parse / dispatch / submitUserInput）──

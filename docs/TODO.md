@@ -265,12 +265,12 @@ P1：
 
 若只开一刀（**非 Electron**）：
 
-> **主推：Auto/YOLO 续作 Y3**（清洗加深 / 危险模式库 / 敏感路径）— 见 `docs/TODO_AUTO_PERMISSIONS.md`  
-> - **Y0–Y2 已落地最小可用 auto**（`/permissions auto` · 白名单 · 侧路分类器 · fail-closed）  
-> - **禁止** 把 Y2 勾成「完整 YOLO 100%」；Y3/Y4 仍待做  
+> **主推：Auto/YOLO 续作 Y4**（两阶段分类 / 对抗集 / PS 危险模式）— `docs/TODO_AUTO_PERMISSIONS.md`  
+> - **Y0–Y3 已落地**（可用 auto + 危险硬拦 + 熔断 demote + 敏感路径）  
 > - 测试：`npx tsx scripts/test-auto-permissions.ts`  
+> - 相对 HC auto 语义约 **~70%**；Y4 冲 ~90%  
 
-**已齐摘要：** … · **auto Y2 最小** · PL-MKT · …
+**已齐摘要：** … · **auto Y3 最小** · PL-MKT · …
 
 ---
 
@@ -301,5 +301,4 @@ P1：
 ---
 
 **一句话：**  
-规则权限已可用；**auto/YOLO 按 `docs/TODO_AUTO_PERMISSIONS.md` 专册推进**（Y2 首发可用，Y4 冲 HC auto 语义 ~90%）。  
-PL-MKT 最小已齐；完整官方市场 / Electron 后置。
+规则权限 + **auto Y0–Y3 最小**已可用（危险硬拦、熔断 demote、敏感路径）；Y4 两阶段/对抗见 `docs/TODO_AUTO_PERMISSIONS.md`。

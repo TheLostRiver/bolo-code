@@ -151,6 +151,13 @@ export type RunToolUseContext = {
   classifyPermission?: AutoClassifyFn
   /** 会话 auto 状态（熔断 / lastReason） */
   autoModeState?: AutoModeState
+  /**
+   * 可选：会话引用，用于 auto 熔断 demote 回 default（Y3.2）。
+   */
+  sessionRef?: {
+    permissionMode: PermissionMode
+    autoModeState?: AutoModeState
+  }
   signal?: AbortSignal
   onEvent?: (e: ToolExecutionEvent | QueryLoopEvent) => void
 }
@@ -449,6 +456,11 @@ export async function runToolUse(
         if (result.unavailable) {
           if (autoState) {
             recordAutoClassifyFailure(autoState, result.reason)
+            if (autoState.demoteToDefault && ctx.sessionRef) {
+              ctx.sessionRef.permissionMode = 'default'
+              autoState.demoteToDefault = false
+              autoState.lastReason = `demoted to default: ${result.reason}`
+            }
           }
           emit(ctx, {
             type: 'permission_decision',

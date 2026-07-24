@@ -184,44 +184,40 @@ type AutoClassifyResult =
 
 **出口：** headless 可开 auto，危险操作经模型批/拒；**fail-closed**。 **~45% HC auto 语义（Y2 完成）。**
 
-### Y3 / Y4
+### Y3 / Y4 状态
 
 | 阶段 | 状态 |
 |------|------|
-| Y3 清洗/熔断/危险库 | 🟡 部分：stripDangerousAllows + 熔断计数已入；危险模式库仍 ⬜ |
+| Y3 清洗/熔断/危险库 | ✅ 最小：strip + 解释器前缀清洗 · 熔断 demote→default · dangerous bash 硬 deny · 敏感路径 · Agent 强制分类 |
 | Y4 两阶段/对抗 | ⬜ |
-
-**出口：** headless 可开 auto，危险操作经模型批/拒；**fail-closed**。  
-**相对 HC YOLO 语义：~40–50%。**  
-**建议默认「可合并主线」的第一里程碑。**
 
 ---
 
 ### Y3 — 敢用：清洗、熔断、路径/危险库
 
-| ID | 任务 | 验收 |
-|----|------|------|
-| **Y3.1** | 进入 auto 时 `stripDangerousAllows`（Bash 全工具 allow、过宽 prefix 等） | 单测；进模前后 rules 对比 |
-| **Y3.2** | 会话熔断：连续 N 次 unavailable/超时 → 退出 auto 或强制 ask | 单测 |
-| **Y3.3** | `dangerousPatterns` 最小表（rm -rf、curl\|sh、磁盘格式化等）→ 直接 deny 或强制分类 | 单测 |
-| **Y3.4** | 敏感路径（`.ssh`、`.git/config`、系统目录）→ deny 或 classifier 必问 | 单测 |
-| **Y3.5** | 子 agent：auto 下仍遵守 S8；Agent 工具默认不白名单 | 单测 |
-| **Y3.6** | 可选：分类结果写入 `system_note`（审计，不进模型链） | 可选 |
+| ID | 任务 | 验收 | 状态 |
+|----|------|------|------|
+| **Y3.1** | 进入 auto 时 `stripDangerousAllows`（Bash/Agent + 解释器前缀） | 单测 | ✅ |
+| **Y3.2** | 熔断：连续 N 次 unavailable → circuit + **demote to default** | 单测 + sessionRef | ✅ 最小 |
+| **Y3.3** | `dangerousPatterns`（rm -rf /、curl\|sh 等）→ 硬 deny | 单测 | ✅ 最小 |
+| **Y3.4** | 敏感路径（.ssh 硬 deny；.env 不快路径） | 单测 | ✅ 最小 |
+| **Y3.5** | Agent 不在白名单 → 强制分类器 | 单测 | ✅ |
+| **Y3.6** | system_note 审计 | 可选 | ⬜ |
 
-**出口：** 误配置 allow 不易架空 auto；故障可熔断。  
-**相对 HC YOLO 语义：~65–75%。**
+**出口：** 误配置 allow 不易架空 auto；明显破坏性命令硬拦；故障可熔断退 default。  
+**相对 HC YOLO 语义：~65–75%（Y3 最小完成）。**
 
 ---
 
 ### Y4 — 对齐 HC 行为深度（冲 ~90%）
 
-| ID | 任务 | 验收 |
-|----|------|------|
-| **Y4.1** | 两阶段：fast 否决 / 再 deep（或 HC 式 stage1/2 语义） | 测：明显安全跳过 deep |
-| **Y4.2** | 分类器上下文：压缩后的 transcript 投影（控制 token） | 文档上限 + 测 |
-| **Y4.3** | PowerShell / cmd 危险模式（Windows）最小 | 测 |
-| **Y4.4** | plan 模式与 auto 组合策略（HC plan+auto 语义选一：plan 禁止写 或 plan 内只读分类） | 文档钉死 + 测 |
-| **Y4.5** | 对抗用例集：`scripts/test-auto-classifier-adversarial.ts` | CI 可跑 mock |
+| ID | 任务 | 验收 | 状态 |
+|----|------|------|------|
+| **Y4.1** | 两阶段：fast 否决 / 再 deep | 测 | ⬜ |
+| **Y4.2** | 分类器上下文 token 控制 | 文档 + 测 | ⬜ |
+| **Y4.3** | PowerShell / cmd 危险模式最小 | 测 | ⬜ |
+| **Y4.4** | plan 与 auto 组合策略钉死 | 文档 + 测 | ⬜ |
+| **Y4.5** | 对抗用例集 | mock CI | ⬜ |
 
 **出口：** 行为接近 HC auto **日用路径** ~85–90%。  
 **仍不宣称** 权限 UI/企业策略 90%。

@@ -522,7 +522,7 @@ flowchart TB
 |--------|------|--------|
 | M0–M2 | ✅/🟡 | headless 主路径可跑；相对 HC 未满 |
 | **M-Loop 韧性** | 🟡 最小 | 分类 + 429/5xx 有限退避；PTL 正交 |
-| **M-Tool+Permission** | 🟡 最小+ | 规则层 ✅；**auto/YOLO 见 `TODO_AUTO_PERMISSIONS.md`（Y0–Y4 未实现）** |
+| **M-Tool+Permission** | 🟡 | 规则层 ✅；**auto Y0–Y3 最小 ✅**（Y4 两阶段/对抗见 `TODO_AUTO_PERMISSIONS.md`） |
 | **M-Compact 日用** | 🟡 最小 | 加权 token · pressure · `/context`·`/compact`；**默认 auto ✅**；**snip 最小 ✅**；cached MC / SnipTool 后置 |
 | **M-Slash** | ✅ | 日用 `/` + SL-polish |
 | **M-Rules** | ✅ | `.bolo/rules` + path-scoped + `/rules` |
@@ -538,6 +538,6 @@ flowchart TB
 **一句话：**  
 Headless **主路径可日用**，相对参考实现约 **40–55%**（文档不再写 ~70% 乐观数）。  
 **P1 可闭环余量已齐**（含 apply_patch Move · reasoning persist · SSE 重连 · hooks · S8）。  
-**规则权限日用已齐；auto/YOLO 按专册 `TODO_AUTO_PERMISSIONS.md` 推进（目标 HC auto 语义 ~90%，非权限 UI 全家桶）。**  
+**规则权限 + auto Y0–Y3 最小已齐**（冲 HC auto 语义 ~70%；Y4 冲 ~90% 见专册）。  
 **PL-MKT 最小已齐。**  
 执行序 → **`docs/TODO.md`**。
