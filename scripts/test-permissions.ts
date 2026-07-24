@@ -6,6 +6,7 @@
 import {
   decidePermission,
   getNextPermissionMode,
+  matchBashPattern,
   matchPathGlob,
   type PermissionMode,
 } from '../packages/permissions/src/index.ts'
@@ -240,6 +241,119 @@ async function main() {
       rules: bashRules,
     }).behavior === 'allow',
     'bypass still full open',
+  )
+
+  // --- TP-PERM：规则匹配增强 / 硬 deny（非完整 yolo 分类器）---
+  assert(matchBashPattern('git status', 'git '), 'bash pure prefix')
+  assert(matchBashPattern('git', 'git *'), 'bash wildcard bare git')
+  assert(matchBashPattern('git status', 'git *'), 'bash wildcard git status')
+  assert(matchBashPattern('git status', 'git:*'), 'bash legacy :*')
+  assert(
+    matchBashPattern('npm test -- --watch', 'npm * --watch'),
+    'bash multi-wildcard',
+  )
+  assert(!matchBashPattern('rm -rf /', 'git *'), 'bash wildcard no false match')
+
+  const wildAllow = {
+    alwaysAllowToolNames: [] as string[],
+    alwaysAllowBashPrefixes: ['git *', 'npm:*'],
+  }
+  assert(
+    decidePermission({
+      mode: 'default',
+      toolName: 'Bash',
+      toolInput: { command: 'git' },
+      cwd,
+      requiresPermission: true,
+      rules: wildAllow,
+    }).behavior === 'allow',
+    'bash wild allow: bare git',
+  )
+  assert(
+    decidePermission({
+      mode: 'default',
+      toolName: 'Bash',
+      toolInput: { command: 'npm install' },
+      cwd,
+      requiresPermission: true,
+      rules: wildAllow,
+    }).behavior === 'allow',
+    'bash wild allow: npm:* legacy',
+  )
+
+  const denyRules = {
+    alwaysAllowToolNames: ['Bash', 'Write'],
+    alwaysDenyToolNames: ['Bash'],
+    alwaysDenyPathGlobs: ['secrets/**'],
+    alwaysDenyBashPrefixes: ['rm *'],
+    alwaysDenyPrefixes: ['mcp__evil'],
+  }
+  assert(
+    decidePermission({
+      mode: 'default',
+      toolName: 'Bash',
+      toolInput: { command: 'echo hi' },
+      cwd,
+      requiresPermission: true,
+      rules: denyRules,
+    }).behavior === 'deny',
+    'deny tool name over always-allow',
+  )
+  assert(
+    decidePermission({
+      mode: 'bypassPermissions',
+      toolName: 'Bash',
+      toolInput: { command: 'echo hi' },
+      cwd,
+      rules: denyRules,
+    }).behavior === 'deny',
+    'deny wins over bypass',
+  )
+  assert(
+    decidePermission({
+      mode: 'acceptEdits',
+      toolName: 'Write',
+      toolInput: { path: 'secrets/key.pem', content: 'x' },
+      cwd,
+      requiresPermission: true,
+      rules: denyRules,
+    }).behavior === 'deny',
+    'deny path glob over acceptEdits',
+  )
+  assert(
+    decidePermission({
+      mode: 'default',
+      toolName: 'Bash',
+      toolInput: { command: 'rm -rf tmp' },
+      cwd,
+      requiresPermission: true,
+      rules: {
+        alwaysAllowToolNames: [] as string[],
+        alwaysDenyBashPrefixes: ['rm *'],
+      },
+    }).behavior === 'deny',
+    'deny bash wildcard',
+  )
+  assert(
+    decidePermission({
+      mode: 'default',
+      toolName: 'mcp__evil__x',
+      toolInput: {},
+      cwd,
+      rules: denyRules,
+    }).behavior === 'deny',
+    'deny tool prefix',
+  )
+  assert(
+    decidePermission({
+      mode: 'default',
+      toolName: 'Write',
+      toolInput: { path: 'src/ok.ts', content: 'x' },
+      cwd,
+      requiresPermission: true,
+      rules: denyRules,
+    }).behavior === 'allow',
+    'deny rules: unlisted Write still always-allow',
   )
 
   console.log('PERMISSION TESTS PASS')

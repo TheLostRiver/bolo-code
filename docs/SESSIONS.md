@@ -43,7 +43,7 @@
 | `messages` | `ChatMessage[]`（含 `tool_calls` / `tool_call_id`） |
 | `systemPromptSections` | system 段快照（resume 可重建或回退） |
 | `model` / `autoCompactEnabled` / `contextWindowTokens` / `maxPtlRetries` | 会话配置切片 |
-| `permissionRules` / `effortLevel` / `usage`（可选） | Always-allow：工具名/前缀 + path glob + Bash 前缀；effort；本地 token 累计；resume 恢复；无遥测 |
+| `permissionRules` / `effortLevel` / `usage`（可选） | Always-allow + **always-deny**（工具名/前缀 + path glob + Bash 模式）；effort；本地 token 累计；resume 恢复；无遥测 |
 | `createdAt` / `updatedAt` | ISO 时间 |
 
 **不落盘**：provider、hooks 运行时、skills 全文、`onEvent`、`askPermission` 等句柄（resume 时由调用方重新注入）。

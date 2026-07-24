@@ -33,6 +33,7 @@
   · Compact 日用加深（加权 token 估 · 压力 · /context·/compact · 熔断）
   · **CP 余量小步**：默认开 auto · 环境熔断 · `/autocompact`
   · **TP 余量小步**：StreamingToolExecutor 边流边跑（queryLoop 主路径）
+  · **TP-PERM**：permission 规则匹配小步（always-deny · Bash 通配 · `/deny`）
   · Usage+ 本地 breakdown（cache · byModel · /cost）
   · RC2 思考链二期（Responses reasoning SSE · /thinking 显示开关）
   · MCP-SSE 经典 SSE 长连接（type:sse · endpoint 事件 · list_changed）
@@ -50,14 +51,15 @@ P1：
   8. ~~RC2 思考链二期~~ ✅ 最小
   9. ~~MCP-SSE 经典 SSE~~ ✅ 最小
   10. ~~CP 余量：默认 auto + 环境熔断 + /autocompact~~ ✅ 最小
-  11. ~~TP 余量：StreamingToolExecutor 最小~~ ✅ 最小（本刀）
-  下一刀：permission 分类器小步 ·（或）J-D 余量 / snip 小步
+  11. ~~TP 余量：StreamingToolExecutor 最小~~ ✅ 最小
+  12. ~~TP-PERM：permission 规则匹配小步~~ ✅ 最小（本刀）
+  下一刀：snip 小步 ·（或）J-D 余量
 ```
 
 | 优先级 | 含义（当前） |
 |--------|----------------|
 | **P0** | 抬 headless 水位：韧性 / TP / **CP 日用** 已 🟡 |
-| **P1** | 扩展深度（**MCP HTTP+SSE ✅** · **RC1+RC2 ✅** · **PL2 ✅** · **Usage+ ✅** · **CP5 ✅** · **STE ✅**）— **默认下一刀区：permission 小步 / snip / J-D** |
+| **P1** | 扩展深度（**MCP HTTP+SSE ✅** · **RC1+RC2 ✅** · **PL2 ✅** · **Usage+ ✅** · **CP5 ✅** · **STE ✅** · **TP-PERM ✅**）— **默认下一刀区：snip / J-D** |
 | **P2** | 未做或仅最小的子项 |
 | **P3** | GUI / 完整 Ink / 后置协议 |
 
@@ -116,11 +118,12 @@ P1：
 | ID | 内容 | 状态 |
 |----|------|------|
 | **TP1** | 内置 **Edit**（`old_string`/`new_string`；默认唯一匹配；`replace_all`；清晰错误） | ✅ 最小 |
-| **TP2** | always-allow：**path glob** + **Bash 命令前缀**；`/allow path:…` `/allow bash:…`；快照兼容 | ✅ 最小 |
-| **TP3** | plan 仍 deny 写/壳；bypass 仍全开；工具名 always-allow 保留 | ✅ |
+| **TP2** | always-allow：**path glob** + **Bash 前缀/通配/`:*`**；`/allow path:…` `/allow bash:…`；快照兼容 | ✅ 最小 |
+| **TP3** | plan 仍 deny 写/壳；**bypass 仍可被 always-deny 拦住**；工具名 always-allow 保留 | ✅ |
 | **TP4** | Bash/Read/Write/Edit/apply_patch 中段 **AbortSignal** → `Error: tool cancelled` | ✅ 最小 |
 | **TP5** | schema 校验失败 → `<tool_use_error>`（既有，测试覆盖） | ✅ |
-| **TP-STE** | **StreamingToolExecutor** 最小：边流边跑 · 入队序 drain · Bash 级联 · discard · queryLoop 接入 | ✅ 最小（本刀） |
+| **TP-STE** | **StreamingToolExecutor** 最小：边流边跑 · 入队序 drain · Bash 级联 · discard · queryLoop 接入 | ✅ 最小 |
+| **TP-PERM** | **规则匹配小步**：always-deny（工具/前缀/path/bash）· Bash 通配 · `/deny` · 快照/meta；**非** YOLO | ✅ 最小（本刀） |
 | **TP-doc** | `TOOL_CALLING.md` / `PERMISSIONS.md` / ROADMAP / TODO | ✅ |
 
 ### 2.6 Compact 日用加深
@@ -186,7 +189,7 @@ P1：
 | **Usage+** | 本地 usage 展示 | cache 字段 + byModel + `/cost` breakdown；快照/meta 持久化 | ✅ 最小 |
 | **J-D 余量** | entry / CLI | 更多 entry 类型；CLI `migrate-session` 包装 | 🟡 可选支线 |
 | **C6+** | Cache 后置 | 1h TTL / global scope / break detection / cached MC | ⬜ **后置** |
-| **TP 余量** | permission / STE | **STE 边流边跑 ✅ 最小**；完整分类器 / 更强 apply_patch / STE progress | 🟡 STE 已齐；分类器 ⬜ |
+| **TP 余量** | permission / STE | **STE ✅** · **TP-PERM 规则匹配 ✅**；完整 YOLO / 更强 apply_patch / STE progress | 🟡 规则小步已齐；YOLO ⬜ |
 | **CP 余量** | compact 再深 | **默认开 auto ✅**；snip · cached MC · 真 tokenizer 仍后置 | 🟡 默认 auto 已齐；其余 ⬜ |
 
 ---
@@ -226,10 +229,11 @@ P1：
   · Usage+ 本地 breakdown 最小 · RC2 思考链二期最小 · MCP-SSE 经典 SSE 最小
   · CP5 默认 auto + 环境熔断 + /autocompact 最小
   · TP-STE StreamingToolExecutor 边流边跑最小
+  · TP-PERM permission 规则匹配小步（always-deny · Bash 通配 · /deny）
 
 下一阶段：
-  ① permission 分类器小步 / J-D 余量 / snip 小步   ← 默认主刀区（P1 余量）
-  ② C6+ / OR6 / T8 / Electron  （后置）
+  ① snip 小步 / J-D 余量   ← 默认主刀区（P1 余量）
+  ② C6+ / OR6 / T8 / Electron / 完整 YOLO  （后置）
 ```
 
 ---
@@ -238,13 +242,13 @@ P1：
 
 若只开一刀（**非 Electron**）：
 
-> **主推：permission 分类器小步** 或 **snip 最小** / **J-D 余量**  
-> - 勿一口做完整市场 / OAuth MCP / 完整 Ink  
+> **主推：snip 最小** 或 **J-D 余量**  
+> - 勿一口做完整市场 / OAuth MCP / 完整 Ink / 完整 YOLO  
 >
-> **本刀已勾选：** **TP-STE**（`StreamingToolExecutor` 最小 · queryLoop 边流边跑 · 保序 drain · Bash 级联 · discard · 无遥测）。  
-> **明确后置：** STE progress/interruptBehavior · 思考链安全回灌 · Anthropic thinking budget · 插件市场 · OAuth · SSE 自动重连 · cached MC · snip 全管线 · 真 tokenizer · OR6 · C6+ · T8 · Electron · 完整 permission 分类器 · 远程 USD 账单。
+> **本刀已勾选：** **TP-PERM**（permission 规则匹配小步：always-deny · Bash 通配/`:*` · `/deny` · 快照/meta；**非**完整 YOLO 分类器）。  
+> **明确后置：** STE progress/interruptBehavior · 思考链安全回灌 · Anthropic thinking budget · 插件市场 · OAuth · SSE 自动重连 · cached MC · snip 全管线 · 真 tokenizer · OR6 · C6+ · T8 · Electron · **完整 YOLO / auto 分类器** · 远程 USD 账单。
 
-**已齐摘要：** resume · slash · BOLO TUI 最小 · rules · C1–C5 · JSONL 主路径 · creators · Subagent · MCP stdio+HTTP+**SSE** 最小 · **plugins PL1+PL2 最小** · Responses HTTP · Loop 韧性最小 · Tool+Permission 日用 + **STE 边流边跑** · Compact 日用加深 + **默认 auto** · **RC1+RC2 思考链** · **Usage+ 最小**。
+**已齐摘要：** resume · slash · BOLO TUI 最小 · rules · C1–C5 · JSONL 主路径 · creators · Subagent · MCP stdio+HTTP+**SSE** 最小 · **plugins PL1+PL2 最小** · Responses HTTP · Loop 韧性最小 · Tool+Permission 日用 + **STE** + **规则匹配小步** · Compact 日用加深 + **默认 auto** · **RC1+RC2 思考链** · **Usage+ 最小**。
 
 ---
 
@@ -253,7 +257,7 @@ P1：
 | TODO | ROADMAP |
 |------|---------|
 | LR* | M-Loop 韧性 🟡 |
-| TP* · **TP-STE** | M-Tool+Permission 🟡（含边流边跑） |
+| TP* · **TP-STE** · **TP-PERM** | M-Tool+Permission 🟡（STE + 规则匹配小步） |
 | CP* · **CP5** | 长会话 compact 🟡（默认 auto ✅） |
 | RS* · T* | M5.2 / M-TUI（T0–T7 ✅；T8 ⬜） |
 | SL* · SL-polish | M-Slash ✅ |
@@ -283,4 +287,4 @@ P1：
 ---
 
 **一句话：**  
-**TP-STE**（StreamingToolExecutor 边流边跑）已落地；**下一刀：permission 分类器小步** 或 snip/J-D；市场 / OAuth / cached MC / 回灌勿抢。
+**TP-PERM**（permission 规则匹配小步）已落地；**下一刀：snip 小步** 或 J-D 余量；完整 YOLO / 市场 / OAuth / cached MC / 回灌勿抢。

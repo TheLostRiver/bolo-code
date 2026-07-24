@@ -124,4 +124,4 @@ type TerminalReason =
 - reactive compact / context collapse / snip  
 - 完整 Message 类型系统（assistant content blocks 数组）— v1 仍用简化 ChatMessage  
 
-后续 **P1 余量**：permission 分类器小步 · snip · J-D entry；compact 再深见 `docs/COMPACTION.md`。
+后续 **P1 余量**：snip 小步 · J-D entry；完整 YOLO 后置；compact 再深见 `docs/COMPACTION.md`。

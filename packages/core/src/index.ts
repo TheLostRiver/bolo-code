@@ -234,10 +234,16 @@ export {
   decidePermission,
   createEmptyPermissionRules,
   matchesAlwaysAllow,
+  matchesAlwaysDeny,
   matchPathGlob,
+  matchBashPattern,
   addAlwaysAllowToolName,
   addAlwaysAllowPathGlob,
   addAlwaysAllowBashPrefix,
+  addAlwaysDenyToolName,
+  addAlwaysDenyPathGlob,
+  addAlwaysDenyBashPrefix,
+  addAlwaysDenyPrefix,
 } from '../../permissions/src/index.ts'
 export {
   SESSION_SNAPSHOT_VERSION,

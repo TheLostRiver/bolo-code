@@ -261,6 +261,18 @@ function clonePermissionRules(
   if (rules.alwaysAllowBashPrefixes?.length) {
     out.alwaysAllowBashPrefixes = [...rules.alwaysAllowBashPrefixes]
   }
+  if (rules.alwaysDenyToolNames?.length) {
+    out.alwaysDenyToolNames = [...rules.alwaysDenyToolNames]
+  }
+  if (rules.alwaysDenyPrefixes?.length) {
+    out.alwaysDenyPrefixes = [...rules.alwaysDenyPrefixes]
+  }
+  if (rules.alwaysDenyPathGlobs?.length) {
+    out.alwaysDenyPathGlobs = [...rules.alwaysDenyPathGlobs]
+  }
+  if (rules.alwaysDenyBashPrefixes?.length) {
+    out.alwaysDenyBashPrefixes = [...rules.alwaysDenyBashPrefixes]
+  }
   return out
 }
 
@@ -295,6 +307,30 @@ function parsePermissionRulesField(
       (p): p is string => typeof p === 'string' && p.length > 0,
     )
     if (bash.length) out.alwaysAllowBashPrefixes = bash
+  }
+  if (Array.isArray(o.alwaysDenyToolNames)) {
+    const names = o.alwaysDenyToolNames.filter(
+      (n): n is string => typeof n === 'string' && n.trim().length > 0,
+    )
+    if (names.length) out.alwaysDenyToolNames = names
+  }
+  if (Array.isArray(o.alwaysDenyPrefixes)) {
+    const prefixes = o.alwaysDenyPrefixes.filter(
+      (p): p is string => typeof p === 'string' && p.length > 0,
+    )
+    if (prefixes.length) out.alwaysDenyPrefixes = prefixes
+  }
+  if (Array.isArray(o.alwaysDenyPathGlobs)) {
+    const globs = o.alwaysDenyPathGlobs.filter(
+      (g): g is string => typeof g === 'string' && g.trim().length > 0,
+    )
+    if (globs.length) out.alwaysDenyPathGlobs = globs
+  }
+  if (Array.isArray(o.alwaysDenyBashPrefixes)) {
+    const bash = o.alwaysDenyBashPrefixes.filter(
+      (p): p is string => typeof p === 'string' && p.length > 0,
+    )
+    if (bash.length) out.alwaysDenyBashPrefixes = bash
   }
   return out
 }
@@ -737,6 +773,32 @@ async function snapshotFromTranscriptOnly(
           ? {
               alwaysAllowBashPrefixes: [
                 ...meta.permissionRules.alwaysAllowBashPrefixes,
+              ],
+            }
+          : {}),
+        ...(meta.permissionRules.alwaysDenyToolNames?.length
+          ? {
+              alwaysDenyToolNames: [
+                ...meta.permissionRules.alwaysDenyToolNames,
+              ],
+            }
+          : {}),
+        ...(meta.permissionRules.alwaysDenyPrefixes?.length
+          ? {
+              alwaysDenyPrefixes: [...meta.permissionRules.alwaysDenyPrefixes],
+            }
+          : {}),
+        ...(meta.permissionRules.alwaysDenyPathGlobs?.length
+          ? {
+              alwaysDenyPathGlobs: [
+                ...meta.permissionRules.alwaysDenyPathGlobs,
+              ],
+            }
+          : {}),
+        ...(meta.permissionRules.alwaysDenyBashPrefixes?.length
+          ? {
+              alwaysDenyBashPrefixes: [
+                ...meta.permissionRules.alwaysDenyBashPrefixes,
               ],
             }
           : {}),

@@ -14,6 +14,10 @@ import {
   addAlwaysAllowBashPrefix,
   addAlwaysAllowPathGlob,
   addAlwaysAllowToolName,
+  addAlwaysDenyBashPrefix,
+  addAlwaysDenyPathGlob,
+  addAlwaysDenyPrefix,
+  addAlwaysDenyToolName,
   createEmptyPermissionRules,
   isPermissionMode,
   PERMISSION_MODES,
@@ -1006,11 +1010,11 @@ function ensurePermissionRules(session: SlashSession): SessionPermissionRules {
 }
 
 /**
- * /allow [ToolName | path:glob | bash:prefix] — 会话 always-allow
+ * /allow [ToolName | path:glob | bash:pattern] — 会话 always-allow
  * - 无参：列出当前规则
  * - ToolName：精确工具名
  * - path:GLOB：路径 glob（相对 cwd）
- * - bash:PREFIX：Bash 命令前缀
+ * - bash:PATTERN：Bash 模式（前缀 / 通配 * / 遗留 :*）
  */
 function cmdAllow(session: SlashSession, args: string): SlashDispatchResult {
   const rules = ensurePermissionRules(session)
@@ -1035,6 +1039,7 @@ function cmdAllow(session: SlashSession, args: string): SlashDispatchResult {
           '  /allow path:src' +
           '/**\n' +
           '  /allow bash:git\n' +
+          '  /allow bash:git *\n' +
           'Tip: at permission prompt, answer a = allow always this tool name this session.',
       }
     }
@@ -1044,7 +1049,7 @@ function cmdAllow(session: SlashSession, args: string): SlashDispatchResult {
     if (pathGlobs.length) lines.push(`  paths: ${pathGlobs.join(', ')}`)
     if (bashPrefs.length) lines.push(`  bash: ${bashPrefs.join(', ')}`)
     lines.push(
-      'Add: /allow ToolName | /allow path:GLOB | /allow bash:PREFIX',
+      'Add: /allow ToolName | /allow path:GLOB | /allow bash:PATTERN',
     )
     return { ok: true, message: lines.join('\n') }
   }
@@ -1069,13 +1074,14 @@ function cmdAllow(session: SlashSession, args: string): SlashDispatchResult {
     if (!pref) {
       return {
         ok: false,
-        message: 'Usage: /allow bash:git  (command prefix after bash:)',
+        message:
+          'Usage: /allow bash:git  or  /allow bash:git *  (prefix / wildcard / foo:*)',
       }
     }
     addAlwaysAllowBashPrefix(rules, pref)
     return {
       ok: true,
-      message: `always-allow bash prefix: ${pref}\ncurrent bash: ${(rules.alwaysAllowBashPrefixes ?? []).join(', ')}`,
+      message: `always-allow bash pattern: ${pref}\ncurrent bash: ${(rules.alwaysAllowBashPrefixes ?? []).join(', ')}`,
     }
   }
 
@@ -1083,6 +1089,101 @@ function cmdAllow(session: SlashSession, args: string): SlashDispatchResult {
   return {
     ok: true,
     message: `always-allow added for this session: ${raw}\ncurrent tools: ${rules.alwaysAllowToolNames.join(', ')}`,
+  }
+}
+
+/**
+ * /deny [ToolName | path:glob | bash:pattern | prefix:pfx] — 会话 always-deny（硬规则）
+ * 优先于 bypass / always-allow；可经快照 / JSONL meta 持久化。
+ */
+function cmdDeny(session: SlashSession, args: string): SlashDispatchResult {
+  const rules = ensurePermissionRules(session)
+  const raw = args.trim()
+  if (!raw) {
+    const names = rules.alwaysDenyToolNames ?? []
+    const prefixes = rules.alwaysDenyPrefixes ?? []
+    const pathGlobs = rules.alwaysDenyPathGlobs ?? []
+    const bashPrefs = rules.alwaysDenyBashPrefixes ?? []
+    if (
+      !names.length &&
+      !prefixes.length &&
+      !pathGlobs.length &&
+      !bashPrefs.length
+    ) {
+      return {
+        ok: true,
+        message:
+          'Session always-deny: (empty)\n' +
+          'Usage:\n' +
+          '  /deny ToolName\n' +
+          '  /deny path:secrets' +
+          '/**\n' +
+          '  /deny bash:rm\n' +
+          '  /deny bash:rm *\n' +
+          '  /deny prefix:mcp__untrusted\n' +
+          'Hard deny wins over bypass and always-allow.',
+      }
+    }
+    const lines = ['Session always-deny:']
+    if (names.length) lines.push(`  tools: ${names.join(', ')}`)
+    if (prefixes.length) lines.push(`  tool-prefixes: ${prefixes.join(', ')}`)
+    if (pathGlobs.length) lines.push(`  paths: ${pathGlobs.join(', ')}`)
+    if (bashPrefs.length) lines.push(`  bash: ${bashPrefs.join(', ')}`)
+    lines.push(
+      'Add: /deny ToolName | /deny path:GLOB | /deny bash:PATTERN | /deny prefix:PFX',
+    )
+    return { ok: true, message: lines.join('\n') }
+  }
+
+  const lower = raw.toLowerCase()
+  if (lower.startsWith('path:')) {
+    const glob = raw.slice(5).trim()
+    if (!glob) {
+      return {
+        ok: false,
+        message: 'Usage: /deny path:<glob>  (path glob relative to cwd)',
+      }
+    }
+    addAlwaysDenyPathGlob(rules, glob)
+    return {
+      ok: true,
+      message: `always-deny path glob: ${glob}\ncurrent deny paths: ${(rules.alwaysDenyPathGlobs ?? []).join(', ')}`,
+    }
+  }
+  if (lower.startsWith('bash:')) {
+    const pref = raw.slice(5).trim()
+    if (!pref) {
+      return {
+        ok: false,
+        message:
+          'Usage: /deny bash:rm  or  /deny bash:rm *  (prefix / wildcard / foo:*)',
+      }
+    }
+    addAlwaysDenyBashPrefix(rules, pref)
+    return {
+      ok: true,
+      message: `always-deny bash pattern: ${pref}\ncurrent deny bash: ${(rules.alwaysDenyBashPrefixes ?? []).join(', ')}`,
+    }
+  }
+  if (lower.startsWith('prefix:')) {
+    const pfx = raw.slice(7).trim()
+    if (!pfx) {
+      return {
+        ok: false,
+        message: 'Usage: /deny prefix:mcp__untrusted  (tool name prefix)',
+      }
+    }
+    addAlwaysDenyPrefix(rules, pfx)
+    return {
+      ok: true,
+      message: `always-deny tool prefix: ${pfx}\ncurrent deny prefixes: ${(rules.alwaysDenyPrefixes ?? []).join(', ')}`,
+    }
+  }
+
+  addAlwaysDenyToolName(rules, raw)
+  return {
+    ok: true,
+    message: `always-deny added for this session: ${raw}\ncurrent deny tools: ${(rules.alwaysDenyToolNames ?? []).join(', ')}`,
   }
 }
 
@@ -1435,10 +1536,18 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
   },
   {
     name: 'allow',
-    summary: 'List or add session always-allow (tool / path:glob / bash:prefix)',
-    usage: '[ToolName | path:GLOB | bash:PREFIX]',
+    summary: 'List or add session always-allow (tool / path:glob / bash:pattern)',
+    usage: '[ToolName | path:GLOB | bash:PATTERN]',
     group: 'model',
     run: cmdAllow,
+  },
+  {
+    name: 'deny',
+    summary:
+      'List or add session always-deny (hard; wins over bypass / allow)',
+    usage: '[ToolName | path:GLOB | bash:PATTERN | prefix:PFX]',
+    group: 'model',
+    run: cmdDeny,
   },
   {
     name: 'rules',

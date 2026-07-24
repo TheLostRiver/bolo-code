@@ -139,6 +139,18 @@ function clonePermissionRules(
   if (rules.alwaysAllowBashPrefixes?.length) {
     out.alwaysAllowBashPrefixes = [...rules.alwaysAllowBashPrefixes]
   }
+  if (rules.alwaysDenyToolNames?.length) {
+    out.alwaysDenyToolNames = [...rules.alwaysDenyToolNames]
+  }
+  if (rules.alwaysDenyPrefixes?.length) {
+    out.alwaysDenyPrefixes = [...rules.alwaysDenyPrefixes]
+  }
+  if (rules.alwaysDenyPathGlobs?.length) {
+    out.alwaysDenyPathGlobs = [...rules.alwaysDenyPathGlobs]
+  }
+  if (rules.alwaysDenyBashPrefixes?.length) {
+    out.alwaysDenyBashPrefixes = [...rules.alwaysDenyBashPrefixes]
+  }
   return out
 }
 
@@ -510,6 +522,30 @@ export async function loadTranscriptFile(
                 (p): p is string => typeof p === 'string' && p.length > 0,
               )
               if (bash.length) rules.alwaysAllowBashPrefixes = bash
+            }
+            if (Array.isArray(pr.alwaysDenyToolNames)) {
+              const denyNames = pr.alwaysDenyToolNames.filter(
+                (n): n is string => typeof n === 'string' && n.trim().length > 0,
+              )
+              if (denyNames.length) rules.alwaysDenyToolNames = denyNames
+            }
+            if (Array.isArray(pr.alwaysDenyPrefixes)) {
+              const denyPref = pr.alwaysDenyPrefixes.filter(
+                (p): p is string => typeof p === 'string' && p.length > 0,
+              )
+              if (denyPref.length) rules.alwaysDenyPrefixes = denyPref
+            }
+            if (Array.isArray(pr.alwaysDenyPathGlobs)) {
+              const denyGlobs = pr.alwaysDenyPathGlobs.filter(
+                (g): g is string => typeof g === 'string' && g.trim().length > 0,
+              )
+              if (denyGlobs.length) rules.alwaysDenyPathGlobs = denyGlobs
+            }
+            if (Array.isArray(pr.alwaysDenyBashPrefixes)) {
+              const denyBash = pr.alwaysDenyBashPrefixes.filter(
+                (p): p is string => typeof p === 'string' && p.length > 0,
+              )
+              if (denyBash.length) rules.alwaysDenyBashPrefixes = denyBash
             }
             meta.permissionRules = rules
           }

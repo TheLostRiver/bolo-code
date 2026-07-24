@@ -10,7 +10,7 @@
 
 | 层 | 粗估 | 说明 |
 |----|------|------|
-| **Headless 核心**（loop / tools / provider / compact / prompt） | **~55–65%** | 主路径可用；compact 日用加深已 🟡；**StreamingToolExecutor 最小 ✅**；仍缺 cached MC/snip、完整 permission 分类器 |
+| **Headless 核心**（loop / tools / provider / compact / prompt） | **~55–65%** | 主路径可用；compact 日用加深已 🟡；**STE ✅**；**permission 规则匹配小步 ✅**；仍缺 cached MC/snip、完整 YOLO 分类器 |
 | 会话与 CLI | **~70–80%** | JSONL 默认写（T3）；resume/continue；无参 REPL；非成熟 Ink |
 | **扩展面（MCP / Plugins / Skills）** | **~55–65%** | Skills + MCP stdio 面 + list_changed + **HTTP transport** ✅；**SSE ✅ 最小**；**PL2 热加载 ✅ 最小**；市场 ⬜ |
 | **Subagent** | **~50–60%** | 真 loop + Agent + 目录定义；async/fork 最小；worktree ⬜ |
@@ -42,8 +42,9 @@
 9. ~~**MCP-SSE**（经典 SSE 长连接）~~ ✅ 最小  
 10. ~~**CP5**（默认开 auto · 环境熔断 · `/autocompact`）~~ ✅ 最小  
 11. ~~**TP 余量：StreamingToolExecutor 最小**~~ ✅ 最小  
-12. **下一刀 P1 余量：** permission 分类器小步 · J-D 余量 · snip 小步  
-13. **后置：** 思考回灌 · Anthropic budget · OR6 WS · cache TTL · cached MC · T8 Ink · Electron · 插件市场  
+12. ~~**TP-PERM：permission 规则匹配小步**~~ ✅ 最小（always-deny + Bash 通配；非完整 YOLO）  
+13. **下一刀 P1 余量：** snip 小步 · J-D 余量 · 其它 TP/CP 余量  
+14. **后置：** 思考回灌 · Anthropic budget · OR6 WS · cache TTL · cached MC · 完整 YOLO 分类器 · T8 Ink · Electron · 插件市场  
 
 ---
 
@@ -81,7 +82,7 @@
 
 | 能力 | 状态 | 备注 |
 |------|------|------|
-| queryLoop / Hooks / 四档权限 | ✅/🟡 | always-allow：工具名/前缀 + **path glob** + **Bash 前缀**；plan 仍 deny 写 |
+| queryLoop / Hooks / 四档权限 | ✅/🟡 | always-allow + **always-deny**（工具/前缀/path/bash）；Bash **通配/`:*`**；deny 赢过 bypass；plan 仍 deny 写 |
 | **Loop 韧性：错误分类 + model 退避** | 🟡 最小 | `errorClassify` + `wrapCallModelWithRetry`；默认 3 次；事件 `model_retry` |
 | PTL 截断重试 | ✅ | 与 model 退避正交 |
 | buildTool + 分区并发 + 常用工具 | ✅/🟡 | **Edit** ✅ 最小；真 apply_patch；Write；schema → tool_use_error |
@@ -143,7 +144,7 @@
 |----|------|------|
 | 总线 | 解析 `/`、help、skill 回落 | ✅ |
 | 会话 | `/clear` `/compact` `/context` `/cost` | ✅ | compact 报前后 token；context 含压力 |
-| 模型与推理 | `/model` **`/effort`** `/plan` `/permissions` `/allow` | ✅ |
+| 模型与推理 | `/model` **`/effort`** `/plan` `/permissions` `/allow` `/deny` | ✅ |
 | 扩展 | `/skills` `/mcp` `/plugins` `/hooks` **`/rules`** `/agents` `/bg` | ✅ |
 | 诊断脚手架 | `/doctor` `/status` `/init` | ✅ |
 | 体验打磨 | `/help` 分组 · 未知建议 · `/context` 加深 · 别名隐藏 | ✅ **SL-polish** |
@@ -343,7 +344,7 @@ flowchart TB
 |------|------|
 | `/help` | 分组列命令 |
 | `/compact` `/clear` `/context` | 压缩 / 清对话 / 上下文概览（token/sections/cache） |
-| `/model` `/effort` `/plan` `/permissions` `/allow` | 模型 · 档位 · 模式 · 权限 |
+| `/model` `/effort` `/plan` `/permissions` `/allow` `/deny` | 模型 · 档位 · 模式 · always-allow/deny |
 | `/rules` `/skills` `/skill` · `/<id>` | 规则与技能 |
 | `/mcp` `/plugins` `/hooks` | 扩展状态 |
 | `/agents` `/bg` | 子代理 / 后台 |
@@ -445,7 +446,7 @@ flowchart TB
 | G 协议 | Responses HTTP | ✅；WS 后置 |
 | H 韧性 | 错误分类 + model 退避 + PTL | 🟡 最小（本刀） |
 
-**默认下一刀：** 见 **`docs/TODO.md` §8**（**P1 余量：permission 分类器 / snip / J-D**）。
+**默认下一刀：** 见 **`docs/TODO.md` §8**（**P1 余量：snip / J-D**）。
 
 ---
 
@@ -486,7 +487,8 @@ flowchart TB
 
 | commit | 内容（代码行为） |
 |--------|------------------|
-| *(本刀)* | **TP-STE**：StreamingToolExecutor 最小（边流边跑 · 保序 · Bash 级联 · discard · queryLoop 接入） |
+| *(本刀)* | **TP-PERM**：permission 规则匹配小步（always-deny · Bash 通配/`:*` · `/deny` · 快照/meta；非 YOLO） |
+| `bd99c95` | **TP-STE**：StreamingToolExecutor 最小（边流边跑 · 保序 · Bash 级联 · discard · queryLoop 接入） |
 | `19cf680` | **CP5**：默认 auto compact + 环境熔断 + `/autocompact` |
 | `3ec8b52` | **Loop 韧性**：`errorClassify` + `wrapCallModelWithRetry`；queryLoop `model_retry`；文档口径诚实化 |
 | `b7a4ccc` | **MCP2 list_changed 热刷新**（tools/resources/prompts → 缓存 + session.tools）；subject 曾误写为 J-D T3 |
@@ -509,7 +511,7 @@ flowchart TB
 |--------|------|--------|
 | M0–M2 | ✅/🟡 | headless 主路径可跑；相对 HC 未满 |
 | **M-Loop 韧性** | 🟡 最小 | 分类 + 429/5xx 有限退避；PTL 正交 |
-| **M-Tool+Permission** | 🟡 最小 | Edit + path/bash always-allow + abort + **STE 边流边跑**；非完整分类器 |
+| **M-Tool+Permission** | 🟡 最小 | Edit + path/bash allow/deny + abort + **STE** + **规则匹配小步**；完整 YOLO 后置 |
 | **M-Compact 日用** | 🟡 最小 | 加权 token · pressure · `/context`·`/compact`；**默认 auto ✅**；cached MC/snip 后置 |
 | **M-Slash** | ✅ | 日用 `/` + SL-polish |
 | **M-Rules** | ✅ | `.bolo/rules` + path-scoped + `/rules` |
@@ -524,5 +526,5 @@ flowchart TB
 
 **一句话：**  
 Headless **主路径可日用**，相对参考实现约 **40–55%**（文档不再写 ~70% 乐观数）。  
-**P0 切片** LR / TP / CP 日用均 🟡 最小；**MCP HTTP+SSE · PL2 · Usage+ · RC2 · CP5 · STE 边流边跑 🟡 最小**；**下一刀：permission 分类器小步 / snip / J-D**。  
+**P0 切片** LR / TP / CP 日用均 🟡 最小；**MCP HTTP+SSE · PL2 · Usage+ · RC2 · CP5 · STE · TP-PERM 规则匹配 🟡 最小**；**下一刀：snip 小步 / J-D 余量**。  
 执行序 → **`docs/TODO.md`**。

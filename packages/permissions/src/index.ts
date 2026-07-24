@@ -1,7 +1,7 @@
 /**
- * 权限模式与门控 — 对照 HelsincyCode PermissionMode / permissions 语义
+ * 权限模式与门控 — 对照参考实现 PermissionMode / permissions 决策链语义
  * 见 docs/PERMISSIONS.md
- * 无遥测、无 auto 分类器
+ * 无遥测、无 YOLO / auto 分类器
  */
 
 import path from 'node:path'
@@ -115,20 +115,37 @@ export function isPathInsideCwd(cwd: string, filePath: string): boolean {
 }
 
 /**
- * 会话级 Always-allow 规则（对照参考实现 session permission rules；无遥测）。
- * 可经 SessionSnapshot 本地持久化；plan 模式下写/壳/MCP 仍 deny，不受 alwaysAllow 覆盖。
+ * 会话级权限规则（对照参考实现 session permission rules；无遥测）。
+ * 可经 SessionSnapshot / JSONL meta 本地持久化。
  *
- * 扩展（TP*）：
- * - alwaysAllowPathGlobs：相对 cwd 的路径 glob（Read/Write/Edit/apply_patch 等带 path 的工具）
- * - alwaysAllowBashPrefixes：Bash command 字符串前缀（trim 后 startsWith）
+ * Always-allow（TP*）：
+ * - alwaysAllowPathGlobs：相对 cwd 的路径 glob
+ * - alwaysAllowBashPrefixes：Bash 模式（前缀 / 通配 * / 遗留 :*）
+ *
+ * Always-deny（分类器小步 / 规则匹配增强）：
+ * - 硬 deny 优先于 bypass / always-allow / 模式矩阵（对照参考实现 deny 规则先于 mode）
+ * - plan 写/壳/MCP 仍 deny（与 always-allow 不可覆盖一致）
  */
 export type SessionPermissionRules = {
   alwaysAllowToolNames: string[]
   alwaysAllowPrefixes?: string[]
   /** 路径 glob（如 src 下全部、任意 .ts）；相对 cwd 匹配 */
   alwaysAllowPathGlobs?: string[]
-  /** Bash 命令前缀（如 "git "、"npm test"） */
+  /**
+   * Bash 允许模式：
+   * - 纯前缀：`git ` → startsWith
+   * - 遗留：`git:*` → 前缀 `git`
+   * - 通配：`git *` / `npm * --watch`（`*` 匹配任意子串；`\\*` 字面星号）
+   */
   alwaysAllowBashPrefixes?: string[]
+  /** 硬 deny：精确工具名 */
+  alwaysDenyToolNames?: string[]
+  /** 硬 deny：工具名前缀（如 mcp__untrusted） */
+  alwaysDenyPrefixes?: string[]
+  /** 硬 deny：路径 glob */
+  alwaysDenyPathGlobs?: string[]
+  /** 硬 deny：Bash 模式（语义同 alwaysAllowBashPrefixes） */
+  alwaysDenyBashPrefixes?: string[]
 }
 
 export function createEmptyPermissionRules(): SessionPermissionRules {
@@ -208,16 +225,132 @@ function extractCommandFromInput(input: unknown): string | undefined {
   return undefined
 }
 
+/**
+ * Bash 规则模式匹配（对照参考实现 shellRuleMatching 语义，无遥测）。
+ *
+ * - `foo:*` → 前缀 `foo`（遗留）
+ * - 含未转义 `*` → 通配（`git *` 同时匹配 `git` 与 `git status`）
+ * - 否则 → trim 后 startsWith（保留既有前缀语义）
+ */
+export function matchBashPattern(command: string, pattern: string): boolean {
+  const cmd = command.trim()
+  const pat = pattern.trim()
+  if (!cmd || !pat) return false
+
+  // 遗留 prefix:* 
+  if (pat.endsWith(':*') && !pat.slice(0, -2).includes('*')) {
+    const prefix = pat.slice(0, -2)
+    return prefix.length > 0 && cmd.startsWith(prefix)
+  }
+
+  // 通配：未转义 *
+  if (bashPatternHasWildcard(pat)) {
+    return matchBashWildcard(pat, cmd)
+  }
+
+  // 纯前缀
+  return cmd.startsWith(pat)
+}
+
+function bashPatternHasWildcard(pattern: string): boolean {
+  for (let i = 0; i < pattern.length; i++) {
+    if (pattern[i] !== '*') continue
+    let backslashCount = 0
+    let j = i - 1
+    while (j >= 0 && pattern[j] === '\\') {
+      backslashCount++
+      j--
+    }
+    if (backslashCount % 2 === 0) return true
+  }
+  return false
+}
+
+const ESCAPED_STAR = '\x00STAR\x00'
+const ESCAPED_BS = '\x00BS\x00'
+
+function matchBashWildcard(pattern: string, command: string): boolean {
+  let processed = ''
+  for (let i = 0; i < pattern.length; ) {
+    const c = pattern[i]!
+    if (c === '\\' && i + 1 < pattern.length) {
+      const next = pattern[i + 1]!
+      if (next === '*') {
+        processed += ESCAPED_STAR
+        i += 2
+        continue
+      }
+      if (next === '\\') {
+        processed += ESCAPED_BS
+        i += 2
+        continue
+      }
+    }
+    processed += c
+    i += 1
+  }
+
+  let escaped = ''
+  for (const c of processed) {
+    if ('+.?^${}()|[]"\''.includes(c)) escaped += '\\' + c
+    else escaped += c
+  }
+  let regexPattern = escaped
+    .replace(/\*/g, '.*')
+    .split(ESCAPED_STAR)
+    .join('\\*')
+    .split(ESCAPED_BS)
+    .join('\\\\')
+
+  // 仅一个通配且形如 `cmd *` 时，尾部空格+参数可选（bare `git` 也命中）
+  const starCount = (processed.match(/\*/g) || []).length
+  if (regexPattern.endsWith(' .*') && starCount === 1) {
+    regexPattern = regexPattern.slice(0, -3) + '( .*)?'
+  }
+
+  try {
+    return new RegExp(`^${regexPattern}$`, 's').test(command)
+  } catch {
+    return false
+  }
+}
+
 export type AlwaysAllowMatchOpts = {
   toolInput?: unknown
   cwd?: string
+}
+
+function matchesToolNameList(toolName: string, names?: string[]): boolean {
+  return !!names?.length && names.includes(toolName)
+}
+
+function matchesToolPrefixList(toolName: string, prefixes?: string[]): boolean {
+  if (!prefixes?.length) return false
+  for (const p of prefixes) {
+    if (p && toolName.startsWith(p)) return true
+  }
+  return false
+}
+
+function matchesBashPatternList(
+  toolName: string,
+  patterns: string[] | undefined,
+  input: unknown,
+): boolean {
+  if (!patterns?.length || toolName !== 'Bash') return false
+  const cmd = extractCommandFromInput(input)?.trim() ?? ''
+  if (!cmd) return false
+  for (const pat of patterns) {
+    if (pat && matchBashPattern(cmd, pat)) return true
+  }
+  return false
 }
 
 /**
  * 是否命中 always-allow：
  * 1) 精确工具名 / 工具名前缀
  * 2) 路径 glob（带 path 的工具）
- * 3) Bash 命令前缀
+ * 3) Bash 模式（前缀 / 通配 / :*）
  */
 export function matchesAlwaysAllow(
   toolName: string,
@@ -225,13 +358,8 @@ export function matchesAlwaysAllow(
   opts?: AlwaysAllowMatchOpts,
 ): boolean {
   if (!rules) return false
-  if (rules.alwaysAllowToolNames.includes(toolName)) return true
-  const prefixes = rules.alwaysAllowPrefixes
-  if (prefixes?.length) {
-    for (const p of prefixes) {
-      if (p && toolName.startsWith(p)) return true
-    }
-  }
+  if (matchesToolNameList(toolName, rules.alwaysAllowToolNames)) return true
+  if (matchesToolPrefixList(toolName, rules.alwaysAllowPrefixes)) return true
 
   const input = opts?.toolInput
   const cwd = opts?.cwd ?? process.cwd()
@@ -242,14 +370,36 @@ export function matchesAlwaysAllow(
     if (p && pathMatchesAnyGlob(cwd, p, pathGlobs)) return true
   }
 
-  const bashPrefixes = rules.alwaysAllowBashPrefixes
-  if (bashPrefixes?.length && toolName === 'Bash') {
-    const cmd = extractCommandFromInput(input)?.trim() ?? ''
-    if (cmd) {
-      for (const pref of bashPrefixes) {
-        if (pref && cmd.startsWith(pref)) return true
-      }
-    }
+  if (matchesBashPatternList(toolName, rules.alwaysAllowBashPrefixes, input)) {
+    return true
+  }
+
+  return false
+}
+
+/**
+ * 是否命中 always-deny（硬规则；优先于 bypass / allow / 模式矩阵）。
+ */
+export function matchesAlwaysDeny(
+  toolName: string,
+  rules?: SessionPermissionRules | null,
+  opts?: AlwaysAllowMatchOpts,
+): boolean {
+  if (!rules) return false
+  if (matchesToolNameList(toolName, rules.alwaysDenyToolNames)) return true
+  if (matchesToolPrefixList(toolName, rules.alwaysDenyPrefixes)) return true
+
+  const input = opts?.toolInput
+  const cwd = opts?.cwd ?? process.cwd()
+
+  const pathGlobs = rules.alwaysDenyPathGlobs
+  if (pathGlobs?.length) {
+    const p = extractPathFromInput(input)
+    if (p && pathMatchesAnyGlob(cwd, p, pathGlobs)) return true
+  }
+
+  if (matchesBashPatternList(toolName, rules.alwaysDenyBashPrefixes, input)) {
+    return true
   }
 
   return false
@@ -281,7 +431,7 @@ export function addAlwaysAllowPathGlob(
   return rules
 }
 
-/** 就地加入 Bash 命令前缀（去重；保留用户给定空白语义，仅 trim 两端） */
+/** 就地加入 Bash 允许模式（去重；仅 trim 两端） */
 export function addAlwaysAllowBashPrefix(
   rules: SessionPermissionRules,
   prefix: string,
@@ -291,6 +441,62 @@ export function addAlwaysAllowBashPrefix(
   if (!rules.alwaysAllowBashPrefixes) rules.alwaysAllowBashPrefixes = []
   if (!rules.alwaysAllowBashPrefixes.includes(p)) {
     rules.alwaysAllowBashPrefixes.push(p)
+  }
+  return rules
+}
+
+/** 就地加入会话 always-deny 工具名（去重） */
+export function addAlwaysDenyToolName(
+  rules: SessionPermissionRules,
+  toolName: string,
+): SessionPermissionRules {
+  const name = toolName.trim()
+  if (!name) return rules
+  if (!rules.alwaysDenyToolNames) rules.alwaysDenyToolNames = []
+  if (!rules.alwaysDenyToolNames.includes(name)) {
+    rules.alwaysDenyToolNames.push(name)
+  }
+  return rules
+}
+
+/** 就地加入硬 deny 路径 glob（去重） */
+export function addAlwaysDenyPathGlob(
+  rules: SessionPermissionRules,
+  glob: string,
+): SessionPermissionRules {
+  const g = glob.trim()
+  if (!g) return rules
+  if (!rules.alwaysDenyPathGlobs) rules.alwaysDenyPathGlobs = []
+  if (!rules.alwaysDenyPathGlobs.includes(g)) {
+    rules.alwaysDenyPathGlobs.push(g)
+  }
+  return rules
+}
+
+/** 就地加入硬 deny Bash 模式（去重） */
+export function addAlwaysDenyBashPrefix(
+  rules: SessionPermissionRules,
+  prefix: string,
+): SessionPermissionRules {
+  const p = prefix.trim()
+  if (!p) return rules
+  if (!rules.alwaysDenyBashPrefixes) rules.alwaysDenyBashPrefixes = []
+  if (!rules.alwaysDenyBashPrefixes.includes(p)) {
+    rules.alwaysDenyBashPrefixes.push(p)
+  }
+  return rules
+}
+
+/** 就地加入硬 deny 工具名前缀（去重） */
+export function addAlwaysDenyPrefix(
+  rules: SessionPermissionRules,
+  prefix: string,
+): SessionPermissionRules {
+  const p = prefix.trim()
+  if (!p) return rules
+  if (!rules.alwaysDenyPrefixes) rules.alwaysDenyPrefixes = []
+  if (!rules.alwaysDenyPrefixes.includes(p)) {
+    rules.alwaysDenyPrefixes.push(p)
   }
   return rules
 }
@@ -317,14 +523,34 @@ export type GateResult = {
 }
 
 /**
- * 纯函数门控 — 对照 HC 模式变换的最小表驱动版
+ * 纯函数门控 — 对照参考实现规则优先 + 模式矩阵的最小表驱动版
  *
- * 顺序：bypass → plan（写仍 deny）→ alwaysAllow rules → acceptEdits / default
+ * 顺序：
+ * 1. always-deny（硬规则，**含** bypass）
+ * 2. bypass → allow
+ * 3. plan（写/壳/MCP 仍 deny，优先于 always-allow）
+ * 4. always-allow
+ * 5. acceptEdits / default 矩阵
+ *
+ * 非完整 YOLO / auto 分类器。
  */
 export function decidePermission(input: GateInput): GateResult {
   const category = classifyTool(input.toolName)
   const mode = input.mode
   const base = { category, mode }
+  const matchOpts = {
+    toolInput: input.toolInput,
+    cwd: input.cwd,
+  }
+
+  // 1. 硬 deny：即使用户开 bypass 也拦（对照参考实现 deny 规则优先）
+  if (matchesAlwaysDeny(input.toolName, input.rules, matchOpts)) {
+    return {
+      ...base,
+      behavior: 'deny',
+      reason: 'session always-deny rule',
+    }
+  }
 
   if (mode === 'bypassPermissions') {
     return {
@@ -346,12 +572,7 @@ export function decidePermission(input: GateInput): GateResult {
     }
   }
 
-  if (
-    matchesAlwaysAllow(input.toolName, input.rules, {
-      toolInput: input.toolInput,
-      cwd: input.cwd,
-    })
-  ) {
+  if (matchesAlwaysAllow(input.toolName, input.rules, matchOpts)) {
     return {
       ...base,
       behavior: 'allow',

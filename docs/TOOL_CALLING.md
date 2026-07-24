@@ -67,7 +67,7 @@ Edit 失败形态（示例）：
 
 - 完整 zod 与复杂 schema  
 - StreamingToolExecutor 加深：progress 通道 · interruptBehavior · 完整 contextModifier  
-- 完整 permission 分类器  
+- 完整 YOLO / auto 分类器（模型批）  
 - UI renderToolResult  
 
 ## 6. 测试

@@ -1,6 +1,6 @@
 # Slash 命令契约（最小）
 
-> 无遥测。对照 HelsincyCode 行首 `/` 语义再实现；不抄 Claude 商标。
+> 无遥测。对照参考实现行首 `/` 语义再实现；不抄 Claude 商标。
 
 ## 解析
 
@@ -35,6 +35,8 @@
 | `/thinking [on\|off]` | 会话字段 `showThinking`（默认 **on**）：仅控制 CLI 是否渲染思考链；**off 仍解析** provider 事件，不写终端；**不**回灌 ChatMessage |
 | `/plan` | `permissionMode = plan` |
 | `/permissions [mode]` | 无参列出四档；有参切换；非法参数返回 **Usage** 文案 |
+| `/allow [ToolName \| path:GLOB \| bash:PATTERN]` | 会话 always-allow：工具名 / 路径 glob / Bash 模式（前缀·通配·`:*`）；无参列出 |
+| `/deny [ToolName \| path:GLOB \| bash:PATTERN \| prefix:PFX]` | 会话 **always-deny**（硬规则，赢过 bypass/allow）；无参列出 |
 
 REPL 额外：`/exit` `/quit` 由 CLI 处理（退出循环，不进总线）。
 
