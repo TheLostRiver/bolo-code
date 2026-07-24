@@ -55,14 +55,15 @@ P1：
   11. ~~TP 余量：StreamingToolExecutor 最小~~ ✅ 最小
   12. ~~TP-PERM：permission 规则匹配小步~~ ✅ 最小
   13. ~~CP-SNIP：snip 最小~~ ✅ 最小
-  14. ~~J-D 余量：title entry + CLI list/migrate~~ ✅ 最小（本刀）
-  下一刀：其它 CP/TP 余量 ·（或）lite 列表 / system_note
+  14. ~~J-D 余量：title entry + CLI list/migrate~~ ✅ 最小
+  15. ~~J-D 再余量：system_note + lite list + /note~~ ✅ 最小（本刀）
+  下一刀：其它 CP/TP 余量 ·（完整 YOLO / 市场 **后置，需你确认再开**）
 ```
 
 | 优先级 | 含义（当前） |
 |--------|----------------|
 | **P0** | 抬 headless 水位：韧性 / TP / **CP 日用** 已 🟡 |
-| **P1** | 扩展深度（**MCP HTTP+SSE ✅** · **RC1+RC2 ✅** · **PL2 ✅** · **Usage+ ✅** · **CP5 ✅** · **STE ✅** · **TP-PERM ✅** · **CP-SNIP ✅** · **J-D 余量 title/CLI ✅**）— **默认下一刀区：其它 CP·TP 余量** |
+| **P1** | 扩展深度（**MCP HTTP+SSE ✅** · **RC1+RC2 ✅** · **PL2 ✅** · **Usage+ ✅** · **CP5 ✅** · **STE ✅** · **TP-PERM ✅** · **CP-SNIP ✅** · **J-D title/CLI ✅** · **system_note+lite ✅**）— **默认下一刀区：其它 CP·TP 余量** |
 | **P2** | 未做或仅最小的子项 |
 | **P3** | GUI / 完整 Ink / 后置协议 |
 
@@ -82,7 +83,8 @@ P1：
 | **J-C / J-C+** | `loadTranscriptMessages`；JSON 缺失回退；双文件 messages 优先 jsonl（非空） | ✅ 最小 |
 | **J-D** | R1 `compact_boundary` · 空/坏 jsonl 回退 · list 跟 jsonl · 冲突策略 | ✅ |
 | **J-D T3** | **默认只写 jsonl** · meta 配置切片 · `migrateSessionToJsonl` · 旧 JSON 只读 | ✅ |
-| **J-D 余量** | **title entry**（last-wins · 不进模型链）· `/title` · list 展示 title · CLI `--list` / `--migrate-session` | ✅ 最小（本刀） |
+| **J-D 余量** | **title entry**（last-wins · 不进模型链）· `/title` · list 展示 title · CLI `--list` / `--migrate-session` | ✅ 最小 |
+| **J-D 再余量** | **system_note** entry · `/note` · rewrite 保留 · **scanTranscriptLite** list · 近况 preview | ✅ 最小（本刀） |
 
 ### 2.2 斜杠 · Rules · Cache · Creators
 
@@ -192,7 +194,8 @@ P1：
 | **RC2** | Reasoning 加深 | openai-responses reasoning SSE；`/thinking` 显示开关；**跳过** ChatMessage 回灌 | ✅ 最小 |
 | **PL2** | plugins 深度 | 热加载 / commands 贡献 / `/plugins reload` | ✅ 最小 |
 | **Usage+** | 本地 usage 展示 | cache 字段 + byModel + `/cost` breakdown；快照/meta 持久化 | ✅ 最小 |
-| **J-D 余量** | entry / CLI | **title** + `/title` + list title + `--list` + `--migrate-session` | ✅ 最小（本刀）；system_note / lite 头尾读 ⬜ |
+| **J-D 余量** | entry / CLI | **title** + `/title` + list title + `--list` + `--migrate-session` | ✅ 最小 |
+| **J-D 再余量** | system_note / lite | **system_note** + `/note` + `scanTranscriptLite` list | ✅ 最小（本刀） |
 | **C6+** | Cache 后置 | 1h TTL / global scope / break detection / cached MC | ⬜ **后置** |
 | **TP 余量** | permission / STE | **STE ✅** · **TP-PERM 规则匹配 ✅**；完整 YOLO / 更强 apply_patch / STE progress | 🟡 规则小步已齐；YOLO ⬜ |
 | **CP 余量** | compact 再深 | **默认开 auto ✅**；**snip 最小 ✅**；cached MC · SnipTool/UUID · 真 tokenizer 仍后置 | 🟡 snip 最小已齐；其余 ⬜ |
@@ -237,10 +240,11 @@ P1：
   · TP-PERM permission 规则匹配小步（always-deny · Bash 通配 · /deny）
   · CP-SNIP snip 最小（门槛 · 安全 cut · prepare 写回）
   · J-D 余量 title entry + CLI --list / migrate-session
+  · J-D 再余量 system_note + /note + scanTranscriptLite list
 
 下一阶段：
-  ① 其它 CP·TP 余量 / system_note / lite 列表   ← 默认主刀区（P1 余量）
-  ② C6+ / OR6 / T8 / Electron / 完整 YOLO  （后置）
+  ① 其它 CP·TP 余量   ← 默认主刀区（P1 余量）
+  ② C6+ / OR6 / T8 / Electron / 完整 YOLO / 插件市场  （后置；**完整 YOLO·市场开工前需用户确认**）
 ```
 
 ---
@@ -249,13 +253,13 @@ P1：
 
 若只开一刀（**非 Electron**）：
 
-> **主推：其它 CP/TP 余量** 或 J-D 再余量（`system_note` / lite 头尾读）小步  
+> **主推：其它 CP/TP 余量**（勿抢完整 YOLO / 市场）  
 > - 勿一口做完整市场 / OAuth MCP / 完整 Ink / 完整 YOLO  
 >
-> **本刀已勾选：** **J-D 余量**（`title` entry last-wins · `/title` · list title · CLI `--list` / `--migrate-session` · `test-session-title`）。  
-> **明确后置：** STE progress/interruptBehavior · 思考链安全回灌 · Anthropic thinking budget · 插件市场 · OAuth · SSE 自动重连 · cached MC · SnipTool/UUID 回放 · 真 tokenizer · OR6 · C6+ · T8 · Electron · **完整 YOLO / auto 分类器** · 远程 USD 账单。
+> **本刀已勾选：** **J-D 再余量**（`system_note` · `/note` · rewrite 保留 · `scanTranscriptLite` list · `test-session-notes-lite`）。  
+> **明确后置（开工前叫用户）：** **完整 YOLO / auto 分类器** · **插件市场** · STE progress · 思考链安全回灌 · Anthropic thinking budget · OAuth · SSE 自动重连 · cached MC · SnipTool/UUID · 真 tokenizer · OR6 · C6+ · T8 · Electron · 远程 USD 账单。
 
-**已齐摘要：** resume · slash · BOLO TUI 最小 · rules · C1–C5 · JSONL 主路径（**title entry**）· creators · Subagent · MCP stdio+HTTP+**SSE** 最小 · **plugins PL1+PL2 最小** · Responses HTTP · Loop 韧性最小 · Tool+Permission 日用 + **STE** + **规则匹配小步** · Compact 日用加深 + **默认 auto** + **snip 最小** · **RC1+RC2 思考链** · **Usage+ 最小** · CLI `--list` / migrate。
+**已齐摘要：** resume · slash · BOLO TUI 最小 · rules · C1–C5 · JSONL 主路径（**title + system_note**）· creators · Subagent · MCP stdio+HTTP+**SSE** 最小 · **plugins PL1+PL2 最小** · Responses HTTP · Loop 韧性最小 · Tool+Permission 日用 + **STE** + **规则匹配小步** · Compact 日用加深 + **默认 auto** + **snip 最小** · **RC1+RC2 思考链** · **Usage+ 最小** · CLI `--list` / migrate · lite list。
 
 ---
 
@@ -272,7 +276,7 @@ P1：
 | C* | M-Cost（C1–C5 ✅；C6+ 后置） |
 | **Usage+** | 本地 usage breakdown ✅ 最小 |
 | **RC1 · RC2** | 思考链流式 + Responses reasoning + `/thinking` ✅ 最小 |
-| J* | M5.1 / `TODO_SESSION_JSONL`（J-D T3 ✅ · title/CLI 余量 ✅ 最小） |
+| J* | M5.1 / `TODO_SESSION_JSONL`（J-D T3 ✅ · title/CLI ✅ · system_note+lite ✅） |
 | K* | M-Creators ✅ |
 | S* | M-Subagent（S0–S7 ✅；S12 partial） |
 | MCP* · PL* | M3（stdio + HTTP ✅；**PL2 ✅ 最小**；**SSE ✅ 最小**；市场 ⬜） |
@@ -294,4 +298,5 @@ P1：
 ---
 
 **一句话：**  
-**J-D 余量**（title + CLI list/migrate）已落地；**下一刀：其它 CP/TP 余量** 或 system_note/lite 列表；完整 YOLO / 市场 / OAuth / cached MC / SnipTool 回放 / 回灌勿抢。
+**J-D 再余量**（system_note + lite list）已落地；**下一刀：其它 CP/TP 余量**。  
+**完整 YOLO / 插件市场** 后置——**动手前先叫用户确认**。

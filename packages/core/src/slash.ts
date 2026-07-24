@@ -455,6 +455,103 @@ async function cmdTitle(
   }
 }
 
+/**
+ * `/note`：追加 system_note（不进模型链；rewrite 保留）。
+ * 无参：列出最近若干条；有参：append。
+ * 可选前缀 `kind:text`（如 `ptl:retried after truncate`）。
+ */
+async function cmdNote(
+  session: SlashSession,
+  args: string,
+): Promise<SlashDispatchResult> {
+  const raw = args.trim()
+  const {
+    appendSessionSystemNote,
+    getSessionPersistMeta,
+    resolveSessionFilePath,
+  } = await import('./sessionPersist.ts')
+  const {
+    loadTranscriptFile,
+    resolveTranscriptPathFromJson,
+    getTranscriptWriteState,
+    systemNotesFromTranscriptEntries,
+  } = await import('./sessionTranscript.ts')
+
+  const meta = getSessionPersistMeta(session)
+  const tw = getTranscriptWriteState(session)
+  const saveOpts = {
+    sessionsDir: meta?.sessionsDir,
+    filePath: meta?.filePath ?? tw?.filePath,
+    scope: meta?.scope,
+  }
+
+  if (!raw) {
+    try {
+      const jsonSide =
+        saveOpts.filePath ??
+        resolveSessionFilePath(session.id, {
+          scope: meta?.scope ?? 'project',
+          cwd: session.cwd,
+          sessionsDir: meta?.sessionsDir,
+        })
+      const tp = resolveTranscriptPathFromJson(jsonSide)
+      const { entries } = await loadTranscriptFile(tp)
+      const notes = systemNotesFromTranscriptEntries(entries)
+      if (!notes.length) {
+        return {
+          ok: true,
+          message:
+            'No system notes. Usage: /note [kind:]text  (appends system_note; not model-visible)',
+        }
+      }
+      const tail = notes.slice(-8)
+      const lines = tail.map((n, i) => {
+        const k = n.kind ? `[${n.kind}] ` : ''
+        return `${notes.length - tail.length + i + 1}. ${k}${n.text}`
+      })
+      return {
+        ok: true,
+        message: `System notes (${notes.length}):\n${lines.join('\n')}`,
+      }
+    } catch {
+      return {
+        ok: true,
+        message:
+          'No system notes (no transcript yet). Usage: /note [kind:]text',
+      }
+    }
+  }
+
+  let kind: string | undefined
+  let text = raw
+  const colon = raw.indexOf(':')
+  if (colon > 0 && colon < 32) {
+    const maybeKind = raw.slice(0, colon).trim()
+    const rest = raw.slice(colon + 1).trim()
+    // 仅当 kind 像标签（无空格）且 rest 非空
+    if (maybeKind && !/\s/.test(maybeKind) && rest) {
+      kind = maybeKind
+      text = rest
+    }
+  }
+
+  try {
+    const r = await appendSessionSystemNote(
+      session as Parameters<typeof appendSessionSystemNote>[0],
+      text,
+      { ...saveOpts, kind },
+    )
+    const k = r.kind ? ` [${r.kind}]` : ''
+    return {
+      ok: true,
+      message: `Note appended${k}: ${r.text}`,
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return { ok: false, message: `note failed: ${msg}` }
+  }
+}
+
 async function cmdCompact(
   session: SlashSession,
   args: string,
@@ -1500,6 +1597,14 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     usage: '[text]',
     group: 'session',
     run: cmdTitle,
+  },
+  {
+    name: 'note',
+    summary:
+      'List or append system_note (jsonl; not model-visible; rewrite keeps notes)',
+    usage: '[[kind:]text]',
+    group: 'session',
+    run: cmdNote,
   },
   {
     name: 'compact',

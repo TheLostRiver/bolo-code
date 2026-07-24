@@ -65,11 +65,24 @@ export type TranscriptTitleEntry = TranscriptEntryBase & {
   title: string
 }
 
+/**
+ * 系统注记（线性 append；**不进模型链**）。
+ * 对照 HC 侧 metadata entry（task-summary / 内部说明类）：审计与 list 可读，
+ * rewrite 时保留（compact 后仍可见）。
+ */
+export type TranscriptSystemNoteEntry = TranscriptEntryBase & {
+  type: 'system_note'
+  text: string
+  /** 可选分类：ptl / compact / manual / … */
+  kind?: string
+}
+
 export type TranscriptEntry =
   | TranscriptMetaEntry
   | TranscriptMessageEntry
   | TranscriptCompactBoundaryEntry
   | TranscriptTitleEntry
+  | TranscriptSystemNoteEntry
 
 export type TranscriptMetaInput = {
   sessionId: string
@@ -337,6 +350,63 @@ export async function appendSessionTitle(
   return entry
 }
 
+/** 规范化 system_note 正文 */
+export function normalizeSystemNoteText(raw: string): string | undefined {
+  const t = raw.replace(/\s+/g, ' ').trim()
+  return t ? t : undefined
+}
+
+export function buildSystemNoteEntry(opts: {
+  sessionId: string
+  text: string
+  kind?: string
+  timestamp?: string
+}): TranscriptSystemNoteEntry {
+  const text = normalizeSystemNoteText(opts.text)
+  if (!text) {
+    throw new Error('buildSystemNoteEntry: text is empty')
+  }
+  const kind =
+    typeof opts.kind === 'string' && opts.kind.trim()
+      ? opts.kind.trim()
+      : undefined
+  return {
+    type: 'system_note',
+    sessionId: opts.sessionId,
+    timestamp: opts.timestamp ?? nowIso(),
+    text,
+    ...(kind ? { kind } : {}),
+  }
+}
+
+/** 追加 `system_note`（不进 messages 链） */
+export async function appendSystemNote(
+  file: string,
+  opts: { sessionId: string; text: string; kind?: string },
+): Promise<TranscriptSystemNoteEntry> {
+  const entry = buildSystemNoteEntry(opts)
+  await appendTranscriptLine(file, entry)
+  return entry
+}
+
+/** entries 中全部 system_note（保持文件顺序） */
+export function systemNotesFromTranscriptEntries(
+  entries: TranscriptEntry[],
+): Array<{ text: string; kind?: string; timestamp: string }> {
+  const out: Array<{ text: string; kind?: string; timestamp: string }> = []
+  for (const e of entries) {
+    if (e.type !== 'system_note') continue
+    const text = normalizeSystemNoteText(e.text)
+    if (!text) continue
+    out.push({
+      text,
+      timestamp: e.timestamp,
+      ...(e.kind ? { kind: e.kind } : {}),
+    })
+  }
+  return out
+}
+
 /** entries 中最后一条非空 title（last-wins） */
 export function titleFromTranscriptEntries(
   entries: TranscriptEntry[],
@@ -378,9 +448,9 @@ export function setTranscriptWriteState(
 }
 
 /**
- * 从 messages 全量重建 jsonl（meta + 可选 compact_boundary + 全部 message + 保留 title）。
+ * 从 messages 全量重建 jsonl（meta + 可选 compact_boundary + 全部 message + 保留 title/notes）。
  * 用于 compact 后 messages 变短等无法纯 append 的情况。
- * title：显式 opts.title 优先；否则读旧文件 last-wins 保留。
+ * title / system_note：显式 opts 优先；否则读旧文件保留（title last-wins；notes 全量保留）。
  */
 export async function rewriteTranscriptFromMessages(
   file: string,
@@ -390,20 +460,43 @@ export async function rewriteTranscriptFromMessages(
     compactBoundarySummary?: string
     /** 显式标题；省略则尽量保留磁盘上最后一条 title */
     title?: string
+    /** 显式 system_notes；省略则尽量保留磁盘上已有 notes */
+    systemNotes?: Array<{ text: string; kind?: string }>
   },
 ): Promise<void> {
   const filePath = path.resolve(file)
   await fs.mkdir(path.dirname(filePath), { recursive: true })
 
   let preservedTitle: string | undefined
+  let preservedNotes: Array<{ text: string; kind?: string }> = []
   if (opts && 'title' in opts && opts.title !== undefined) {
     preservedTitle = normalizeSessionTitle(opts.title)
+  }
+  if (opts && 'systemNotes' in opts && opts.systemNotes !== undefined) {
+    preservedNotes = opts.systemNotes
+      .map((n) => {
+        const text = normalizeSystemNoteText(n.text)
+        if (!text) return null
+        return {
+          text,
+          ...(n.kind?.trim() ? { kind: n.kind.trim() } : {}),
+        }
+      })
+      .filter((n): n is { text: string; kind?: string } => n != null)
   } else {
     try {
       const { entries } = await loadTranscriptFile(filePath)
-      preservedTitle = titleFromTranscriptEntries(entries)
+      if (!(opts && 'title' in opts && opts.title !== undefined)) {
+        preservedTitle = titleFromTranscriptEntries(entries)
+      }
+      if (!(opts && 'systemNotes' in opts && opts.systemNotes !== undefined)) {
+        preservedNotes = systemNotesFromTranscriptEntries(entries).map((n) => ({
+          text: n.text,
+          ...(n.kind ? { kind: n.kind } : {}),
+        }))
+      }
     } catch {
-      preservedTitle = undefined
+      /* 新文件或不可读 */
     }
   }
 
@@ -437,6 +530,17 @@ export async function rewriteTranscriptFromMessages(
     lines.push(
       JSON.stringify(
         buildTitleEntry({ sessionId: session.id, title: preservedTitle }),
+      ),
+    )
+  }
+  for (const n of preservedNotes) {
+    lines.push(
+      JSON.stringify(
+        buildSystemNoteEntry({
+          sessionId: session.id,
+          text: n.text,
+          kind: n.kind,
+        }),
       ),
     )
   }
@@ -746,6 +850,25 @@ export async function loadTranscriptFile(
           title,
           uuid: typeof o.uuid === 'string' ? o.uuid : undefined,
         })
+        continue
+      }
+      if (o.type === 'system_note') {
+        if (typeof o.text !== 'string') continue
+        const text = normalizeSystemNoteText(o.text)
+        if (!text) continue
+        const kind =
+          typeof o.kind === 'string' && o.kind.trim()
+            ? o.kind.trim()
+            : undefined
+        entries.push({
+          type: 'system_note',
+          sessionId: typeof o.sessionId === 'string' ? o.sessionId : '',
+          timestamp:
+            typeof o.timestamp === 'string' ? o.timestamp : nowIso(),
+          text,
+          ...(kind ? { kind } : {}),
+          uuid: typeof o.uuid === 'string' ? o.uuid : undefined,
+        })
       }
     } catch {
       // 损坏行跳过
@@ -757,7 +880,7 @@ export async function loadTranscriptFile(
 /**
  * 策略 R1：取**最后一个** `compact_boundary` 之后的 message 行作为有效模型链。
  * 无 boundary 时取全部 message。meta 仍取文件中首条 meta。
- * `title` 不进 messages（仅元数据 last-wins）。
+ * `title` / `system_note` 不进 messages（仅元数据）。
  * compact 后 rewrite 的 jsonl 为 meta+boundary+压缩后 messages，与此一致。
  */
 export function messagesFromTranscriptEntries(entries: TranscriptEntry[]): {
@@ -767,6 +890,8 @@ export function messagesFromTranscriptEntries(entries: TranscriptEntry[]): {
   usedCompactBoundary: boolean
   /** 最后一条 title（若有） */
   title?: string
+  /** 全部 system_note（文件序） */
+  systemNotes?: Array<{ text: string; kind?: string; timestamp: string }>
 } {
   let meta: TranscriptMetaEntry | undefined
   let lastBoundary = -1
@@ -780,6 +905,7 @@ export function messagesFromTranscriptEntries(entries: TranscriptEntry[]): {
       if (t) title = t
     }
   }
+  const systemNotes = systemNotesFromTranscriptEntries(entries)
   const messages: ChatMessage[] = []
   const start = lastBoundary >= 0 ? lastBoundary + 1 : 0
   for (let i = start; i < entries.length; i++) {
@@ -791,6 +917,7 @@ export function messagesFromTranscriptEntries(entries: TranscriptEntry[]): {
     meta,
     usedCompactBoundary: lastBoundary >= 0,
     ...(title ? { title } : {}),
+    ...(systemNotes.length ? { systemNotes } : {}),
   }
 }
 
@@ -819,6 +946,137 @@ export async function loadTranscriptMessages(
     entryCount: entries.length,
     usedCompactBoundary,
     ...(title ? { title } : {}),
+  }
+}
+
+/** list 轻量扫描默认窗口：头/尾各 64KiB（对照 HC 有界头尾读语义） */
+export const DEFAULT_LITE_SCAN_BYTES = 64 * 1024
+
+export type TranscriptLiteScan = {
+  sessionId?: string
+  cwd?: string
+  model?: string
+  title?: string
+  /** R1 后有效 message 条数 */
+  messageCount: number
+  /** user 预览（优先尾窗近况，否则首条 user） */
+  preview: string
+  lastTimestamp?: string
+  noteCount: number
+  /** 小文件一次读完 */
+  fullScan: boolean
+}
+
+function tryParseLiteLine(line: string): Record<string, unknown> | null {
+  const t = line.trim()
+  if (!t.startsWith('{')) return null
+  try {
+    const o = JSON.parse(t) as unknown
+    if (!o || typeof o !== 'object') return null
+    return o as Record<string, unknown>
+  } catch {
+    return null
+  }
+}
+
+function extractUserPreviewFromMessageObj(
+  message: unknown,
+  max: number,
+): string | undefined {
+  if (!message || typeof message !== 'object') return undefined
+  const m = message as Record<string, unknown>
+  if (m.role !== 'user' || typeof m.content !== 'string') return undefined
+  const one = m.content.replace(/\s+/g, ' ').trim()
+  if (!one) return undefined
+  if (one.length <= max) return one
+  return `${one.slice(0, max - 1)}…`
+}
+
+/**
+ * 有界头/尾扫描 jsonl，供 list 使用。
+ * - 小文件（≤ 2×window）：一次读完
+ * - 大文件：仍读全文计 message/title（list 正确性优先），但 preview 优先从尾窗取「近况」
+ * 对照 HC readLiteMetadata：有界窗口取元数据；Bolo 最小版保证 list 字段正确。
+ */
+export async function scanTranscriptLite(
+  file: string,
+  opts?: { windowBytes?: number; previewMax?: number },
+): Promise<TranscriptLiteScan> {
+  const filePath = path.resolve(file)
+  const windowBytes = opts?.windowBytes ?? DEFAULT_LITE_SCAN_BYTES
+  const previewMax = opts?.previewMax ?? 80
+  const st = await fs.stat(filePath)
+  const size = st.size
+  const fullScan = size <= windowBytes * 2
+
+  const rawAll = await fs.readFile(filePath, 'utf8')
+
+  let metaSessionId: string | undefined
+  let cwd: string | undefined
+  let model: string | undefined
+  let title: string | undefined
+  let lastTimestamp: string | undefined
+  let lastBoundaryMsgIndex = -1
+  let messageOrdinal = 0
+  let noteCount = 0
+  let firstUserPreview = ''
+  let lastUserPreview = ''
+
+  for (const line of rawAll.split(/\r?\n/)) {
+    const o = tryParseLiteLine(line)
+    if (!o || typeof o.type !== 'string') continue
+    if (typeof o.timestamp === 'string' && o.timestamp.trim()) {
+      lastTimestamp = o.timestamp
+    }
+    if (o.type === 'meta') {
+      if (typeof o.sessionId === 'string' && o.sessionId.trim()) {
+        metaSessionId = o.sessionId.trim()
+      }
+      if (typeof o.cwd === 'string') cwd = o.cwd
+      if (typeof o.model === 'string') model = o.model
+      continue
+    }
+    if (o.type === 'title' && typeof o.title === 'string') {
+      const t = normalizeSessionTitle(o.title)
+      if (t) title = t
+      continue
+    }
+    if (o.type === 'system_note') {
+      noteCount++
+      continue
+    }
+    if (o.type === 'compact_boundary') {
+      lastBoundaryMsgIndex = messageOrdinal
+      continue
+    }
+    if (o.type === 'message') {
+      const p = extractUserPreviewFromMessageObj(o.message, previewMax)
+      if (p) {
+        if (!firstUserPreview) firstUserPreview = p
+        lastUserPreview = p
+      }
+      messageOrdinal++
+    }
+  }
+
+  const messageCount =
+    lastBoundaryMsgIndex >= 0
+      ? Math.max(0, messageOrdinal - lastBoundaryMsgIndex)
+      : messageOrdinal
+
+  // 近况预览：有多条 user 时用最后一条（list 更贴最近对话）
+  const preview = lastUserPreview || firstUserPreview
+
+  return {
+    ...(metaSessionId ? { sessionId: metaSessionId } : {}),
+    ...(cwd ? { cwd } : {}),
+    ...(model ? { model } : {}),
+    ...(title ? { title } : {}),
+    messageCount,
+    preview,
+    ...(lastTimestamp ? { lastTimestamp } : {}),
+    noteCount,
+    fullScan,
   }
 }
 

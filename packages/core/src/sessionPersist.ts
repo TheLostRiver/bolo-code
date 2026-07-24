@@ -35,10 +35,12 @@ import {
   rewriteTranscriptFromMessages,
   setTranscriptWriteState,
   appendSessionTitle,
+  appendSystemNote,
   ensureTranscriptFile,
   metaInputFromSession,
   getTranscriptWriteState,
   normalizeSessionTitle,
+  scanTranscriptLite,
 } from './sessionTranscript.ts'
 import type { SessionUsage } from './sessionUsage.ts'
 import { cloneSessionUsage } from './sessionUsage.ts'
@@ -776,6 +778,64 @@ export async function setSessionTitle(
   return { transcriptPath, title: normalized }
 }
 
+/**
+ * 为会话追加 `system_note`（不进模型链；rewrite 时保留）。
+ * 用途：PTL / compact / 手动审计说明。
+ */
+export async function appendSessionSystemNote(
+  session: PersistableSession,
+  text: string,
+  options?: {
+    kind?: string
+    scope?: SessionScope
+    sessionsDir?: string
+    filePath?: string
+  },
+): Promise<{ transcriptPath: string; text: string; kind?: string }> {
+  const normalized = text.replace(/\s+/g, ' ').trim()
+  if (!normalized) {
+    throw new Error('appendSessionSystemNote: text is empty')
+  }
+
+  const rawFilePath = options?.filePath
+    ? path.resolve(options.filePath)
+    : resolveSessionFilePath(session.id, {
+        scope: options?.scope,
+        cwd: session.cwd,
+        sessionsDir: options?.sessionsDir,
+      })
+  const transcriptPath = resolveTranscriptPathFromJson(rawFilePath)
+
+  await ensureTranscriptFile(
+    transcriptPath,
+    metaInputFromSession(session),
+  )
+  const entry = await appendSystemNote(transcriptPath, {
+    sessionId: session.id,
+    text: normalized,
+    kind: options?.kind,
+  })
+
+  const prev = getTranscriptWriteState(session)
+  if (prev?.filePath) {
+    setTranscriptWriteState(session, {
+      filePath: prev.filePath,
+      appendedMessageCount: prev.appendedMessageCount,
+    })
+  } else {
+    setTranscriptWriteState(session, {
+      filePath: transcriptPath,
+      appendedMessageCount: session.messages.length,
+    })
+  }
+
+  return {
+    transcriptPath,
+    text: entry.text,
+    ...(entry.kind ? { kind: entry.kind } : {}),
+  }
+}
+
 async function loadSessionSnapshotFromPath(
   filePath: string,
 ): Promise<SessionSnapshot> {
@@ -1160,40 +1220,33 @@ export function sessionPreviewFromMessages(
 /**
  * 从 jsonl 粗提列表字段（坏行跳过；messageCount/preview 走 R1 boundary）。
  * 半行/损坏行：JSON.parse 失败则跳过。
+ * 使用 scanTranscriptLite：不构建完整 ChatMessage 数组。
  */
 async function sessionListItemFromJsonl(
   filePath: string,
   idFromFile: string,
   mtime: Date,
 ): Promise<SessionListItem | null> {
-  let entries: Awaited<ReturnType<typeof loadTranscriptFile>>['entries']
+  let lite: Awaited<ReturnType<typeof scanTranscriptLite>>
   try {
-    ;({ entries } = await loadTranscriptFile(filePath))
+    lite = await scanTranscriptLite(filePath)
   } catch {
     return null
   }
 
-  const { messages, meta, title } = messagesFromTranscriptEntries(entries)
   const id =
-    (meta?.sessionId && meta.sessionId.trim()) || idFromFile
-  let lastTs: string | undefined
-  for (const e of entries) {
-    if (typeof e.timestamp === 'string' && e.timestamp.trim()) {
-      lastTs = e.timestamp
-    }
-  }
-
+    (lite.sessionId && lite.sessionId.trim()) || idFromFile
   const mtimeIso = mtime.toISOString()
   return {
     id,
     filePath,
     // 仅 jsonl：优先文件 mtime（列表新鲜度），无 mtime 时回退末行 timestamp
-    updatedAt: mtimeIso || lastTs || new Date(0).toISOString(),
-    messageCount: messages.length,
-    preview: sessionPreviewFromMessages(messages),
-    ...(title ? { title } : {}),
-    cwd: meta?.cwd,
-    model: meta?.model,
+    updatedAt: mtimeIso || lite.lastTimestamp || new Date(0).toISOString(),
+    messageCount: lite.messageCount,
+    preview: lite.preview,
+    ...(lite.title ? { title: lite.title } : {}),
+    cwd: lite.cwd,
+    model: lite.model,
   }
 }
 

@@ -29,7 +29,7 @@
 | `compact_boundary` | full compact 边界（`compactSession` 成功后 rewrite jsonl 写入） |
 | `title` | 会话标题（**last-wins**；**不进**模型 messages；rewrite 时保留最后一条） |
 
-`saveSession` **默认**只增量 append / rewrite `.jsonl`；不再默认原子写 JSON。`migrateSessionToJsonl` 可将旧 JSON 旁路写出 jsonl（默认不删 JSON）。`setSessionTitle` / `/title` 追加 `title` 行。详见 `docs/TODO_SESSION_JSONL.md`。
+`saveSession` **默认**只增量 append / rewrite `.jsonl`；不再默认原子写 JSON。`migrateSessionToJsonl` 可将旧 JSON 旁路写出 jsonl（默认不删 JSON）。`setSessionTitle` / `/title` 追加 `title` 行；`appendSessionSystemNote` / `/note` 追加 `system_note`（不进模型链）。list 对 jsonl 走 `scanTranscriptLite`（轻量计数字段 + 近况 preview）。详见 `docs/TODO_SESSION_JSONL.md`。
 
 ## 2. 快照格式（version 1，只读兼容）
 

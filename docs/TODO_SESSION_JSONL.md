@@ -304,15 +304,16 @@ A 规格/类型 ✅
 
 ## 10. 余量（非阻塞 headless）
 
-1. ~~更多 entry 类型（title…）~~ → **`title` entry + `/title` + list title ✅ 最小**（本刀；summary/system_note 仍 ⬜）  
+1. ~~更多 entry 类型（title…）~~ → **`title` entry + `/title` + list title ✅ 最小**  
 2. ~~CLI `migrate-session` 子命令包装~~ → **`bolo --migrate-session` / `bolo migrate-session` + `--force` / `--delete-json` ✅**  
-3. ~~`bolo --list`~~ → **`--list` / `-l` ✅**（与 resume 无 id 共用 `listProjectSessions`）  
-4. lite 列表进一步只读头/尾（性能） ⬜  
-5. Phase G 分叉链 / 完整侧链语义 ⬜  
+3. ~~`bolo --list`~~ → **`--list` / `-l` ✅**  
+4. ~~system_note~~ → **`system_note` + `/note` + rewrite 保留 ✅ 最小**  
+5. ~~lite 列表~~ → **`scanTranscriptLite` 供 list（近况 preview · R1 计数）✅ 最小**（仍全文件行扫 type，非 Buffer 快路径）  
+6. Phase G 分叉链 / 完整侧链语义 ⬜  
 
 全局默认下一刀 → **`docs/TODO.md` §8**（非本专题阻塞）。
 
 ---
 
 **一句话：**  
-JSONL 主路径（append + R1 resume + 默认停写 JSON + migrate + list）已齐；**title entry 日用最小**；旧 JSON 只读兼容；**不上 SQLite**；余量 system_note / lite 头尾读不挡 headless。
+JSONL 主路径（append + R1 resume + 默认停写 JSON + migrate + list）已齐；**title + system_note 日用最小**；list 走 lite 扫描；旧 JSON 只读兼容；**不上 SQLite**。
