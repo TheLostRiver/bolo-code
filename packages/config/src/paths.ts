@@ -30,6 +30,8 @@ export type BoloLayoutPaths = {
   sessionsDir: string
   /** 项目/用户 rules 目录（`.bolo/rules`） */
   rulesDir: string
+  /** 项目/用户 agent 定义目录（`.bolo/agents`） */
+  agentsDir: string
 }
 
 export function layoutPaths(root: string): BoloLayoutPaths {
@@ -42,6 +44,7 @@ export function layoutPaths(root: string): BoloLayoutPaths {
     pluginsDir: path.join(root, 'plugins'),
     sessionsDir: path.join(root, 'sessions'),
     rulesDir: path.join(root, 'rules'),
+    agentsDir: path.join(root, 'agents'),
   }
 }
 

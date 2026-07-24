@@ -17,6 +17,8 @@
   plugins/
     <plugin-id>/bolo.plugin.json
   sessions/                 # 会话 JSON 快照（见 docs/SESSIONS.md）
+  rules/                    # 可选用户级 rules
+  agents/                   # 可选用户级 subagent 定义（*.md）
 ```
 
 ### 项目（仓库根下的 `.bolo/`）
@@ -33,6 +35,8 @@
   plugins/
     <plugin-id>/bolo.plugin.json
   sessions/                 # 默认 scope=project 落盘处
+  rules/                    # 项目 rules（见 RULES.md）
+  agents/                   # 项目 subagent 定义（*.md；覆盖同名内置，见 SUBAGENT.md）
 ```
 
 对照 Claude Code：项目级常落在仓库的 `.claude/`；Bolo 固定用 **`.bolo/`**。
@@ -56,6 +60,7 @@ defaults
 - **MCP server 同名**：项目覆盖用户  
 - **Hooks**：数组合并（用户 + 项目 + 插件 contributes）  
 - **Skills 同 id**：项目覆盖用户；插件 contributes 再覆盖  
+- **Subagent 类型同名**（S7）：内置 ← 用户 `agents/*.md` ← 项目 `.bolo/agents/*.md`（见 [SUBAGENT.md](./SUBAGENT.md)）  
 - **Plugins（PL1）**：扫 user/project `plugins/<id>/bolo.plugin.json`；`contributes.skills`（或默认 `skills/`）合并进 workspace skills catalog；**无**市场/远程安装 
 
 ## 3. `config.json` 示例

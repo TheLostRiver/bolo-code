@@ -32,6 +32,8 @@ export type RunToolsParams = {
   tools?: readonly BoloTool[]
   /** 供 Agent 工具启动子 loop */
   deps?: QueryDeps
+  /** 活跃 agent 定义（.bolo/agents 合并结果） */
+  agentDefinitions?: import('./subagent.ts').ActiveAgentDefinitions
   signal?: AbortSignal
   onEvent?: (e: ToolExecutionEvent) => void
 }
@@ -86,6 +88,7 @@ export async function runTools(params: RunToolsParams): Promise<RunToolsResult> 
     skills: params.skills,
     tools,
     deps: params.deps,
+    agentDefinitions: params.agentDefinitions,
     signal: params.signal,
     onEvent: params.onEvent,
   }

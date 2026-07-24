@@ -77,6 +77,8 @@ export type QueryLoopParams = {
   tools?: readonly BoloTool[]
   /** 会话 skill 注册表（Skill 工具按需加载全文） */
   skills?: LoadedSkill[]
+  /** 活跃 agent 定义；传给 Agent 工具 resolve */
+  agentDefinitions?: import('./subagent.ts').ActiveAgentDefinitions
   /**
    * callModel 因上下文过长失败时，截断最旧轮次再试的次数。
    * 默认 3；0 = 关闭。对照 HC MAX_PTL_RETRIES。
@@ -284,6 +286,7 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
       skills: params.skills,
       tools,
       deps: params.deps,
+      agentDefinitions: params.agentDefinitions,
       signal: params.signal,
       onEvent: params.onEvent,
     })

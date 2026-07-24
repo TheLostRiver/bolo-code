@@ -31,6 +31,8 @@ export type SlashSession = {
   compactSummarizer?: CompactSummarizer
   /** 会话 skill 全文表；供 /skills 与 /<skill-id> 回落 */
   skills?: LoadedSkill[]
+  /** 活跃 subagent 定义；供 /agents */
+  agentDefinitions?: import('./subagent.ts').ActiveAgentDefinitions
 }
 
 export type ParseSlashResult =
@@ -327,6 +329,47 @@ function sessionSkills(session: SlashSession): LoadedSkill[] {
   return session.skills ?? []
 }
 
+async function cmdAgents(
+  session: SlashSession,
+  _args: string,
+): Promise<SlashDispatchResult> {
+  const { listActiveAgents, loadAgentsDir, builtinAgentMap } = await import(
+    './subagent.ts'
+  )
+  let active = session.agentDefinitions
+  if (!active || !Object.keys(active).length) {
+    const loaded = await loadAgentsDir({ cwd: session.cwd })
+    active = loaded.active
+  }
+  const agents = listActiveAgents(active ?? builtinAgentMap())
+  if (!agents.length) {
+    return {
+      ok: true,
+      message:
+        'No agent types.\nPlace markdown under .bolo/agents/ (or ~/.bolo/agents/).\nSee docs/SUBAGENT.md.',
+    }
+  }
+  const lines = [
+    `Active subagent types (${agents.length}):`,
+    '',
+    ...agents.map((a) => {
+      const src = a.source ?? 'builtin'
+      const tools =
+        a.tools === '*'
+          ? '*'
+          : Array.isArray(a.tools)
+            ? a.tools.join(', ')
+            : String(a.tools)
+      const mode = a.permissionMode ? ` mode=${a.permissionMode}` : ''
+      return `  ${a.agentType}  [${src}]${mode}\n    ${a.description}\n    tools: ${tools}`
+    }),
+    '',
+    'Dirs: .bolo/agents/*.md  ·  ~/.bolo/agents/*.md  ·  project overrides builtin',
+    'Agent tool: subagent_type=<name>',
+  ]
+  return { ok: true, message: lines.join('\n') }
+}
+
 function cmdSkills(session: SlashSession, args: string): SlashDispatchResult {
   const skills = sessionSkills(session)
   const filter = args.trim().toLowerCase()
@@ -462,6 +505,11 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     summary: 'List loaded skills (catalog)',
     usage: '[filter]',
     run: cmdSkills,
+  },
+  {
+    name: 'agents',
+    summary: 'List active subagent types (builtin + .bolo/agents)',
+    run: cmdAgents,
   },
   {
     name: 'skill',

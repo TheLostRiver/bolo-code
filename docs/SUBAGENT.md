@@ -1,6 +1,6 @@
-# Subagent 契约（S0–S6 最小完成线）
+# Subagent 契约（S0–S7）
 
-对照 HelsincyCode `tools/AgentTool`（`runAgent` / `resolveAgentTools` / `Agent` 工具），**无遥测**、不抄 GrowthBook / fork / swarm。
+对照 HelsincyCode `tools/AgentTool`（`runAgent` / `resolveAgentTools` / `loadAgentsDir` / `Agent` 工具），**无遥测**、不抄 GrowthBook / fork / swarm。
 
 ## 流程
 
@@ -19,11 +19,12 @@
 
 | 字段 | 说明 |
 |------|------|
-| `agentType` | 如 `explore` / `general` |
+| `agentType` | 如 `explore` / `general` / 项目自定义 |
 | `description` | 给主模型选类型用 |
 | `tools` | 白名单工具名，或 `'*'` |
 | `systemPrompt` | 子 agent 短 system |
 | `permissionMode?` | 可选；未设则继承父会话 |
+| `source?` | `builtin` / `user` / `project` |
 
 ## 内置类型
 
@@ -31,6 +32,41 @@
 |-----------------|------|-------------|
 | `explore` | `Read` / `Glob` / `Grep` | 只调研，不改文件 |
 | `general`（默认） | 与主会话默认可写集相同，**排除 `Agent`** | 执行子任务并回报摘要 |
+
+## 项目 / 用户定义（S7 · `loadAgentsDir`）
+
+发现顺序与合并（**后者覆盖同名**）：
+
+1. 内置 `explore` / `general`
+2. 可选 `~/.bolo/agents/*.md`（或 `$BOLO_CONFIG_DIR/agents/`）
+3. `{cwd}/.bolo/agents/*.md` — **项目覆盖同名内置 / 用户**
+
+`ensureProjectLayout` / `ensureUserLayout` 会创建空的 `agents/` 目录。
+
+### Markdown 约定
+
+```markdown
+---
+name: explore
+description: Project-overridden explore agent
+tools: Read, Glob, Grep
+permissionMode: default
+---
+
+Optional system append / replacement body for the subagent.
+```
+
+| frontmatter | 说明 |
+|-------------|------|
+| `name` / `agentType` / `id` | 类型 id；缺省用文件名（去 `.md`） |
+| `description` | 列表与选类型用 |
+| `tools` | `*`，或逗号列表，或 YAML 列表项 `- Read` |
+| `permissionMode` | `default` / `acceptEdits` / `plan` / `bypassPermissions` |
+| body | **system 正文**（整段作为子 agent system；覆盖内置时替换内置 system） |
+
+解析 API：`loadAgentsDir({ cwd })` → `{ agents, active, errors }`；会话在 `createSession` 时装入 `session.agentDefinitions`，`createAgentTool` / `runSubagent` / `spawnSubagent` 按 active 表 resolve。
+
+斜杠：`/agents` 列出活跃类型与来源。
 
 ## 工具策略 `resolveAgentTools`
 
@@ -49,10 +85,13 @@
 
 ## 刻意不做（P2+）
 
-- 侧链 `agent-*.jsonl`、`.bolo/agents` 目录定义
+- 侧链 `agent-*.jsonl`
 - Fork 继承父 messages、异步后台、worktree
 - 遥测 / GrowthBook / teammate
 
 ## 完成定义
 
-`spawnSubagentStub`（只发 hook）**不算完成**。S0–S6：文档 + `runSubagent` + Agent 工具 + 测试绿。
+`spawnSubagentStub`（只发 hook）**不算完成**。
+
+- **S0–S6：** 文档 + `runSubagent` + Agent 工具 + 测试绿
+- **S7：** `.bolo/agents` 发现、覆盖内置、resolve + `/agents` + `ensure*Layout` 的 `agents/`

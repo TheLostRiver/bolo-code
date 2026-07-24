@@ -90,7 +90,7 @@ P3  GUI / 打磨 / 后置
 | T0 | `docs/TUI.md` + `docs/BRAND.md`（吉祥物定稿） | ✅ |
 | T1 | `renderWelcomeBanner`：**大写 BOLO** + 原创吉祥物 ASCII | ✅ |
 | T2 | `bolo` **无参 TTY** → 新会话 + banner + 输入循环 | ✅ |
-| T3–T6 | 状态行 / 流式工具行 / 权限 y/n / 接 slash | T3–T6 ✅ |
+| T3–T6 | 状态行 / 流式工具行 / 权限 y/n / 接 slash | T3 ✅ 状态行；T4–T6 ⬜ |
 | T7 | 与 **RS\*** 合流：resume 路径也显示缩略 banner | ✅（轻量一行） |
 
 吉祥物候选：Bolot / Nyxkit / Pipkin / Glim（**择一**，禁止抄第三方 IP）。
@@ -164,9 +164,9 @@ P3  GUI / 打磨 / 后置
 
 若只开一刀：
 
-> **J-C+**（jsonl 优先 resume / RS7 双格式列表）或 **S7**（`.bolo/agents`）或 T8 完整 Ink。
+> **T4–T6**（流式工具行 / 权限 y/n）或 **J-C+**（jsonl 优先 resume / RS7 双格式列表）。
 
-已齐：resume 列表、斜杠、BOLO 欢迎、rules、prompt cache、JSONL 双写、creators、Subagent、MCP、plugins、`--continue`、T3–T6（状态行 / 流式工具行 / 权限 y/N / slash）、jsonl messages 回退。
+已齐：resume 列表、斜杠、BOLO 欢迎、rules、prompt cache、JSONL 双写、creators、Subagent（含 S7 `.bolo/agents`）、MCP、plugins、`--continue`、T3 状态行、jsonl messages 回退。
 
 ---
 
@@ -198,4 +198,4 @@ P3  GUI / 打磨 / 后置
 ---
 
 **一句话：**  
-日用 CLI 主路径（resume / slash / banner / rules / cache / JSONL 双写与 jsonl 回退 / Subagent / MCP / TUI 最小含工具行与权限 ask）已齐；下一刀 **J-C+ / S7 / T8**。
+日用 CLI 主路径（resume / slash / banner / rules / cache / JSONL 双写与 jsonl 回退 / Subagent S0–S7 / MCP）已齐；下一刀 **T4–T6 / J-C+**。

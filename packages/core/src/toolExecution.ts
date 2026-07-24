@@ -66,6 +66,8 @@ export type RunToolUseContext = {
   tools?: readonly BoloTool[]
   /** 供 Agent 工具 runSubagent */
   deps?: QueryDeps
+  /** 活跃 agent 定义；注入 subagentParent */
+  agentDefinitions?: import('./subagent.ts').ActiveAgentDefinitions
   signal?: AbortSignal
   onEvent?: (e: ToolExecutionEvent | QueryLoopEvent) => void
 }
@@ -375,6 +377,7 @@ export async function runToolUse(
               askPermission: ctx.askPermission,
               allTools: tools,
               skills: ctx.skills,
+              agentDefinitions: ctx.agentDefinitions,
               signal: ctx.signal,
               onEvent: ctx.onEvent,
             }

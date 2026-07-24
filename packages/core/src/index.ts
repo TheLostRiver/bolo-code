@@ -47,7 +47,11 @@ import {
 } from './deps.ts'
 import { queryLoop, type QueryLoopEvent, type Terminal } from './queryLoop.ts'
 import type { AskPermissionFn } from './toolExecution.ts'
-import { createDefaultTools } from './subagent.ts'
+import {
+  createDefaultTools,
+  loadAgentsDir,
+  type ActiveAgentDefinitions,
+} from './subagent.ts'
 import {
   parsePermissionMode,
   type PermissionMode,
@@ -257,6 +261,11 @@ export type CreateSessionOptions = {
   source?: SessionStartSource
   onEvent?: (e: SessionEvent) => void
   /**
+   * 预加载的 active agent 定义（内置 + 目录）。
+   * 未传时 createSession 会按 cwd 调 loadAgentsDir。
+   */
+  agentDefinitions?: ActiveAgentDefinitions
+  /**
    * 每轮 submitPrompt 结束后自动 saveSession。
    * true = project scope；或传 { scope, sessionsDir, filePath }。
    */
@@ -300,6 +309,11 @@ export type BoloSession = {
    * 未设置时 submitPrompt 回落 createDefaultTools()。
    */
   tools?: BoloTool[]
+  /**
+   * 活跃 subagent 定义（内置 + ~/.bolo/agents + .bolo/agents）。
+   * Agent 工具 / spawnSubagent 按此 resolve。
+   */
+  agentDefinitions?: ActiveAgentDefinitions
   /** 已连接的 MCP stdio 进程；endSession 时关闭 */
   mcpConnections?: ConnectedMcpServer[]
   onEvent: (e: SessionEvent) => void
@@ -373,6 +387,10 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
     })
   }
 
+  const agentDefinitions =
+    opts.agentDefinitions ??
+    (await loadAgentsDir({ cwd: opts.cwd })).active
+
   const session: BoloSession = {
     id: opts.sessionId ?? newId('sess'),
     cwd: opts.cwd,
@@ -395,6 +413,8 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
       opts.maxPtlRetries === undefined
         ? 3
         : Math.max(0, opts.maxPtlRetries),
+    agentDefinitions,
+    tools: createDefaultTools(agentDefinitions),
     onEvent: opts.onEvent ?? (() => {}),
   }
 
@@ -570,7 +590,7 @@ export async function createSessionFromWorkspace(
 
   // 全文注册表给 Skill 工具（catalog 已在 systemPromptSections）
   session.skills = workspace.skills
-  session.tools = createDefaultTools()
+  // tools 已在 createSession 按 agentDefinitions 装配；MCP 再追加
 
   let mcp: ConnectMcpResult | undefined
   if (opts.connectMcp !== false && workspace.mcpServers.length > 0) {
@@ -585,7 +605,7 @@ export async function createSessionFromWorkspace(
       console.warn(`[bolo mcp] ${w}`)
     }
     if (mcp.tools.length > 0) {
-      session.tools = [...session.tools, ...mcp.tools]
+      session.tools = [...(session.tools ?? createDefaultTools(session.agentDefinitions)), ...mcp.tools]
       session.mcpConnections = mcp.servers
     }
   }
@@ -654,7 +674,8 @@ export async function submitPrompt(
     permissionMode: session.permissionMode,
     askPermission: session.askPermission,
     skills: session.skills,
-    tools: session.tools ?? createDefaultTools(),
+    tools: session.tools ?? createDefaultTools(session.agentDefinitions),
+    agentDefinitions: session.agentDefinitions,
     maxTurns: options?.maxTurns ?? 8,
     querySource: options?.querySource ?? 'repl_main_thread',
     maxPtlRetries: session.maxPtlRetries,
@@ -970,11 +991,22 @@ export {
   createDefaultTools,
   getAgentDefinition,
   listBuiltinAgents,
+  listActiveAgents,
+  loadAgentsDir,
+  mergeAgentDefinitions,
+  builtinAgentMap,
   resolveAgentTools,
   runSubagent,
   spawnSubagent,
   spawnSubagentStub,
+  agentDefinitionFromMarkdown,
+  parseAgentFrontmatter,
+  parseToolsField,
   type AgentDefinition,
+  type AgentDefinitionSource,
+  type ActiveAgentDefinitions,
+  type LoadAgentsDirOptions,
+  type LoadAgentsDirResult,
   type ResolveAgentToolsResult,
   type RunSubagentParams,
   type RunSubagentResult,

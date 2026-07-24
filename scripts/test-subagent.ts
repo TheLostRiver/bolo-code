@@ -1,8 +1,12 @@
 /**
- * Subagent 最小完成线测试 — mock 父调 Agent → 子返回文本 → tool_result 含摘要
+ * Subagent 最小完成线 + S7 项目 agents 目录测试
  * 运行：npx tsx scripts/test-subagent.ts
  */
 
+import { promises as fs } from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { ensureProjectLayout } from '../packages/config/src/index.ts'
 import {
   createSession,
   submitPrompt,
@@ -15,6 +19,9 @@ import {
   GENERAL_AGENT,
   runSubagent,
   identityPrepareMessages,
+  loadAgentsDir,
+  mergeAgentDefinitions,
+  listActiveAgents,
   type QueryDeps,
 } from '../packages/core/src/index.ts'
 import { createBuiltinTools, findToolByName } from '../packages/tools/src/index.ts'
@@ -24,6 +31,7 @@ import type {
   LlmProvider,
   ProviderStreamEvent,
 } from '../packages/providers/src/index.ts'
+import { dispatchSlashCommand } from '../packages/core/src/slash.ts'
 
 function assert(c: unknown, m: string): asserts c {
   if (!c) {
@@ -84,6 +92,167 @@ function createNestedMockProvider(): LlmProvider {
     async completeText() {
       return 'n/a'
     },
+  }
+}
+
+async function testProjectAgentsDir(): Promise<void> {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'bolo-agents-'))
+  const userRoot = path.join(tmp, 'user-bolo')
+  try {
+    const ensured = await ensureProjectLayout(tmp, { writeDefaults: false })
+    assert(
+      ensured.layout.agentsDir === path.join(tmp, '.bolo', 'agents'),
+      'layout.agentsDir',
+    )
+    const st = await fs.stat(ensured.layout.agentsDir)
+    assert(st.isDirectory(), 'ensureProjectLayout creates agents/')
+
+    // 覆盖内置 explore description
+    await fs.writeFile(
+      path.join(ensured.layout.agentsDir, 'explore.md'),
+      `---
+name: explore
+description: PROJECT_EXPLORE_DESC_OVERRIDE
+tools:
+  - Read
+  - Glob
+  - Grep
+permissionMode: default
+---
+
+You are project explore. Report PROJECT_EXPLORE_SYSTEM.
+`,
+      'utf8',
+    )
+
+    // 新类型
+    await fs.writeFile(
+      path.join(ensured.layout.agentsDir, 'reviewer.md'),
+      `---
+agentType: reviewer
+description: Custom reviewer subagent
+tools: Read, Grep
+permissionMode: plan
+---
+
+You are a code reviewer. Summarize findings only.
+`,
+      'utf8',
+    )
+
+    const loaded = await loadAgentsDir({
+      cwd: tmp,
+      userConfigDir: userRoot,
+      loadUserAgents: true,
+    })
+    assert(loaded.errors.length === 0, `load errors: ${loaded.errors.join('; ')}`)
+
+    const explore = getAgentDefinition('explore', loaded.active)
+    assert(
+      explore.description === 'PROJECT_EXPLORE_DESC_OVERRIDE',
+      `explore desc override: ${explore.description}`,
+    )
+    assert(explore.source === 'project', 'explore source project')
+    assert(
+      explore.systemPrompt.includes('PROJECT_EXPLORE_SYSTEM'),
+      'explore system body',
+    )
+
+    const reviewer = getAgentDefinition('reviewer', loaded.active)
+    assert(reviewer.agentType === 'reviewer', 'reviewer type')
+    assert(reviewer.permissionMode === 'plan', 'reviewer mode')
+    assert(
+      Array.isArray(reviewer.tools) &&
+        reviewer.tools.includes('Read') &&
+        reviewer.tools.includes('Grep'),
+      'reviewer tools',
+    )
+
+    // runSubagent resolve 项目类型
+    const childProvider: LlmProvider = {
+      id: 'mock',
+      async *completeStream(): AsyncIterable<ProviderStreamEvent> {
+        yield { type: 'text_delta', text: 'reviewer ok' }
+        yield { type: 'done' }
+      },
+      async completeText() {
+        return 'n/a'
+      },
+    }
+    const childDeps: QueryDeps = {
+      callModel: async function* ({ messages, signal, tools }) {
+        yield* childProvider.completeStream(messages, {
+          signal,
+          tools: tools as CompleteStreamOptions['tools'],
+        })
+      },
+      prepareMessages: identityPrepareMessages,
+      uuid: () => 'uuid_reviewer_1',
+    }
+    const ran = await runSubagent({
+      def: getAgentDefinition('reviewer', loaded.active),
+      prompt: 'review this',
+      parentSessionId: 'sess_p',
+      cwd: tmp,
+      hooks: {},
+      deps: childDeps,
+      permissionMode: 'bypassPermissions',
+      askPermission: async () => 'allow',
+      allTools: createBuiltinTools(),
+    })
+    assert(ran.summary.includes('reviewer ok'), 'project type runSubagent')
+    assert(!ran.isError, 'project type ok')
+
+    // createSession 装入 active + /agents
+    const session = await createSession({
+      cwd: tmp,
+      provider: createNestedMockProvider(),
+      systemPrompt: false,
+      permissionMode: 'bypassPermissions',
+      askPermission: async () => 'allow',
+      agentDefinitions: loaded.active,
+    })
+    assert(
+      session.agentDefinitions?.explore?.description ===
+        'PROJECT_EXPLORE_DESC_OVERRIDE',
+      'session agentDefinitions',
+    )
+    const slash = await dispatchSlashCommand(session, 'agents', '')
+    assert(slash.ok, 'slash /agents ok')
+    assert(slash.message.includes('reviewer'), `/agents lists reviewer: ${slash.message}`)
+    assert(
+      slash.message.includes('PROJECT_EXPLORE_DESC_OVERRIDE'),
+      '/agents lists override desc',
+    )
+
+    // Agent 工具能 resolve 项目类型
+    const tool = createAgentTool(loaded.active)
+    const toolResult = await tool.call(
+      { prompt: 'hi', subagent_type: 'reviewer' },
+      {
+        cwd: tmp,
+        sessionId: 's1',
+        extras: {
+          subagentParent: {
+            parentSessionId: 's1',
+            cwd: tmp,
+            hooks: {},
+            deps: childDeps,
+            permissionMode: 'bypassPermissions' as const,
+            askPermission: async () => 'allow' as const,
+            allTools: createBuiltinTools(),
+            agentDefinitions: loaded.active,
+          },
+        },
+      },
+    )
+    assert(toolResult.ok, `Agent tool project type: ${toolResult.output}`)
+    assert(
+      toolResult.output.includes('[subagent reviewer'),
+      `header: ${toolResult.output}`,
+    )
+  } finally {
+    await fs.rm(tmp, { recursive: true, force: true })
   }
 }
 
@@ -198,6 +367,15 @@ async function main() {
   assert(joined.includes('[subagent general'), 'header with type')
 
   assert(createAgentTool().name === 'Agent', 'createAgentTool name')
+
+  // --- S7 project agents ---
+  await testProjectAgentsDir()
+  assert(
+    listActiveAgents(mergeAgentDefinitions([])).some(
+      (a) => a.agentType === 'general',
+    ),
+    'merge keeps builtins',
+  )
 
   console.log('PASS test-subagent')
 }
