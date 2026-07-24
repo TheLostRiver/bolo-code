@@ -707,8 +707,14 @@ async function testBackgroundSubagent(): Promise<void> {
     )
     assert(
       statusSlash.message.includes('done') ||
+        statusSlash.message.includes('DONE') ||
         statusSlash.message.includes('BG_AGENT_DONE'),
       `/agents status summary: ${statusSlash.message}`,
+    )
+    assert(
+      statusSlash.message.includes('total=') ||
+        statusSlash.message.includes('running='),
+      `/agents status counts: ${statusSlash.message}`,
     )
     const bgSlash = await dispatchSlashCommand(session, 'bg', '')
     assert(bgSlash.ok, 'slash /bg ok')

@@ -285,6 +285,26 @@ export function sectionLabel(section: string, maxLen = 48): string {
   return bare.length > maxLen ? `${bare.slice(0, maxLen - 1)}…` : bare
 }
 
+/** CP-OBS：section 角色提示（只读展示；不改注入序） */
+export function sectionRoleHint(section: string): string {
+  const head = section.trim().slice(0, 120).toLowerCase()
+  if (
+    head.startsWith('# identity') ||
+    head.startsWith('# system') ||
+    head.startsWith('# task') ||
+    head.startsWith('# tools')
+  ) {
+    return 'cache-stable'
+  }
+  if (head.includes('auto memory')) return 'memory·volatile'
+  if (head.includes('project rules')) return 'rules·volatile'
+  if (head.includes('available skills') || head.includes('skill catalog')) {
+    return 'skills·volatile'
+  }
+  if (head.startsWith('# environment')) return 'env·volatile'
+  return 'volatile'
+}
+
 /** 编辑距离（小串；未知命令建议用） */
 export function editDistance(a: string, b: string): number {
   const s = a.toLowerCase()
@@ -661,8 +681,9 @@ function cmdContext(session: SlashSession, _args: string): SlashDispatchResult {
     for (let i = 0; i < sections.length; i++) {
       const s = sections[i] ?? ''
       const secTok = estimateSystemSectionsTokens([s])
+      const role = sectionRoleHint(s)
       lines.push(
-        `  [${i + 1}] ${sectionLabel(s)}  (${s.length} chars, ~${secTok} tok)`,
+        `  [${i + 1}] ${sectionLabel(s)}  (${s.length} chars, ~${secTok} tok, ${role})`,
       )
     }
   }
@@ -676,6 +697,10 @@ function cmdContext(session: SlashSession, _args: string): SlashDispatchResult {
   } else {
     lines.push('skill catalog:     (no skills loaded)')
   }
+  // CP-OBS：memory 预算提示（不读盘大文件；只提示路径与 cap 常量）
+  lines.push(
+    'memory:          user ~/.bolo/memory + project .bolo/memory · index caps 200 lines / 25k chars · /memory',
+  )
   lines.push(
     'cache:           stable system prefix first; providers may send cache_control / prompt_cache_key (see docs/PROMPT_CACHE.md)',
     'prepare order:   snip → microcompact → auto full compact → callModel (PTL truncate is fallback)',

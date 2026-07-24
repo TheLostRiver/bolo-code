@@ -25,7 +25,7 @@
 | `/note [[kind:]text]` | 无参列出最近 system_note；有参 **append** `system_note`（**不进**模型链；rewrite 保留；可选 `kind:text`） |
 | `/compact [note]` | `compactSession`；成功后报告 messages token 前后与节省量；无 summarizer 时错误文案 |
 | `/autocompact [on\|off]` | 会话级 auto compact 开关；无参显示 on/off + summarizer + 环境熔断；重挂 prepare 链 |
-| `/context` | 消息数、字符粗算、**tokens 分拆（messages + system）**、**window / auto threshold / pressure**、permissionMode、model、effort、cwd、id、**各 system section 标签·长度·token**、**cache + prepare 顺序**、usage 一行；提示 `/autocompact` |
+| `/context` | 消息数、字符粗算、**tokens 分拆（messages + system）**、**window / auto threshold / pressure**、permissionMode、model、effort、cwd、id、**各 system section 标签·长度·token·角色（cache-stable/memory·volatile…）**、skill catalog 预算、**memory 路径/cap 提示**、**cache + prepare 顺序**、usage 一行；提示 `/autocompact` |
 | `/doctor` · `/status` | 本地诊断：node/platform、cwd/id/**provider**/mode/model/effort、messages/sections、tools/skills/agent types、**mcp 连接数 + 失败摘要**、usage、autoCompact/maxPtlRetries、`getBoloHomeDir()` 是否存在；无遥测；`/status` 为隐藏别名 |
 | `/memory` · `/memory path` · `/memory topics` | 跨会话 **MEMORY.md**：user/project 路径、开关、预览、topic 列表（见 `docs/MEMORY.md`） |
 | `/mcp` · `/mcp status` · `/mcp tools` | 已连接 MCP：**transport / status / live / caps / 脱敏 endpoint**；`status` 含 **failures + configWarnings**；`tools` 列 `mcp__server__tool` |

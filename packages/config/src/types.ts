@@ -46,6 +46,12 @@ export type BoloConfigJson = {
    * 合并位次：bundled → extra → user → project → plugin。
    */
   extraSkillRoots?: string[]
+  /**
+   * IMPORT-P1：外来插件根目录列表（只读映射 skills）。
+   * 识别 `.claude-plugin/plugin.json` / `.codex-plugin/plugin.json` 等；
+   * **不**加载 hooks/commands；**不**接官方市场。默认 off。
+   */
+  foreignPluginRoots?: string[]
 }
 
 export type McpFileJson = {

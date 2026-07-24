@@ -540,7 +540,7 @@ export function markBackgroundAgentFinished(
   return row
 }
 
-/** 列表 running / done 摘要（slash 与调试） */
+/** 列表 running / done 摘要（slash 与调试）；SA-PAR：计数 + 清晰状态 */
 export function formatBackgroundAgentsStatus(
   store?: BackgroundAgentStore | null,
 ): string {
@@ -552,23 +552,38 @@ export function formatBackgroundAgentsStatus(
   if (!pending.length && !results.length) {
     return 'No background agents. Start with Agent tool run_in_background=true.'
   }
-  const lines: string[] = ['Background agents:', '']
   const seen = new Set<string>()
-  const rows = [
+  const rows: BackgroundAgentEntry[] = []
+  for (const r of [
     ...pending,
     ...results.filter((r) => !store.pendingAgents[r.agentId]),
-  ]
-  for (const r of rows) {
+  ]) {
     if (seen.has(r.agentId)) continue
     seen.add(r.agentId)
-    const head = `  ${r.agentId}  [${r.status}]  type=${r.agentType}`
-    lines.push(head)
+    rows.push(r)
+  }
+  const nRun = rows.filter((r) => r.status === 'running').length
+  const nDone = rows.filter((r) => r.status === 'done').length
+  const nErr = rows.filter((r) => r.status === 'error').length
+  const lines: string[] = [
+    `Background agents: total=${rows.length}  running=${nRun}  done=${nDone}  error=${nErr}`,
+    '',
+  ]
+  for (const r of rows) {
+    const tag =
+      r.status === 'running'
+        ? 'RUNNING'
+        : r.status === 'error'
+          ? 'ERROR'
+          : 'DONE'
+    lines.push(`  ${r.agentId}  [${tag}]  type=${r.agentType}`)
     if (r.status === 'running') {
-      lines.push(`    prompt: ${truncateOneLine(r.prompt, 80)}`)
+      lines.push(`    prompt:  ${truncateOneLine(r.prompt, 80)}`)
       lines.push(`    started: ${r.startedAt}`)
     } else {
       const sum = (r.summary ?? '').trim() || '(no summary)'
       lines.push(`    summary: ${truncateOneLine(sum, 120)}`)
+      if (r.finishedAt) lines.push(`    finished: ${r.finishedAt}`)
       if (r.agentTranscriptPath) {
         lines.push(`    transcript: ${r.agentTranscriptPath}`)
       }

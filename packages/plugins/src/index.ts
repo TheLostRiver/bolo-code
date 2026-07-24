@@ -411,6 +411,16 @@ export function findPluginCommand(
   )
 }
 
+// ── 外来插件只读导入（IMPORT）──
+export {
+  detectForeignPluginDir,
+  importForeignPluginSkills,
+  importForeignPluginSkillsFromRoots,
+  type ForeignPluginKind,
+  type ForeignPluginDetect,
+  type ImportForeignPluginResult,
+} from './importCompat.ts'
+
 // ── 插件市场（PL-MKT 最小）──
 export {
   registerMarketplace,

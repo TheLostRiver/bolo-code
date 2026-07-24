@@ -195,9 +195,26 @@ npx tsx scripts/test-config.ts
 
 - Claude / Codex **官方市场**与商标商店  
 - 完整 zip / git / npm 运营市场（另刀）  
-- 外来 `.claude-plugin` / `.codex-plugin` 完整运行时兼容（IMPORT 附录，后置）  
+- 外来插件 **完整运行时**兼容（hooks/commands/agents 不保证）  
 - 遥测  
+
+## 8. 只读导入（IMPORT 最小）
+
+| 配置 | 作用 |
+|------|------|
+| `extraSkillRoots` | 旁路 skill 根（S-PORT-2 / IMPORT-S1）；默认 off |
+| `foreignPluginRoots` | 外来插件目录；只映射 skills（IMPORT-P1） |
+
+API：`importForeignPluginSkills` / `detectForeignPluginDir`（`packages/plugins`）。  
+失败面：unsupported contributes → warnings（IMPORT-X）。  
+**禁止**写成「完全兼容 Claude/Codex」。
+
+测试：
+
+```bash
+node --import tsx/esm scripts/test-import-compat.ts
+```
 
 ---
 
-**一句话：** 插件以 `bolo.plugin.json` 为唯一一等规范；坏插件隔离；skill/mcp 可独立；市场仅最小清单安装。
+**一句话：** 插件以 `bolo.plugin.json` 为唯一一等规范；坏插件隔离；skill/mcp 可独立；市场仅最小清单安装；外来目录仅 skills 只读映射。

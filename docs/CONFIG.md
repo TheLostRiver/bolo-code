@@ -78,11 +78,14 @@ defaults
   "permissionMode": "default",
   "autoCompactEnabled": true,
   "contextWindowTokens": 128000,
-  "extraSkillRoots": []
+  "extraSkillRoots": [],
+  "foreignPluginRoots": []
 }
 ```
 
-`extraSkillRoots`（**S-PORT-2**，可选）：旁路 skill 根目录列表（每根：`<id>/SKILL.md`）。**默认省略或 `[]` = 不扫描**（不静默加载 `~/.agents/skills` 等）。支持 `~` 与相对项目 cwd 的路径；user + project 数组合并去重。位次：bundled → **extra** → user → project → plugin。
+`extraSkillRoots`（**S-PORT-2 / IMPORT-S1**，可选）：旁路 skill 根目录列表（每根：`<id>/SKILL.md`）。**默认省略或 `[]` = 不扫描**（不静默加载 `~/.agents/skills` 等）。支持 `~` 与相对项目 cwd 的路径；user + project 数组合并去重。位次：bundled → **extra** → user → project → plugin。
+
+`foreignPluginRoots`（**IMPORT-P1**，可选）：外来插件目录列表（只读映射 **skills**）。识别 `.claude-plugin/plugin.json` / `.codex-plugin/plugin.json` 等；**不**加载 hooks/commands；**不**接官方市场。失败与 unsupported contributes 记入 workspace `pluginMerge.errors` 警告。见 [PLUGINS.md](./PLUGINS.md)。
 
 `provider.kind` 还可为：`openai-responses`（原生 Responses `/responses`）、`anthropic`、`mock`。详见 [PROVIDERS.md](./PROVIDERS.md)。
 | 字段 | 默认 | 说明 |
@@ -92,6 +95,7 @@ defaults
 | `microcompactEnabled` | `true` | 为 true 时 prepare 链先跑 microcompact（清旧 tool 正文，无 LLM）；`false` 关闭 |
 | `maxPtlRetries` | `3` | callModel / compact summarizer 命中上下文过长时截断最旧轮次再试的次数；`0` 关闭 |
 | `extraSkillRoots` | 省略/`[]` | **可选**旁路 skill 根；默认 **off**；见 SKILLS.md S-PORT-2 |
+| `foreignPluginRoots` | 省略/`[]` | **可选**外来插件根（skills 只读）；默认 **off** |
 
 `createSessionFromWorkspace` 会读上述字段；也可用 `createSession({ autoCompactEnabled, contextWindowTokens, compactSummarizer, microcompact, maxPtlRetries })` 直接开。未显式传 `autoCompactEnabled` 时默认 **开**。
 

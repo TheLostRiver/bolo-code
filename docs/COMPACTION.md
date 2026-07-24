@@ -418,7 +418,8 @@ type CompactSummarizer = (req: {
 | **已接线** | 加权 token · pressure · richer `/context`·`/compact`；`test-context-slash` |
 | **已接线** | 默认 `autoCompactEnabled: true`；`BOLO_DISABLE_*` 环境熔断；`/autocompact` 运行时开关；`test-auto-compact` |
 | **已接线** | snip 最小：门槛 + 安全 cut + 边界 + prepare 写回；`test-snip` |
-| **再后** | SnipTool / UUID 回放 / cached microcompact · partial compact · 真 tokenizer |
+| **已接线** | `/context` section 角色标签 + memory 预算提示（CP-OBS）；**不做** cached MC |
+| **OUT / 再后** | SnipTool / UUID 回放 / **cached microcompact** · partial compact · 真 tokenizer（AUTORUN 轨外） |
 
 ---
 

@@ -217,9 +217,9 @@ PL-SPEC 出口 ────────► IMPORT-*（可选）
 
 | ID | 任务 | 范围 | 状态 |
 |----|------|------|------|
-| **IMPORT-S1** | 旁路 skill 根（配置开关） | 例：`~/.agents/skills`；不改对方文件 | ⬜ |
-| **IMPORT-P1** | 识别 `.claude-plugin/plugin.json` / `.codex-plugin/plugin.json` | **仅映射** skills（+ 可选 mcp 路径）；hooks **不保证** | ⬜ |
-| **IMPORT-X** | 失败面文档 | 不支持的 contributes → warn | ⬜ |
+| **IMPORT-S1** | 旁路 skill 根（配置开关） | 例：`extraSkillRoots` / `~/.agents/skills`；不改对方文件 | ✅ |
+| **IMPORT-P1** | 识别 `.claude-plugin/plugin.json` / `.codex-plugin/plugin.json` | **仅映射** skills（+ 可选 mcp 路径）；hooks **不保证** | ✅ |
+| **IMPORT-X** | 失败面文档 | 不支持的 contributes → warn | ✅ |
 
 **禁止：** 导入 = 接入对方官方 market API / 远程 curated 目录。
 
@@ -292,5 +292,5 @@ PL-SPEC 出口 ────────► IMPORT-*（可选）
 
 **Skill / MCP / Plugin Spec：** S-PORT ✅ · M-GEN-0..6+8 ✅ · **PL-SPEC-0..6 ✅**。  
 
-**全局下一轨：** `docs/TODO_AUTORUN.md`（先 Memory MEM-6/7；本专册 **IMPORT-S1/P1/X** 为波次 B）。  
-**OUT：** M-GEN-7 OAuth · 官方市场深度 · Electron（需另令，不进 AUTORUN）。
+**全局下一轨：** ~~`docs/TODO_AUTORUN.md`~~ **圆满**（IMPORT 已含）。  
+**OUT：** M-GEN-7 OAuth · 官方市场深度 · Electron（需另令）。

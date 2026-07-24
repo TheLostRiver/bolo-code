@@ -122,6 +122,8 @@ fork 路径不走白名单表，直接 `parent.allTools` 去掉 `Agent`。
 
 **S8 最小权限：** `resolveSubagentPermissionMode(parent, def)` — 子 agent **不得**比父会话更宽（rank：`plan < default < acceptEdits < bypass`）。定义写 `bypass` 而父为 `default` 时实际仍用 `default`。
 
+**SA-PAR：** `/agents status` · `/bg` 展示 `total/running/done/error` 计数 + `RUNNING|DONE|ERROR` 标签 + finished 时间。
+
 ## 完成定义
 
 `spawnSubagentStub`（只发 hook）**不算完成**。
@@ -130,3 +132,4 @@ fork 路径不走白名单表，直接 `parent.allTools` 去掉 `Agent`。
 - **S7：** `.bolo/agents` 发现、覆盖内置、resolve + `/agents` + `ensure*Layout` 的 `agents/`
 - **S8 最小：** 子权限不升级（`resolveSubagentPermissionMode`）
 - **S12 partial：** 可选后台 subagent + **fork 继承父 messages**（无 worktree）
+- **SA-PAR：** 后台队列可见性（计数 + 状态标签）

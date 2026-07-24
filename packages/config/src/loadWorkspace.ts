@@ -20,6 +20,7 @@ import {
 import {
   discoverPluginsDetailed,
   mergePluginContributions,
+  importForeignPluginSkillsFromRoots,
   type LoadedPlugin,
   type MergeResult,
 } from '../../plugins/src/index.ts'
@@ -205,6 +206,32 @@ export async function loadWorkspace(
     hooks = mergeHooks(hooks, pluginMerge.hooks)
     // S-PORT-3：plugin skills 盖过 bundled/user/project
     skills = mergeSkillsByPrecedence(skills, pluginMerge.skills)
+  }
+
+  // IMPORT-P1：外来插件只读 skills（配置显式根；默认 off）
+  if (config.foreignPluginRoots?.length) {
+    const foreign = await importForeignPluginSkillsFromRoots(
+      config.foreignPluginRoots,
+    )
+    if (foreign.skills.length) {
+      skills = mergeSkillsByPrecedence(skills, foreign.skills)
+    }
+    if (foreign.warnings.length) {
+      if (!pluginMerge) {
+        pluginMerge = {
+          skills: [],
+          hooks: {},
+          mcpServers: [],
+          agents: [],
+          commands: [],
+          errors: [],
+        }
+      }
+      pluginMerge.errors = [
+        ...(pluginMerge.errors ?? []),
+        ...foreign.warnings,
+      ]
+    }
   }
 
   const mcpMerged = mergeMcpServerLayers(mcpLayers)
