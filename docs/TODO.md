@@ -198,4 +198,4 @@ P3  GUI / 打磨 / 后置
 ---
 
 **一句话：**  
-日用 CLI 主路径（RS8 picker / jsonl 优先 messages / apply_patch / 侧链 transcript / slash / BOLO TUI / rules / cache / Subagent S0–S7 / MCP / plugins / **usage 本地累计 + `/cost`**）已齐；**Electron 后置**；下一刀可选 **fork/async subagent** 或 T8 Ink。
+日用 CLI 主路径（slash 含 **`/doctor`·`/status` 本地诊断** / usage+`/cost` / Subagent / MCP / plugins / BOLO TUI）已齐；**Electron 后置**；下一刀可选 **fork/async subagent** 或 T8 Ink。

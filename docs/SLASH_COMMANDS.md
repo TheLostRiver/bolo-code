@@ -23,6 +23,7 @@
 | `/clear` | 清空 `messages`；保留 id / cwd / config / `systemPromptSections` |
 | `/compact [note]` | `compactSession`；无 summarizer 时返回错误文案 |
 | `/context` | 消息数、字符粗算、permissionMode、model、effort、cwd、id、usage 一行 |
+| `/doctor` · `/status` | 本地诊断：node/platform、cwd/id/mode/model/effort、tools/skills/agent types、mcp（有则）、usage、autoCompact/maxPtlRetries、`getBoloHomeDir()` 是否存在；无遥测 |
 | `/cost` · `/usage` | 会话内本地 token 累计（`session.usage`）；无遥测、不上报 |
 | `/model [name]` | 无参显示；有参设 `session.model` |
 | `/effort [low\|medium\|high\|max\|auto]` | 会话字段 `effortLevel`；`auto` 清除覆盖；经 `mapEffort` 映射为 `max_tokens` |

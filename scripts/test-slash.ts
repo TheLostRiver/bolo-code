@@ -80,6 +80,41 @@ async function main() {
     assert(ctx.message.includes('usage:'), 'context has usage line')
   }
 
+  // /doctor · /status（极简本地诊断）
+  const doctor = await submitUserInput(session, '/doctor')
+  assert(doctor.type === 'slash', 'doctor slash')
+  if (doctor.type === 'slash') {
+    assert(doctor.message.includes(session.cwd), 'doctor has cwd')
+    assert(
+      doctor.message.includes(`permissionMode:  ${session.permissionMode}`) ||
+        doctor.message.includes(session.permissionMode),
+      'doctor has mode',
+    )
+    assert(doctor.message.includes(process.version), 'doctor has node')
+    assert(doctor.message.includes(process.platform), 'doctor has platform')
+    assert(doctor.message.includes(session.id), 'doctor has session id')
+    assert(doctor.message.includes('tools:'), 'doctor has tools count')
+    assert(doctor.message.includes('skills:'), 'doctor has skills count')
+    assert(doctor.message.includes('agent types:'), 'doctor has agent types')
+    assert(doctor.message.includes('usage:'), 'doctor has usage line')
+    assert(doctor.message.includes('autoCompact:'), 'doctor has autoCompact')
+    assert(doctor.message.includes('maxPtlRetries:'), 'doctor has maxPtlRetries')
+    assert(
+      doctor.message.includes('~/.bolo:') || doctor.message.includes('.bolo'),
+      'doctor has bolo home path',
+    )
+  }
+  const statusCmd = await submitUserInput(session, '/status')
+  assert(statusCmd.type === 'slash', 'status slash')
+  if (statusCmd.type === 'slash' && doctor.type === 'slash') {
+    assert(statusCmd.message === doctor.message, '/status alias of /doctor')
+    assert(statusCmd.message.includes(session.cwd), 'status has cwd')
+    assert(
+      statusCmd.message.includes(session.permissionMode),
+      'status has mode',
+    )
+  }
+
   // /cost 初始为空
   const cost0 = await submitUserInput(session, '/cost')
   assert(cost0.type === 'slash', 'cost slash')

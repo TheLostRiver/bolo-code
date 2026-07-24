@@ -4,6 +4,8 @@
  * 无遥测。不依赖 core/index 顶层导入（避免循环）。
  */
 
+import { existsSync } from 'node:fs'
+import { getBoloHomeDir } from '../../config/src/paths.ts'
 import {
   addAlwaysAllowToolName,
   createEmptyPermissionRules,
@@ -41,12 +43,20 @@ export type SlashSession = {
   compactSummarizer?: CompactSummarizer
   /** 会话 skill 全文表；供 /skills 与 /<skill-id> 回落 */
   skills?: LoadedSkill[]
-  /** 活跃 subagent 定义；供 /agents */
+  /** 活跃 subagent 定义；供 /agents · /doctor */
   agentDefinitions?: import('./subagent.ts').ActiveAgentDefinitions
   /** 后台 subagent 表；/agents status · /bg */
   backgroundAgents?: import('./subagent.ts').BackgroundAgentStore
-  /** 本地 usage 累计；/cost · /context */
+  /** 本地 usage 累计；/cost · /context · /doctor */
   usage?: SessionUsage
+  /** 会话工具表；/doctor 计数 */
+  tools?: { name: string }[]
+  /** auto compact 开关；/doctor */
+  autoCompactEnabled?: boolean
+  /** PTL 重试上限；/doctor */
+  maxPtlRetries?: number
+  /** 已连接 MCP；/doctor 有则显示 */
+  mcpConnections?: unknown[]
 }
 
 export type ParseSlashResult =
@@ -195,6 +205,50 @@ function cmdContext(session: SlashSession, _args: string): SlashDispatchResult {
     `system sections: ${session.systemPromptSections.length}`,
     formatUsageOneLiner(session.usage),
   ]
+  return { ok: true, message: lines.join('\n') }
+}
+
+/**
+ * 极简本地诊断（对照 HC /doctor · /status）。
+ * 无 Electron、无遥测；只读会话与本机环境。
+ */
+function cmdDoctor(session: SlashSession, _args: string): SlashDispatchResult {
+  const boloHome = getBoloHomeDir()
+  const boloHomeExists = existsSync(boloHome)
+  const toolsCount = session.tools?.length ?? 0
+  const skillsCount = session.skills?.length ?? 0
+  const agentTypesCount = session.agentDefinitions
+    ? Object.keys(session.agentDefinitions).length
+    : 0
+  const mcpCount = session.mcpConnections?.length ?? 0
+  const autoCompact =
+    session.autoCompactEnabled === true ? 'on' : 'off'
+  const maxPtl =
+    session.maxPtlRetries === undefined
+      ? '(unset)'
+      : String(session.maxPtlRetries)
+
+  const lines = [
+    `node:            ${process.version}`,
+    `platform:        ${process.platform}`,
+    `cwd:             ${session.cwd}`,
+    `session id:      ${session.id}`,
+    `permissionMode:  ${session.permissionMode}`,
+    `model:           ${session.model ?? '(unset)'}`,
+    `effort:          ${session.effortLevel ?? 'auto'}`,
+    `tools:           ${toolsCount}`,
+    `skills:          ${skillsCount}`,
+    `agent types:     ${agentTypesCount}`,
+  ]
+  if (mcpCount > 0) {
+    lines.push(`mcp connections: ${mcpCount}`)
+  }
+  lines.push(
+    formatUsageOneLiner(session.usage),
+    `autoCompact:     ${autoCompact}`,
+    `maxPtlRetries:   ${maxPtl}`,
+    `~/.bolo:         ${boloHome} (${boloHomeExists ? 'exists' : 'missing'})`,
+  )
   return { ok: true, message: lines.join('\n') }
 }
 
@@ -547,6 +601,16 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     name: 'context',
     summary: 'Show message count, chars, mode, model, cwd, id, usage',
     run: cmdContext,
+  },
+  {
+    name: 'doctor',
+    summary: 'Local diagnostics (node, cwd, mode, tools, usage, ~/.bolo)',
+    run: cmdDoctor,
+  },
+  {
+    name: 'status',
+    summary: 'Alias of /doctor',
+    run: cmdDoctor,
   },
   {
     name: 'cost',
