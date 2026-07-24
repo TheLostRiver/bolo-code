@@ -256,6 +256,16 @@ export type CreateSessionOptions = {
   askPermission?: AskPermissionFn
   /** 会话 Always-allow 规则；默认空表 */
   permissionRules?: SessionPermissionRules
+  /**
+   * 会话 effort 档位（/effort）；可选。
+   * resume 时由快照恢复。
+   */
+  effortLevel?: string
+  /**
+   * 会话本地 token 累计种子；默认全 0。
+   * resume 时由快照恢复（无遥测）。
+   */
+  usage?: SessionUsage
   /** tool_result 写入 transcript 的字符上限；默认 50_000 */
   maxToolResultChars?: number
   compactSummarizer?: CompactSummarizer
@@ -451,6 +461,10 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
     compactSummarizer: opts.compactSummarizer,
     skills,
     model: opts.model,
+    effortLevel:
+      typeof opts.effortLevel === 'string' && opts.effortLevel.trim()
+        ? opts.effortLevel.trim()
+        : undefined,
     autoCompactEnabled: opts.autoCompactEnabled === true,
     contextWindowTokens: opts.contextWindowTokens ?? 128_000,
     maxPtlRetries:
@@ -460,12 +474,20 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
     agentDefinitions,
     backgroundAgents: createBackgroundAgentStore(),
     tools: createDefaultTools(agentDefinitions),
-    usage: {
-      inputTokens: 0,
-      outputTokens: 0,
-      totalTokens: 0,
-      calls: 0,
-    },
+    usage: opts.usage
+      ? {
+          inputTokens: opts.usage.inputTokens,
+          outputTokens: opts.usage.outputTokens,
+          totalTokens: opts.usage.totalTokens,
+          calls: opts.usage.calls,
+          ...(opts.usage.estimated ? { estimated: true } : {}),
+        }
+      : {
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          calls: 0,
+        },
     onEvent: opts.onEvent ?? (() => {}),
   }
 
@@ -815,6 +837,10 @@ export async function resumeSession(
     contextWindowTokens:
       opts.create?.contextWindowTokens ?? snapshot.contextWindowTokens,
     maxPtlRetries: opts.create?.maxPtlRetries ?? snapshot.maxPtlRetries,
+    permissionRules:
+      opts.create?.permissionRules ?? snapshot.permissionRules,
+    effortLevel: opts.create?.effortLevel ?? snapshot.effortLevel,
+    usage: opts.create?.usage ?? snapshot.usage,
     provider: opts.provider ?? opts.create?.provider,
     hooks: opts.hooks ?? opts.create?.hooks,
     skills: opts.skills ?? opts.create?.skills,

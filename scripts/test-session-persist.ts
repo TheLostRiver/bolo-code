@@ -68,6 +68,18 @@ async function main() {
   ]
   session.messages.push(...messages)
   session.systemPromptSections = ['section-a', 'section-b']
+  session.permissionRules = {
+    alwaysAllowToolNames: ['Bash', 'Read'],
+    alwaysAllowPrefixes: ['mcp__'],
+  }
+  session.effortLevel = 'high'
+  session.usage = {
+    inputTokens: 120,
+    outputTokens: 40,
+    totalTokens: 160,
+    calls: 2,
+    estimated: true,
+  }
 
   // ── 1) toSnapshot / parse ──
   const snap1 = toSnapshot(session)
@@ -83,6 +95,24 @@ async function main() {
   assert(snap1b.contextWindowTokens === 64_000, 'ctx tokens')
   assert(snap1b.maxPtlRetries === 2, 'ptl')
   assert(snap1b.model === 'mock-model', 'model')
+  assert(
+    deepEqual(snap1b.permissionRules, {
+      alwaysAllowToolNames: ['Bash', 'Read'],
+      alwaysAllowPrefixes: ['mcp__'],
+    }),
+    'permissionRules roundtrip',
+  )
+  assert(snap1b.effortLevel === 'high', 'effortLevel roundtrip')
+  assert(
+    deepEqual(snap1b.usage, {
+      inputTokens: 120,
+      outputTokens: 40,
+      totalTokens: 160,
+      calls: 2,
+      estimated: true,
+    }),
+    'usage roundtrip',
+  )
 
   // ── 2) save / load ──
   const { path: savedPath, snapshot: saved } = await saveSession(session, {
@@ -99,12 +129,23 @@ async function main() {
   assert(deepEqual(loaded.messages, messages), 'load messages')
   assert(loaded.permissionMode === 'acceptEdits', 'load mode')
   assert(loaded.createdAt === saved.createdAt, 'createdAt stable on first save')
+  assert(
+    deepEqual(loaded.permissionRules, session.permissionRules),
+    'load permissionRules',
+  )
+  assert(loaded.effortLevel === 'high', 'load effortLevel')
+  assert(deepEqual(loaded.usage, session.usage), 'load usage')
 
   // 再 save：createdAt 保留，updatedAt 变
   await new Promise((r) => setTimeout(r, 5))
   const { snapshot: saved2 } = await saveSession(session, { sessionsDir })
   assert(saved2.createdAt === saved.createdAt, 'createdAt preserved')
   assert(saved2.updatedAt >= saved.updatedAt, 'updatedAt moves')
+  assert(
+    deepEqual(saved2.permissionRules, session.permissionRules),
+    'save2 permissionRules',
+  )
+  assert(deepEqual(saved2.usage, session.usage), 'save2 usage')
 
   // ── 3) resume by id ──
   const { session: resumed, path: resumePath } = await resumeSession({
@@ -125,6 +166,24 @@ async function main() {
   )
   assert(resumed.autoCompactEnabled === true, 'resume autoCompact')
   assert(resumed.maxPtlRetries === 2, 'resume ptl')
+  assert(
+    deepEqual(resumed.permissionRules, {
+      alwaysAllowToolNames: ['Bash', 'Read'],
+      alwaysAllowPrefixes: ['mcp__'],
+    }),
+    'resume permissionRules',
+  )
+  assert(resumed.effortLevel === 'high', 'resume effortLevel')
+  assert(
+    deepEqual(resumed.usage, {
+      inputTokens: 120,
+      outputTokens: 40,
+      totalTokens: 160,
+      calls: 2,
+      estimated: true,
+    }),
+    'resume usage',
+  )
 
   // ── 4) resume by absolute path ──
   const { session: r2 } = await resumeSession({
@@ -133,8 +192,10 @@ async function main() {
     systemPrompt: false,
   })
   assert(deepEqual(r2.messages, messages), 'resume by path')
+  assert(r2.effortLevel === 'high', 'resume by path effort')
+  assert(deepEqual(r2.usage, session.usage), 'resume by path usage')
 
-  // ── 5) autoSave 接线 ──
+  // ── 5) autoSave 接线 + resume 保留 always-allow / usage ──
   const autoDir = path.join(tmpRoot, 'auto')
   await fs.mkdir(autoDir, { recursive: true })
   const sAuto = await createSession({
@@ -144,6 +205,16 @@ async function main() {
     autoSave: { sessionsDir: autoDir },
   })
   sAuto.messages.push({ role: 'user', content: 'auto' })
+  sAuto.permissionRules = {
+    alwaysAllowToolNames: ['Write'],
+  }
+  sAuto.effortLevel = 'low'
+  sAuto.usage = {
+    inputTokens: 10,
+    outputTokens: 5,
+    totalTokens: 15,
+    calls: 1,
+  }
   // 直接调 maybe 路径：submitPrompt 内部会调；这里用 save 验证 meta 后手动
   const { maybeAutoSaveSession, getSessionPersistMeta } = await import(
     '../packages/core/src/sessionPersist.ts'
@@ -159,6 +230,37 @@ async function main() {
     sessionsDir: autoDir,
   })
   assert(autoLoaded.snapshot.messages[0]?.content === 'auto', 'auto content')
+  assert(
+    deepEqual(autoLoaded.snapshot.permissionRules, {
+      alwaysAllowToolNames: ['Write'],
+    }),
+    'autoSave permissionRules',
+  )
+  assert(autoLoaded.snapshot.effortLevel === 'low', 'autoSave effort')
+  assert(
+    deepEqual(autoLoaded.snapshot.usage, {
+      inputTokens: 10,
+      outputTokens: 5,
+      totalTokens: 15,
+      calls: 1,
+    }),
+    'autoSave usage',
+  )
+
+  const { session: autoResumed } = await resumeSession({
+    idOrPath: 'sess_auto_save_01',
+    sessionsDir: autoDir,
+    cwd,
+    reassembleSystem: false,
+    systemPrompt: false,
+  })
+  assert(
+    deepEqual(autoResumed.permissionRules?.alwaysAllowToolNames, ['Write']),
+    'autoSave resume always-allow',
+  )
+  assert(autoResumed.effortLevel === 'low', 'autoSave resume effort')
+  assert(autoResumed.usage?.calls === 1, 'autoSave resume usage calls')
+  assert(autoResumed.usage?.totalTokens === 15, 'autoSave resume usage total')
 
   // 清理
   await fs.rm(tmpRoot, { recursive: true, force: true })

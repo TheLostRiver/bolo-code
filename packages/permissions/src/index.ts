@@ -115,8 +115,8 @@ export function isPathInsideCwd(cwd: string, filePath: string): boolean {
 }
 
 /**
- * 会话级 Always-allow 规则（对照 HC session permission rules；无遥测、不持久化 DSL）。
- * plan 模式下写/壳/MCP 仍 deny，不受 alwaysAllow 覆盖。
+ * 会话级 Always-allow 规则（对照 HC session permission rules；无遥测）。
+ * 可经 SessionSnapshot 本地持久化；plan 模式下写/壳/MCP 仍 deny，不受 alwaysAllow 覆盖。
  */
 export type SessionPermissionRules = {
   alwaysAllowToolNames: string[]

@@ -487,7 +487,7 @@ flowchart TB
 
 **Effort 规划要点（贴 HC，无遥测）：**
 
-- Session 字段 `effortLevel`；可持久化到 config / 会话快照  
+- Session 字段 `effortLevel`；可持久化到会话快照（`SessionSnapshot`）  
 - 映射到 provider：`max_tokens` / thinking / reasoning 强度（按厂商能力，**能映射多少做多少**）  
 - `/effort` 无参：显示当前；有参：设置；`auto`：清会话覆盖  
 - 与 `/model` 可联动（HC model UI 会显示 effort）  

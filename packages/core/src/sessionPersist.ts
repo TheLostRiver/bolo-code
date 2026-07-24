@@ -24,12 +24,14 @@ import {
 import {
   parsePermissionMode,
   type PermissionMode,
+  type SessionPermissionRules,
 } from '../../permissions/src/index.ts'
 import {
   dualWriteSessionTranscript,
   loadTranscriptMessages,
   resolveTranscriptPathFromJson,
 } from './sessionTranscript.ts'
+import type { SessionUsage } from './sessionUsage.ts'
 
 /** 可落盘的会话切片（避免与 index 循环依赖） */
 export type PersistableSession = {
@@ -43,6 +45,12 @@ export type PersistableSession = {
   contextWindowTokens: number
   maxPtlRetries: number
   phase?: SessionPhase
+  /** 会话 Always-allow；可选落盘 */
+  permissionRules?: SessionPermissionRules
+  /** 会话 effort 档位；可选落盘 */
+  effortLevel?: string
+  /** 本地 token 累计；可选落盘，无遥测 */
+  usage?: SessionUsage
   onEvent?: (e: { type: 'error'; message: string }) => void
 }
 
@@ -69,6 +77,12 @@ export type SessionSnapshot = {
   createdAt: string
   updatedAt: string
   phase?: SessionPhase
+  /** 会话 Always-allow（可选；旧快照无此字段） */
+  permissionRules?: SessionPermissionRules
+  /** 会话 effort 档位（可选） */
+  effortLevel?: string
+  /** 本地 token 累计（可选；无遥测） */
+  usage?: SessionUsage
 }
 
 export type SaveSessionOptions = {
@@ -208,12 +222,89 @@ function isChatMessage(x: unknown): x is ChatMessage {
   return true
 }
 
+function clonePermissionRules(
+  rules: SessionPermissionRules | undefined,
+): SessionPermissionRules | undefined {
+  if (!rules) return undefined
+  const out: SessionPermissionRules = {
+    alwaysAllowToolNames: [...rules.alwaysAllowToolNames],
+  }
+  if (rules.alwaysAllowPrefixes?.length) {
+    out.alwaysAllowPrefixes = [...rules.alwaysAllowPrefixes]
+  }
+  return out
+}
+
+function cloneUsage(usage: SessionUsage | undefined): SessionUsage | undefined {
+  if (!usage) return undefined
+  const out: SessionUsage = {
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    totalTokens: usage.totalTokens,
+    calls: usage.calls,
+  }
+  if (usage.estimated) out.estimated = true
+  return out
+}
+
+function parsePermissionRulesField(
+  raw: unknown,
+): SessionPermissionRules | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const o = raw as Record<string, unknown>
+  if (!Array.isArray(o.alwaysAllowToolNames)) return undefined
+  const names = o.alwaysAllowToolNames.filter(
+    (n): n is string => typeof n === 'string' && n.trim().length > 0,
+  )
+  const out: SessionPermissionRules = { alwaysAllowToolNames: names }
+  if (Array.isArray(o.alwaysAllowPrefixes)) {
+    const prefixes = o.alwaysAllowPrefixes.filter(
+      (p): p is string => typeof p === 'string' && p.length > 0,
+    )
+    if (prefixes.length) out.alwaysAllowPrefixes = prefixes
+  }
+  return out
+}
+
+function parseUsageField(raw: unknown): SessionUsage | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const o = raw as Record<string, unknown>
+  const num = (v: unknown): number | undefined =>
+    typeof v === 'number' && Number.isFinite(v) ? Math.max(0, Math.floor(v)) : undefined
+  const inputTokens = num(o.inputTokens)
+  const outputTokens = num(o.outputTokens)
+  const totalTokens = num(o.totalTokens)
+  const calls = num(o.calls)
+  if (
+    inputTokens === undefined &&
+    outputTokens === undefined &&
+    totalTokens === undefined &&
+    calls === undefined
+  ) {
+    return undefined
+  }
+  const out: SessionUsage = {
+    inputTokens: inputTokens ?? 0,
+    outputTokens: outputTokens ?? 0,
+    totalTokens: totalTokens ?? (inputTokens ?? 0) + (outputTokens ?? 0),
+    calls: calls ?? 0,
+  }
+  if (o.estimated === true) out.estimated = true
+  return out
+}
+
 /** JSON 安全序列化（剔除不可 JSON 的运行时句柄） */
 export function toSnapshot(
   session: PersistableSession,
   previous?: Partial<SessionSnapshot>,
 ): SessionSnapshot {
   const createdAt = previous?.createdAt ?? nowIso()
+  const permissionRules = clonePermissionRules(session.permissionRules)
+  const usage = cloneUsage(session.usage)
+  const effort =
+    typeof session.effortLevel === 'string' && session.effortLevel.trim()
+      ? session.effortLevel.trim()
+      : undefined
   return {
     version: SESSION_SNAPSHOT_VERSION,
     id: session.id,
@@ -228,6 +319,9 @@ export function toSnapshot(
     createdAt,
     updatedAt: nowIso(),
     phase: session.phase,
+    ...(permissionRules ? { permissionRules } : {}),
+    ...(effort ? { effortLevel: effort } : {}),
+    ...(usage ? { usage } : {}),
   }
 }
 
@@ -271,6 +365,13 @@ export function parseSessionSnapshot(raw: unknown): SessionSnapshot {
     ? o.systemPromptSections.filter((s): s is string => typeof s === 'string')
     : []
 
+  const permissionRules = parsePermissionRulesField(o.permissionRules)
+  const usage = parseUsageField(o.usage)
+  const effortLevel =
+    typeof o.effortLevel === 'string' && o.effortLevel.trim()
+      ? o.effortLevel.trim()
+      : undefined
+
   return {
     version: SESSION_SNAPSHOT_VERSION,
     id: o.id,
@@ -294,6 +395,9 @@ export function parseSessionSnapshot(raw: unknown): SessionSnapshot {
       typeof o.phase === 'string'
         ? (o.phase as SessionPhase)
         : undefined,
+    ...(permissionRules ? { permissionRules } : {}),
+    ...(effortLevel ? { effortLevel } : {}),
+    ...(usage ? { usage } : {}),
   }
 }
 
@@ -588,6 +692,15 @@ export function applySnapshotToSession(
   session.autoCompactEnabled = snapshot.autoCompactEnabled
   session.contextWindowTokens = snapshot.contextWindowTokens
   session.maxPtlRetries = snapshot.maxPtlRetries
+  if (snapshot.permissionRules) {
+    session.permissionRules = clonePermissionRules(snapshot.permissionRules)!
+  }
+  if (snapshot.effortLevel !== undefined) {
+    session.effortLevel = snapshot.effortLevel
+  }
+  if (snapshot.usage) {
+    session.usage = cloneUsage(snapshot.usage)
+  }
 }
 
 /** 挂在 session 上的持久化元数据（运行时，不进 JSON） */
