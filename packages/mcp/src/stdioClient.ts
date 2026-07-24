@@ -1,97 +1,52 @@
 /**
- * MCP stdio JSON-RPC client — Content-Length framing（对照 MCP SDK / HC mcp client 语义）
+ * MCP stdio JSON-RPC client — Content-Length framing
  * 无遥测；能力：initialize → tools/list|call · resources/list|read · prompts/list|get
  * 通知：notifications/{tools,resources,prompts}/list_changed（热刷新由 host 接线）
  */
 
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
+import {
+  MCP_DEFAULT_TIMEOUT_MS,
+  MCP_PROTOCOL_VERSION,
+  type JsonRpcNotification,
+  type JsonRpcRequest,
+  type JsonRpcResponse,
+  type McpCallResult,
+  type McpClient,
+  type McpGetPromptResult,
+  type McpNotificationHandler,
+  type McpPromptDef,
+  type McpResourceContents,
+  type McpResourceDef,
+  type McpServerCapabilities,
+  type McpToolDef,
+} from './client.ts'
 import type { McpServerConfig } from './types.ts'
 
-export type JsonRpcId = string | number
+export type {
+  JsonRpcId,
+  JsonRpcNotification,
+  JsonRpcRequest,
+  JsonRpcResponse,
+  McpCallResult,
+  McpGetPromptResult,
+  McpNotificationHandler,
+  McpPromptDef,
+  McpPromptMessage,
+  McpResourceContents,
+  McpResourceDef,
+  McpServerCapabilities,
+  McpToolDef,
+} from './client.ts'
 
-export type JsonRpcRequest = {
-  jsonrpc: '2.0'
-  id: JsonRpcId
-  method: string
-  params?: unknown
-}
-
-export type JsonRpcNotification = {
-  jsonrpc: '2.0'
-  method: string
-  params?: unknown
-}
-
-export type JsonRpcResponse = {
-  jsonrpc: '2.0'
-  id: JsonRpcId | null
-  result?: unknown
-  error?: { code: number; message: string; data?: unknown }
-}
-
-export type McpToolDef = {
-  name: string
-  description?: string
-  inputSchema?: Record<string, unknown>
-}
-
-export type McpCallResult = {
-  content?: Array<{ type?: string; text?: string; [k: string]: unknown }>
-  isError?: boolean
-  [k: string]: unknown
-}
-
-/** server capabilities（initialize result；对照 HC client.capabilities） */
-export type McpServerCapabilities = {
-  tools?: Record<string, unknown>
-  resources?: Record<string, unknown>
-  prompts?: Record<string, unknown>
-  [k: string]: unknown
-}
-
-export type McpResourceDef = {
-  uri: string
-  name?: string
-  description?: string
-  mimeType?: string
-  [k: string]: unknown
-}
-
-export type McpResourceContents = {
-  uri: string
-  mimeType?: string
-  text?: string
-  blob?: string
-  [k: string]: unknown
-}
-
-export type McpPromptDef = {
-  name: string
-  description?: string
-  arguments?: Array<{
-    name: string
-    description?: string
-    required?: boolean
-  }>
-  [k: string]: unknown
-}
-
-export type McpPromptMessage = {
-  role?: string
-  content?:
-    | { type?: string; text?: string; [k: string]: unknown }
-    | Array<{ type?: string; text?: string; [k: string]: unknown }>
-  [k: string]: unknown
-}
-
-export type McpGetPromptResult = {
-  description?: string
-  messages?: McpPromptMessage[]
-  [k: string]: unknown
-}
-
-const PROTOCOL_VERSION = '2024-11-05'
-const DEFAULT_TIMEOUT_MS = 15_000
+export {
+  formatMcpCallOutput,
+  formatMcpPromptResult,
+  formatMcpResourceContents,
+  MCP_PROMPTS_LIST_CHANGED,
+  MCP_RESOURCES_LIST_CHANGED,
+  MCP_TOOLS_LIST_CHANGED,
+} from './client.ts'
 
 function encodeMessage(msg: object): Buffer {
   const json = JSON.stringify(msg)
@@ -154,19 +109,9 @@ export type StdioClientOptions = {
   env?: Record<string, string>
 }
 
-/** 服务端 → 客户端 JSON-RPC 通知（无 id） */
-export type McpNotificationHandler = (
-  method: string,
-  params: unknown,
-) => void | Promise<void>
-
-/** MCP list_changed 通知 method（spec 名） */
-export const MCP_TOOLS_LIST_CHANGED = 'notifications/tools/list_changed'
-export const MCP_RESOURCES_LIST_CHANGED = 'notifications/resources/list_changed'
-export const MCP_PROMPTS_LIST_CHANGED = 'notifications/prompts/list_changed'
-
-export class McpStdioClient {
+export class McpStdioClient implements McpClient {
   readonly serverName: string
+  readonly transport = 'stdio' as const
   private proc: ChildProcessWithoutNullStreams | null = null
   private buf = Buffer.alloc(0)
   private nextId = 1
@@ -183,13 +128,13 @@ export class McpStdioClient {
   private readonly opts: StdioClientOptions
   /** initialize 返回的 server capabilities（可能为空对象） */
   private _capabilities: McpServerCapabilities = {}
-  /** method → handlers（对照 HC setNotificationHandler，无遥测） */
+  /** method → handlers */
   private notificationHandlers = new Map<string, Set<McpNotificationHandler>>()
 
   constructor(opts: StdioClientOptions) {
     this.opts = opts
     this.serverName = opts.server.name
-    this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS
+    this.timeoutMs = opts.timeoutMs ?? MCP_DEFAULT_TIMEOUT_MS
   }
 
   get isConnected(): boolean {
@@ -394,7 +339,7 @@ export class McpStdioClient {
 
   private async initialize(): Promise<void> {
     const result = (await this.request('initialize', {
-      protocolVersion: PROTOCOL_VERSION,
+      protocolVersion: MCP_PROTOCOL_VERSION,
       capabilities: {
         // 声明我们能处理的面（最小）；server 用 result.capabilities 宣告自身
         roots: {},
@@ -512,65 +457,4 @@ export class McpStdioClient {
       }
     })
   }
-}
-
-export function formatMcpCallOutput(result: McpCallResult): string {
-  if (Array.isArray(result.content)) {
-    const parts = result.content
-      .map((c) => {
-        if (c && typeof c === 'object' && typeof c.text === 'string') return c.text
-        return JSON.stringify(c)
-      })
-      .filter(Boolean)
-    if (parts.length) return parts.join('\n')
-  }
-  return JSON.stringify(result)
-}
-
-/** resources/read 内容 → 模型可读文本（blob 只记 mime/长度，不灌 base64） */
-export function formatMcpResourceContents(
-  contents: McpResourceContents[],
-): string {
-  if (!contents.length) return '(empty resource)'
-  const parts = contents.map((c) => {
-    if (typeof c.text === 'string') {
-      const head = c.mimeType ? `[${c.uri} ${c.mimeType}]\n` : `[${c.uri}]\n`
-      return head + c.text
-    }
-    if (typeof c.blob === 'string') {
-      return `[${c.uri}] binary blob (${c.mimeType ?? 'application/octet-stream'}, base64 len=${c.blob.length}) — not inlined`
-    }
-    return JSON.stringify(c)
-  })
-  return parts.join('\n\n')
-}
-
-/** prompts/get messages → 可读文本 */
-export function formatMcpPromptResult(result: McpGetPromptResult): string {
-  const lines: string[] = []
-  if (result.description) lines.push(result.description)
-  const messages = Array.isArray(result.messages) ? result.messages : []
-  for (const m of messages) {
-    const role = m.role ?? 'message'
-    const content = m.content
-    let text = ''
-    if (typeof content === 'string') text = content
-    else if (Array.isArray(content)) {
-      text = content
-        .map((c) =>
-          c && typeof c === 'object' && typeof c.text === 'string'
-            ? c.text
-            : JSON.stringify(c),
-        )
-        .join('\n')
-    } else if (content && typeof content === 'object') {
-      text =
-        typeof (content as { text?: string }).text === 'string'
-          ? String((content as { text: string }).text)
-          : JSON.stringify(content)
-    }
-    lines.push(`[${role}] ${text}`)
-  }
-  if (!lines.length) return JSON.stringify(result)
-  return lines.join('\n')
 }

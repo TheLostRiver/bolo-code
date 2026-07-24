@@ -1,7 +1,7 @@
 # Bolo Code 总任务清单（TODO）
 
 > **执行入口**：勾选与优先级以本文为准；里程碑/能力矩阵见 `docs/ROADMAP.md`；专项细节见各 `docs/*.md`。  
-> 更新：对齐 **CP* 长会话 compact 加深** + 已交付主路径；完成度按 **主路径 vs 相对 HC** 诚实口径。  
+> 更新：对齐 **MCP Streamable HTTP + transport 抽象** + 已交付主路径；完成度按 **主路径 vs 相对 HC** 诚实口径。  
 > 原则：无遥测；对照参考实现语义再实现；不把 stub 当完成；**状态按代码行为写**，不按错误 commit subject。
 
 ---
@@ -15,6 +15,7 @@
 | `AGENT_LOOP.md` | loop / 错误分类 / model·PTL 重试 |
 | `COMPACTION.md` | compact 管道 · auto 阈值 · micro · token 启发式 |
 | `TOOL_CALLING.md` / `PERMISSIONS.md` | 工具管道 · 权限门控 · always-allow |
+| `MCP.md` | MCP transport · 配置 · `/mcp` |
 | `TODO_SESSION_JSONL.md` | JSONL 存盘专项（主路径已齐；余量 entry/CLI） |
 | 其它 `docs/*.md` | 契约真源 |
 
@@ -27,22 +28,24 @@
 ```text
 主路径可跑（脚本/CLI）：
   bolo / --resume / --continue · 斜杠 + rules · C1–C5 · JSONL 默认写
-  · Subagent · MCP stdio 面 · plugins 最小 · Responses HTTP
+  · Subagent · MCP stdio 面 + Streamable HTTP 最小 · plugins 最小 · Responses HTTP
   · Loop 韧性最小 · Tool+Permission 日用最小
   · Compact 日用加深（加权 token 估 · 压力 · /context·/compact · 熔断）
 
 相对参考实现 headless 约 40–55%（勿再写 ~70% 乐观数）。
-真正抬水位的 P0 余量：
+P0 抬水位：
   1. ~~Loop 韧性~~ ✅ 最小
   2. ~~Tool+Permission 日用~~ ✅ 最小
-  3. ~~长会话 compact 加深~~ ✅ 最小（本刀）
-P1：MCP SSE/HTTP · PL2 · Usage+
+  3. ~~长会话 compact 加深~~ ✅ 最小
+P1：
+  4. ~~MCP 远程 transport（HTTP + 抽象）~~ ✅ 最小（本刀）
+  下一刀：PL2 · Usage+ ·（可选）经典 SSE 长连接
 ```
 
 | 优先级 | 含义（当前） |
 |--------|----------------|
 | **P0** | 抬 headless 水位：韧性 / TP / **CP 日用** 已 🟡 |
-| **P1** | 扩展深度（MCP SSE · PL2 · Usage+）— **默认下一刀区** |
+| **P1** | 扩展深度（**MCP HTTP ✅** · PL2 · Usage+）— **默认下一刀区：PL2 / Usage+** |
 | **P2** | 未做或仅最小的子项 |
 | **P3** | GUI / 完整 Ink / 后置协议 |
 
@@ -83,6 +86,7 @@ P1：MCP SSE/HTTP · PL2 · Usage+
 | **MCP1** | MCP stdio listTools/call → tools 表 | ✅ |
 | **MCP2 stdio 面** | resources/prompts + meta 工具 + `/mcp` 子命令 | ✅ |
 | **MCP2 list_changed** | tools/resources/prompts 通知 → 再 list → 缓存 + `session.tools` 热刷新 | ✅ |
+| **MCP2 HTTP** | `McpClient` 抽象 + Streamable HTTP（`type: http` / url）+ 错误隔离 + `/mcp` transport/status | ✅ 最小 |
 | **PL1** | 本地 plugins 发现 + skills/hooks/mcp 合并（非市场） | ✅ 最小 |
 | **OR1–OR5** | OpenAI Responses HTTP SSE 直连 | ✅ |
 | 其它 | 真 `apply_patch` · usage 本地 `/cost` · tool_result 预算 · 快照/meta 中 permissionRules/effort/usage | ✅ / 🟡 |
@@ -104,17 +108,30 @@ P1：MCP SSE/HTTP · PL2 · Usage+
 | **TP5** | schema 校验失败 → `<tool_use_error>`（既有，测试覆盖） | ✅ |
 | **TP-doc** | `TOOL_CALLING.md` / `PERMISSIONS.md` / ROADMAP / TODO | ✅ |
 
-### 2.6 Compact 日用加深（本刀）
+### 2.6 Compact 日用加深
 
 | ID | 内容 | 状态 |
 |----|------|------|
 | **CP1** | 加权 token 启发式：正文≈chars/4；密文 JSON≈chars/2；**tool_calls** 计入；与 `/context` 同源 | ✅ 最小 |
 | **CP2** | auto 阈值常量显式化 + `getContextPressure`（ok/warn/critical/over）；临近窗口才 critical | ✅ 最小 |
-| **CP3** | auto 失败熔断加固（连续失败不拖垮 turn）；compact **不改** `systemPromptSections` | ✅ |
+| **CP3** | auto 失败熔断加固（连续失败不拖垮 turn）；compact **不改** `systemPromptSections` | ✅ 最小 |
 | **CP4** | `/context`：messages/system 分拆、window/threshold/pressure、prepare 顺序；`/compact` 报告前后 token | ✅ 最小 |
 | **CP-doc** | `COMPACTION.md` / `AGENT_LOOP.md` / ROADMAP / TODO；`test-context-slash` | ✅ |
 
 **明确后置（CP 余量）：** cached microcompact / snip 全管线 / 默认开 `autoCompactEnabled` / 真 tokenizer。
+
+### 2.7 MCP 远程 transport（本刀）
+
+| ID | 内容 | 状态 |
+|----|------|------|
+| **MCP-T1** | `McpClient` 接口；stdio / http 共用 host listTools/call · resources/prompts · list_changed 路径 | ✅ |
+| **MCP-T2** | Streamable HTTP：`type: http` + `url` + `headers`；JSON 与 SSE 响应帧；`Mcp-Session-Id` | ✅ 最小 |
+| **MCP-T3** | 错误隔离：远程失败不拖垮 stdio 其它 server | ✅ |
+| **MCP-T4** | `/mcp` 显示 transport + status | ✅ |
+| **MCP-T5** | fixture + `scripts/test-mcp-http.ts` | ✅ |
+| **MCP-doc** | `MCP.md` / ROADMAP / TODO / ARCHITECTURE | ✅ |
+
+**明确后置：** 经典 SSE 长连接（`type: sse`）· OAuth · headersHelper · 插件热重载 MCP。
 
 ---
 
@@ -124,7 +141,7 @@ P1：MCP SSE/HTTP · PL2 · Usage+
 |----|------|------|------|
 | **LR*** | Loop 韧性 | 分类 + model 退避 + 与 PTL 分工 | ✅ 最小 |
 | **TP*** | Tool+Permission 日用 | Edit、path/bash always-allow、中段 abort | ✅ 最小 |
-| **CP*** | 长会话 compact | 加权估 · 压力 · boundary 前缀 · `/context`·`/compact` | ✅ 最小（本刀） |
+| **CP*** | 长会话 compact | 加权估 · 压力 · boundary 前缀 · `/context`·`/compact` | ✅ 最小 |
 
 ---
 
@@ -132,13 +149,14 @@ P1：MCP SSE/HTTP · PL2 · Usage+
 
 | ID | 主题 | 说明 | 状态 |
 |----|------|------|------|
-| **MCP2 余量** | 远程 transport | **SSE / HTTP（streamable）** 接同一 host 语义；stdio 面已齐 | ⬜ **主推下一刀** |
-| **PL2** | plugins 深度 | 热加载 / 贡献 slash 深化 /（若做）市场 | ⬜ |
+| **MCP2 余量** | 远程 transport | **Streamable HTTP + 抽象** 已接 host；经典 SSE 长连接后置 | ✅ 最小（本刀） |
+| **PL2** | plugins 深度 | 热加载 / 贡献 slash 深化 /（若做）市场 | ⬜ **主推下一刀** |
 | **Usage+** | 本地 usage 展示 | 已有累计与 `/cost`；可加深 breakdown | 🟡 可选 |
 | **J-D 余量** | entry / CLI | 更多 entry 类型；CLI `migrate-session` 包装 | 🟡 可选支线 |
 | **C6+** | Cache 后置 | 1h TTL / global scope / break detection / cached MC | ⬜ **后置** |
 | **TP 余量** | permission 深度 | 完整分类器 / StreamingToolExecutor / 更强 apply_patch | ⬜ 后置 |
 | **CP 余量** | compact 再深 | 默认开 auto · snip · cached MC · 真 tokenizer | ⬜ 后置 |
+| **MCP-SSE** | 经典 SSE 长连接 | `type: sse` 真实现（配置已预留） | ⬜ 可选 |
 
 ---
 
@@ -172,12 +190,12 @@ P1：MCP SSE/HTTP · PL2 · Usage+
 ```text
 已完成主线：
   RS* · SL* · SL-polish · T0–T7 · R* · C1–C5 · J-A/B/C · J-D(+T3)
-  · K* · S0–S7 · MCP1 · MCP2(stdio + list_changed) · PL1 · OR1–OR5
+  · K* · S0–S7 · MCP1 · MCP2(stdio + list_changed + HTTP 最小) · PL1 · OR1–OR5
   · LR* · TP* · CP* 长会话 compact 日用最小
 
 下一阶段：
-  ① MCP2 SSE/HTTP（或 PL2 / Usage+）  ← 默认主刀（P1）
-  ② CP 余量 / TP 余量 / C6+ / OR6 / T8 / Electron  （后置）
+  ① PL2 插件深化（或 Usage+）  ← 默认主刀（P1）
+  ② 经典 SSE 长连接 / CP 余量 / TP 余量 / C6+ / OR6 / T8 / Electron  （后置）
 ```
 
 ---
@@ -186,13 +204,13 @@ P1：MCP SSE/HTTP · PL2 · Usage+
 
 若只开一刀（**非 Electron**）：
 
-> **主推：MCP SSE/HTTP（MCP2 余量）** 或 **PL2 / Usage+**（P1 任选一条）  
-> - 接同一 host 语义；勿一口做完整市场  
+> **主推：PL2（plugins 热加载 / 贡献深化）** 或 **Usage+**（P1）  
+> - 勿一口做完整市场 / OAuth MCP  
 >
-> **本刀已勾选：** CP1–CP4 + 文档（加权 token · 压力 · `/context`·`/compact` · 熔断/前缀）。  
-> **明确后置：** cached MC · snip 全管线 · 默认开 auto · OR6 · C6+ · T8 · Electron · 完整 permission 分类器。
+> **本刀已勾选：** MCP-T1–T5 + 文档（`McpClient` · Streamable HTTP · 隔离 · `/mcp` transport/status · fixture 测试）。  
+> **明确后置：** 经典 SSE 长连接 · OAuth · cached MC · snip · 默认开 auto · OR6 · C6+ · T8 · Electron · 完整 permission 分类器。
 
-**已齐摘要：** resume · slash · BOLO TUI 最小 · rules · C1–C5 · JSONL 主路径 · creators · Subagent · MCP stdio 面 · plugins 最小 · Responses HTTP · Loop 韧性最小 · Tool+Permission 日用最小 · **Compact 日用加深最小**。
+**已齐摘要：** resume · slash · BOLO TUI 最小 · rules · C1–C5 · JSONL 主路径 · creators · Subagent · MCP stdio+HTTP 最小 · plugins 最小 · Responses HTTP · Loop 韧性最小 · Tool+Permission 日用最小 · Compact 日用加深最小。
 
 ---
 
@@ -210,7 +228,7 @@ P1：MCP SSE/HTTP · PL2 · Usage+
 | J* | M5.1 / `TODO_SESSION_JSONL`（J-D T3 ✅） |
 | K* | M-Creators ✅ |
 | S* | M-Subagent（S0–S7 ✅；S12 partial） |
-| MCP* · PL* | M3（stdio 面 ✅；SSE/HTTP · PL2 ⬜） |
+| MCP* · PL* | M3（stdio + HTTP ✅；SSE 长连接 · PL2 ⬜） |
 | **OR*** | Responses：HTTP SSE ✅；WS 后置 |
 | M4 | Electron ⬜ |
 
@@ -229,4 +247,4 @@ P1：MCP SSE/HTTP · PL2 · Usage+
 ---
 
 **一句话：**  
-CP* 日用最小已落地；**下一刀 P1：MCP SSE/HTTP（或 PL2 / Usage+）**；cached MC / snip 勿抢。
+MCP Streamable HTTP + transport 抽象已落地；**下一刀 P1：PL2 或 Usage+**；经典 SSE / cached MC / snip 勿抢。

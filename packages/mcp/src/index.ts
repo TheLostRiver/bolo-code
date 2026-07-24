@@ -1,34 +1,55 @@
 /**
- * @bolo/mcp — MCP host：stdio JSON-RPC、tools/resources/prompts、list_changed、mcp__* 命名
+ * @bolo/mcp — MCP host：stdio / Streamable HTTP、tools/resources/prompts、list_changed、mcp__* 命名
  * 无遥测；禁止 mock invoke 冒充完成
  */
 
-export type { McpServerConfig, McpToolRegistration } from './types.ts'
+export type {
+  McpServerConfig,
+  McpToolRegistration,
+  McpTransportKind,
+} from './types.ts'
+export { resolveMcpTransport } from './types.ts'
 export { mcpToolName, parseMcpToolName } from './names.ts'
 export {
   loadMcpConfigFile,
   registerToolsFromServers,
   findMcpTool,
 } from './config.ts'
+export type {
+  McpClient,
+  McpToolDef,
+  McpCallResult,
+  McpServerCapabilities,
+  McpResourceDef,
+  McpResourceContents,
+  McpPromptDef,
+  McpGetPromptResult,
+  McpNotificationHandler,
+  JsonRpcId,
+  JsonRpcRequest,
+  JsonRpcResponse,
+  JsonRpcNotification,
+} from './client.ts'
 export {
-  McpStdioClient,
-  extractMessages,
   formatMcpCallOutput,
   formatMcpResourceContents,
   formatMcpPromptResult,
   MCP_TOOLS_LIST_CHANGED,
   MCP_RESOURCES_LIST_CHANGED,
   MCP_PROMPTS_LIST_CHANGED,
-  type McpToolDef,
-  type McpCallResult,
-  type McpServerCapabilities,
-  type McpResourceDef,
-  type McpResourceContents,
-  type McpPromptDef,
-  type McpGetPromptResult,
-  type McpNotificationHandler,
+  MCP_PROTOCOL_VERSION,
+  MCP_DEFAULT_TIMEOUT_MS,
+} from './client.ts'
+export {
+  McpStdioClient,
+  extractMessages,
   type StdioClientOptions,
 } from './stdioClient.ts'
+export {
+  McpHttpClient,
+  parseSseDataPayloads,
+  type HttpClientOptions,
+} from './httpClient.ts'
 export {
   connectMcpServers,
   closeMcpConnections,

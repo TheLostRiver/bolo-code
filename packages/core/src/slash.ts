@@ -74,6 +74,10 @@ export type SlashSession = {
   /** 已连接 MCP；/doctor · /mcp */
   mcpConnections?: Array<{
     name: string
+    /** stdio | http | sse */
+    transport?: string
+    /** connected | error | closed */
+    status?: string
     tools?: Array<{ name: string; description?: string }>
     resources?: Array<{
       uri: string
@@ -565,7 +569,11 @@ function cmdMcp(session: SlashSession, args: string): SlashDispatchResult {
     if (s.capabilities?.resources) caps.push('resources')
     if (s.capabilities?.prompts) caps.push('prompts')
     const capStr = caps.length ? caps.join('+') : 'unknown'
-    lines.push(`  ${s.name}  tools=${n} resources=${nr} prompts=${np}  [${capStr}]`)
+    const transport = s.transport ?? 'stdio'
+    const status = s.status ?? 'connected'
+    lines.push(
+      `  ${s.name}  transport=${transport}  status=${status}  tools=${n} resources=${nr} prompts=${np}  [${capStr}]`,
+    )
   }
   lines.push(
     'Use /mcp tools | /mcp resources | /mcp prompts for details.',

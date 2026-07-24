@@ -42,17 +42,25 @@ export type McpFileJson = {
   mcpServers?: Record<
     string,
     {
-      command: string
+      /** 缺省：有 command→stdio，有 url→http */
+      type?: 'stdio' | 'http' | 'sse'
+      command?: string
       args?: string[]
       env?: Record<string, string>
+      /** http / sse endpoint */
+      url?: string
+      headers?: Record<string, string>
       tools?: { name: string; description?: string }[]
     }
   >
   servers?: Array<{
     name: string
-    command: string
+    type?: 'stdio' | 'http' | 'sse'
+    command?: string
     args?: string[]
     env?: Record<string, string>
+    url?: string
+    headers?: Record<string, string>
     tools?: { name: string; description?: string }[]
   }>
 }

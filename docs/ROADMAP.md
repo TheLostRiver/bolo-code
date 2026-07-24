@@ -1,6 +1,6 @@
 # Bolo Code 整体路线图（详细版）
 
-> 更新：对齐 **CP* 长会话 compact 日用加深** 与已交付主路径（含 TP / LR）。  
+> 更新：对齐 **MCP Streamable HTTP + transport 抽象** 与已交付主路径（含 CP / TP / LR）。  
 > **勾选与「下一刀」以 `docs/TODO.md` 为准**；本文件回答：**做到哪 / 缺什么 / 验收 / 里程碑**。  
 > 原则：借鉴参考实现 **语义**再实现；**无遥测**；文档无本机绝对路径；**状态按代码行为**，不按错误 commit subject。
 
@@ -12,7 +12,7 @@
 |----|------|------|
 | **Headless 核心**（loop / tools / provider / compact / prompt） | **~55–65%** | 主路径可用；compact 日用加深已 🟡；仍缺 StreamingToolExecutor、cached MC/snip、完整 permission 分类器 |
 | 会话与 CLI | **~70–80%** | JSONL 默认写（T3）；resume/continue；无参 REPL；非成熟 Ink |
-| **扩展面（MCP / Plugins / Skills）** | **~45–55%** | Skills + MCP stdio 面 + list_changed ✅；SSE/HTTP · PL2 ⬜ |
+| **扩展面（MCP / Plugins / Skills）** | **~50–60%** | Skills + MCP stdio 面 + list_changed + **HTTP transport** ✅；SSE 长连接 · PL2 ⬜ |
 | **Subagent** | **~50–60%** | 真 loop + Agent + 目录定义；async/fork 最小；worktree ⬜ |
 | **项目规则 Rules** | **~75–85%** | 装载 + paths + 刷新 + `/rules` |
 | **内置元技能 Creators** | **~70–80%** | skill/plugin-creator 最小 |
@@ -35,8 +35,9 @@
 2. ~~**Loop 韧性**（错误分类 + 429/5xx 有限退避；与 PTL 正交）~~ ✅ 最小  
 3. ~~**Tool+Permission 日用**（Edit、path/bash always-allow、中段 abort）~~ ✅ 最小  
 4. ~~**长会话 compact 加深**（加权 token · 压力 · `/context`·`/compact` · 熔断）~~ ✅ 最小  
-5. **下一刀 P1：** MCP SSE/HTTP · PL2 · Usage+  
-6. **后置：** OR6 WS · cache TTL · cached MC · T8 Ink · Electron · TP/CP 余量  
+5. ~~**MCP 远程 transport**（`McpClient` 抽象 + Streamable HTTP）~~ ✅ 最小  
+6. **下一刀 P1：** PL2 · Usage+ ·（可选）经典 SSE 长连接  
+7. **后置：** OR6 WS · cache TTL · cached MC · T8 Ink · Electron · TP/CP 余量  
 
 ---
 
@@ -60,7 +61,7 @@
   → Loop 韧性（分类 + 退避）+ Tool/Permission 日用
   → 斜杠 + Rules + Creators + Cache 标记
   → Skills / MCP / Plugins / Subagent
-  → 扩展深度（SSE/HTTP · PL2）
+  → 扩展深度（HTTP MCP ✅ · PL2 · SSE 长连接可选）
   → Electron · 完整 Ink · 生产化打磨
 ```
 
@@ -165,7 +166,8 @@
 | MCP stdio tools | ✅ |
 | MCP resources/prompts（stdio）+ meta 工具 + `/mcp` | ✅ |
 | MCP **list_changed 热刷新**（tools/resources/prompts） | ✅ |
-| MCP SSE/HTTP transport | ⬜ |
+| MCP **transport 抽象 + Streamable HTTP** | ✅ 最小 |
+| MCP 经典 SSE 长连接（`type: sse`） | ⬜ |
 | Plugins 本地加载 | ✅ 最小 |
 | Plugins 热加载 / 市场（PL2） | ⬜ |
 | Subagent 真 loop | ✅ |
@@ -216,7 +218,8 @@ K1–K2 + slash 回落 ✅；rule-creator 可选 ⬜。
 | 3.2 MCP stdio tools | ✅ |
 | 3.2b MCP resources/prompts + meta + `/mcp` | ✅ |
 | 3.2c MCP list_changed 热刷新 | ✅（stdio） |
-| 3.2d MCP SSE/HTTP | ⬜ |
+| 3.2d MCP Streamable HTTP + client 抽象 | ✅ 最小 |
+| 3.2e MCP 经典 SSE 长连接 | ⬜ |
 | 3.3 Plugins 真加载 | ✅ 最小（本地）；PL2 热加载 ⬜ |
 | 3.4 Subagent | ✅ 见 M-Subagent |
 
@@ -397,7 +400,8 @@ flowchart TB
 | JSONL 默认写 + R1/list + migrate + meta 切片 | ✅ J-D T3 |
 | Usage 本地记账 | ✅ 最小；breakdown 🟡 |
 | openai-responses HTTP SSE | ✅；WS ⬜ |
-| MCP stdio + resources/prompts + list_changed | ✅；SSE/HTTP ⬜ |
+| MCP stdio + resources/prompts + list_changed | ✅ |
+| MCP Streamable HTTP + `McpClient` 抽象 | ✅ 最小；经典 SSE 长连接 ⬜ |
 | Plugins 本地最小 | ✅；PL2 ⬜ |
 | Undo / 多模态 / 沙箱 | ⬜ 后置 |
 | 遥测 | 🚫 |
@@ -412,7 +416,7 @@ flowchart TB
 | `config` | layout（rules/agents/skills…）· workspace 加载 |
 | `tools` | builtins（含 Edit）· Agent · apply_patch |
 | `skills` | 发现 · catalog · bundled |
-| `plugins` / `mcp` | 本地加载 · stdio host（resources/prompts/list_changed） |
+| `plugins` / `mcp` | 本地加载 · stdio/http host（resources/prompts/list_changed） |
 | `cli` | banner · REPL · resume picker · `submitUserInput` |
 | `providers` | effort · usage · **promptCache** · openai-responses |
 
@@ -425,13 +429,13 @@ flowchart TB
 | A 交互 | 斜杠 · SL-polish · rules · skills · creators | ✅ |
 | B 成本 | C1–C5 | ✅；C6+ 后置 |
 | C 存盘 | JSONL A–D + **J-D T3**（默认 jsonl / migrate / meta / R1） | ✅ 主路径 |
-| D 扩展 | Subagent · MCP（stdio 面 + list_changed）· plugins 最小 | ✅ 最小；**SSE/HTTP · PL2 ⬜** |
+| D 扩展 | Subagent · MCP（stdio + HTTP 最小）· plugins 最小 | ✅ 最小；**SSE 长连接 · PL2 ⬜** |
 | E TUI | T0–T7 | ✅；T8 ⬜ |
 | F GUI | Electron | ⬜ 后置 |
 | G 协议 | Responses HTTP | ✅；WS 后置 |
 | H 韧性 | 错误分类 + model 退避 + PTL | 🟡 最小（本刀） |
 
-**默认下一刀：** 见 **`docs/TODO.md` §7**（**P0 Tool+Permission 日用**；MCP SSE/HTTP · PL2 为 P1）。
+**默认下一刀：** 见 **`docs/TODO.md` §7**（**P1：PL2 · Usage+**；经典 SSE 长连接可选）。
 
 ---
 
@@ -502,12 +506,12 @@ flowchart TB
 | **M-Subagent** | 🟡 | S0–S7 + async/fork/侧链最小 |
 | **M-TUI** | 🟡 | T0–T7 ✅；T8 Ink ⬜ |
 | **M-Cost** | 🟡 | C1–C5 ✅；TTL/break 后置 |
-| **M3** | 🟡 | MCP stdio 面 + list_changed；**SSE/HTTP · PL2 未完** |
+| **M3** | 🟡 | MCP stdio + list_changed + **HTTP 最小**；**SSE 长连接 · PL2 未完** |
 | **M5** | 🟡 | 会话/CLI 可用；JSONL 主路径 T3 ✅ |
 | **Responses** | 🟡 | HTTP SSE ✅；WS ⬜ |
 | M4–M6 | ⬜ | Electron 与体验打磨 |
 
 **一句话：**  
 Headless **主路径可日用**，相对参考实现约 **40–55%**（文档不再写 ~70% 乐观数）。  
-**P0 切片** LR / TP / CP 日用均 🟡 最小；**下一刀 P1：MCP SSE/HTTP · PL2 · Usage+**。  
+**P0 切片** LR / TP / CP 日用均 🟡 最小；**MCP HTTP transport 🟡 最小**；**下一刀 P1：PL2 · Usage+ ·（可选）经典 SSE**。  
 执行序 → **`docs/TODO.md`**。

@@ -1,10 +1,10 @@
 /**
- * MCP host：连 stdio servers → listTools/listResources/listPrompts
+ * MCP host：连 stdio / http servers → listTools/listResources/listPrompts
  * → 注册 BoloTool（mcp__server__tool + 可选 ListMcpResources / ReadMcpResource / GetMcpPrompt）
  * → list_changed 通知热刷新（tools/resources/prompts 缓存 + 可选会话工具表同步）
  * 单 server 失败 warn，不阻断其它 server / 会话
  *
- * 对照 HC 语义（非复制）：capabilities 门控 · list_changed 再 list · meta 工具 · 无遥测
+ * 对照参考实现语义（非复制）：多 transport · capabilities 门控 · list_changed 再 list · meta 工具 · 无遥测
  */
 
 import {
@@ -19,15 +19,22 @@ import {
   MCP_PROMPTS_LIST_CHANGED,
   MCP_RESOURCES_LIST_CHANGED,
   MCP_TOOLS_LIST_CHANGED,
-  McpStdioClient,
+  type McpClient,
   type McpPromptDef,
   type McpResourceDef,
   type McpToolDef,
-} from './stdioClient.ts'
+} from './client.ts'
+import { McpHttpClient } from './httpClient.ts'
+import { McpStdioClient } from './stdioClient.ts'
 import { mcpToolName, parseMcpToolName } from './names.ts'
-import type { McpServerConfig, McpToolRegistration } from './types.ts'
+import {
+  resolveMcpTransport,
+  type McpServerConfig,
+  type McpToolRegistration,
+  type McpTransportKind,
+} from './types.ts'
 
-/** list_changed 刷新面（对照 HC tools|prompts|resources list_changed） */
+/** list_changed 刷新面（对照 tools|prompts|resources list_changed） */
 export type McpListChangedKind = 'tools' | 'resources' | 'prompts'
 
 export type McpListChangedEvent = {
@@ -40,7 +47,11 @@ export type McpListChangedEvent = {
 
 export type ConnectedMcpServer = {
   name: string
-  client: McpStdioClient
+  client: McpClient
+  /** stdio | http | sse */
+  transport: McpTransportKind
+  /** connected | error | closed */
+  status: 'connected' | 'error' | 'closed'
   tools: McpToolDef[]
   resources: McpResourceDef[]
   prompts: McpPromptDef[]
@@ -265,7 +276,7 @@ export function registrationFromListed(
 
 export function boloToolFromMcp(
   reg: McpToolRegistration,
-  client: McpStdioClient,
+  client: McpClient,
 ): BoloTool {
   const schema = asInputSchema(reg.inputSchema)
   return buildTool({
@@ -553,9 +564,32 @@ export function createMcpMetaTools(servers: ConnectedMcpServer[]): BoloTool[] {
   return out
 }
 
+function createMcpClient(
+  cfg: McpServerConfig,
+  options: ConnectMcpOptions,
+  transport: McpTransportKind,
+): McpClient {
+  if (transport === 'http') {
+    return new McpHttpClient({
+      server: cfg,
+      timeoutMs: options.timeoutMs,
+    })
+  }
+  if (transport === 'sse') {
+    throw new Error(
+      `MCP server "${cfg.name}": type "sse" not implemented yet; use type "http" (Streamable HTTP) or stdio`,
+    )
+  }
+  return new McpStdioClient({
+    server: cfg,
+    cwd: options.cwd,
+    timeoutMs: options.timeoutMs,
+  })
+}
+
 /**
- * 连接配置中的 MCP servers（stdio），list tools/resources/prompts 后注册 BoloTool，
- * 并挂 list_changed 热刷新。任一 server 失败只记 warning。
+ * 连接配置中的 MCP servers（stdio / http），list tools/resources/prompts 后注册 BoloTool，
+ * 并挂 list_changed 热刷新。任一 server 失败只记 warning，不拖垮其它 server。
  */
 export async function connectMcpServers(
   options: ConnectMcpOptions,
@@ -567,18 +601,29 @@ export async function connectMcpServers(
   const seenNames = new Set<string>()
 
   for (const cfg of options.servers) {
-    if (!cfg.name?.trim() || !cfg.command?.trim()) {
+    if (!cfg.name?.trim()) {
       warnings.push(
-        `skip MCP server with empty name/command: ${JSON.stringify(cfg.name)}`,
+        `skip MCP server with empty name: ${JSON.stringify(cfg.name)}`,
       )
       continue
     }
 
-    const client = new McpStdioClient({
-      server: cfg,
-      cwd: options.cwd,
-      timeoutMs: options.timeoutMs,
-    })
+    const transport = resolveMcpTransport(cfg)
+    if (!transport) {
+      warnings.push(
+        `skip MCP server "${cfg.name}": need command (stdio) or url (http)`,
+      )
+      continue
+    }
+
+    let client: McpClient
+    try {
+      client = createMcpClient(cfg, options, transport)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      warnings.push(`MCP server "${cfg.name}" failed: ${msg}`)
+      continue
+    }
 
     try {
       await client.connect()
@@ -595,6 +640,8 @@ export async function connectMcpServers(
       servers.push({
         name: cfg.name,
         client,
+        transport: client.transport,
+        status: 'connected',
         tools: listed,
         resources,
         prompts,
@@ -696,6 +743,7 @@ export async function closeMcpConnections(
       } catch {
         /* ignore */
       }
+      s.status = 'closed'
     }),
   )
 }

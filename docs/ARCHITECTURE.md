@@ -132,10 +132,11 @@ idle
 
 ### 6.2 MCP
 
-- 传输：stdio ✅；SSE / HTTP ⬜
-- 能力：tools ✅；resources / prompts ✅（stdio + meta 工具）；list_changed 热刷新 ✅
+- 传输：stdio ✅；**Streamable HTTP（`type: http`）** ✅ 最小；经典 SSE 长连接（`type: sse`）⬜
+- 能力：tools ✅；resources / prompts ✅（host 共用）；list_changed 热刷新 ✅（stdio 推送；http 若 SSE 帧含通知可分发）
 - 命名：远端 `mcp__<server>__<tool>`；meta：`ListMcpResources` / `ReadMcpResource` / `GetMcpPrompt`
 - PermissionRequest / PreToolUse matcher 可匹配 `mcp__*`
+- 错误隔离：单 server 失败只 warn，不拖垮其它 server / 会话
 
 ### 6.3 Hooks（详见 [HOOKS.md](./HOOKS.md)）
 
