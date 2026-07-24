@@ -131,7 +131,7 @@ P3  GUI / 打磨 / 后置
 | M4 | Electron GUI | ⬜ |
 | T8 | 完整 Ink TUI | ⬜ |
 | S12+ | Fork 继承上下文 / 异步 agent / worktree | ⬜ |
-| 其它 | 真 apply_patch ✅ 最小 · 本地 usage 上报 UI、企业策略… | 🟡 |
+| 其它 | 真 apply_patch ✅ 最小 · **usage 本地累计** `/cost` ✅ · 企业策略… | 🟡 |
 
 **不做：** 远程遥测、GrowthBook、抄 Claude 商标/IP。
 
@@ -164,7 +164,7 @@ P3  GUI / 打磨 / 后置
 
 若只开一刀：
 
-> **T8 完整 Ink（可选）**、**fork/async subagent**、**usage 本地累计**；**Electron 明确后置**。
+> **T8 完整 Ink（可选）**、**fork/async subagent**；**usage 本地累计** ✅；**Electron 明确后置**。
 
 已齐：resume 列表（RS7/RS8）、jsonl 优先 messages、斜杠、BOLO TUI T0–T7、rules、prompt cache、JSONL 双写+boundary、creators、Subagent S0–S7+侧链、MCP、plugins、`--continue`、真 apply_patch 最小。
 
@@ -198,4 +198,4 @@ P3  GUI / 打磨 / 后置
 ---
 
 **一句话：**  
-日用 CLI 主路径（RS8 picker / jsonl 优先 messages / apply_patch / 侧链 transcript / slash / BOLO TUI / rules / cache / Subagent S0–S7 / MCP / plugins）已齐；**Electron 后置**；下一刀可选 **usage 本地累计** 或 **fork/async subagent**。
+日用 CLI 主路径（RS8 picker / jsonl 优先 messages / apply_patch / 侧链 transcript / slash / BOLO TUI / rules / cache / Subagent S0–S7 / MCP / plugins / **usage 本地累计 + `/cost`**）已齐；**Electron 后置**；下一刀可选 **fork/async subagent** 或 T8 Ink。

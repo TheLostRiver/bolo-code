@@ -31,6 +31,13 @@ import type {
 } from './toolExecution.ts'
 import { runTools } from './toolOrchestration.ts'
 import { prepareModelMessages } from './systemPrompt.ts'
+import {
+  accumulateSessionUsage,
+  estimateUsageFromCharCounts,
+  messageChars,
+  normalizeProviderUsage,
+  type SessionUsage,
+} from './sessionUsage.ts'
 
 export type TerminalReason =
   | 'completed'
@@ -84,6 +91,11 @@ export type QueryLoopParams = {
    * 默认 3；0 = 关闭。对照 HC MAX_PTL_RETRIES。
    */
   maxPtlRetries?: number
+  /**
+   * 可选：会话 usage 累加器（就地更新）。
+   * 有 provider `usage` 事件则累加；否则 chars/4 估算并标 estimated。
+   */
+  usage?: SessionUsage
   onEvent?: (e: QueryLoopEvent) => void
   signal?: AbortSignal
 }
@@ -186,6 +198,12 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
       assistantText = ''
       toolBlocks.length = 0
       let modelError: string | undefined
+      let streamUsage: {
+        inputTokens?: number
+        outputTokens?: number
+        totalTokens?: number
+      } | null = null
+      let toolArgsChars = 0
 
       try {
         for await (const ev of params.deps.callModel({
@@ -203,12 +221,19 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
             } catch {
               input = { raw: ev.arguments }
             }
+            toolArgsChars += (ev.arguments ?? '').length
             toolBlocks.push({
               id: ev.id || params.deps.uuid(),
               name: ev.name,
               input,
               argumentsJson: ev.arguments,
             })
+          } else if (ev.type === 'usage') {
+            streamUsage = {
+              inputTokens: ev.usage?.inputTokens,
+              outputTokens: ev.usage?.outputTokens,
+              totalTokens: ev.usage?.totalTokens,
+            }
           } else if (ev.type === 'error') {
             modelError = ev.message
           }
@@ -250,6 +275,24 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
 
       modelOk = true
       ptlAttemptsThisTurn = 0
+
+      // 本地 usage 累计（无遥测）：provider usage 优先，否则 chars/4
+      if (params.usage) {
+        const fromProvider = streamUsage
+          ? normalizeProviderUsage(streamUsage)
+          : null
+        if (fromProvider) {
+          accumulateSessionUsage(params.usage, fromProvider)
+        } else {
+          accumulateSessionUsage(
+            params.usage,
+            estimateUsageFromCharCounts({
+              inputChars: messageChars(messagesForQuery),
+              outputChars: assistantText.length + toolArgsChars,
+            }),
+          )
+        }
+      }
     }
 
     // OpenAI 回灌：assistant 需带 tool_calls 结构

@@ -75,6 +75,7 @@ import {
 import {
   writeTranscriptAfterCompact,
 } from './sessionTranscript.ts'
+import type { SessionUsage } from './sessionUsage.ts'
 
 export type { AskPermissionFn, Terminal }
 export type { QueryDeps, PrepareMessagesFn } from './deps.ts'
@@ -97,6 +98,18 @@ export {
   PTL_RETRY_MARKER,
 } from '../../compact/src/index.ts'
 export { queryLoop } from './queryLoop.ts'
+export {
+  createEmptySessionUsage,
+  accumulateSessionUsage,
+  estimateTokensFromChars,
+  estimateUsageFromCharCounts,
+  estimateUsageFromTexts,
+  normalizeProviderUsage,
+  formatSessionUsage,
+  formatUsageOneLiner,
+  type SessionUsage,
+  type UsageDelta,
+} from './sessionUsage.ts'
 export { runTools } from './toolOrchestration.ts'
 export { runToolUse } from './toolExecution.ts'
 export type { PermissionMode } from '../../permissions/src/index.ts'
@@ -305,6 +318,11 @@ export type BoloSession = {
   /** PTL 截断重试上限；0 = 关 */
   maxPtlRetries: number
   /**
+   * 会话内本地 token 累计（/cost）；无遥测。
+   * 有 provider usage 事件则累加，否则 chars/4 估算。
+   */
+  usage?: SessionUsage
+  /**
    * 会话工具表（内置 + Agent + 可选 MCP）。
    * 未设置时 submitPrompt 回落 createDefaultTools()。
    */
@@ -415,6 +433,12 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
         : Math.max(0, opts.maxPtlRetries),
     agentDefinitions,
     tools: createDefaultTools(agentDefinitions),
+    usage: {
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      calls: 0,
+    },
     onEvent: opts.onEvent ?? (() => {}),
   }
 
@@ -679,6 +703,7 @@ export async function submitPrompt(
     maxTurns: options?.maxTurns ?? 8,
     querySource: options?.querySource ?? 'repl_main_thread',
     maxPtlRetries: session.maxPtlRetries,
+    usage: session.usage,
     onEvent: (e) => mapLoopEvent(session, e),
   })
 

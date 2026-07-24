@@ -91,7 +91,7 @@
 | **Effort 档位**（low/medium/high/max/auto） | ⬜ | 调推理深度/费用/延迟；HC 有 `/effort` |
 | Prompt Cache 友好前缀 | ⬜ | 提缓存命中 → 省钱 |
 | 大 tool_result 预算 | ⬜ | 防单结果炸上下文 |
-| `/context` `/cost` 本地可见 | ⬜ | 用户感知占用 |
+| `/context` `/cost` 本地可见 | ✅ | 用户感知占用（本地累计，无遥测） |
 
 ### 2.3 项目规则 Rules（**新标出 · 用户明确要求**）
 

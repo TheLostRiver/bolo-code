@@ -8,6 +8,7 @@
 export type {
   ProviderId,
   ProviderStreamEvent,
+  ProviderUsage,
   CompleteStreamOptions,
   LlmProvider,
 } from './types.ts'

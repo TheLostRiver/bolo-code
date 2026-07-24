@@ -18,6 +18,11 @@ import {
   type LoadedSkill,
 } from '../../skills/src/index.ts'
 import type { Terminal } from './queryLoop.ts'
+import {
+  formatSessionUsage,
+  formatUsageOneLiner,
+  type SessionUsage,
+} from './sessionUsage.ts'
 
 /** slash 需要的会话切片（与 BoloSession 兼容） */
 export type SlashSession = {
@@ -33,6 +38,8 @@ export type SlashSession = {
   skills?: LoadedSkill[]
   /** 活跃 subagent 定义；供 /agents */
   agentDefinitions?: import('./subagent.ts').ActiveAgentDefinitions
+  /** 本地 usage 累计；/cost · /context */
+  usage?: SessionUsage
 }
 
 export type ParseSlashResult =
@@ -179,8 +186,13 @@ function cmdContext(session: SlashSession, _args: string): SlashDispatchResult {
     `model:           ${session.model ?? '(unset)'}`,
     `effort:          ${session.effortLevel ?? 'auto'}`,
     `system sections: ${session.systemPromptSections.length}`,
+    formatUsageOneLiner(session.usage),
   ]
   return { ok: true, message: lines.join('\n') }
+}
+
+function cmdCost(session: SlashSession, _args: string): SlashDispatchResult {
+  return { ok: true, message: formatSessionUsage(session.usage) }
 }
 
 function cmdModel(session: SlashSession, args: string): SlashDispatchResult {
@@ -468,8 +480,18 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
   },
   {
     name: 'context',
-    summary: 'Show message count, chars, mode, model, cwd, id',
+    summary: 'Show message count, chars, mode, model, cwd, id, usage',
     run: cmdContext,
+  },
+  {
+    name: 'cost',
+    summary: 'Show session token usage (local only)',
+    run: cmdCost,
+  },
+  {
+    name: 'usage',
+    summary: 'Alias of /cost',
+    run: cmdCost,
   },
   {
     name: 'model',

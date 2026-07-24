@@ -22,13 +22,20 @@
 | `/help` | 列出命令 |
 | `/clear` | 清空 `messages`；保留 id / cwd / config / `systemPromptSections` |
 | `/compact [note]` | `compactSession`；无 summarizer 时返回错误文案 |
-| `/context` | 消息数、字符粗算、permissionMode、model、effort、cwd、id |
+| `/context` | 消息数、字符粗算、permissionMode、model、effort、cwd、id、usage 一行 |
+| `/cost` · `/usage` | 会话内本地 token 累计（`session.usage`）；无遥测、不上报 |
 | `/model [name]` | 无参显示；有参设 `session.model` |
 | `/effort [low\|medium\|high\|max\|auto]` | 会话字段 `effortLevel`；`auto` 清除覆盖；暂无 provider 映射 |
 | `/plan` | `permissionMode = plan` |
 | `/permissions [mode]` | 无参列出四档；有参切换 |
 
 REPL 额外：`/exit` `/quit` 由 CLI 处理（退出循环，不进总线）。
+
+## 本地 usage（`/cost`）
+
+- 字段：`session.usage?: { inputTokens, outputTokens, totalTokens, calls, estimated? }`
+- 每轮 `callModel` 成功后累加：若 stream 有 `usage` 事件则用其；否则 `chars/4` 估算并标 `estimated`
+- **仅会话内存**；不写遥测、不上传
 
 ## CLI
 
@@ -39,4 +46,4 @@ REPL 额外：`/exit` `/quit` 由 CLI 处理（退出循环，不进总线）。
 
 - skill 回落 `/skills`、插件命令、远程/账号类命令
 - effort → API 参数映射
-- 遥测
+- 遥测 / 远程 cost 账单

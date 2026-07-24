@@ -77,6 +77,50 @@ async function main() {
     assert(ctx.message.includes(session.id), 'context id')
     assert(ctx.message.includes('messages:'), 'context msgs')
     assert(ctx.message.includes('mock-a'), 'context model')
+    assert(ctx.message.includes('usage:'), 'context has usage line')
+  }
+
+  // /cost 初始为空
+  const cost0 = await submitUserInput(session, '/cost')
+  assert(cost0.type === 'slash', 'cost slash')
+  if (cost0.type === 'slash') {
+    assert(
+      cost0.message.toLowerCase().includes('none') ||
+        cost0.message.includes('calls:'),
+      'cost shows empty or zero',
+    )
+  }
+
+  // mock 几轮 callModel 后 /cost 非空
+  const r1 = await submitUserInput(session, 'hello usage one')
+  assert(r1.type === 'prompt', 'prompt 1')
+  const r2 = await submitUserInput(session, 'hello usage two')
+  assert(r2.type === 'prompt', 'prompt 2')
+  assert(session.usage && session.usage.calls >= 1, 'usage calls after mock')
+  assert(
+    session.usage!.totalTokens > 0 || session.usage!.inputTokens > 0,
+    'usage tokens non-zero',
+  )
+  const cost1 = await submitUserInput(session, '/cost')
+  assert(cost1.type === 'slash', 'cost after mock')
+  if (cost1.type === 'slash') {
+    assert(cost1.message.includes('calls:'), 'cost has calls')
+    assert(
+      !cost1.message.includes('(none yet'),
+      'cost not empty after mock rounds',
+    )
+  }
+  const usageAlias = await submitUserInput(session, '/usage')
+  assert(usageAlias.type === 'slash', '/usage alias')
+  if (usageAlias.type === 'slash') {
+    assert(usageAlias.message.includes('calls:'), '/usage same as cost')
+  }
+  const ctx2 = await submitUserInput(session, '/context')
+  if (ctx2.type === 'slash') {
+    assert(
+      /usage:\s+\d+ tokens/.test(ctx2.message),
+      'context usage line after calls',
+    )
   }
 
   // /model
