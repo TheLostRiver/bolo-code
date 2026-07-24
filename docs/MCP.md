@@ -108,10 +108,19 @@ Headers 日志脱敏：**M-GEN-3 最小**（`redactMcpHeaders`）。
 4. `tools/list` → 注册 `BoloTool`，名：`mcp__<server>__<tool>`
 5. 若 `capabilities.resources`：`resources/list` 缓存；meta `ListMcpResources` / `ReadMcpResource`
 6. 若 `capabilities.prompts`：`prompts/list` 缓存；meta `GetMcpPrompt`
-7. 挂 `notifications/{tools,resources,prompts}/list_changed`（stdio / **经典 SSE 长连接** 可推；http 若响应 SSE 内含通知也会分发）→ 再 list → `mergeSessionToolsWithMcp`
-8. 模型 `tools/call` → JSON-RPC `tools/call`
+7. 挂 `notifications/{tools,resources,prompts}/list_changed` → 再 list → `mergeSessionToolsWithMcp`  
+   - **stdio / 经典 SSE（type:sse）**：长连接可推送 list_changed（M-GEN-5 回归）  
+   - **Streamable HTTP（type:http）**：**仅**当某次 HTTP 响应体为 SSE 且帧内含 notification 时分发；**无**独立长推送通道  
+8. 模型 `tools/call` → JSON-RPC `tools/call`  
 
-**错误隔离：** 单 server 连接/list 失败只 **warn**（`console.warn` + session event `warning`），不中断其它 server 与会话。
+**resources / prompts（M-GEN-4）：**
+
+- `initialize` 未声明 cap → list 返回 `[]`，不抛  
+- list 失败：tools 连接**保留**；warning 记 `resources/list failed` / `prompts/list failed`  
+- meta：`ListMcpResources` 失败可回退缓存；`GetMcpPrompt` 参数经 `coerceMcpPromptArguments` 转 string  
+- API：`safeListMcpResources` · `safeListMcpPrompts` · `coerceMcpPromptArguments`  
+
+**错误隔离：** 单 server 连接/list 失败只 **warn**（`console.warn` + session event `warning` + `mcpDiagnostics.failures`），不中断其它 server 与会话。
 
 关闭：`closeSessionMcp(session)`（stdio 杀子进程；http 尽力 `DELETE` + 丢弃 session id；sse 中止 GET 流并拒绝 pending）。
 
