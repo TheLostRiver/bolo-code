@@ -175,7 +175,7 @@ PL-SPEC 出口 ────────► IMPORT-*（可选）
 |----|------|------|------|
 | **M-GEN-0** | `MCP.md`「通用性边界」 | 协议 ✅ / 与官方商店无关 / OAuth 后置 | ✅ |
 | **M-GEN-1** | **配置校验与友好错误** | `validateMcpServerConfig` · `loadMcpConfigFileDetailed` · 坏项跳过 + warn | ✅ 最小 |
-| **M-GEN-2** | **`/doctor` 或 `/mcp` 诊断加深** | transport · last error · 计数 · capability 可读 | ⬜ |
+| **M-GEN-2** | **`/doctor` 或 `/mcp` 诊断加深** | transport · live · caps · failures · configWarnings · 脱敏 endpoint | ✅ 最小 |
 | **M-GEN-3** | **headers 秘钥卫生** | `redactMcpHeaders` · summary 不打印全文 | ✅ 最小 |
 | **M-GEN-4** | **resources/prompts 日用加固** | list/read 测；空 capability 不报错 | ⬜ |
 | **M-GEN-5** | **list_changed 回归** | stdio/sse 测绿；http 行为写清 | ⬜ |
@@ -230,7 +230,7 @@ PL-SPEC 出口 ────────► IMPORT-*（可选）
 | 序 | 刀 | 切片 |
 |----|----|------|
 | 1 | Skill 可移植 | ~~S-PORT-0..8~~ ✅ 最小出口 |
-| 2 | MCP 诊断卫生 | ~~M-GEN-0/1/3~~ ✅ → **M-GEN-2** doctor/mcp 诊断 |
+| 2 | MCP 诊断卫生 | ~~M-GEN-0/1/2/3~~ ✅ → **M-GEN-4/5** 或 **M-GEN-8** |
 | 3 | MCP 诊断卫生 | M-GEN-0 · M-GEN-1 · M-GEN-2 · M-GEN-3 |
 | 4 | MCP 加固 | M-GEN-4 · M-GEN-5 · M-GEN-8（± M-GEN-6） |
 | 5 | Bolo Spec | PL-SPEC-0 · PL-SPEC-1 · PL-SPEC-2 · PL-SPEC-3 · PL-SPEC-4 |

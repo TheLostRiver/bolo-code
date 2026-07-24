@@ -124,14 +124,18 @@ Headers 日志脱敏：**M-GEN-3 最小**（`redactMcpHeaders`）。
 | Permission 类 | `mcp`（`mcp__*`）；Read 资源默认只读；Read/Get 仍可 ask |
 | Hook matcher | 可匹配完整名或 `mcp__*` |
 
-## `/mcp` 斜杠
+## `/mcp` · `/doctor` 诊断（M-GEN-2）
 
 | 子命令 | 作用 |
 |--------|------|
-| `/mcp` | 各 server：**transport** · **status** · tools/resources/prompts 计数 + capability |
+| `/mcp` | 已连接 **✓** + 失败 **✗**；transport · status · live · caps · **脱敏 endpoint** |
+| `/mcp status` | 完整诊断：connected 计数 · failures · configWarnings · lastError |
 | `/mcp tools` | 列出 `mcp__server__tool` |
 | `/mcp resources` | 列出 URI（连接时 list 缓存） |
 | `/mcp prompts` | 列出 prompt 名与参数 |
+| `/doctor` | 摘要：mcp 连接数 / failures；最多列出 8 个已连接 server |
+
+会话字段：`session.mcpDiagnostics = { configWarnings?, failures? }`；`ConnectedMcpServer.endpointSummary`。
 
 ## API（`@bolo/mcp`）
 
