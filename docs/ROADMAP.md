@@ -12,7 +12,7 @@
 |----|------|------|
 | **Headless 核心**（loop / tools / provider / compact / prompt） | **~55–65%** | 主路径可用；compact 日用加深已 🟡；仍缺 StreamingToolExecutor、cached MC/snip、完整 permission 分类器 |
 | 会话与 CLI | **~70–80%** | JSONL 默认写（T3）；resume/continue；无参 REPL；非成熟 Ink |
-| **扩展面（MCP / Plugins / Skills）** | **~55–65%** | Skills + MCP stdio 面 + list_changed + **HTTP transport** ✅；**PL2 热加载 ✅ 最小**；SSE 长连接 ⬜ |
+| **扩展面（MCP / Plugins / Skills）** | **~55–65%** | Skills + MCP stdio 面 + list_changed + **HTTP transport** ✅；**SSE ✅ 最小**；**PL2 热加载 ✅ 最小**；市场 ⬜ |
 | **Subagent** | **~50–60%** | 真 loop + Agent + 目录定义；async/fork 最小；worktree ⬜ |
 | **项目规则 Rules** | **~75–85%** | 装载 + paths + 刷新 + `/rules` |
 | **内置元技能 Creators** | **~70–80%** | skill/plugin-creator 最小 |
@@ -39,8 +39,10 @@
 6. ~~**PL2 插件深化**（热加载 · commands · `/plugins reload`）~~ ✅ 最小  
 7. ~~**Usage+**（`/cost` cache + by-model breakdown · 本地可观测）~~ ✅ 最小  
 8. ~~**RC2**（Responses reasoning SSE · `/thinking` 显示开关）~~ ✅ 最小  
-9. **下一刀 P1 余量：** CP/TP 余量 · J-D 余量  
-10. **后置：** 思考回灌 · Anthropic budget · OR6 WS · cache TTL · cached MC · T8 Ink · Electron · 插件市场  
+9. ~~**MCP-SSE**（经典 SSE 长连接）~~ ✅ 最小  
+10. ~~**CP5**（默认开 auto · 环境熔断 · `/autocompact`）~~ ✅ 最小  
+11. **下一刀 P1 余量：** TP 余量 · J-D 余量 · snip 小步  
+12. **后置：** 思考回灌 · Anthropic budget · OR6 WS · cache TTL · cached MC · T8 Ink · Electron · 插件市场  
 
 ---
 
@@ -92,7 +94,7 @@
 
 | 能力 | 状态 | 对资源的影响 |
 |------|------|----------------|
-| Full / auto / micro compact · PTL | ✅/🟡 | 加权 token 估 + pressure；默认 `autoCompactEnabled: false`；cached MC 后置 |
+| Full / auto / micro compact · PTL | ✅/🟡 | 加权 token 估 + pressure；默认 **`autoCompactEnabled: true`**；`BOLO_DISABLE_*` 熔断；`/autocompact`；cached MC/snip 后置 |
 | Skill catalog-only | ✅ | 降输入 |
 | **Effort** low/medium/high/max/auto | ✅ | session + `/effort` → max_tokens |
 | Prompt Cache 布局 + **API 标记** | ✅ | C1–C5：`cache_control` / `prompt_cache_key` |
@@ -505,7 +507,7 @@ flowchart TB
 | M0–M2 | ✅/🟡 | headless 主路径可跑；相对 HC 未满 |
 | **M-Loop 韧性** | 🟡 最小 | 分类 + 429/5xx 有限退避；PTL 正交 |
 | **M-Tool+Permission** | 🟡 最小 | Edit + path/bash always-allow + abort；非完整分类器 |
-| **M-Compact 日用** | 🟡 最小 | 加权 token · pressure · `/context`·`/compact`；cached MC/snip 后置 |
+| **M-Compact 日用** | 🟡 最小 | 加权 token · pressure · `/context`·`/compact`；**默认 auto ✅**；cached MC/snip 后置 |
 | **M-Slash** | ✅ | 日用 `/` + SL-polish |
 | **M-Rules** | ✅ | `.bolo/rules` + path-scoped + `/rules` |
 | **M-Creators** | ✅ | bundled creators |
@@ -519,5 +521,5 @@ flowchart TB
 
 **一句话：**  
 Headless **主路径可日用**，相对参考实现约 **40–55%**（文档不再写 ~70% 乐观数）。  
-**P0 切片** LR / TP / CP 日用均 🟡 最小；**MCP HTTP+SSE · PL2 · Usage+ · RC2 🟡 最小**；**下一刀：CP/TP 余量**。  
+**P0 切片** LR / TP / CP 日用均 🟡 最小；**MCP HTTP+SSE · PL2 · Usage+ · RC2 · CP5 默认 auto 🟡 最小**；**下一刀：TP 余量**。  
 执行序 → **`docs/TODO.md`**。

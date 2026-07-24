@@ -286,6 +286,94 @@ async function main() {
   })
   assert(failCalls === beforeBreaker, 'circuit breaker stops after 3 failures')
 
+  // ── 8) 默认 auto 开 + 环境熔断 + /autocompact 运行时开关 ──
+  const {
+    shouldAutoCompact,
+    isAutoCompactEnvDisabled,
+  } = await import('../packages/compact/src/index.ts')
+  const {
+    setSessionAutoCompact,
+    dispatchSlashCommand,
+  } = await import('../packages/core/src/index.ts')
+
+  assert(
+    isAutoCompactEnvDisabled({ BOLO_DISABLE_AUTO_COMPACT: '1' }) === true,
+    'env disable auto',
+  )
+  assert(
+    isAutoCompactEnvDisabled({ BOLO_DISABLE_COMPACT: 'yes' }) === true,
+    'env disable all compact auto path',
+  )
+  assert(isAutoCompactEnvDisabled({}) === false, 'empty env ok')
+
+  assert(
+    shouldAutoCompact({
+      tokenCount: getAutoCompactThreshold(8_000) + 10,
+      contextWindowTokens: 8_000,
+      enabled: true,
+      consecutiveFailures: 0,
+      env: { BOLO_DISABLE_AUTO_COMPACT: '1' },
+    }) === false,
+    'shouldAutoCompact respects env',
+  )
+
+  let defSum = 0
+  const sessDefault = await createSession({
+    cwd: process.cwd(),
+    systemPrompt: false,
+    // 不传 autoCompactEnabled → 默认 true
+    contextWindowTokens: 8_000,
+    provider: textOnlyProvider(),
+    compactSummarizer: async () => {
+      defSum += 1
+      return {
+        text: `<summary>\n1. Primary Request and Intent:\n   Default path.\n</summary>`,
+      }
+    },
+  })
+  assert(sessDefault.autoCompactEnabled === true, 'default autoCompact on')
+
+  // 超阈值应挂 auto prepare（compactSession 读 session.messages）
+  sessDefault.messages = [
+    {
+      role: 'user',
+      content: 'd'.repeat((getAutoCompactThreshold(8_000) + 80) * 4),
+    },
+  ]
+  const rDef = await sessDefault.deps.prepareMessages({
+    messages: sessDefault.messages,
+    querySource: 'repl_main_thread',
+    tokenCount: 0,
+  })
+  assert(rDef.didCompact === true, 'default-on auto fires prepare')
+  assert(defSum === 1, 'default-on summarizer called')
+
+  // 运行时 off 后不再 auto
+  setSessionAutoCompact(sessDefault, false)
+  assert(sessDefault.autoCompactEnabled === false, 'runtime off')
+  sessDefault.messages = [
+    {
+      role: 'user',
+      content: 'd'.repeat((getAutoCompactThreshold(8_000) + 80) * 4),
+    },
+  ]
+  const rOff = await sessDefault.deps.prepareMessages({
+    messages: sessDefault.messages,
+    querySource: 'repl_main_thread',
+    tokenCount: 0,
+  })
+  assert(rOff.didCompact !== true, 'runtime off no auto')
+
+  // slash 开关
+  const ac = await dispatchSlashCommand(sessDefault, 'autocompact', '')
+  assert(ac.ok, 'autocompact status ok')
+  assert(ac.message.includes('autoCompact:'), 'autocompact shows status')
+  const acOn = await dispatchSlashCommand(sessDefault, 'autocompact', 'on')
+  assert(acOn.ok && acOn.message.includes('on'), 'autocompact on')
+  assert(sessDefault.autoCompactEnabled === true, 'slash on session')
+  const acBad = await dispatchSlashCommand(sessDefault, 'autocompact', 'maybe')
+  assert(acBad.ok === false, 'autocompact bad arg')
+
   await fs.rm(tmpRoot, { recursive: true, force: true })
 
   console.log('AUTO COMPACT TESTS PASS')

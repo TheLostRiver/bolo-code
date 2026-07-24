@@ -458,7 +458,7 @@ export function parseSessionSnapshot(raw: unknown): SessionSnapshot {
     messages: o.messages as ChatMessage[],
     systemPromptSections: sections,
     model: typeof o.model === 'string' ? o.model : undefined,
-    autoCompactEnabled: o.autoCompactEnabled === true,
+    autoCompactEnabled: o.autoCompactEnabled !== false,
     contextWindowTokens:
       typeof o.contextWindowTokens === 'number' && o.contextWindowTokens > 0
         ? o.contextWindowTokens

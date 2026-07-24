@@ -71,6 +71,7 @@ async function main() {
   assert(ctx.message.includes('prepare order:'), 'context shows prepare order')
   assert(ctx.message.includes('autoCompact:     on'), 'context auto on')
   assert(ctx.message.includes('~'), 'token estimates present')
+  assert(ctx.message.includes('/autocompact'), 'context points to toggle')
 
   const thr = getAutoCompactThreshold(8_000)
   const pad = 'p'.repeat((thr + 200) * 4)
@@ -90,6 +91,13 @@ async function main() {
     session.systemPromptSections[0]?.includes('keep me'),
     'system section still present',
   )
+
+  // /autocompact 可见性
+  const ac = await dispatchSlashCommand(session, 'autocompact', 'off')
+  assert(ac.ok, 'autocompact off ok')
+  assert(session.autoCompactEnabled === false, 'session auto off')
+  const ctx2 = await dispatchSlashCommand(session, 'context', '')
+  assert(ctx2.message.includes('autoCompact:     off'), 'context reflects off')
 
   console.log('CONTEXT SLASH TESTS PASS')
 }

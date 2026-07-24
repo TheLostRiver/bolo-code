@@ -7,6 +7,7 @@
 import path from 'node:path'
 import {
   runFullCompact,
+  isAutoCompactEnvDisabled,
   type CompactSummarizer,
   type MicrocompactOptions,
 } from '../../compact/src/index.ts'
@@ -135,6 +136,8 @@ export {
   getEffectiveContextWindow,
   getContextPressure,
   shouldAutoCompact,
+  isAutoCompactEnvDisabled,
+  isEnvTruthy,
   AUTOCOMPACT_BUFFER_TOKENS,
   WARNING_BUFFER_TOKENS,
   DEFAULT_MAX_AUTOCOMPACT_FAILURES,
@@ -364,8 +367,9 @@ export type CreateSessionOptions = {
    */
   systemPrompt?: boolean | AssembleSessionSystemPromptOptions
   /**
-   * 是否在 queryLoop 的 prepareMessages 挂 auto compact（对照 HC autoCompactIfNeeded）。
-   * 需同时注入 compactSummarizer；默认 false。
+   * 是否在 queryLoop 的 prepareMessages 挂 auto compact（对照参考 autoCompactIfNeeded）。
+   * 需同时注入 compactSummarizer；默认 **true**（与 DEFAULT_CONFIG 一致）。
+   * 环境变量 `BOLO_DISABLE_AUTO_COMPACT` / `BOLO_DISABLE_COMPACT` 可熔断 auto。
    */
   autoCompactEnabled?: boolean
   /** 模型上下文窗口估计（tokens），用于 auto 阈值；默认 128_000 */
@@ -595,7 +599,8 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
         ? opts.effortLevel.trim()
         : undefined,
     showThinking: opts.showThinking === false ? false : true,
-    autoCompactEnabled: opts.autoCompactEnabled === true,
+    // 默认开 auto（对照参考全局 config）；显式 false 关闭
+    autoCompactEnabled: opts.autoCompactEnabled !== false,
     contextWindowTokens: opts.contextWindowTokens ?? 128_000,
     maxPtlRetries:
       opts.maxPtlRetries === undefined
@@ -610,32 +615,19 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
     onEvent: opts.onEvent ?? (() => {}),
   }
 
-  // 对照 HC query.ts：microcompact → autocompact → callModel
+  // 对照参考 query：microcompact → autocompact → callModel
   const microOpts: MicrocompactOptions | undefined =
     opts.microcompact === false
       ? { enabled: false }
       : opts.microcompact === undefined
         ? undefined
         : opts.microcompact
-  const microPrepare = createMicrocompactPrepare(microOpts)
 
   if (session.autoCompactEnabled && session.compactSummarizer) {
-    session.deps = {
-      ...session.deps,
-      prepareMessages: composePrepareMessages(
-        microPrepare,
-        createAutoCompactPrepare({
-          enabled: true,
-          contextWindowTokens: session.contextWindowTokens,
-          runAutoCompact: async () => {
-            const r = await compactSession(session, { trigger: 'auto' })
-            return r.ok ? session.messages : null
-          },
-        }),
-      ),
-    }
+    wireSessionPrepareMessages(session, { microcompact: microOpts })
   } else if (opts.deps) {
     // 自定义 deps：在其 prepare 前挂 micro（便宜、幂等）
+    const microPrepare = createMicrocompactPrepare(microOpts)
     session.deps = {
       ...session.deps,
       prepareMessages: composePrepareMessages(
@@ -647,8 +639,11 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
     // 覆盖 productionDeps 默认 micro 配置
     session.deps = {
       ...session.deps,
-      prepareMessages: microPrepare,
+      prepareMessages: createMicrocompactPrepare(microOpts),
     }
+  } else if (session.autoCompactEnabled && !session.compactSummarizer) {
+    // 默认 auto 开但无 summarizer：仍只 micro（与旧「未挂 auto」一致）
+    // productionDeps 已默认 micro
   }
   // 否则：productionDeps 已默认 micro（DEFAULT_MICROCOMPACT_OPTIONS）
 
@@ -757,7 +752,8 @@ export async function createSessionFromWorkspace(
     source: opts.source,
     onEvent: opts.onEvent,
     autoCompactEnabled:
-      opts.autoCompactEnabled ?? workspace.config.autoCompactEnabled === true,
+      opts.autoCompactEnabled ??
+      workspace.config.autoCompactEnabled !== false,
     contextWindowTokens:
       opts.contextWindowTokens ??
       workspace.config.contextWindowTokens ??
@@ -1181,6 +1177,65 @@ export async function persistSession(
   options?: SaveSessionOptions,
 ): Promise<{ path: string; snapshot: SessionSnapshot }> {
   return saveSession(session, options)
+}
+
+/**
+ * 按 session.autoCompactEnabled + summarizer 重挂 prepare 链。
+ * 供 createSession / 运行时 `/autocompact` 共用。
+ */
+export function wireSessionPrepareMessages(
+  session: BoloSession,
+  opts?: {
+    microcompact?: MicrocompactOptions | false
+  },
+): void {
+  const microOpts: MicrocompactOptions | undefined =
+    opts?.microcompact === false
+      ? { enabled: false }
+      : opts?.microcompact === undefined
+        ? undefined
+        : opts.microcompact
+  const microPrepare = createMicrocompactPrepare(microOpts)
+
+  if (session.autoCompactEnabled && session.compactSummarizer) {
+    session.deps = {
+      ...session.deps,
+      prepareMessages: composePrepareMessages(
+        microPrepare,
+        createAutoCompactPrepare({
+          enabled: true,
+          contextWindowTokens: session.contextWindowTokens,
+          runAutoCompact: async () => {
+            const r = await compactSession(session, { trigger: 'auto' })
+            return r.ok ? session.messages : null
+          },
+        }),
+      ),
+    }
+    return
+  }
+
+  session.deps = {
+    ...session.deps,
+    prepareMessages: microPrepare,
+  }
+}
+
+/**
+ * 运行时开关 auto compact，并重挂 prepare（不改 system 前缀）。
+ * 返回生效后的状态；环境熔断时仍可「会话 on」但 shouldAutoCompact 为 false。
+ */
+export function setSessionAutoCompact(
+  session: BoloSession,
+  enabled: boolean,
+  opts?: { microcompact?: MicrocompactOptions | false },
+): { autoCompactEnabled: boolean; envDisabled: boolean } {
+  session.autoCompactEnabled = enabled === true
+  wireSessionPrepareMessages(session, opts)
+  return {
+    autoCompactEnabled: session.autoCompactEnabled,
+    envDisabled: isAutoCompactEnvDisabled(),
+  }
 }
 
 export type CompactSessionOptions = {

@@ -31,6 +31,7 @@
   · Subagent · MCP stdio 面 + Streamable HTTP 最小 · plugins 最小 · Responses HTTP
   · Loop 韧性最小 · Tool+Permission 日用最小
   · Compact 日用加深（加权 token 估 · 压力 · /context·/compact · 熔断）
+  · **CP 余量小步**：默认开 auto · 环境熔断 · `/autocompact`
   · Usage+ 本地 breakdown（cache · byModel · /cost）
   · RC2 思考链二期（Responses reasoning SSE · /thinking 显示开关）
   · MCP-SSE 经典 SSE 长连接（type:sse · endpoint 事件 · list_changed）
@@ -46,14 +47,15 @@ P1：
   6. ~~PL2 插件深化~~ ✅ 最小
   7. ~~Usage+ 本地 breakdown~~ ✅ 最小
   8. ~~RC2 思考链二期~~ ✅ 最小
-  9. ~~MCP-SSE 经典 SSE~~ ✅ 最小（本刀）
-  下一刀：CP/TP 余量 ·（或）C6+ / 其它 P1 余量
+  9. ~~MCP-SSE 经典 SSE~~ ✅ 最小
+  10. ~~CP 余量：默认 auto + 环境熔断 + /autocompact~~ ✅ 最小（本刀）
+  下一刀：TP 余量 ·（或）J-D 余量 / snip 小步 / 其它 P1 余量
 ```
 
 | 优先级 | 含义（当前） |
 |--------|----------------|
 | **P0** | 抬 headless 水位：韧性 / TP / **CP 日用** 已 🟡 |
-| **P1** | 扩展深度（**MCP HTTP+SSE ✅** · **RC1+RC2 ✅** · **PL2 ✅** · **Usage+ ✅**）— **默认下一刀区：CP/TP 余量** |
+| **P1** | 扩展深度（**MCP HTTP+SSE ✅** · **RC1+RC2 ✅** · **PL2 ✅** · **Usage+ ✅** · **CP5 默认 auto ✅**）— **默认下一刀区：TP 余量** |
 | **P2** | 未做或仅最小的子项 |
 | **P3** | GUI / 完整 Ink / 后置协议 |
 
@@ -126,9 +128,10 @@ P1：
 | **CP2** | auto 阈值常量显式化 + `getContextPressure`（ok/warn/critical/over）；临近窗口才 critical | ✅ 最小 |
 | **CP3** | auto 失败熔断加固（连续失败不拖垮 turn）；compact **不改** `systemPromptSections` | ✅ 最小 |
 | **CP4** | `/context`：messages/system 分拆、window/threshold/pressure、prepare 顺序；`/compact` 报告前后 token | ✅ 最小 |
-| **CP-doc** | `COMPACTION.md` / `AGENT_LOOP.md` / ROADMAP / TODO；`test-context-slash` | ✅ |
+| **CP5** | 默认开 `autoCompactEnabled`；`BOLO_DISABLE_AUTO_COMPACT` / `BOLO_DISABLE_COMPACT` 环境熔断；`/autocompact` + prepare 重挂 | ✅ 最小（本刀） |
+| **CP-doc** | `COMPACTION.md` / `AGENT_LOOP.md` / ROADMAP / TODO；`test-context-slash` · `test-auto-compact` | ✅ |
 
-**明确后置（CP 余量）：** cached microcompact / snip 全管线 / 默认开 `autoCompactEnabled` / 真 tokenizer。
+**明确后置（CP 再后）：** cached microcompact / snip 全管线 / 真 tokenizer。
 
 ### 2.7 MCP 远程 transport
 
@@ -181,7 +184,7 @@ P1：
 | **J-D 余量** | entry / CLI | 更多 entry 类型；CLI `migrate-session` 包装 | 🟡 可选支线 |
 | **C6+** | Cache 后置 | 1h TTL / global scope / break detection / cached MC | ⬜ **后置** |
 | **TP 余量** | permission 深度 | 完整分类器 / StreamingToolExecutor / 更强 apply_patch | ⬜ 后置 |
-| **CP 余量** | compact 再深 | 默认开 auto · snip · cached MC · 真 tokenizer | ⬜ 后置 |
+| **CP 余量** | compact 再深 | **默认开 auto ✅**；snip · cached MC · 真 tokenizer 仍后置 | 🟡 默认 auto 已齐；其余 ⬜ |
 
 ---
 
@@ -218,9 +221,10 @@ P1：
   · K* · S0–S7 · MCP1 · MCP2(stdio + list_changed + HTTP 最小) · PL1 · OR1–OR5
   · LR* · TP* · CP* 长会话 compact 日用最小 · RC1 思考链显示最小 · PL2 插件热加载最小
   · Usage+ 本地 breakdown 最小 · RC2 思考链二期最小 · MCP-SSE 经典 SSE 最小
+  · CP5 默认 auto + 环境熔断 + /autocompact 最小
 
 下一阶段：
-  ① CP 余量 / TP 余量 / J-D 余量   ← 默认主刀区（P1 余量）
+  ① TP 余量 / J-D 余量 / snip 小步   ← 默认主刀区（P1 余量）
   ② C6+ / OR6 / T8 / Electron  （后置）
 ```
 
@@ -230,13 +234,13 @@ P1：
 
 若只开一刀（**非 Electron**）：
 
-> **主推：CP/TP 余量**（默认 auto compact 小步 · permission 深度）或 **J-D 余量**  
+> **主推：TP 余量**（permission 深度 / StreamingToolExecutor 小步）或 **J-D 余量** / snip 小步  
 > - 勿一口做完整市场 / OAuth MCP / 完整 Ink  
 >
-> **本刀已勾选：** **MCP-SSE**（`type: sse` 经典长连接 · endpoint 事件 · POST 消息 · list_changed · 错误隔离 · 无遥测）。  
-> **明确后置：** 思考链安全回灌 · Anthropic thinking budget · 插件市场 · OAuth · SSE 自动重连 · cached MC · snip · 默认开 auto · OR6 · C6+ · T8 · Electron · 完整 permission 分类器 · 远程 USD 账单。
+> **本刀已勾选：** **CP5**（默认开 auto compact · `BOLO_DISABLE_*` 环境熔断 · `/autocompact` 运行时开关 · prepare 重挂 · 无遥测）。  
+> **明确后置：** 思考链安全回灌 · Anthropic thinking budget · 插件市场 · OAuth · SSE 自动重连 · cached MC · snip · 真 tokenizer · OR6 · C6+ · T8 · Electron · 完整 permission 分类器 · 远程 USD 账单。
 
-**已齐摘要：** resume · slash · BOLO TUI 最小 · rules · C1–C5 · JSONL 主路径 · creators · Subagent · MCP stdio+HTTP+**SSE** 最小 · **plugins PL1+PL2 最小** · Responses HTTP · Loop 韧性最小 · Tool+Permission 日用最小 · Compact 日用加深最小 · **RC1+RC2 思考链** · **Usage+ 最小**。
+**已齐摘要：** resume · slash · BOLO TUI 最小 · rules · C1–C5 · JSONL 主路径 · creators · Subagent · MCP stdio+HTTP+**SSE** 最小 · **plugins PL1+PL2 最小** · Responses HTTP · Loop 韧性最小 · Tool+Permission 日用最小 · Compact 日用加深 + **默认 auto** · **RC1+RC2 思考链** · **Usage+ 最小**。
 
 ---
 
@@ -246,7 +250,7 @@ P1：
 |------|---------|
 | LR* | M-Loop 韧性 🟡 |
 | TP* | M-Tool+Permission 🟡 |
-| CP* | 长会话 compact 🟡 最小 |
+| CP* · **CP5** | 长会话 compact 🟡（默认 auto ✅） |
 | RS* · T* | M5.2 / M-TUI（T0–T7 ✅；T8 ⬜） |
 | SL* · SL-polish | M-Slash ✅ |
 | R* | M-Rules ✅ |
@@ -256,7 +260,7 @@ P1：
 | J* | M5.1 / `TODO_SESSION_JSONL`（J-D T3 ✅） |
 | K* | M-Creators ✅ |
 | S* | M-Subagent（S0–S7 ✅；S12 partial） |
-| MCP* · PL* | M3（stdio + HTTP ✅；**PL2 ✅ 最小**；SSE 长连接 ⬜） |
+| MCP* · PL* | M3（stdio + HTTP ✅；**PL2 ✅ 最小**；**SSE ✅ 最小**；市场 ⬜） |
 | **OR*** | Responses：HTTP SSE ✅；WS 后置 |
 | M4 | Electron ⬜ |
 
@@ -275,4 +279,4 @@ P1：
 ---
 
 **一句话：**  
-RC2（Responses reasoning · `/thinking`）与 **MCP-SSE**（经典 `type:sse`）已落地；**下一刀：CP/TP 余量**；市场 / OAuth / cached MC / snip / 回灌勿抢。
+**CP5**（默认 auto · 环境熔断 · `/autocompact`）已落地；**下一刀：TP 余量** 或 snip/J-D；市场 / OAuth / cached MC / 回灌勿抢。

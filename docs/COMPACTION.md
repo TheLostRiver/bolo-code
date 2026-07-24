@@ -239,16 +239,32 @@ DEFAULT_MAX_AUTOCOMPACT_FAILURES = 3
 参考：连续失败 ≥ 3 次则本会话停止 auto 尝试，避免死循环打 API。  
 Bolo：`createAutoCompactPrepare` 内 `consecutiveFailures`；失败 **返回原 messages**，不拖垮 turn。
 
+**环境熔断**（对照参考 `DISABLE_AUTO_COMPACT` / `DISABLE_COMPACT`）：
+
+| 变量 | 效果 |
+|------|------|
+| `BOLO_DISABLE_AUTO_COMPACT` | 为真（`1`/`true`/`yes`/`on`）时 **不**触发 auto |
+| `BOLO_DISABLE_COMPACT` | 同上（一键挡 auto；**不**挡 manual `/compact`） |
+
 ### 3.4 递归守卫
 
 compact / session_memory 类 **子查询**不得再次触发 autocompact。  
-Bolo：`querySource: 'compact' | 'main'`，`source==='compact'` 时跳过 auto。
+Bolo：`querySource: 'compact' | 'session_memory' | 'main'`，`source==='compact'|'session_memory'` 时跳过 auto。
 
 ### 3.5 与 manual 关系
 
 - manual `/compact`：始终可走 full compact（用户显式）；成功后报告前后 messages token  
-- auto：受 `autoCompactEnabled` + 阈值 + 熔断约束  
+- auto：受 `autoCompactEnabled` + 阈值 + 熔断 + **环境变量**约束  
 - full compact **只改** `session.messages`；**不改** `systemPromptSections`（稳定 system 前缀）  
+- 运行时：`/autocompact on|off` → `setSessionAutoCompact` 重挂 prepare  
+
+### 3.6 默认策略
+
+| 项 | 值 |
+|----|-----|
+| `DEFAULT_CONFIG.autoCompactEnabled` | **`true`**（对照参考全局 config 默认开） |
+| `createSession` 未传 | **开**（`opts.autoCompactEnabled !== false`） |
+| 生效条件 | 会话 on **且** 有 `compactSummarizer` **且** 未环境熔断 **且** 达阈值 **且** 熔断未满 |
 
 ---
 
@@ -383,6 +399,7 @@ type CompactSummarizer = (req: {
 - [x] microcompact 清旧 tool_result（`microcompactMessages` + prepare 链）  
 - [x] PTL 截断重试（`isPromptTooLongError` + `truncateHeadForPtlRetry` + queryLoop / full compact）  
 - [x] 加权 token 启发式 + `getContextPressure` + `/context`·`/compact` 日用（CP* 最小）  
+- [x] 默认开 auto + 环境熔断 + `/autocompact` 可见性（CP 余量小步）  
 - [ ] 任何 compaction 遥测 / 远程实验开关  
 
 ---
@@ -397,7 +414,7 @@ type CompactSummarizer = (req: {
 | **已接线** | microcompact 默认开；`test-microcompact` |
 | **已接线** | PTL 截断重试；`test-ptl-retry` |
 | **已接线** | 加权 token · pressure · richer `/context`·`/compact`；`test-context-slash` |
-| **下期** | 默认 config 是否开 auto（现默认 `autoCompactEnabled: false`） |
+| **已接线** | 默认 `autoCompactEnabled: true`；`BOLO_DISABLE_*` 环境熔断；`/autocompact` 运行时开关；`test-auto-compact` |
 | **再后** | snip · cached microcompact · partial compact · 真 tokenizer |
 
 ---

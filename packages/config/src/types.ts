@@ -22,7 +22,10 @@ export type BoloConfigJson = {
   provider?: ProviderConfigJson
   /** 默认权限模式 */
   permissionMode?: PermissionMode
-  /** 是否启用 auto compact（挂 prepareMessages 时用） */
+  /**
+   * 是否启用 auto compact（挂 prepareMessages 时用）。
+   * 默认 true（对照参考全局 config）；可用 config / 会话 / 环境变量关掉。
+   */
   autoCompactEnabled?: boolean
   /** 模型上下文窗口估计（auto compact） */
   contextWindowTokens?: number
@@ -74,7 +77,7 @@ export const DEFAULT_CONFIG: BoloConfigJson = {
     model: 'gpt-4o-mini',
   },
   permissionMode: 'default',
-  autoCompactEnabled: false,
+  autoCompactEnabled: true,
   contextWindowTokens: 128_000,
   microcompactEnabled: true,
   maxPtlRetries: 3,

@@ -116,6 +116,36 @@ async function main() {
     }) === false,
     'no recurse',
   )
+  assert(
+    shouldAutoCompact({
+      tokenCount: 100_000,
+      contextWindowTokens: 100_000,
+      enabled: true,
+      consecutiveFailures: 0,
+      env: { BOLO_DISABLE_AUTO_COMPACT: '1' },
+    }) === false,
+    'env BOLO_DISABLE_AUTO_COMPACT',
+  )
+  assert(
+    shouldAutoCompact({
+      tokenCount: 100_000,
+      contextWindowTokens: 100_000,
+      enabled: true,
+      consecutiveFailures: 0,
+      env: { BOLO_DISABLE_COMPACT: 'true' },
+    }) === false,
+    'env BOLO_DISABLE_COMPACT',
+  )
+  assert(
+    shouldAutoCompact({
+      tokenCount: 100_000,
+      contextWindowTokens: 100_000,
+      enabled: true,
+      consecutiveFailures: 0,
+      env: {},
+    }) === true,
+    'empty env still allows when enabled',
+  )
 
   // ── token 启发式：正文 chars/4；JSON 密文更密 ──
   const {

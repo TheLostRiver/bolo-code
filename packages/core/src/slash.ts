@@ -428,6 +428,21 @@ function cmdContext(session: SlashSession, _args: string): SlashDispatchResult {
     contextWindowTokens: window,
   })
   const autoOn = session.autoCompactEnabled === true
+  // 延迟读 env，避免循环依赖；compact 包为纯函数
+  let envDisabled = false
+  try {
+    // sync require 不可用（ESM）；用已导出的同步路径：从 process 直接判断
+    const v1 = process.env.BOLO_DISABLE_AUTO_COMPACT
+    const v2 = process.env.BOLO_DISABLE_COMPACT
+    const truthy = (v: string | undefined) => {
+      if (!v) return false
+      const t = v.trim().toLowerCase()
+      return t === '1' || t === 'true' || t === 'yes' || t === 'on'
+    }
+    envDisabled = truthy(v1) || truthy(v2)
+  } catch {
+    envDisabled = false
+  }
   const sections = session.systemPromptSections
   const lines = [
     `id:              ${session.id}`,
@@ -438,7 +453,7 @@ function cmdContext(session: SlashSession, _args: string): SlashDispatchResult {
     `  heuristic:     text≈chars/4; dense JSON≈chars/2; tool_calls counted (local only, not billing)`,
     `window:          ${window}  (effective ~${pressure.effectiveWindow}; auto threshold ~${pressure.autoThreshold})`,
     `pressure:        ${pressure.level}  (~${pressure.percentOfWindow}% of window; ~${pressure.percentOfThreshold}% of auto threshold)`,
-    `autoCompact:     ${autoOn ? 'on' : 'off'}${autoOn && pressure.aboveAutoThreshold ? '  (would trigger on next prepare)' : ''}`,
+    `autoCompact:     ${autoOn ? 'on' : 'off'}${autoOn && pressure.aboveAutoThreshold && !envDisabled ? '  (would trigger on next prepare)' : ''}${envDisabled ? '  (env-disabled)' : ''}`,
     `permissionMode:  ${session.permissionMode}`,
     `model:           ${session.model ?? '(unset)'}`,
     `effort:          ${session.effortLevel ?? 'auto'}`,
@@ -457,13 +472,73 @@ function cmdContext(session: SlashSession, _args: string): SlashDispatchResult {
   lines.push(
     'cache:           stable system prefix first; providers may send cache_control / prompt_cache_key (see docs/PROMPT_CACHE.md)',
     'prepare order:   microcompact → auto full compact → callModel (PTL truncate is fallback)',
+    'toggle:          /autocompact [on|off]',
     formatUsageOneLiner(session.usage),
   )
   return { ok: true, message: lines.join('\n') }
 }
 
 /**
- * 极简本地诊断（对照 HC /doctor · /status）。
+ * /autocompact [on|off] — 会话级 auto compact 开关（对照参考 settings.autoCompactEnabled）。
+ * 无参：显示当前 on/off + 环境熔断 + 是否有 summarizer。
+ * 环境 BOLO_DISABLE_AUTO_COMPACT / BOLO_DISABLE_COMPACT 仍挡 auto；manual /compact 不受影响。
+ */
+async function cmdAutocompact(
+  session: SlashSession,
+  args: string,
+): Promise<SlashDispatchResult> {
+  const raw = args.trim().toLowerCase()
+  const { isAutoCompactEnvDisabled } = await import('../../compact/src/index.ts')
+  const envDisabled = isAutoCompactEnvDisabled()
+  const hasSum = typeof session.compactSummarizer === 'function'
+  const cur = session.autoCompactEnabled === true
+
+  if (!raw) {
+    const lines = [
+      `autoCompact:     ${cur ? 'on' : 'off'}`,
+      `summarizer:      ${hasSum ? 'yes' : 'no (auto will not run without CompactSummarizer)'}`,
+      `env disabled:    ${envDisabled ? 'yes (BOLO_DISABLE_AUTO_COMPACT or BOLO_DISABLE_COMPACT)' : 'no'}`,
+      'Usage: /autocompact [on|off]',
+      'Note: manual /compact always available when summarizer is present.',
+    ]
+    return { ok: true, message: lines.join('\n') }
+  }
+
+  if (raw !== 'on' && raw !== 'off') {
+    return {
+      ok: false,
+      message: `Invalid autocompact mode "${args.trim()}". Usage: /autocompact [on|off]`,
+    }
+  }
+
+  const enabled = raw === 'on'
+  const { setSessionAutoCompact } = await import('./index.ts')
+  const r = setSessionAutoCompact(
+    session as Parameters<typeof setSessionAutoCompact>[0],
+    enabled,
+  )
+  const effective =
+    r.autoCompactEnabled && hasSum && !r.envDisabled
+      ? 'armed (will run when over threshold)'
+      : r.autoCompactEnabled && !hasSum
+        ? 'session on but no summarizer — auto idle'
+        : r.autoCompactEnabled && r.envDisabled
+          ? 'session on but env-disabled — auto idle'
+          : 'off'
+  return {
+    ok: true,
+    message: [
+      `autoCompact: ${r.autoCompactEnabled ? 'on' : 'off'}`,
+      `effective:   ${effective}`,
+      r.envDisabled
+        ? 'env: BOLO_DISABLE_AUTO_COMPACT / BOLO_DISABLE_COMPACT is set (auto blocked).'
+        : 'env: no disable flag',
+    ].join('\n'),
+  }
+}
+
+/**
+ * 极简本地诊断（对照参考 /doctor · /status）。
  * 无 Electron、无遥测；只读会话与本机环境。
  */
 function cmdDoctor(session: SlashSession, _args: string): SlashDispatchResult {
@@ -1249,6 +1324,13 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     usage: '[note]',
     group: 'session',
     run: cmdCompact,
+  },
+  {
+    name: 'autocompact',
+    summary: 'Show or set session auto compact (on/off)',
+    usage: '[on|off]',
+    group: 'session',
+    run: cmdAutocompact,
   },
   {
     name: 'context',

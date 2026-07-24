@@ -49,7 +49,7 @@ Bolo **P0** 对齐：
 | 单 tool | `runToolUse` | `toolExecution.ts` |
 | 结束 | stop hooks / terminal | Stop hooks + `Terminal` |
 | micro compact | `microcompactMessages` | `createMicrocompactPrepare`（默认开） |
-| auto compact | `autoCompactIfNeeded` | `createAutoCompactPrepare`（需开关+summarizer；失败熔断） |
+| auto compact | `autoCompactIfNeeded` | `createAutoCompactPrepare`（默认开；需 summarizer；失败/环境熔断；`/autocompact`） |
 | token 估 / 压力 | roughTokenEstimation / warning | `estimateTokens` 加权 + `getContextPressure`；`/context` 同源 |
 | PTL 重试 | compact 内 `truncateHeadForPTLRetry` | `isPromptTooLongError` + `truncateHeadForPtlRetry`；`maxPtlRetries` 默认 3 |
 | 遥测 logEvent | 遍地 | **不实现** |

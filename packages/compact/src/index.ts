@@ -460,6 +460,27 @@ export function getContextPressure(opts: {
   }
 }
 
+/**
+ * 环境熔断（对照参考 DISABLE_AUTO_COMPACT / DISABLE_COMPACT）。
+ * 真值：`1` / `true` / `yes` / `on`（大小写不敏感）。
+ * 仅挡 auto；manual `/compact` 仍可用（便于用户显式回收上下文）。
+ */
+export function isEnvTruthy(value: string | undefined): boolean {
+  if (!value) return false
+  const v = value.trim().toLowerCase()
+  return v === '1' || v === 'true' || v === 'yes' || v === 'on'
+}
+
+/** 任一为真则 auto compact 不触发 */
+export function isAutoCompactEnvDisabled(
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return (
+    isEnvTruthy(env.BOLO_DISABLE_AUTO_COMPACT) ||
+    isEnvTruthy(env.BOLO_DISABLE_COMPACT)
+  )
+}
+
 export function shouldAutoCompact(opts: {
   tokenCount: number
   contextWindowTokens: number
@@ -467,9 +488,14 @@ export function shouldAutoCompact(opts: {
   consecutiveFailures: number
   maxConsecutiveFailures?: number
   querySource?: string
+  /** 默认读 process.env；测试可注入 */
+  env?: NodeJS.ProcessEnv
 }): boolean {
   if (!opts.enabled) return false
+  if (isAutoCompactEnvDisabled(opts.env)) return false
   if (opts.querySource === 'compact') return false
+  // 子查询 / 摘要轮不得再 auto（对照 session_memory / compact）
+  if (opts.querySource === 'session_memory') return false
   const maxFail = opts.maxConsecutiveFailures ?? DEFAULT_MAX_AUTOCOMPACT_FAILURES
   if (opts.consecutiveFailures >= maxFail) return false
   return opts.tokenCount >= getAutoCompactThreshold(opts.contextWindowTokens)
