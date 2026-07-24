@@ -1,7 +1,7 @@
 # Bolo Code 总任务清单（TODO）
 
-> **执行入口**：勾选与优先级以本文为准；细节切片见 `docs/ROADMAP.md` 与各专项 TODO。  
-> 更新：对齐 HC `cli --resume`（无 id → **当前项目**会话列表可选）+ 全盘优先级。  
+> **执行入口**：勾选与优先级以本文为准；里程碑/能力矩阵见 `docs/ROADMAP.md`；专项细节见各 `docs/*.md`。  
+> 更新：对齐 **已交付 headless 日用主路径**（resume / slash / rules / cache C1–C5 / JSONL / Subagent / MCP / plugins / openai-responses）。  
 > 原则：无遥测；对照 HelsincyCode 语义再实现；不把 stub 当完成。
 
 ---
@@ -10,120 +10,89 @@
 
 | 文档 | 角色 |
 |------|------|
-| **本文 `TODO.md`** | **P0→P3 总序**、跨模块依赖、本周默认下一刀 |
-| `ROADMAP.md` | 里程碑、能力矩阵、验收表 |
-| `TODO_SESSION_JSONL.md` | JSONL 存盘专项 |
+| **本文 `TODO.md`** | **P0→P3 总序**、跨模块依赖、**本周默认下一刀** |
+| `ROADMAP.md` | 里程碑、能力矩阵、验收表（不重复长篇勾选） |
+| `TODO_SESSION_JSONL.md` | JSONL 存盘深化专项 |
 | 其它 `docs/*.md` | 契约真源 |
 
-**规则：** 一次只推进 **一条 P0 主切片**（可并行一条「文档/纯 UI 无模型」支线）。
+**规则：** 一次只推进 **一条主切片**（可并行一条「文档/纯 UI 无模型」支线）。
 
 ---
 
-## 1. 优先级总览
+## 1. 一句话现状
 
 ```text
-P0  立刻影响「像成熟 agent / 对齐 HC 日用」
-P1  体验与省成本，紧随 P0
-P2  扩展面与深度能力
-P3  GUI / 打磨 / 后置
+日用 headless CLI agent 主路径已齐：
+  bolo / --resume / --continue · 斜杠总线 · rules · prompt cache API 标记
+  · JSONL 双写 · Subagent · MCP stdio · plugins 最小 · openai-responses HTTP SSE
+
+缺口偏「打磨与深度」：JSONL 主路径/entry 细化、MCP·plugins 深度、
+  slash 体验、T8 Ink、cache TTL/break、Responses WebSocket、Electron。
 ```
 
-| 优先级 | 主题 | 一句话 |
-|--------|------|--------|
-| **P0-a** | **`--resume` 无 id 会话列表** | 对齐 HC：项目相关会话列表 → 用户选择进入 |
-| **P0-b** | **斜杠总线 + 最小命令** | `/help` `/compact` `/context` `/effort` `/model` `/clear`… |
-| **P0-c** | **`bolo` 无参新会话 + BOLO 欢迎** | TUI 最小可见产品（可与 a/b 交错） |
-| **P1-a** | **`.bolo/rules` + `/rules`** | 项目约束装载；`paths` 作用域 ✅ |
-| **P1-b** | **Prompt 缓存友好前缀 + API 标记** | C1–C5 ✅ 省 token |
-| **P1-c** | **JSONL transcript 双写** | 按 `TODO_SESSION_JSONL` A+B |
-| **P1-d** | **内置 skill-creator / plugin-creator** | 元技能 |
-| **P2-a** | **Subagent 真 loop（S0–S6）** | ✅ 废 stub，Agent 工具 |
-| **P2-b** | **MCP stdio** | 真连接，禁止 mock 冒充 |
-| **P2-c** | Plugins / Subagent 目录定义 / JSONL 侧链 | |
-| **P3** | Electron · 完整 Ink · fork/async agent | |
+| 优先级 | 含义（当前） |
+|--------|----------------|
+| **P0** | 主路径已 ✅；仅保留回归/验收意识，**不再占默认下一刀** |
+| **P1** | 体验与成本加深（可选主刀） |
+| **P2** | 扩展面深度 / 未做子项 |
+| **P3** | GUI / Ink 完整 / 后置协议 |
 
 ---
 
-## 2. P0 — 必须先做
+## 2. 已交付（勿再当「缺口」）
 
-### P0-a · `bolo --resume` 无会话 id → 项目列表选择（对齐 HC）
+### 2.1 会话与 CLI
 
-**HC 行为：** `cli --resume` **不填 id** → 展示**与当前项目相关**的会话列表 → 用户选择进入。  
-**Bolo 现状：** 必须 `--resume <id|path>`；无列表、无选择器（`parseArgs` 强制 value）。
+| ID | 内容 | 状态 |
+|----|------|------|
+| **RS1–RS9** | `listProjectSessions`；`--resume` 无 id 列表选择；非 TTY；双格式；表格 picker；`--continue` | ✅ |
+| **T0–T7** | BOLO banner + 吉祥物；无参 TTY 新会话；状态行/工具行/权限 y/n；接 slash；resume 缩略 banner | ✅ |
+| **J-A/B** | JSON + `.jsonl` 双写 | ✅ |
+| **J-C / J-C+** | `loadTranscriptMessages`；JSON 缺失回退；双文件 messages 优先 jsonl | ✅ 最小 |
 
-| ID | 任务 | 验收 | 状态 |
+### 2.2 斜杠 · Rules · Cache · Creators
+
+| ID | 内容 | 状态 |
+|----|------|------|
+| **SL0–SL5** | 总线 + `/help` `/compact` `/clear` `/context` `/model` `/effort` `/plan` `/permissions`…；`/skills` + `/<skill-id>` 回落 | ✅ |
+| 扩展 slash | `/doctor` `/status` `/mcp` `/plugins` `/hooks` `/init` `/cost` `/usage` `/rules` `/agents` `/bg` `/allow` | ✅ |
+| **R1–R4 / R3b** | `.bolo/rules` + 用户 rules；`paths` 作用域；submitPrompt 刷新；`/rules` | ✅ |
+| **C1–C5** | 稳定前缀布局 + Anthropic `cache_control` + OpenAI/Responses `prompt_cache_key`（`promptCache.ts`） | ✅ |
+| **K1–K2** | bundled `skill-creator` / `plugin-creator` | ✅ |
+
+### 2.3 扩展 · Provider · 会话策略
+
+| ID | 内容 | 状态 |
+|----|------|------|
+| **S0–S7** | `runSubagent` + Agent 工具 + `.bolo/agents` + `/agents` | ✅ |
+| **S7+ / S12 partial** | 侧链 `agent-*.jsonl`；`run_in_background` + `/bg`；fork 继承父 messages 最小 | ✅ 最小 |
+| **MCP1** | MCP stdio listTools/call → tools 表 | ✅ |
+| **PL1** | 本地 plugins 发现 + skills/hooks/mcp 合并（非市场） | ✅ 最小 |
+| **OR1–OR5** | OpenAI Responses HTTP SSE 直连 | ✅ |
+| 其它 | 真 `apply_patch` 最小 · usage 本地 `/cost` · always-allow · tool_result 预算 · 快照持久化 permissionRules/effort/usage | ✅ / 🟡 |
+
+---
+
+## 3. P1 — 紧随（体验与成本加深）
+
+| ID | 主题 | 说明 | 状态 |
 |----|------|------|------|
-| **RS1** | `listProjectSessions(cwd)` 扫 `{cwd}/.bolo/sessions/*`（先 JSON 快照） | 单测：临时目录多文件排序 | ✅ |
-| **RS2** | CLI：`--resume` / `-r` **允许无 value** | `parseArgs` + help 文案 | ✅ |
-| **RS3** | TTY：编号列表 + 选择 → `resumeSession` | 手工 + 测 | ✅ |
-| **RS4** | 非 TTY：打印列表，要求显式 id，exit≠0 | 测 | ✅ |
-| **RS5** | 空列表提示新建 `bolo` | | ✅ |
-| **RS6** | 列表字段：id · mtime · preview · 消息数 | | ✅ |
-| **RS7** | JSONL 双格式列表 | `*.json`+`*.jsonl` 去重 | ✅ |
-| **RS8** | 表格列表 + id/过滤/q 取消（非箭头键；跨平台 readline） | 美化 picker | ✅ |
-| RS9 | `--continue` 最近一条 | P1 捷径 | ✅ |
-
-**范围钉死：** 默认 **仅当前项目** sessions；全局 `~/.bolo/sessions` 需显式 flag（如 `--scope user`）再议。
-
-**依赖：** 现有 `resumeSession` / 快照即可；**不**阻塞 JSONL。
+| **J-D** | JSONL 主路径细化 | entry 类型、列表 lite、compact_boundary 体验、与 `TODO_SESSION_JSONL` 后续 Phase | 🟡 |
+| **SL-polish** | 斜杠打磨 | help 分组、未知命令提示、少数 UX 缺口（非新总线） | 🟡 |
+| **C6+** | Cache 后置 | 1h TTL / global scope / break detection / cached MC | ⬜ 后置 |
+| **Usage+** | 本地 usage 展示 | 已有累计；可加深 breakdown | 🟡 |
 
 ---
 
-### P0-b · 斜杠命令总线（M-Slash 最小）
-
-| ID | 任务 | 状态 |
-|----|------|------|
-| SL0 | `docs/SLASH_COMMANDS.md` 契约 | ✅ |
-| SL1 | `parseSlash` + 注册表 + `submitUserInput` | ✅ |
-| SL2 | `/help` `/compact` `/clear` `/context` | ✅ |
-| SL3 | `/model` **`/effort`** `/plan` `/permissions` | ✅ |
-| SL4 | CLI REPL 走 `submitUserInput` | ✅ |
-
-详见 `ROADMAP.md` §5。
-
----
-
-### P0-c · CLI 可见产品（M-TUI 最小）
-
-| ID | 任务 | 状态 |
-|----|------|------|
-| T0 | `docs/TUI.md` + `docs/BRAND.md`（吉祥物定稿） | ✅ |
-| T1 | `renderWelcomeBanner`：**大写 BOLO** + 原创吉祥物 ASCII | ✅ |
-| T2 | `bolo` **无参 TTY** → 新会话 + banner + 输入循环 | ✅ |
-| T3–T6 | 状态行 / 流式工具行 / 权限 y/n / 接 slash | ✅（T4–T6：`23b51c7`） |
-| T7 | 与 **RS\*** 合流：resume 路径也显示缩略 banner | ✅（轻量一行） |
-
-吉祥物候选：Bolot / Nyxkit / Pipkin / Glim（**择一**，禁止抄第三方 IP）。
-
----
-
-## 3. P1 — 紧随
-
-| ID | 主题 | 关键切片 | 状态 |
-|----|------|----------|------|
-| R1–R2 | **`.bolo/rules` 发现 + 注入** | M-Rules | ✅ |
-| R3 | **frontmatter `paths` 作用域** | `activePaths` × globs | ✅ |
-| R3b | **submitPrompt 刷新 path-scoped rules** | 从 messages 推 activePaths → 替换 `# Project rules` | ✅ |
-| R4 | `/rules` | 依赖 Slash | ✅ |
-| C1–C4 | **Prompt 静态/动态边界 + 前缀稳定测试** | M-Cost（`PROMPT_CACHE.md` + stable/volatile + `test-prompt-cache`） | ✅ |
-| C5 | **API cache 接线** | Anthropic `cache_control` + OpenAI/Responses `prompt_cache_key`（`promptCache.ts`） | ✅ |
-| J-A/B | **JSONL 双写** | `TODO_SESSION_JSONL` Phase A+B（commit 19f7594） | ✅ |
-| J-C | **JSONL resume 起步** | `loadTranscriptMessages` + JSON 缺失回退 | ✅ 最小 |
-| K1–K2 | **skill-creator / plugin-creator** | M-Creators | ✅ |
-| SL5 | `/skills` + `/<skill-id>` 回落 | | ✅ |
-
----
-
-## 4. P2 — 扩展与深度
+## 4. P2 — 扩展深度
 
 | ID | 主题 | 状态 |
 |----|------|------|
-| S0–S6 | **Subagent** 真 `runSubagent` + Agent 工具；废 stub | ✅ |
-| MCP1 | **MCP stdio** listTools/call → 进 tools 表 | ✅ |
-| PL1 | Plugins 真加载（本地发现 + skills/hooks/mcp 合并；非市场） | ✅ 最小 |
-| S7 | `.bolo/agents` 目录定义（frontmatter + 覆盖内置 + `/agents`） | ✅ |
-| S7+ | 侧链 transcript · 权限细化 | ✅ 最小（agent-*.jsonl + Stop path） |
-| J-C+ | JSONL resume 主路径优先 · list 增强（RS7） | ✅（双文件 messages 优先 jsonl；RS7 列表） |
+| **MCP2** | SSE/HTTP transport · resources/prompts · 热重载 | ⬜ |
+| **PL2** | 插件热加载 / 市场（若做）· 贡献 slash 深化 | ⬜ |
+| **S8+** | 子 agent 权限细化 · 并行策略文档化 · worktree | 🟡 / ⬜ |
+| **OR6** | Responses **WebSocket** | ⬜ **后置**（HTTP SSE 已够用） |
+| Skills+ | 远程 skill / 动态 discovery 预取 | ⬜ |
 
 ---
 
@@ -131,46 +100,45 @@ P3  GUI / 打磨 / 后置
 
 | ID | 主题 | 状态 |
 |----|------|------|
-| M4 | Electron GUI | ⬜ |
-| T8 | 完整 Ink TUI | ⬜ |
-| S12+ | Fork 继承上下文 / 异步 agent / worktree | 🟡 partial（async：`run_in_background` + `/bg` ✅；fork 继承父 messages 最小 ✅；worktree ⬜） |
-| 其它 | 真 apply_patch ✅ 最小 · **usage 本地累计** `/cost` ✅ · 会话 always-allow + tool_result 预算 ✅ · **快照持久化** permissionRules/effort/usage ✅ · 企业策略… | 🟡 |
+| **T8** | 完整 Ink TUI / 箭头键 picker | ⬜ |
+| **T9** | 主题 · 窄终端 · 吉祥物开关 | ⬜ |
+| **M4** | Electron GUI | ⬜ |
+| S14+ | Worktree 隔离 · swarm/teammate | ⬜ |
+| 其它 | 企业策略 · 完整 model 目录… | ⬜ |
 
 **不做：** 远程遥测、GrowthBook、抄 Claude 商标/IP。
 
 ---
 
-## 6. 推荐执行顺序（串行主线）
+## 6. 推荐执行顺序（当前）
 
 ```text
-① RS1–RS6     bolo --resume 无 id 项目列表选择   ← 对齐 HC，收益大、依赖少
-② SL0–SL3     斜杠 P0（含 /effort）
-③ T0–T2       BOLO 欢迎 + 无参新会话
-④ R1–R2       .bolo/rules
-⑤ C1–C5       prompt cache 布局 + API 标记
-⑥ J-A/B       JSONL 双写
-⑦ K1–K2       creators
-⑧ S0–S6       Subagent 真实现
-⑨ MCP1        MCP stdio
-⑩ T3–T7 / M4  TUI 加深 → Electron
+已完成主线（勿回退当 P0）：
+  RS* · SL* · T0–T7 · R* · C1–C5 · J-A/B/C · K* · S0–S7 · MCP1 · PL1 · OR1–OR5
+
+下一阶段串行候选（择一为主刀）：
+  ① J-D          JSONL 深化（见 TODO_SESSION_JSONL）
+  ② MCP2 / PL2   扩展面深度（真能力，非 mock）
+  ③ SL-polish    斜杠与 doctor 体验
+  ④ T8           Ink TUI（可选，不挡 headless）
+  ⑤ C6+ / OR6    cache 后置 / Responses WS —— 明确后置
+  ⑥ M4           Electron —— 门禁后置
 ```
-
-**可并行支线（不抢 P0 主线程）：**
-
-- T0–T1 纯 banner/ASCII（无模型）  
-- `SUBAGENT.md` / `RULES.md` / `SLASH_COMMANDS.md` 文档  
-- `PROMPT_CACHE.md` 规格 + C5 API 标记  
 
 ---
 
 ## 7. 本周默认「下一刀」
 
-若只开一刀：
+若只开一刀（**非 Electron**）：
 
-> **OpenAI Responses HTTP SSE 已实现**（OR1–OR5）；OR6 WebSocket 后置。  
-> **Electron / 完整 Ink T8** 后置。
+> **主推候选（三选一，按收益选）：**  
+> 1. **J-D** — JSONL transcript 主路径/列表/边界细化（`TODO_SESSION_JSONL.md`）  
+> 2. **MCP2 / PL2** — MCP 传输面或 plugins 深度（禁止 mock 冒充）  
+> 3. **SL-polish** — 斜杠/help/doctor 日用打磨  
+>
+> **明确后置：** OR6 WebSocket · C6+ cache TTL/break · T8 Ink · Electron。
 
-已齐：resume / slash / BOLO TUI / rules / cache / JSONL / creators / Subagent / MCP / plugins / usage+effort / always-allow / apply_patch / **openai-responses 直连**。
+已齐：resume / slash / BOLO TUI 最小 / rules（含 path-scoped 刷新）/ cache C1–C5 / JSONL 双写+最小 resume / creators / Subagent / MCP stdio / plugins 最小 / usage+effort / always-allow / apply_patch / **openai-responses HTTP SSE**。
 
 ---
 
@@ -178,17 +146,16 @@ P3  GUI / 打磨 / 后置
 
 | TODO | ROADMAP |
 |------|---------|
-| RS* | M5.2 / M-TUI T7 / § resume 选择器 |
-| SL* | M-Slash |
-| T* | M-TUI |
-| R* | M-Rules |
-| C* | M-Cost |
+| RS* · T* | M5.2 / M-TUI（T0–T7 ✅；T8 ⬜） |
+| SL* | M-Slash ✅ 最小 |
+| R* | M-Rules ✅ |
+| C* | M-Cost（C1–C5 ✅；C6+ 后置） |
 | J* | M5.1 / `TODO_SESSION_JSONL` |
-| K* | M-Creators |
-| S* | M-Subagent |
-| MCP* | M3.2 |
-| **OR*** | **OpenAI Responses 直连** ✅ HTTP SSE；WS 后置 |
-| M4 | Electron |
+| K* | M-Creators ✅ |
+| S* | M-Subagent（S0–S7 ✅；S12 partial） |
+| MCP* · PL* | M3 |
+| **OR*** | Responses：HTTP SSE ✅；WS 后置 |
+| M4 | Electron ⬜ |
 
 ---
 
@@ -197,10 +164,10 @@ P3  GUI / 打磨 / 后置
 - [ ] 无遥测  
 - [ ] 文档无本机绝对路径  
 - [ ] 相关 `scripts/test-*.ts` 绿  
-- [ ] 更新本文对应 ⬜→✅  
+- [ ] 更新本文对应 ⬜→✅，并扫一眼 `ROADMAP` 总览是否仍一致  
 - [ ] stub / mock 未勾成「完成」  
 
 ---
 
 **一句话：**  
-日用 CLI 主路径已齐；**OpenAI Responses 原生直连（HTTP SSE）已支持**；**Electron 后置**；可选下一刀：Responses WebSocket / T8 Ink。
+可日用 headless 主路径已齐；下一刀做 **JSONL 深化 / MCP·plugins 深度 / slash 打磨** 之一；**Electron · Ink · Responses WS · cache TTL** 后置。

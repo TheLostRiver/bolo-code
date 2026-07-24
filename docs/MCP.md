@@ -65,5 +65,6 @@ npx tsx scripts/test-mcp-stdio.ts
 
 - SSE / HTTP transport
 - resources / prompts
-- `/mcp` 斜杠状态命令
 - 插件热重载 MCP
+
+> `/mcp` 斜杠状态：已落地（见 `packages/core/src/slash.ts`）。
