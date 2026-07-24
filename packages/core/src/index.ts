@@ -279,6 +279,8 @@ export {
 export type SessionEvent =
   | { type: 'phase'; phase: SessionPhase | string }
   | { type: 'text'; text: string }
+  /** 思考链增量（流式展示；不持久化进 transcript） */
+  | { type: 'reasoning'; text: string }
   | { type: 'tool_start'; id: string; name: string; input: unknown }
   | { type: 'tool_end'; id: string; name: string; output: string; ok: boolean }
   | { type: 'permission_request'; id: string; name: string; input: unknown }

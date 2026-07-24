@@ -81,6 +81,7 @@
 | buildTool + 分区并发 + 常用工具 | ✅/🟡 | **Edit** ✅ 最小；真 apply_patch；Write；schema → tool_use_error |
 | tool 中段 AbortSignal | 🟡 最小 | Bash/Read/Write/Edit/apply_patch 尊重 abort |
 | Provider：OpenAI 兼容 / Anthropic / **openai-responses** / mock | ✅ | Responses：**HTTP SSE** ✅；WS ⬜ |
+| **思考链流式显示**（reasoning / thinking） | 🟡 最小 | `reasoning_delta`→SessionEvent→CLI dim；不回灌 ChatMessage；budget/Responses reasoning ⬜ |
 | System prompt + BOLO.md + Rules | ✅ | |
 | Skill catalog + Skill 工具 + slash 调 skill | ✅ | 远程 skill ⬜ |
 

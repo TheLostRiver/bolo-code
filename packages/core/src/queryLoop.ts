@@ -60,6 +60,8 @@ export type Terminal = {
 export type QueryLoopEvent =
   | { type: 'phase'; phase: string }
   | { type: 'text'; text: string }
+  /** 思考链增量（不写入 ChatMessage；仅展示） */
+  | { type: 'reasoning'; text: string }
   | { type: 'hook'; event: string; exitCode: number; blocked?: boolean }
   | { type: 'error'; message: string }
   | {
@@ -252,6 +254,11 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
           if (ev.type === 'text_delta') {
             assistantText += ev.text
             emit(params, { type: 'text', text: ev.text })
+          } else if (ev.type === 'reasoning_delta') {
+            // 仅转发展示；不并入 assistantText / ChatMessage（避免签名回灌坑）
+            if (ev.text) emit(params, { type: 'reasoning', text: ev.text })
+          } else if (ev.type === 'reasoning_end') {
+            // 分段标记：CLI 用空 reasoning 或仅靠后续 text 换行；此处不发噪声
           } else if (ev.type === 'tool_call') {
             let input: unknown = {}
             try {

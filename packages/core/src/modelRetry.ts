@@ -72,7 +72,12 @@ function backoffMs(baseDelayMs: number, attempt: number): number {
 }
 
 function isContentEvent(ev: ProviderStreamEvent): boolean {
-  return ev.type === 'text_delta' || ev.type === 'tool_call'
+  // reasoning 也算「有模型输出」，避免纯思考流被误判为空失败
+  return (
+    ev.type === 'text_delta' ||
+    ev.type === 'tool_call' ||
+    ev.type === 'reasoning_delta'
+  )
 }
 
 /**

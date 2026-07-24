@@ -14,8 +14,16 @@ export type ProviderUsage = {
   totalTokens?: number
 }
 
+/**
+ * Provider 流式事件（内部统一）。
+ * reasoning_*：思考链增量；无内容则不发，不伪造。
+ * 对照 HC thinking_delta / OpenCode openai-compatible reasoning_content。
+ */
 export type ProviderStreamEvent =
   | { type: 'text_delta'; text: string }
+  | { type: 'reasoning_delta'; text: string }
+  /** 可选：思考块结束，便于 UI 与正文分段；无则静默 */
+  | { type: 'reasoning_end' }
   | { type: 'tool_call'; id: string; name: string; arguments: string }
   | { type: 'usage'; usage: ProviderUsage }
   | { type: 'done' }

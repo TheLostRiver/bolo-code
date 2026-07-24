@@ -102,6 +102,25 @@ export function resolveOpenAIPromptCacheKey(
   return derivePromptCacheKey(messages, model)
 }
 
+/**
+ * 从 Chat Completions `choices[0].delta` 提取 text / reasoning 事件（不含 tool）。
+ * - content → text_delta
+ * - reasoning_content → reasoning_delta（DeepSeek 等；无字段则零输出）
+ */
+export function eventsFromOpenAIChatDelta(delta: {
+  content?: string | null
+  reasoning_content?: string | null
+}): ProviderStreamEvent[] {
+  const out: ProviderStreamEvent[] = []
+  if (delta.reasoning_content) {
+    out.push({ type: 'reasoning_delta', text: delta.reasoning_content })
+  }
+  if (delta.content) {
+    out.push({ type: 'text_delta', text: delta.content })
+  }
+  return out
+}
+
 /** 组装 Chat Completions 请求体（含可选 prompt_cache_key） */
 export function buildOpenAICompatibleRequestBody(
   messages: ChatMessage[],
@@ -228,6 +247,7 @@ export function createOpenAICompatibleProvider(
             choices?: Array<{
               delta?: {
                 content?: string | null
+                reasoning_content?: string | null
                 tool_calls?: Array<{
                   index?: number
                   id?: string
@@ -247,8 +267,10 @@ export function createOpenAICompatibleProvider(
           if (u) streamUsage = mergeProviderUsage(streamUsage, u)
 
           const delta = json.choices?.[0]?.delta
-          if (delta?.content) {
-            yield { type: 'text_delta', text: delta.content }
+          if (delta) {
+            for (const ev of eventsFromOpenAIChatDelta(delta)) {
+              yield ev
+            }
           }
 
           if (delta?.tool_calls) {

@@ -122,9 +122,25 @@ npx tsx scripts/smoke-live.ts
 - `system` 独立字段（**文本块数组**；稳定段带 `cache_control: { type: 'ephemeral' }`）
 - tools：`input_schema`；可选 **末项** `cache_control`
 - messages：可选 **最后一条** 末 content 块 `cache_control`（每请求一个消息级断点）
-- 流式：`content_block_start` / `content_block_delta`（`text_delta` / `input_json_delta`）/ `message_stop`
+- 流式：`content_block_start` / `content_block_delta`（`text_delta` / `thinking_delta` / `input_json_delta`）/ `message_stop`
 - tool 结果：下一条 `user` 的 `tool_result` blocks
 - 实现：`anthropic.ts` + `promptCache.ts`；`buildAnthropicRequestBody`
+
+### 思考链 / Reasoning（流式显示）
+
+对照 HC（thinking / redacted_thinking / thinking_delta）与 OpenCode openai-compatible 的 `reasoning_content`：**只解析与展示，不伪造**。
+
+| 来源 | SSE / 字段 | Provider 事件 | SessionEvent | CLI |
+|------|------------|---------------|--------------|-----|
+| OpenAI-compatible（DeepSeek 等） | `delta.reasoning_content` | `reasoning_delta` | `reasoning` | dim + 前缀 `thinking` |
+| Anthropic | `content_block` type `thinking` + `thinking_delta` | `reasoning_delta`（可选 `reasoning_end`） | 同上 | 同上 |
+| Anthropic | `redacted_thinking` | 单次占位 `[redacted thinking]` | 同上 | 同上 |
+| 无字段 / 不支持 | — | **不发** | **不发** | 零输出 |
+
+- 内部类型：`ProviderStreamEvent` 含 `reasoning_delta` | `reasoning_end`
+- `queryLoop` 转发为 `{ type: 'reasoning', text }`；**不**并入 `ChatMessage.content`（避免签名/回灌坑；持久化二期）
+- 请求侧 thinking budget / adaptive thinking：**本刀不做**；`/effort` 仍只映射 `max_tokens`
+- openai-responses 的 reasoning summary：**二期**
 
 ### Prompt cache 字段（C5）
 
@@ -137,7 +153,7 @@ npx tsx scripts/smoke-live.ts
 
 详见 `docs/PROMPT_CACHE.md`。
 
-内部统一为 Bolo `ProviderStreamEvent`（`text_delta` | `tool_call` | `usage` | `done` | `error`），agent loop 无需关心协议。
+内部统一为 Bolo `ProviderStreamEvent`（`text_delta` | `reasoning_delta` | `reasoning_end` | `tool_call` | `usage` | `done` | `error`），agent loop 无需关心协议。
 
 ### Usage 事件（若 API 有）
 

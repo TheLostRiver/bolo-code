@@ -42,6 +42,7 @@
 
 - Session `onEvent` 在 REPL / 单轮 `submitUserInput` 路径上打印：
   - **text**：按 delta 原样写出（无额外前缀）
+  - **reasoning**（思考链）：弱样式（ANSI dim）+ 首段前缀 `thinking `；与正文换行分离；无事件则静默
   - **tool_start** / **tool_end**：独立一行  
     `→ ToolName` / `✓ ToolName`（失败 `✗ ToolName`）
 - 不打印 phase / hook 等噪声；已流式 text 时回合结束**不**再整段回放 assistant。

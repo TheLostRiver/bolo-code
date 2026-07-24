@@ -147,6 +147,82 @@ function normalizeBaseUrl(base?: string): string {
 }
 
 /**
+ * 从 Anthropic Messages SSE 事件提取 text / reasoning（不含 tool 累积）。
+ * 对照 HC：thinking / redacted_thinking / thinking_delta 与正文分离。
+ * - thinking_delta → reasoning_delta
+ * - content_block_start thinking 若带初始 thinking 文本 → reasoning_delta
+ * - redacted_thinking 开始 → 单次占位（无明文时的简化摘要）
+ * - content_block_stop 在 thinking 块后 → reasoning_end
+ * 无思考内容则返回空数组（静默降级）。
+ */
+export function eventsFromAnthropicSseEvent(
+  evt: {
+    type?: string
+    content_block?: {
+      type?: string
+      thinking?: string
+      text?: string
+    }
+    delta?: {
+      type?: string
+      text?: string
+      thinking?: string
+    }
+  },
+  state?: { inThinking?: boolean },
+): ProviderStreamEvent[] {
+  const out: ProviderStreamEvent[] = []
+  const st = state ?? {}
+
+  switch (evt.type) {
+    case 'content_block_start': {
+      const block = evt.content_block
+      if (block?.type === 'thinking') {
+        st.inThinking = true
+        if (block.thinking) {
+          out.push({ type: 'reasoning_delta', text: block.thinking })
+        }
+      } else if (block?.type === 'redacted_thinking') {
+        st.inThinking = true
+        // 无明文：占位一行，对照 HC「无正文时 redacted 摘要」的简化
+        out.push({ type: 'reasoning_delta', text: '[redacted thinking]' })
+      } else if (block?.type === 'text' || block?.type === 'tool_use') {
+        if (st.inThinking) {
+          st.inThinking = false
+          out.push({ type: 'reasoning_end' })
+        }
+      }
+      break
+    }
+    case 'content_block_delta': {
+      const d = evt.delta
+      if (!d) break
+      if (d.type === 'thinking_delta' && d.thinking) {
+        st.inThinking = true
+        out.push({ type: 'reasoning_delta', text: d.thinking })
+      } else if (d.type === 'text_delta' && d.text) {
+        if (st.inThinking) {
+          st.inThinking = false
+          out.push({ type: 'reasoning_end' })
+        }
+        out.push({ type: 'text_delta', text: d.text })
+      }
+      break
+    }
+    case 'content_block_stop': {
+      if (st.inThinking) {
+        st.inThinking = false
+        out.push({ type: 'reasoning_end' })
+      }
+      break
+    }
+    default:
+      break
+  }
+  return out
+}
+
+/**
  * 组装 Anthropic Messages 请求体（含最小 cache_control 断点）。
  * 断点策略：system 稳定段末尾 + tools 末项（若有）+ messages 最后一条末块。
  */
@@ -206,6 +282,8 @@ export function createAnthropicProvider(config: AnthropicConfig): LlmProvider {
       { id: string; name: string; json: string }
     >()
     let streamUsage: ProviderUsage | null = null
+    /** 思考块状态：用于 reasoning_end 分段 */
+    const thinkingState = { inThinking: false }
 
     try {
       const res = await fetch(url, {
@@ -278,11 +356,13 @@ export function createAnthropicProvider(config: AnthropicConfig): LlmProvider {
               id?: string
               name?: string
               text?: string
+              thinking?: string
               input?: unknown
             }
             delta?: {
               type?: string
               text?: string
+              thinking?: string
               partial_json?: string
             }
           }
@@ -300,35 +380,57 @@ export function createAnthropicProvider(config: AnthropicConfig): LlmProvider {
               const block = evt.content_block
               const idx = evt.index ?? 0
               if (block?.type === 'tool_use') {
+                if (thinkingState.inThinking) {
+                  thinkingState.inThinking = false
+                  yield { type: 'reasoning_end' }
+                }
                 toolByIndex.set(idx, {
                   id: block.id ?? '',
                   name: block.name ?? '',
                   json: '',
                 })
+              } else {
+                for (const ev of eventsFromAnthropicSseEvent(
+                  evt,
+                  thinkingState,
+                )) {
+                  yield ev
+                }
               }
-              // text block: text 在 delta 里
               break
             }
             case 'content_block_delta': {
               const d = evt.delta
               if (!d) break
-              if (d.type === 'text_delta' && d.text) {
-                yield { type: 'text_delta', text: d.text }
-              } else if (
-                d.type === 'input_json_delta' &&
-                d.partial_json != null
-              ) {
+              if (d.type === 'input_json_delta' && d.partial_json != null) {
                 const idx = evt.index ?? 0
                 const cur = toolByIndex.get(idx)
                 if (cur) cur.json += d.partial_json
+              } else {
+                for (const ev of eventsFromAnthropicSseEvent(
+                  evt,
+                  thinkingState,
+                )) {
+                  yield ev
+                }
               }
               break
             }
             case 'content_block_stop': {
+              for (const ev of eventsFromAnthropicSseEvent(
+                evt,
+                thinkingState,
+              )) {
+                yield ev
+              }
               // tool_use 在 message_stop 统一 flush，避免半截
               break
             }
             case 'message_stop': {
+              if (thinkingState.inThinking) {
+                thinkingState.inThinking = false
+                yield { type: 'reasoning_end' }
+              }
               yield* flushTools()
               if (streamUsage) yield { type: 'usage', usage: streamUsage }
               yield { type: 'done' }

@@ -21,6 +21,7 @@ export {
   toOpenAIMessages,
   buildOpenAICompatibleRequestBody,
   resolveOpenAIPromptCacheKey,
+  eventsFromOpenAIChatDelta,
   type OpenAICompatibleConfig,
 } from './openaiCompatible.ts'
 export {
@@ -37,6 +38,7 @@ export {
   toolsToAnthropic,
   toAnthropicMessages,
   buildAnthropicRequestBody,
+  eventsFromAnthropicSseEvent,
   type AnthropicConfig,
 } from './anthropic.ts'
 export {

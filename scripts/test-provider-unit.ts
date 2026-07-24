@@ -6,11 +6,13 @@ import {
   toOpenAIMessages,
   toolsToOpenAI,
   buildOpenAICompatibleRequestBody,
+  eventsFromOpenAIChatDelta,
 } from '../packages/providers/src/openaiCompatible.ts'
 import {
   toAnthropicMessages,
   toolsToAnthropic,
   buildAnthropicRequestBody,
+  eventsFromAnthropicSseEvent,
 } from '../packages/providers/src/anthropic.ts'
 import {
   mapEffort,
@@ -102,6 +104,94 @@ assert(oaiUsage?.totalTokens === 46, 'oai usage total')
 assert(
   parseOpenAIStreamUsage({ choices: [{ delta: { content: 'hi' } }] }) === null,
   'oai no usage → null',
+)
+
+// --- reasoning_content / thinking（mock SSE 片段，不联网）---
+const oaiReason = eventsFromOpenAIChatDelta({
+  reasoning_content: 'step1',
+  content: null,
+})
+assert(
+  oaiReason.length === 1 &&
+    oaiReason[0]!.type === 'reasoning_delta' &&
+    (oaiReason[0] as { text: string }).text === 'step1',
+  'oai reasoning_content → reasoning_delta',
+)
+const oaiBoth = eventsFromOpenAIChatDelta({
+  reasoning_content: 'think',
+  content: 'hi',
+})
+assert(
+  oaiBoth.some((e) => e.type === 'reasoning_delta') &&
+    oaiBoth.some((e) => e.type === 'text_delta' && e.text === 'hi'),
+  'oai reasoning + content separated',
+)
+assert(
+  eventsFromOpenAIChatDelta({ content: 'only' }).every(
+    (e) => e.type !== 'reasoning_delta',
+  ),
+  'oai no reasoning_content → no fake reasoning',
+)
+assert(
+  eventsFromOpenAIChatDelta({}).length === 0,
+  'oai empty delta → silent',
+)
+
+const antThinkState = { inThinking: false }
+const antThinkStart = eventsFromAnthropicSseEvent(
+  {
+    type: 'content_block_start',
+    content_block: { type: 'thinking' },
+  },
+  antThinkState,
+)
+assert(antThinkStart.length === 0, 'ant thinking start no text yet')
+const antThinkDelta = eventsFromAnthropicSseEvent(
+  {
+    type: 'content_block_delta',
+    delta: { type: 'thinking_delta', thinking: 'ponder' },
+  },
+  antThinkState,
+)
+assert(
+  antThinkDelta.some(
+    (e) => e.type === 'reasoning_delta' && e.text === 'ponder',
+  ),
+  'ant thinking_delta → reasoning_delta',
+)
+const antTextAfter = eventsFromAnthropicSseEvent(
+  {
+    type: 'content_block_delta',
+    delta: { type: 'text_delta', text: 'answer' },
+  },
+  antThinkState,
+)
+assert(
+  antTextAfter.some((e) => e.type === 'reasoning_end') &&
+    antTextAfter.some((e) => e.type === 'text_delta' && e.text === 'answer'),
+  'ant text after thinking → reasoning_end + text',
+)
+const antRedactState = { inThinking: false }
+const antRedact = eventsFromAnthropicSseEvent(
+  {
+    type: 'content_block_start',
+    content_block: { type: 'redacted_thinking' },
+  },
+  antRedactState,
+)
+assert(
+  antRedact.some(
+    (e) =>
+      e.type === 'reasoning_delta' && e.text.includes('redacted'),
+  ),
+  'ant redacted_thinking placeholder',
+)
+assert(
+  eventsFromAnthropicSseEvent({
+    type: 'content_block_delta',
+    delta: { type: 'text_delta', text: 'plain' },
+  }).every((e) => e.type === 'text_delta'),
+  'ant plain text no reasoning',
 )
 
 // --- Anthropic SSE usage（mock message_start / message_delta）---

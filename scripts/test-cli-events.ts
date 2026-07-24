@@ -81,6 +81,17 @@ async function main() {
     'phase silent',
   )
 
+  const reasonChunks = formatSessionEventChunks({
+    type: 'reasoning',
+    text: 'hmm',
+  })
+  assert(reasonChunks.length === 1, 'reasoning chunk')
+  assert(reasonChunks[0]!.text.includes('hmm'), 'reasoning text')
+  assert(
+    formatSessionEventChunks({ type: 'reasoning', text: '' }).length === 0,
+    'empty reasoning silent',
+  )
+
   // ── printer：流式 + 工具行不刷屏 ──
   const out: string[] = []
   const err: string[] = []
@@ -111,6 +122,40 @@ async function main() {
   assert(err.length === 0, 'no err on happy path')
   // phase 不出现
   assert(!joined.includes('running'), 'no phase spam')
+
+  // ── printer：thinking 与正文分离 ──
+  const outR: string[] = []
+  const pR = createSessionEventPrinter({
+    writeOut: (s) => outR.push(s),
+    writeErr: () => {},
+  })
+  pR.beginTurn()
+  pR.onEvent({ type: 'reasoning', text: 'step A' })
+  pR.onEvent({ type: 'reasoning', text: ' step B' })
+  pR.onEvent({ type: 'text', text: 'Final answer' })
+  pR.endTurn()
+  const joinedR = outR.join('')
+  assert(joinedR.includes('thinking'), 'thinking prefix')
+  assert(joinedR.includes('step A'), 'reasoning body')
+  assert(joinedR.includes('Final answer'), 'text after reasoning')
+  // 前缀 thinking 不应粘在 Final answer 同一段无换行（应有换行分隔）
+  assert(
+    /step B[\s\S]*\n[\s\S]*Final answer/.test(joinedR) ||
+      joinedR.indexOf('step B') < joinedR.indexOf('Final answer'),
+    'reasoning before text',
+  )
+  // 无 reasoning 事件时不输出 thinking 字样
+  const outPlain: string[] = []
+  const pPlain = createSessionEventPrinter({
+    writeOut: (s) => outPlain.push(s),
+  })
+  pPlain.beginTurn()
+  pPlain.onEvent({ type: 'text', text: 'only text' })
+  pPlain.endTurn()
+  assert(
+    !outPlain.join('').includes('thinking'),
+    'no fake thinking when absent',
+  )
 
   // ── permission parse ──
   assert(parsePermissionAnswer('y') === 'allow', 'y allow')
