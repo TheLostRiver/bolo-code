@@ -15,6 +15,9 @@ import {
   mcpToolName,
   mergeSessionToolsWithMcp,
   parseMcpToolName,
+  coerceMcpPromptArguments,
+  safeListMcpResources,
+  safeListMcpPrompts,
   McpStdioClient,
   type McpListChangedEvent,
 } from '../packages/mcp/src/index.ts'
@@ -274,6 +277,23 @@ async function testConnectHost() {
   )
   assert(gp.ok && gp.output.includes('host'), `prompt ${gp.output}`)
 
+  // M-GEN-4：空 server 过滤 / 错误路径
+  const listBad = await listRes.call(
+    { server: 'nope' },
+    { cwd: process.cwd() },
+  )
+  assert(!listBad.ok && listBad.output.includes('not found'), 'list filter missing server')
+  const readBad = await readRes.call(
+    { server: 'echo', uri: '' },
+    { cwd: process.cwd() },
+  )
+  assert(!readBad.ok, 'read requires uri')
+  const gpBad = await getPrompt.call(
+    { server: 'echo', name: 'no-such-prompt' },
+    { cwd: process.cwd() },
+  )
+  assert(!gpBad.ok || gpBad.isError !== false, 'unknown prompt fails or empty')
+
   await closeMcpConnections(result.servers)
 }
 
@@ -391,11 +411,56 @@ async function testNamesAndConfig() {
   const servers = await loadMcpConfigFile(f)
   assert(servers.length === 1 && servers[0]!.name === 'x', 'load config')
   assert(servers[0]!.env?.A === '1', 'env kept')
+
+  // M-GEN-4 helpers
+  assert(
+    Object.keys(coerceMcpPromptArguments({ a: 1, b: 'x', c: null })).join() ===
+      'a,b',
+    'coerce prompt args',
+  )
+  assert(coerceMcpPromptArguments({ a: 1 }).a === '1', 'coerce number to string')
+  assert(
+    Object.keys(coerceMcpPromptArguments(null)).length === 0,
+    'coerce null empty',
+  )
+}
+
+async function testSafeListEmptyCaps() {
+  // tools-only 假 client：无 resources/prompts cap
+  const client = {
+    serverName: 'tools-only',
+    transport: 'stdio' as const,
+    isConnected: true,
+    capabilities: { tools: {} },
+    supportsTools: true,
+    supportsResources: false,
+    supportsPrompts: false,
+    connect: async () => {},
+    close: async () => {},
+    onNotification: () => () => {},
+    listTools: async () => [],
+    callTool: async () => ({}),
+    listResources: async () => {
+      throw new Error('should not call')
+    },
+    readResource: async () => {
+      throw new Error('should not call')
+    },
+    listPrompts: async () => {
+      throw new Error('should not call')
+    },
+    getPrompt: async () => ({}),
+  }
+  const r = await safeListMcpResources(client)
+  const p = await safeListMcpPrompts(client)
+  assert(r.items.length === 0 && !r.error, 'no resources without cap')
+  assert(p.items.length === 0 && !p.error, 'no prompts without cap')
 }
 
 async function main() {
   await testFraming()
   await testNamesAndConfig()
+  await testSafeListEmptyCaps()
   await testStdioListCall()
   await testConnectHost()
   await testListChangedHotRefresh()

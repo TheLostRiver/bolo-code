@@ -177,8 +177,8 @@ PL-SPEC 出口 ────────► IMPORT-*（可选）
 | **M-GEN-1** | **配置校验与友好错误** | `validateMcpServerConfig` · `loadMcpConfigFileDetailed` · 坏项跳过 + warn | ✅ 最小 |
 | **M-GEN-2** | **`/doctor` 或 `/mcp` 诊断加深** | transport · live · caps · failures · configWarnings · 脱敏 endpoint | ✅ 最小 |
 | **M-GEN-3** | **headers 秘钥卫生** | `redactMcpHeaders` · summary 不打印全文 | ✅ 最小 |
-| **M-GEN-4** | **resources/prompts 日用加固** | list/read 测；空 capability 不报错 | ⬜ |
-| **M-GEN-5** | **list_changed 回归** | stdio/sse 测绿；http 行为写清 | ⬜ |
+| **M-GEN-4** | **resources/prompts 日用加固** | safe list 失败不拆 tools；meta 工具缓存回退；prompt args 强制 string；测 | ✅ 最小 |
+| **M-GEN-5** | **list_changed 回归** | stdio/sse 热刷新绿；http 仅响应内嵌 SSE 文档+测 | ✅ 最小 |
 | **M-GEN-6** | **env/headers `${VAR}` 插值最小** | 可选；无远程脚本执行 | ⬜（D2） |
 | **M-GEN-7** | **OAuth / headersHelper** | 浏览器流 / 刷新令牌 | ⬜ **后置** |
 | **M-GEN-8** | 插件 mcp 与 `mcp.json` **合并序** | 文档 + 测；冲突策略 | ⬜ |

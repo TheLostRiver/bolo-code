@@ -182,6 +182,56 @@ async function testHttpClientSse(baseUrl: string) {
   await client.close()
 }
 
+/**
+ * M-GEN-5：Streamable HTTP 响应体可带 SSE 帧通知。
+ * 经典「长连接 list_changed」走 type:sse；http 仅在**同响应**内嵌 notification 时分发。
+ * 本 fixture 的 tools/call?sse=1 不保证推 list_changed；此处断言：
+ * - parseSseDataPayloads 能识别 list_changed method
+ * - http client 在 JSON 模式可正常 list resources/prompts（无 cap 则空）
+ */
+async function testHttpListChangedSemantics(url: string) {
+  // 文档契约：http list_changed 仅限响应内嵌 SSE；无长推送
+  const notifyBody = [
+    'event: message',
+    'data: {"jsonrpc":"2.0","method":"notifications/tools/list_changed","params":{}}',
+    '',
+    'event: message',
+    'data: {"jsonrpc":"2.0","method":"notifications/resources/list_changed","params":{}}',
+    '',
+  ].join('\n')
+  const msgs = parseSseDataPayloads(notifyBody)
+  assert(msgs.length === 2, 'http sse frames parse list_changed methods')
+  assert(
+    (msgs[0] as { method: string }).method ===
+      'notifications/tools/list_changed',
+    'tools list_changed method',
+  )
+  assert(
+    (msgs[1] as { method: string }).method ===
+      'notifications/resources/list_changed',
+    'resources list_changed method',
+  )
+
+  const client = new McpHttpClient({
+    server: { name: 'http-r', type: 'http', url },
+    timeoutMs: 10_000,
+  })
+  await client.connect()
+  // 无 cap 时 list 必须空数组且不抛
+  if (!client.supportsResources) {
+    const r = await client.listResources()
+    assert(Array.isArray(r) && r.length === 0, 'no-cap resources empty')
+  } else {
+    const r = await client.listResources()
+    assert(Array.isArray(r), 'resources array')
+  }
+  if (!client.supportsPrompts) {
+    const p = await client.listPrompts()
+    assert(Array.isArray(p) && p.length === 0, 'no-cap prompts empty')
+  }
+  await client.close()
+}
+
 async function testHostIsolation(httpUrl: string) {
   const result = await connectMcpServers({
     servers: [
@@ -294,6 +344,7 @@ async function main() {
   try {
     await testHttpClientJson(fx.url)
     await testHttpClientSse(fx.url)
+    await testHttpListChangedSemantics(fx.url)
     await testHostIsolation(fx.url)
     await testSessionAndSlash(fx.url)
     console.log('MCP HTTP TESTS PASS')

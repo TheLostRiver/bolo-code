@@ -117,6 +117,48 @@ const META_TOOL_NAMES = new Set([
   'GetMcpPrompt',
 ])
 
+/** M-GEN-4：prompts/get 参数统一为 string map */
+export function coerceMcpPromptArguments(
+  raw: unknown,
+): Record<string, string> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (v == null) continue
+    out[k] = typeof v === 'string' ? v : String(v)
+  }
+  return out
+}
+
+/**
+ * M-GEN-4：list resources/prompts 失败不拖垮连接（返回空 + 可选 warn 文案）。
+ */
+export async function safeListMcpResources(
+  client: McpClient,
+): Promise<{ items: McpResourceDef[]; error?: string }> {
+  if (!client.supportsResources) return { items: [] }
+  try {
+    const items = await client.listResources()
+    return { items: Array.isArray(items) ? items : [] }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return { items: [], error: msg }
+  }
+}
+
+export async function safeListMcpPrompts(
+  client: McpClient,
+): Promise<{ items: McpPromptDef[]; error?: string }> {
+  if (!client.supportsPrompts) return { items: [] }
+  try {
+    const items = await client.listPrompts()
+    return { items: Array.isArray(items) ? items : [] }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return { items: [], error: msg }
+  }
+}
+
 /** 是否为 MCP 远端工具或全局 meta 工具（热刷新时从会话工具表剔除再重建） */
 export function isMcpManagedToolName(name: string): boolean {
   return META_TOOL_NAMES.has(name) || parseMcpToolName(name) != null
@@ -205,34 +247,32 @@ export function attachMcpListChangedHandlers(
 
     const refreshResources = async () => {
       if (!client.supportsResources) return
-      try {
-        conn.resources = await client.listResources()
-        await onListChanged?.({
-          server: conn.name,
-          kind: 'resources',
-          tools: conn.tools,
-          resources: conn.resources,
-          prompts: conn.prompts,
-        })
-      } catch {
-        /* keep */
-      }
+      const { items, error } = await safeListMcpResources(client)
+      if (error) return
+      conn.resources = items
+      conn.capabilities.resources = true
+      await onListChanged?.({
+        server: conn.name,
+        kind: 'resources',
+        tools: conn.tools,
+        resources: conn.resources,
+        prompts: conn.prompts,
+      })
     }
 
     const refreshPrompts = async () => {
       if (!client.supportsPrompts) return
-      try {
-        conn.prompts = await client.listPrompts()
-        await onListChanged?.({
-          server: conn.name,
-          kind: 'prompts',
-          tools: conn.tools,
-          resources: conn.resources,
-          prompts: conn.prompts,
-        })
-      } catch {
-        /* keep */
-      }
+      const { items, error } = await safeListMcpPrompts(client)
+      if (error) return
+      conn.prompts = items
+      conn.capabilities.prompts = true
+      await onListChanged?.({
+        server: conn.name,
+        kind: 'prompts',
+        tools: conn.tools,
+        resources: conn.resources,
+        prompts: conn.prompts,
+      })
     }
 
     // 串行同 server 刷新，避免并发 list 互相覆盖
@@ -386,10 +426,14 @@ export function createMcpMetaTools(servers: ConnectedMcpServer[]): BoloTool[] {
             mimeType?: string
           }> = []
           for (const s of clients) {
-            if (!s.capabilities.resources) continue
+            if (!s.capabilities.resources && !s.client.supportsResources) {
+              continue
+            }
             try {
               const resources = await s.client.listResources()
               s.resources = resources
+              s.capabilities.resources =
+                s.client.supportsResources || resources.length > 0
               for (const r of resources) {
                 rows.push({
                   server: s.name,
@@ -400,12 +444,31 @@ export function createMcpMetaTools(servers: ConnectedMcpServer[]): BoloTool[] {
                 })
               }
             } catch (e) {
-              const msg = e instanceof Error ? e.message : String(e)
-              rows.push({
-                server: s.name,
-                uri: '',
-                name: `(list failed: ${msg})`,
-              })
+              // M-GEN-4：list 失败回退缓存
+              if (s.resources?.length) {
+                for (const r of s.resources) {
+                  rows.push({
+                    server: s.name,
+                    uri: r.uri,
+                    name: r.name,
+                    description: r.description,
+                    mimeType: r.mimeType,
+                  })
+                }
+                const msg = e instanceof Error ? e.message : String(e)
+                rows.push({
+                  server: s.name,
+                  uri: '',
+                  name: `(list failed, showing cache: ${msg})`,
+                })
+              } else {
+                const msg = e instanceof Error ? e.message : String(e)
+                rows.push({
+                  server: s.name,
+                  uri: '',
+                  name: `(list failed: ${msg})`,
+                })
+              }
             }
           }
           if (!rows.length) {
@@ -544,7 +607,7 @@ export function createMcpMetaTools(servers: ConnectedMcpServer[]): BoloTool[] {
               errorCode: 'mcp_server_not_found',
             }
           }
-          if (!s.capabilities.prompts) {
+          if (!s.capabilities.prompts && !s.client.supportsPrompts) {
             return {
               ok: false,
               output: `Server "${serverName}" does not support prompts`,
@@ -552,15 +615,7 @@ export function createMcpMetaTools(servers: ConnectedMcpServer[]): BoloTool[] {
               errorCode: 'mcp_no_prompts',
             }
           }
-          const argsRaw =
-            input.arguments && typeof input.arguments === 'object'
-              ? (input.arguments as Record<string, unknown>)
-              : {}
-          const args: Record<string, string> = {}
-          for (const [k, v] of Object.entries(argsRaw)) {
-            if (v === undefined || v === null) continue
-            args[k] = typeof v === 'string' ? v : String(v)
-          }
+          const args = coerceMcpPromptArguments(input.arguments)
           try {
             const result = await s.client.getPrompt(promptName, args)
             return {
@@ -678,14 +733,46 @@ export async function connectMcpServers(
 
     try {
       await client.connect()
-      const listed = await client.listTools()
+      let listed: McpToolDef[] = []
+      try {
+        listed = await client.listTools()
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        warnings.push(`MCP server "${cfg.name}": tools/list failed: ${msg}`)
+        failures.push({
+          name: cfg.name,
+          transport,
+          error: `tools/list failed: ${msg}`,
+          endpointSummary,
+        })
+        try {
+          await client.close()
+        } catch {
+          /* ignore */
+        }
+        continue
+      }
+
+      // M-GEN-4：resources/prompts list 失败不拆掉 tools 连接
       let resources: McpResourceDef[] = []
       let prompts: McpPromptDef[] = []
       if (client.supportsResources) {
-        resources = await client.listResources()
+        const r = await safeListMcpResources(client)
+        resources = r.items
+        if (r.error) {
+          warnings.push(
+            `MCP server "${cfg.name}": resources/list failed: ${r.error} (tools still available)`,
+          )
+        }
       }
       if (client.supportsPrompts) {
-        prompts = await client.listPrompts()
+        const p = await safeListMcpPrompts(client)
+        prompts = p.items
+        if (p.error) {
+          warnings.push(
+            `MCP server "${cfg.name}": prompts/list failed: ${p.error} (tools still available)`,
+          )
+        }
       }
 
       servers.push({
@@ -698,6 +785,7 @@ export async function connectMcpServers(
         prompts,
         capabilities: {
           tools: client.supportsTools || listed.length > 0,
+          // cap 位以 initialize 为准；list 空/失败仍标支持，meta 工具可重试
           resources: client.supportsResources,
           prompts: client.supportsPrompts,
         },
