@@ -157,10 +157,12 @@ async function main() {
   assert(only.model === 'm-jsonl', 'jsonl model from meta')
   const oldItem = listed2.find((x) => x.id === 'sess_old')!
   assert(oldItem.filePath.endsWith('.json'), 'same id prefers json path')
+  // J-D：同 id 双文件时 messageCount/preview 跟 jsonl（R1）
   assert(
-    oldItem.preview.includes('first session'),
-    'same id keeps json preview not jsonl',
+    oldItem.preview.includes('should not replace'),
+    'same id message preview from jsonl when present',
   )
+  assert(oldItem.messageCount === 1, 'same id messageCount from jsonl')
 
   const limited = await listProjectSessions({ cwd, sessionsDir, limit: 1 })
   assert(limited.length === 1, 'limit 1')

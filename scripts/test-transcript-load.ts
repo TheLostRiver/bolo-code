@@ -9,7 +9,6 @@ import {
   createSession,
   saveSession,
   loadTranscriptMessages,
-  loadTranscriptFile,
   resumeSession,
   resolveTranscriptPathFromJson,
 } from '../packages/core/src/index.ts'
@@ -108,6 +107,151 @@ async function main() {
     provider: createMockProvider(),
   })
   assert(sameMessages(r2.messages, msgs), 'resume by .jsonl path')
+
+  // ── 6) J-D R1：最后 compact_boundary 之后的 messages ──
+  const r1Path = path.join(sessionsDir, 'r1_boundary.jsonl')
+  await fs.writeFile(
+    r1Path,
+    [
+      JSON.stringify({
+        type: 'meta',
+        sessionId: 'r1_boundary',
+        timestamp: '2020-01-01T00:00:00.000Z',
+        model: 'm-r1',
+      }),
+      JSON.stringify({
+        type: 'message',
+        sessionId: 'r1_boundary',
+        timestamp: '2020-01-01T00:00:01.000Z',
+        message: { role: 'user', content: 'pre-compact old' },
+      }),
+      JSON.stringify({
+        type: 'message',
+        sessionId: 'r1_boundary',
+        timestamp: '2020-01-01T00:00:02.000Z',
+        message: { role: 'assistant', content: 'pre-compact reply' },
+      }),
+      JSON.stringify({
+        type: 'compact_boundary',
+        sessionId: 'r1_boundary',
+        timestamp: '2020-01-01T00:00:03.000Z',
+        summary: 'compressed summary',
+      }),
+      JSON.stringify({
+        type: 'message',
+        sessionId: 'r1_boundary',
+        timestamp: '2020-01-01T00:00:04.000Z',
+        message: { role: 'user', content: 'post-compact only' },
+      }),
+      JSON.stringify({
+        type: 'message',
+        sessionId: 'r1_boundary',
+        timestamp: '2020-01-01T00:00:05.000Z',
+        message: { role: 'assistant', content: 'post-compact ack' },
+      }),
+      'half-line-broken{',
+      '',
+    ].join('\n') + '\n',
+    'utf8',
+  )
+  const r1 = await loadTranscriptMessages(r1Path)
+  assert(r1.usedCompactBoundary === true, 'R1 used boundary')
+  assert(r1.messages.length === 2, `R1 messages after boundary got ${r1.messages.length}`)
+  assert(r1.messages[0]!.content === 'post-compact only', 'R1 first msg')
+  assert(r1.messages[1]!.content === 'post-compact ack', 'R1 second msg')
+  assert(r1.meta?.sessionId === 'r1_boundary', 'R1 meta still first')
+
+  // ── 7) 双文件：jsonl 全坏/无 message → messages 回退 JSON ──
+  const conflictId = 'sess_conflict'
+  const conflictJson = path.join(sessionsDir, `${conflictId}.json`)
+  const conflictJsonl = path.join(sessionsDir, `${conflictId}.jsonl`)
+  await fs.writeFile(
+    conflictJson,
+    JSON.stringify(
+      {
+        version: 1,
+        id: conflictId,
+        cwd,
+        permissionMode: 'default',
+        messages: [
+          { role: 'user', content: 'from-json-snapshot' },
+          { role: 'assistant', content: 'json-ok' },
+        ],
+        systemPromptSections: [],
+        autoCompactEnabled: true,
+        contextWindowTokens: 128000,
+        maxPtlRetries: 3,
+        createdAt: '2020-01-01T00:00:00.000Z',
+        updatedAt: '2020-01-01T00:00:00.000Z',
+      },
+      null,
+      2,
+    ) + '\n',
+    'utf8',
+  )
+  await fs.writeFile(
+    conflictJsonl,
+    [
+      JSON.stringify({
+        type: 'meta',
+        sessionId: conflictId,
+        timestamp: '2020-01-01T00:00:00.000Z',
+      }),
+      'not-json-line',
+      '{"type":"message","broken":true}',
+      'half-open{',
+      '',
+    ].join('\n'),
+    'utf8',
+  )
+  const { session: conflictSess } = await resumeSession({
+    idOrPath: conflictId,
+    sessionsDir,
+    cwd,
+    reassembleSystem: false,
+    systemPrompt: false,
+    provider: createMockProvider(),
+  })
+  assert(
+    conflictSess.messages.length === 2 &&
+      conflictSess.messages[0]!.content === 'from-json-snapshot',
+    'empty/bad jsonl falls back to JSON messages',
+  )
+
+  // ── 8) 双文件：jsonl 有有效 message → 优先 jsonl ──
+  await fs.writeFile(
+    conflictJsonl,
+    [
+      JSON.stringify({
+        type: 'meta',
+        sessionId: conflictId,
+        timestamp: '2020-01-01T00:00:00.000Z',
+        model: 'from-jsonl-meta',
+      }),
+      JSON.stringify({
+        type: 'message',
+        sessionId: conflictId,
+        timestamp: '2020-01-01T00:00:01.000Z',
+        message: { role: 'user', content: 'from-jsonl-wins' },
+      }),
+      '',
+    ].join('\n'),
+    'utf8',
+  )
+  const { session: winSess, snapshot: winSnap } = await resumeSession({
+    idOrPath: conflictId,
+    sessionsDir,
+    cwd,
+    reassembleSystem: false,
+    systemPrompt: false,
+    provider: createMockProvider(),
+  })
+  assert(
+    winSess.messages.length === 1 &&
+      winSess.messages[0]!.content === 'from-jsonl-wins',
+    'valid jsonl messages win over JSON',
+  )
+  assert(winSnap.id === conflictId, 'conflict snapshot id')
 
   await fs.rm(tmpRoot, { recursive: true, force: true })
   console.log('PASS: test-transcript-load')

@@ -28,7 +28,9 @@ import {
 } from '../../permissions/src/index.ts'
 import {
   dualWriteSessionTranscript,
+  loadTranscriptFile,
   loadTranscriptMessages,
+  messagesFromTranscriptEntries,
   resolveTranscriptPathFromJson,
 } from './sessionTranscript.ts'
 import type { SessionUsage } from './sessionUsage.ts'
@@ -564,18 +566,19 @@ export async function loadSessionPair(
   }
 
   if (jsonSnap && transcript) {
-    // 双文件：messages 用 jsonl（更新 transcript）；其余字段保留 JSON
+    // 双文件：jsonl 有可用 messages（R1 后非空）则优先；空/全坏行则回退 JSON
+    const useTranscript = transcript.messages.length > 0
     return {
       path: resolvedJson,
       snapshot: {
         ...jsonSnap,
-        messages: transcript.messages,
+        messages: useTranscript ? transcript.messages : jsonSnap.messages,
         // meta 可补 JSON 缺省
         model: jsonSnap.model ?? transcript.meta?.model,
         cwd: jsonSnap.cwd || transcript.meta?.cwd || opts?.cwd || process.cwd(),
         createdAt: jsonSnap.createdAt || transcript.meta?.createdAt || jsonSnap.createdAt,
       },
-      fromTranscript: true,
+      fromTranscript: useTranscript,
     }
   }
 
@@ -790,45 +793,29 @@ export function sessionPreviewFromMessages(
   return ''
 }
 
-/** 从 jsonl 粗提列表字段（坏行跳过；不依赖完整 loadTranscript） */
+/**
+ * 从 jsonl 粗提列表字段（坏行跳过；messageCount/preview 走 R1 boundary）。
+ * 半行/损坏行：JSON.parse 失败则跳过。
+ */
 async function sessionListItemFromJsonl(
   filePath: string,
   idFromFile: string,
   mtime: Date,
 ): Promise<SessionListItem | null> {
-  const raw = await fs.readFile(filePath, 'utf8')
-  let id = idFromFile
-  let cwd: string | undefined
-  let model: string | undefined
-  let messageCount = 0
-  const messages: unknown[] = []
-  let lastTs: string | undefined
+  let entries: Awaited<ReturnType<typeof loadTranscriptFile>>['entries']
+  try {
+    ;({ entries } = await loadTranscriptFile(filePath))
+  } catch {
+    return null
+  }
 
-  for (const line of raw.split(/\r?\n/)) {
-    const t = line.trim()
-    if (!t) continue
-    try {
-      const o = JSON.parse(t) as Record<string, unknown>
-      if (!o || typeof o.type !== 'string') continue
-      if (typeof o.timestamp === 'string' && o.timestamp.trim()) {
-        lastTs = o.timestamp
-      }
-      if (o.type === 'meta') {
-        if (typeof o.sessionId === 'string' && o.sessionId.trim()) {
-          id = o.sessionId.trim()
-        }
-        if (typeof o.cwd === 'string') cwd = o.cwd
-        if (typeof o.model === 'string') model = o.model
-        continue
-      }
-      if (o.type === 'message') {
-        messageCount++
-        if (o.message && typeof o.message === 'object') {
-          messages.push(o.message)
-        }
-      }
-    } catch {
-      // 坏行跳过
+  const { messages, meta } = messagesFromTranscriptEntries(entries)
+  const id =
+    (meta?.sessionId && meta.sessionId.trim()) || idFromFile
+  let lastTs: string | undefined
+  for (const e of entries) {
+    if (typeof e.timestamp === 'string' && e.timestamp.trim()) {
+      lastTs = e.timestamp
     }
   }
 
@@ -838,17 +825,30 @@ async function sessionListItemFromJsonl(
     filePath,
     // 仅 jsonl：优先文件 mtime（列表新鲜度），无 mtime 时回退末行 timestamp
     updatedAt: mtimeIso || lastTs || new Date(0).toISOString(),
-    messageCount,
+    messageCount: messages.length,
     preview: sessionPreviewFromMessages(messages),
-    cwd,
-    model,
+    cwd: meta?.cwd,
+    model: meta?.model,
   }
+}
+
+/** 取较新的 ISO 时间（解析失败则回退字符串比较） */
+function newerIso(a: string, b: string): string {
+  const ta = Date.parse(a)
+  const tb = Date.parse(b)
+  if (Number.isFinite(ta) && Number.isFinite(tb)) {
+    return tb >= ta ? b : a
+  }
+  return b.localeCompare(a) >= 0 ? b : a
 }
 
 /**
  * 列出当前项目 `.bolo/sessions` 下 `*.json` 与 `*.jsonl`（可覆盖 sessionsDir）。
- * 同 id 去重：优先 JSON 快照元数据；仅有 jsonl 时用 mtime / 行内字段。
- * 按 updatedAt / mtime 降序；坏文件跳过。
+ * 同 id 去重（J-D）：
+ * - 配置/path：优先 JSON 路径与 model/cwd
+ * - messageCount / preview：有可用 jsonl messages 时跟 jsonl（R1）
+ * - updatedAt：取 JSON updatedAt 与 jsonl mtime 较新者
+ * 按 updatedAt 降序；坏文件跳过。
  */
 export async function listProjectSessions(opts: {
   cwd: string
@@ -868,8 +868,11 @@ export async function listProjectSessions(opts: {
     throw err
   }
 
-  /** id → item；JSON 优先于 jsonl */
-  const byId = new Map<string, SessionListItem & { fromJson?: boolean }>()
+  type ListAcc = SessionListItem & {
+    fromJson?: boolean
+    fromJsonl?: boolean
+  }
+  const byId = new Map<string, ListAcc>()
 
   for (const name of names) {
     if (name.startsWith('.')) continue
@@ -901,16 +904,41 @@ export async function listProjectSessions(opts: {
           typeof o.updatedAt === 'string' && o.updatedAt.trim()
             ? o.updatedAt
             : mtimeIso
-        byId.set(id, {
-          id,
-          filePath,
-          updatedAt,
-          messageCount: messages.length,
-          preview: sessionPreviewFromMessages(messages),
-          cwd: typeof o.cwd === 'string' ? o.cwd : undefined,
-          model: typeof o.model === 'string' ? o.model : undefined,
-          fromJson: true,
-        })
+        const prev = byId.get(id)
+        if (prev?.fromJsonl) {
+          // 已有 jsonl：path/配置用 JSON；消息预览保留 jsonl（若有）
+          const keepJsonlMsgs = prev.messageCount > 0 || prev.preview.length > 0
+          byId.set(id, {
+            id,
+            filePath,
+            updatedAt: newerIso(prev.updatedAt, updatedAt),
+            messageCount: keepJsonlMsgs ? prev.messageCount : messages.length,
+            preview: keepJsonlMsgs
+              ? prev.preview
+              : sessionPreviewFromMessages(messages),
+            cwd:
+              typeof o.cwd === 'string'
+                ? o.cwd
+                : prev.cwd,
+            model:
+              typeof o.model === 'string'
+                ? o.model
+                : prev.model,
+            fromJson: true,
+            fromJsonl: true,
+          })
+        } else {
+          byId.set(id, {
+            id,
+            filePath,
+            updatedAt,
+            messageCount: messages.length,
+            preview: sessionPreviewFromMessages(messages),
+            cwd: typeof o.cwd === 'string' ? o.cwd : undefined,
+            model: typeof o.model === 'string' ? o.model : undefined,
+            fromJson: true,
+          })
+        }
         continue
       }
 
@@ -919,9 +947,23 @@ export async function listProjectSessions(opts: {
       const item = await sessionListItemFromJsonl(filePath, idFromFile, st.mtime)
       if (!item) continue
       const prev = byId.get(item.id)
-      // 同 id：已有 JSON 元数据则保留 JSON，不覆盖
-      if (prev?.fromJson) continue
-      byId.set(item.id, item)
+      if (prev?.fromJson) {
+        // 已有 JSON：messages/preview 用 jsonl（R1，非空时）；path 仍 JSON
+        const useJsonlMsgs = item.messageCount > 0
+        byId.set(item.id, {
+          id: prev.id,
+          filePath: prev.filePath,
+          updatedAt: newerIso(prev.updatedAt, item.updatedAt),
+          messageCount: useJsonlMsgs ? item.messageCount : prev.messageCount,
+          preview: useJsonlMsgs ? item.preview : prev.preview,
+          cwd: prev.cwd ?? item.cwd,
+          model: prev.model ?? item.model,
+          fromJson: true,
+          fromJsonl: true,
+        })
+        continue
+      }
+      byId.set(item.id, { ...item, fromJsonl: true })
     } catch {
       // 坏文件 / 不可读：跳过
       continue
@@ -929,7 +971,7 @@ export async function listProjectSessions(opts: {
   }
 
   const items: SessionListItem[] = [...byId.values()].map(
-    ({ fromJson: _f, ...rest }) => rest,
+    ({ fromJson: _j, fromJsonl: _l, ...rest }) => rest,
   )
 
   items.sort((a, b) => {

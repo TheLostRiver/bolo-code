@@ -363,8 +363,39 @@ export async function loadTranscriptFile(
 }
 
 /**
- * 从 jsonl 重建线性 messages（只取 type=message 行，按文件顺序）。
- * J-C+：loadSession / resumeSession 在同 id 有 jsonl 时优先用此重建 messages。
+ * 策略 R1：取**最后一个** `compact_boundary` 之后的 message 行作为有效模型链。
+ * 无 boundary 时取全部 message。meta 仍取文件中首条 meta。
+ * compact 后 rewrite 的 jsonl 为 meta+boundary+压缩后 messages，与此一致。
+ */
+export function messagesFromTranscriptEntries(entries: TranscriptEntry[]): {
+  messages: ChatMessage[]
+  meta?: TranscriptMetaEntry
+  /** 是否应用了 compact_boundary 截断 */
+  usedCompactBoundary: boolean
+} {
+  let meta: TranscriptMetaEntry | undefined
+  let lastBoundary = -1
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i]!
+    if (e.type === 'meta' && !meta) meta = e
+    if (e.type === 'compact_boundary') lastBoundary = i
+  }
+  const messages: ChatMessage[] = []
+  const start = lastBoundary >= 0 ? lastBoundary + 1 : 0
+  for (let i = start; i < entries.length; i++) {
+    const e = entries[i]!
+    if (e.type === 'message') messages.push(cloneMessage(e.message))
+  }
+  return {
+    messages,
+    meta,
+    usedCompactBoundary: lastBoundary >= 0,
+  }
+}
+
+/**
+ * 从 jsonl 重建线性 messages（R1：最后 compact_boundary 之后）。
+ * J-C+ / J-D：loadSession / resumeSession 在同 id 有可用 jsonl messages 时优先用此重建。
  */
 export async function loadTranscriptMessages(
   file: string,
@@ -374,19 +405,17 @@ export async function loadTranscriptMessages(
   meta?: TranscriptMetaEntry
   path: string
   entryCount: number
+  usedCompactBoundary: boolean
 }> {
   const { entries, path: filePath } = await loadTranscriptFile(file, opts)
-  let meta: TranscriptMetaEntry | undefined
-  const messages: ChatMessage[] = []
-  for (const e of entries) {
-    if (e.type === 'meta' && !meta) meta = e
-    if (e.type === 'message') messages.push(cloneMessage(e.message))
-  }
+  const { messages, meta, usedCompactBoundary } =
+    messagesFromTranscriptEntries(entries)
   return {
     messages,
     meta,
     path: filePath,
     entryCount: entries.length,
+    usedCompactBoundary,
   }
 }
 

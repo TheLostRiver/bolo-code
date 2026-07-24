@@ -109,7 +109,7 @@
 | **`bolo --resume` 无 id → 项目列表选择** | ✅ |
 | `listProjectSessions`（json + jsonl 去重） | ✅ |
 | `bolo --continue` | ✅ |
-| JSONL 双写 + 最小 resume（messages 优先 jsonl） | ✅ 最小 |
+| JSONL 双写 + 最小 resume（messages 优先 jsonl；R1 boundary） | ✅ 最小 + J-D 部分 |
 | **无参 `bolo` TTY 新会话 + banner** | ✅ |
 | 状态行 / 流式工具行 / 权限 y/n / slash | ✅ |
 | 完整 Ink 级 TUI | ⬜ T8 |
@@ -375,7 +375,7 @@ flowchart TB
 | skill-creator / plugin-creator | ✅ |
 | Subagent 真 loop / Agent | ✅；worktree ⬜ |
 | Prompt cache C1–C5 | ✅ |
-| JSONL 双写 + 最小 resume | ✅；深化 🟡 |
+| JSONL 双写 + 最小 resume + R1/list 冲突策略 | ✅；J-D 仍可再深 🟡 |
 | Usage 本地记账 | ✅ 最小 |
 | openai-responses HTTP SSE | ✅；WS ⬜ |
 | MCP stdio / plugins 最小 | ✅ |
@@ -404,13 +404,13 @@ flowchart TB
 |------|------|------|
 | A 交互 | 斜杠 · rules · skills · creators | ✅ |
 | B 成本 | C1–C5 | ✅；C6+ 后置 |
-| C 存盘 | JSONL A+B+C 最小 | ✅；J-D 深化 🟡 |
+| C 存盘 | JSONL A+B+C 最小 + J-D R1/冲突 | ✅；J-D 其余 🟡 |
 | D 扩展 | Subagent · MCP · plugins | ✅ 最小；深度 🟡 |
 | E TUI | T0–T7 | ✅；T8 ⬜ |
 | F GUI | Electron | ⬜ 后置 |
 | G 协议 | Responses HTTP | ✅；WS 后置 |
 
-**默认下一刀：** 见 **`docs/TODO.md` §7**（JSONL / MCP·plugins / slash 打磨 三选一）。
+**默认下一刀：** 见 **`docs/TODO.md` §7**（MCP·plugins / J-D 余量 / Usage+）。
 
 ---
 
@@ -476,5 +476,5 @@ flowchart TB
 
 **一句话：**  
 **可日用 headless coding agent 主路径已齐**（CLI + slash + rules + cache 标记 + 会话 + 扩展最小 + Subagent + Responses HTTP）。  
-下一刀优先 **JSONL 深化 / MCP·plugins 深度 / slash 打磨**；**Electron · 完整 Ink · Responses WS · cache TTL** 后置。  
+下一刀优先 **MCP·plugins 深度 / J-D 余量(T3) / Usage+**；**Electron · 完整 Ink · Responses WS · cache TTL** 后置。  
 执行序 → **`docs/TODO.md`**。

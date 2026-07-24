@@ -228,6 +228,7 @@ export {
   rewriteTranscriptFromMessages,
   loadTranscriptFile,
   loadTranscriptMessages,
+  messagesFromTranscriptEntries,
   getTranscriptWriteState,
   setTranscriptWriteState,
   type TranscriptEntry,
