@@ -39,12 +39,19 @@ export type LoadBoloRulesOptions = {
   loadUserRules?: boolean
   /** 是否加载项目级 .bolo/rules（默认 true） */
   loadProjectRules?: boolean
+  /**
+   * 当前相关路径（相对 cwd 或任意路径字符串）。
+   * `alwaysApply: false` 且声明了 `paths` 时，任一 activePath 匹配任一 glob 才装载。
+   */
+  activePaths?: string[]
 }
 
 export type RuleFrontmatter = {
   disabled?: boolean
-  /** 默认 true；false 时本版跳过（无路径匹配） */
+  /** 默认 true；false 时需 paths 匹配 activePaths 才装载，无 paths 则跳过 */
   alwaysApply?: boolean
+  /** glob 列表；仅 alwaysApply=false 时参与过滤 */
+  paths?: string[]
 }
 
 function envDisablesRules(): boolean {
@@ -59,8 +66,121 @@ function parseBool(raw: string): boolean | undefined {
   return undefined
 }
 
+/** 路径归一化为正斜杠（不做 cwd 解析，仅字符串级） */
+export function normalizeRulePath(p: string): string {
+  return p.replace(/\\/g, '/').replace(/^\.\/+/, '')
+}
+
 /**
- * 最小 frontmatter：仅识别 disabled / alwaysApply。
+ * 最小 glob：`*` 不跨 `/`，`**` 可跨多层；也支持纯后缀（如 `*.ts` 匹配任意深度）。
+ * pattern / path 均按正斜杠比较。
+ */
+export function matchRulePathGlob(filePath: string, pattern: string): boolean {
+  const pathNorm = normalizeRulePath(filePath)
+  const pat = normalizeRulePath(pattern).trim()
+  if (!pat) return false
+
+  // 纯后缀：*.ext / **/*.ext — 已由 ** 规则覆盖；额外：无 / 的 *.x 匹配任意段尾
+  const re = globToRegExp(pat)
+  if (re.test(pathNorm)) return true
+
+  // 后缀匹配：pattern 以 * 开头且无 ** 时，也允许匹配 basename / 路径尾
+  if (pat.startsWith('*.') && !pat.includes('/')) {
+    const suffix = pat.slice(1) // e.g. .ts
+    return pathNorm.endsWith(suffix) || pathNorm.split('/').pop()?.endsWith(suffix) === true
+  }
+  return false
+}
+
+function globToRegExp(glob: string): RegExp {
+  let i = 0
+  let out = '^'
+  while (i < glob.length) {
+    const c = glob[i]!
+    if (c === '*') {
+      if (glob[i + 1] === '*') {
+        // ** 或 **/
+        if (glob[i + 2] === '/') {
+          out += '(?:.*/)?'
+          i += 3
+        } else {
+          out += '.*'
+          i += 2
+        }
+      } else {
+        out += '[^/]*'
+        i += 1
+      }
+      continue
+    }
+    if (c === '?') {
+      out += '[^/]'
+      i += 1
+      continue
+    }
+    if ('\\.[]{}()+-^$|'.includes(c)) {
+      out += '\\' + c
+      i += 1
+      continue
+    }
+    out += c
+    i += 1
+  }
+  out += '$'
+  return new RegExp(out)
+}
+
+/** 任一 activePath 匹配任一 glob */
+export function activePathsMatchGlobs(
+  activePaths: readonly string[] | undefined,
+  globs: readonly string[] | undefined,
+): boolean {
+  if (!activePaths?.length || !globs?.length) return false
+  for (const ap of activePaths) {
+    for (const g of globs) {
+      if (matchRulePathGlob(ap, g)) return true
+    }
+  }
+  return false
+}
+
+function parsePathsValue(val: string): string[] | undefined {
+  const v = val.trim()
+  if (!v || v === '[]') return []
+  // YAML 行内列表: ["a", "b"] 或 ['a','b']
+  if (v.startsWith('[') && v.endsWith(']')) {
+    const inner = v.slice(1, -1).trim()
+    if (!inner) return []
+    const parts = inner.split(',').map((s) => {
+      let t = s.trim()
+      if (
+        (t.startsWith('"') && t.endsWith('"')) ||
+        (t.startsWith("'") && t.endsWith("'"))
+      ) {
+        t = t.slice(1, -1)
+      }
+      return t.trim()
+    })
+    return parts.filter(Boolean)
+  }
+  // 逗号分隔字符串
+  return v
+    .split(',')
+    .map((s) => {
+      let t = s.trim()
+      if (
+        (t.startsWith('"') && t.endsWith('"')) ||
+        (t.startsWith("'") && t.endsWith("'"))
+      ) {
+        t = t.slice(1, -1)
+      }
+      return t.trim()
+    })
+    .filter(Boolean)
+}
+
+/**
+ * 最小 frontmatter：disabled / alwaysApply / paths。
  * 无 frontmatter 时 body = 全文，meta 默认 alwaysApply=true。
  */
 export function parseRuleFrontmatter(raw: string): {
@@ -81,8 +201,35 @@ export function parseRuleFrontmatter(raw: string): {
   else if (body.startsWith('\n')) body = body.slice(1)
 
   const meta: RuleFrontmatter = { alwaysApply: true }
-  for (const line of fmBlock.split(/\r?\n/)) {
-    const m = /^([A-Za-z_][\w-]*)\s*:\s*(.*)$/.exec(line.trim())
+  const lines = fmBlock.split(/\r?\n/)
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li]!
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+
+    // YAML 多行列表: paths:\n  - a\n  - b
+    const listKey = /^([A-Za-z_][\w-]*)\s*:\s*$/.exec(trimmed)
+    if (listKey && listKey[1]!.toLowerCase() === 'paths') {
+      const items: string[] = []
+      while (li + 1 < lines.length) {
+        const next = lines[li + 1]!
+        const item = /^\s*-\s+(.+)$/.exec(next)
+        if (!item) break
+        li++
+        let t = item[1]!.trim()
+        if (
+          (t.startsWith('"') && t.endsWith('"')) ||
+          (t.startsWith("'") && t.endsWith("'"))
+        ) {
+          t = t.slice(1, -1)
+        }
+        if (t) items.push(t)
+      }
+      meta.paths = items
+      continue
+    }
+
+    const m = /^([A-Za-z_][\w-]*)\s*:\s*(.*)$/.exec(trimmed)
     if (!m) continue
     const key = m[1]!.toLowerCase()
     const val = m[2]!.trim()
@@ -92,6 +239,9 @@ export function parseRuleFrontmatter(raw: string): {
     } else if (key === 'alwaysapply') {
       const b = parseBool(val)
       if (b !== undefined) meta.alwaysApply = b
+    } else if (key === 'paths') {
+      const parsed = parsePathsValue(val)
+      if (parsed !== undefined) meta.paths = parsed
     }
   }
   return { meta, body }
@@ -234,7 +384,12 @@ export async function loadBoloRules(
 
     const { meta, body } = parseRuleFrontmatter(raw)
     if (meta.disabled === true) continue
-    if (meta.alwaysApply === false) continue
+    // alwaysApply 默认 true：总是装载（忽略 paths）
+    if (meta.alwaysApply === false) {
+      const globs = meta.paths?.filter(Boolean) ?? []
+      if (!globs.length) continue // 无 paths → 跳过
+      if (!activePathsMatchGlobs(opts.activePaths, globs)) continue
+    }
 
     const trimmed = body.trim()
     if (!trimmed) continue

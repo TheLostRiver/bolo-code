@@ -48,7 +48,12 @@ async function main() {
   )
   await fs.writeFile(
     path.join(projectRules, 'path-only.md'),
-    '---\nalwaysApply: false\n---\nPath-gated rule body should be skipped in v1.\n',
+    '---\nalwaysApply: false\n---\nPath-gated rule body should be skipped without paths.\n',
+    'utf8',
+  )
+  await fs.writeFile(
+    path.join(projectRules, 'ts-scope.md'),
+    '---\nalwaysApply: false\npaths: ["**/*.ts", "src/**"]\n---\nTypeScript-scoped rule body PATH_SCOPED_TS.\n',
     'utf8',
   )
   await fs.writeFile(
@@ -74,6 +79,25 @@ async function main() {
   assert(fm.meta.alwaysApply === false, 'fm alwaysApply false')
   assert(fm.body.includes('body here'), 'fm body')
 
+  const fmPaths = parseRuleFrontmatter(
+    '---\nalwaysApply: false\npaths: ["**/*.ts", "src/**"]\n---\nscoped\n',
+  )
+  assert(fmPaths.meta.alwaysApply === false, 'fm paths alwaysApply')
+  assert(
+    Array.isArray(fmPaths.meta.paths) &&
+      fmPaths.meta.paths.includes('**/*.ts') &&
+      fmPaths.meta.paths.includes('src/**'),
+    'fm paths list',
+  )
+  const fmPathsCsv = parseRuleFrontmatter(
+    '---\nalwaysApply: false\npaths: **/*.ts, src/**\n---\nx\n',
+  )
+  assert(
+    fmPathsCsv.meta.paths?.length === 2 &&
+      fmPathsCsv.meta.paths[0] === '**/*.ts',
+    'fm paths csv',
+  )
+
   // loadBoloRules
   const loaded = await loadBoloRules({
     cwd: tmp,
@@ -98,14 +122,66 @@ async function main() {
   )
   assert(
     !loaded.sources.some((s) => s.label.includes('path-only')),
-    'alwaysApply false skipped',
+    'alwaysApply false without paths skipped',
+  )
+  assert(
+    !loaded.sources.some((s) => s.label.includes('ts-scope')),
+    'paths rule skipped without activePaths',
   )
   assert(!loaded.text.includes('EVIL_SHOULD_NOT_LOAD'), 'skip node_modules')
   assert(!loaded.text.includes('never appear'), 'disabled body absent')
+  assert(!loaded.text.includes('PATH_SCOPED_TS'), 'scoped body absent default')
   assert(loaded.text.includes('# Project rules'), 'section title')
   assert(loaded.text.includes('Use tabs for indentation'), 'style body')
   assert(loaded.text.includes('typed errors'), 'api body')
   assert(loaded.text.includes('concise commit'), 'user body')
+
+  // alwaysApply false + paths + activePaths match
+  const withTs = await loadBoloRules({
+    cwd: tmp,
+    userConfigDir: userDir,
+    activePaths: ['src/a.ts'],
+  })
+  assert(
+    withTs.sources.some((s) => s.label.includes('ts-scope')),
+    'paths match src/a.ts',
+  )
+  assert(withTs.text.includes('PATH_SCOPED_TS'), 'scoped body with ts path')
+
+  // activePaths 不匹配 → 不含
+  const withMd = await loadBoloRules({
+    cwd: tmp,
+    userConfigDir: userDir,
+    activePaths: ['readme.md'],
+  })
+  assert(
+    !withMd.sources.some((s) => s.label.includes('ts-scope')),
+    'paths no match readme.md',
+  )
+  assert(!withMd.text.includes('PATH_SCOPED_TS'), 'scoped body absent for md')
+
+  // getSystemPrompt 透传 activePaths
+  const sysScoped = await getSystemPrompt({
+    cwd: tmp,
+    userConfigDir: userDir,
+    date: '2026-07-24',
+    loadInstructions: false,
+    activePaths: ['src/a.ts'],
+  })
+  assert(
+    sysScoped.join('\n\n').includes('PATH_SCOPED_TS'),
+    'getSystemPrompt activePaths',
+  )
+  const assScoped = await assembleSessionSystemPrompt({
+    cwd: tmp,
+    userConfigDir: userDir,
+    date: '2026-07-24',
+    activePaths: ['readme.md'],
+  })
+  assert(
+    !assScoped.join('\n\n').includes('PATH_SCOPED_TS'),
+    'assembleSessionSystemPrompt no match',
+  )
 
   // 稳定排序：用户 prefs 在项目 style 前；nested/api 在 style 后（路径排序）
   const labels = loaded.sources.map((s) => s.label)

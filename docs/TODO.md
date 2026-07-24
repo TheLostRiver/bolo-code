@@ -33,7 +33,7 @@ P3  GUI / 打磨 / 后置
 | **P0-a** | **`--resume` 无 id 会话列表** | 对齐 HC：项目相关会话列表 → 用户选择进入 |
 | **P0-b** | **斜杠总线 + 最小命令** | `/help` `/compact` `/context` `/effort` `/model` `/clear`… |
 | **P0-c** | **`bolo` 无参新会话 + BOLO 欢迎** | TUI 最小可见产品（可与 a/b 交错） |
-| **P1-a** | **`.bolo/rules` + `/rules`** | 项目约束装载 |
+| **P1-a** | **`.bolo/rules` + `/rules`** | 项目约束装载；`paths` 作用域 ✅ |
 | **P1-b** | **Prompt 缓存友好前缀** | 省 token |
 | **P1-c** | **JSONL transcript 双写** | 按 `TODO_SESSION_JSONL` A+B |
 | **P1-d** | **内置 skill-creator / plugin-creator** | 元技能 |
@@ -102,6 +102,7 @@ P3  GUI / 打磨 / 后置
 | ID | 主题 | 关键切片 | 状态 |
 |----|------|----------|------|
 | R1–R2 | **`.bolo/rules` 发现 + 注入** | M-Rules | ✅ |
+| R3 | **frontmatter `paths` 作用域** | `activePaths` × globs | ✅ |
 | R4 | `/rules` | 依赖 Slash | ✅ |
 | C1–C4 | **Prompt 静态/动态边界 + 前缀稳定测试** | M-Cost（`PROMPT_CACHE.md` + stable/volatile + `test-prompt-cache`） | ✅ |
 | J-A/B | **JSONL 双写** | `TODO_SESSION_JSONL` Phase A+B（commit 19f7594） | ✅ |
@@ -200,4 +201,4 @@ P3  GUI / 打磨 / 后置
 ---
 
 **一句话：**  
-日用 CLI 主路径已齐；**Electron 后置**；下一协议刀：**OpenAI Responses 原生直连**（保留 Chat Completions；Codex 只读 `codex-api` responses 定点，不通读全仓）。
+日用 CLI 主路径已齐；**OpenAI Responses 原生直连（HTTP SSE）已支持**；**Electron 后置**；可选下一刀：Responses WebSocket / T8 Ink。

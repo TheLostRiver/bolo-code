@@ -204,6 +204,10 @@ export type GetSystemPromptOptions = SystemPromptEnv & {
   boloRules?: string
   /** 是否在组装时加载 .bolo/rules（默认 true） */
   loadRules?: boolean
+  /**
+   * 当前相关路径，透传给 loadBoloRules（paths 作用域规则）。
+   */
+  activePaths?: string[]
   userConfigDir?: string
   mcpPlaceholder?: boolean
 }
@@ -421,6 +425,7 @@ export async function getVolatileSections(
     const loaded = await loadBoloRules({
       cwd: opts.cwd,
       userConfigDir: opts.userConfigDir,
+      activePaths: opts.activePaths,
     })
     boloRules = loaded.text
   }

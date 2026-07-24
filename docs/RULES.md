@@ -28,6 +28,7 @@
 ---
 disabled: true
 alwaysApply: false
+paths: ["**/*.ts", "src/**"]
 ---
 正文…
 ```
@@ -35,9 +36,14 @@ alwaysApply: false
 | 字段 | 默认 | 行为 |
 |------|------|------|
 | `disabled` | false | `true` 时跳过 |
-| `alwaysApply` | true | `false` 时本版跳过（路径匹配以后再做） |
+| `alwaysApply` | true | `true` 时总是装载（**忽略** `paths`） |
+| `paths` | （无） | 仅当 `alwaysApply: false` 时生效：YAML 列表或逗号分隔字符串；**任一** `activePaths` 匹配**任一** glob 才装载；无 `paths` 则跳过 |
 
-无 frontmatter 的文件整篇作为 body。
+### paths 作用域
+
+- `LoadBoloRulesOptions.activePaths?: string[]`（相对 cwd 或任意路径字符串）
+- `getSystemPrompt` / `assembleSessionSystemPrompt` 透传可选 `activePaths`
+- 简单 glob：`*` 不跨 `/`，`**` 匹配多层；路径用正斜杠归一化
 
 ## 预算
 
@@ -58,8 +64,8 @@ alwaysApply: false
 
 ## API
 
-- `loadBoloRules({ cwd, userConfigDir? })` → `{ text, sources[] }`
-- `getSystemPrompt` / `assembleSessionSystemPrompt` 默认自动装载（`loadRules: false` 可关）
+- `loadBoloRules({ cwd, userConfigDir?, activePaths? })` → `{ text, sources[] }`
+- `getSystemPrompt` / `assembleSessionSystemPrompt` 默认自动装载（`loadRules: false` 可关）；可选 `activePaths`
 - `ensureProjectLayout` 会创建 `rules/` 目录
 
 ## 测试

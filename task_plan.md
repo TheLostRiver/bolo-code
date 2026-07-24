@@ -1,16 +1,15 @@
 # Task Plan: Bolo Code
 
 ## Goal
-兼容 OpenAI **Responses API 原生直连**；保留 Chat Completions。
+OpenAI Responses 原生直连（HTTP SSE）— 已实现 OR1–OR5。
 
 ## Next Step
-OR1–OR5：`openaiResponses.ts` + fromEnv kind + 单测（SSE fixture）。  
-参考：OpenAI 文档 + Codex `codex-api/src/endpoint/responses.rs` + `sse/responses.rs`（仅此）。
+可选：OR6 Responses WebSocket；或有 key 时 `BOLO_PROVIDER=openai-responses` smoke-live。
 
 ## Current Phase
-docs: Responses plan — implement next
+openai-responses provider — complete (HTTP SSE)
 
 ## Notes
+- Chat Completions 仍保留 `openai-compatible`
 - Electron 后置
 - 不通读 Codex 全仓
-- 不把 Responses 请求转成 Chat Completions 再发

@@ -146,6 +146,8 @@ export {
   loadBoloRules,
   parseRuleFrontmatter,
   collectRuleCandidates,
+  matchRulePathGlob,
+  activePathsMatchGlobs,
   BOLO_RULES_MAX_CHARS_PER_FILE,
   BOLO_RULES_MAX_TOTAL_CHARS,
   type BoloRuleSource,
