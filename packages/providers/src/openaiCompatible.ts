@@ -15,6 +15,10 @@ import type {
 } from './types.ts'
 import { mapEffort, DEFAULT_EFFORT_BASE_MAX_TOKENS } from './effort.ts'
 import { mergeProviderUsage, parseOpenAIStreamUsage } from './sseUsage.ts'
+import {
+  derivePromptCacheKey,
+  isPromptCachingEnabled,
+} from './promptCache.ts'
 
 export type OpenAICompatibleConfig = {
   apiKey: string
@@ -77,6 +81,52 @@ function normalizeBaseUrl(base?: string): string {
   return b
 }
 
+/**
+ * 解析本请求应写入的 prompt_cache_key（OpenAI 可选字段）。
+ * - enablePromptCaching === false → 不写
+ * - promptCacheKey === '' → 显式关闭
+ * - 有 promptCacheKey → 用调用方值
+ * - 否则由 model + system 稳定前缀派生
+ */
+export function resolveOpenAIPromptCacheKey(
+  messages: ChatMessage[],
+  model: string,
+  options?: Pick<
+    CompleteStreamOptions,
+    'enablePromptCaching' | 'promptCacheKey'
+  >,
+): string | undefined {
+  if (!isPromptCachingEnabled(options)) return undefined
+  if (options?.promptCacheKey === '') return undefined
+  if (options?.promptCacheKey) return options.promptCacheKey
+  return derivePromptCacheKey(messages, model)
+}
+
+/** 组装 Chat Completions 请求体（含可选 prompt_cache_key） */
+export function buildOpenAICompatibleRequestBody(
+  messages: ChatMessage[],
+  config: { model: string; maxTokens: number },
+  options?: CompleteStreamOptions & { stream?: boolean },
+): Record<string, unknown> {
+  const stream = options?.stream ?? true
+  const body: Record<string, unknown> = {
+    model: config.model,
+    messages: toOpenAIMessages(messages),
+    stream,
+    max_tokens: config.maxTokens,
+  }
+  if (stream) {
+    body.stream_options = { include_usage: true }
+  }
+  if (!options?.disableTools && options?.tools?.length) {
+    body.tools = toolsToOpenAI(options.tools)
+    body.tool_choice = 'auto'
+  }
+  const cacheKey = resolveOpenAIPromptCacheKey(messages, config.model, options)
+  if (cacheKey) body.prompt_cache_key = cacheKey
+  return body
+}
+
 export function createOpenAICompatibleProvider(
   config: OpenAICompatibleConfig,
 ): LlmProvider {
@@ -92,19 +142,11 @@ export function createOpenAICompatibleProvider(
     const maxTokens =
       options?.maxTokens ??
       mapEffort(options?.effort, baseMaxTokens).maxTokens
-    const body: Record<string, unknown> = {
-      model: config.model,
-      messages: toOpenAIMessages(messages),
-      stream: true,
-      max_tokens: maxTokens,
-      // 末包带回 usage（OpenAI / 多数兼容网关）
-      stream_options: { include_usage: true },
-    }
-
-    if (!options?.disableTools && options?.tools?.length) {
-      body.tools = toolsToOpenAI(options.tools)
-      body.tool_choice = 'auto'
-    }
+    const body = buildOpenAICompatibleRequestBody(
+      messages,
+      { model: config.model, maxTokens },
+      { ...options, stream: true },
+    )
 
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
@@ -243,24 +285,35 @@ export function createOpenAICompatibleProvider(
 
   async function completeText(
     messages: ChatMessage[],
-    options?: { signal?: AbortSignal; effort?: string; maxTokens?: number },
+    options?: {
+      signal?: AbortSignal
+      effort?: string
+      maxTokens?: number
+      enablePromptCaching?: boolean
+      promptCacheKey?: string
+    },
   ): Promise<string> {
     const url = `${baseUrl}/chat/completions`
     const maxTokens =
       options?.maxTokens ??
       mapEffort(options?.effort, baseMaxTokens).maxTokens
+    const body = buildOpenAICompatibleRequestBody(
+      messages,
+      { model: config.model, maxTokens },
+      {
+        stream: false,
+        disableTools: true,
+        enablePromptCaching: options?.enablePromptCaching,
+        promptCacheKey: options?.promptCacheKey,
+      },
+    )
     const res = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${config.apiKey}`,
       },
-      body: JSON.stringify({
-        model: config.model,
-        messages: toOpenAIMessages(messages),
-        stream: false,
-        max_tokens: maxTokens,
-      }),
+      body: JSON.stringify(body),
       signal: options?.signal,
     })
     if (!res.ok) {

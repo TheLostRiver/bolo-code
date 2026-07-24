@@ -19,6 +19,10 @@ import type {
 } from './types.ts'
 import { mapEffort, DEFAULT_EFFORT_BASE_MAX_TOKENS } from './effort.ts'
 import { mergeProviderUsage } from './sseUsage.ts'
+import {
+  derivePromptCacheKey,
+  isPromptCachingEnabled,
+} from './promptCache.ts'
 
 export type OpenAIResponsesConfig = {
   apiKey: string
@@ -56,6 +60,8 @@ export type ResponsesRequestBody = {
   store: boolean
   max_output_tokens?: number
   parallel_tool_calls?: boolean
+  /** OpenAI prompt cache 路由键（可选；网关不支持时可忽略） */
+  prompt_cache_key?: string
 }
 
 function normalizeBaseUrl(base?: string): string {
@@ -155,6 +161,16 @@ export function buildResponsesRequest(
   if (!options?.disableTools && options?.tools?.length) {
     body.tools = toolsToResponses(options.tools)
     body.tool_choice = 'auto'
+  }
+  // prompt_cache_key：OpenAI 可选；兼容网关不识别时通常忽略未知字段
+  if (isPromptCachingEnabled(options)) {
+    if (options?.promptCacheKey === '') {
+      // 显式关闭
+    } else if (options?.promptCacheKey) {
+      body.prompt_cache_key = options.promptCacheKey
+    } else {
+      body.prompt_cache_key = derivePromptCacheKey(messages, config.model)
+    }
   }
   return body
 }

@@ -1,7 +1,7 @@
-# Prompt Cache 友好布局
+# Prompt Cache 友好布局与 API 接线
 
-> 对照 HelsincyCode「静态段在前 / 动态段在后」（`DYNAMIC_BOUNDARY` 思路）。  
-> Bolo：**无遥测**、无 GrowthBook、无全局 cache scope；只做 **前缀稳定布局**，让上游 API 的 prefix cache 更容易命中。
+> 对照 HelsincyCode：`getCacheControl` / `buildSystemPromptBlocks` / `addCacheBreakpoints`，以及「静态段在前 / 动态段在后」。  
+> Bolo：**无遥测**、无 GrowthBook、无全局 cache scope / 1h TTL；**布局 + 最小 API 标记**，让上游 prefix cache 更容易命中。
 
 ## 1. 为何布局影响 API prompt cache
 
@@ -20,7 +20,7 @@
 
 **规则：** 同一会话内应尽量保证「稳定前缀」字符串不变；只把会变的内容接在后面。
 
-## 2. Bolo 分段
+## 2. Bolo 分段（core）
 
 实现：`packages/core/src/systemPrompt.ts`。
 
@@ -70,43 +70,83 @@ prepareModelMessages =
 
 `toolsToOpenAI` / `toolsToAnthropic`（`packages/tools/src/providerSchema.ts`）对工具 **按 name 稳定排序**，避免注册/Map 迭代序导致 schema 数组扰动前缀缓存。
 
-## 4. 什么会 cache-break（预期）
+## 4. API 真·cache 标记（providers，C5）
+
+实现：`packages/providers/src/promptCache.ts`，由各 provider 在组请求体时调用。
+
+### 4.1 Anthropic Messages
+
+| 断点 | 行为 |
+|------|------|
+| **system** | 在 `# Environment` 切开；**稳定段**文本块末尾 `cache_control: { type: 'ephemeral' }`；volatile 段接后、不单独再标 |
+| **tools** | 若有 tools：仅 **最后一项** 带 `cache_control` |
+| **messages** | 仅 **最后一条** 的最后一个 content 块带 `cache_control`（对照 HC「每请求一个消息级断点」） |
+
+入口：`buildAnthropicRequestBody`（`anthropic.ts`）。  
+关闭：`completeStream({ enablePromptCaching: false })`。
+
+**有意不做（对照 HC 全量）：** `ttl: '1h'`、`scope: 'global'`、cached microcompact / `cache_edits`、prompt cache break detection、遥测。
+
+### 4.2 OpenAI Chat Completions / Responses
+
+| 字段 | 行为 |
+|------|------|
+| `prompt_cache_key` | 默认由 `model + system 稳定前缀` 派生（`bolo_<sha256 前 24 hex>`）；仅 user 文本变化时 **key 不变** |
+| 覆盖 | `options.promptCacheKey`；`''` 或 `enablePromptCaching: false` 不写该字段 |
+
+入口：`buildOpenAICompatibleRequestBody`、`buildResponsesRequest`。
+
+多数兼容网关会 **忽略未知字段**；真正支持 key 路由的上游可命中；**不支持时仍靠前缀稳定**（C1–C4）获益。
+
+### 4.3 core 接线说明
+
+`prepareModelMessages` 仍输出 `role: system` 字符串（先 stable 后 volatile）。  
+Provider 侧按 `# Environment` 再 partition 打标——**最小侵入**，无需改 queryLoop 消息类型。
+
+## 5. 什么会 cache-break（预期）
 
 | 变更 | 影响 |
 |------|------|
-| 日期跨天 / `now()` 不同 | Environment 变 → 仅 volatile 变；**stable 前缀仍应相同** |
-| permissionMode / model | Environment |
+| 日期跨天 / `now()` 不同 | Environment 变 → 仅 volatile 变；**stable 前缀仍应相同**；Anthropic 稳定段断点仍可复用 |
+| permissionMode / model | Environment；OpenAI key 含 model，model 变则 key 变 |
 | 编辑 rules / BOLO.md | volatile 中对应段 |
 | skill 增删 | catalog |
 | 改 Identity/System 文案 | **stable 前缀** 变化（发版级） |
 | tools 增删或改 schema | API tools 前缀变化 |
-| user 消息 / tool 结果 | 对话尾部（不影响 system stable 前缀） |
+| user 消息 / tool 结果 | 对话尾部；消息级断点随「最后一条」移动（预期） |
 
-## 5. 测试
+## 6. 测试
 
 ```bash
 npx tsx scripts/test-prompt-cache.ts
+npx tsx scripts/test-provider-unit.ts
 # 或
 npm run test:prompt-cache
+npm run test:provider
 ```
 
 验收：
 
 - 同一 cwd 两次组装，仅改「假时间」或 user message → `getCacheStablePrefix` **字节级相同**
 - 乱序 tools 输入 → `toolsToOpenAI` 输出 name 序列稳定且有序
+- Anthropic 请求体：`system[0].cache_control.type === 'ephemeral'`；可选 tools/messages 末断点
+- OpenAI / Responses：`prompt_cache_key` 存在且仅 user 变化时不变
 
-## 6. 有意不做
+## 7. 有意不做
 
 | 项 | 原因 |
 |----|------|
 | 遥测 / logEvent | 产品红线 |
-| GrowthBook 门控长段 | 无 |
-| 全局 `DYNAMIC_BOUNDARY` cache scope | 最小切片只做布局 |
-| Provider cache 请求头（C5+） | 后置；见 ROADMAP M-Cost |
+| GrowthBook 门控长段 / 1h TTL | 无订阅与远程配置 |
+| 全局 `DYNAMIC_BOUNDARY` cache scope | 过重；文档保留对照 |
+| cached microcompact / cache_edits | 后置；见 COMPACTION |
+| prompt cache break detection | 后置；无 UI/遥测诉求 |
+| 把 core system 改成结构化 blocks 贯穿 session | 当前 provider 侧 partition 足够 |
 
-## 7. 相关文档
+## 8. 相关文档
 
 - `docs/SYSTEM_PROMPT.md` — 段语义与 BOLO.md  
+- `docs/PROVIDERS.md` — 各协议 cache 字段  
 - `docs/PROMPT_CATALOG.md` — 文案查阅  
-- `docs/TODO.md` — C1–C4 勾选  
+- `docs/TODO.md` — C1–C5  
 - `docs/ROADMAP.md` — M-Cost

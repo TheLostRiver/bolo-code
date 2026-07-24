@@ -5,10 +5,12 @@
 import {
   toOpenAIMessages,
   toolsToOpenAI,
+  buildOpenAICompatibleRequestBody,
 } from '../packages/providers/src/openaiCompatible.ts'
 import {
   toAnthropicMessages,
   toolsToAnthropic,
+  buildAnthropicRequestBody,
 } from '../packages/providers/src/anthropic.ts'
 import {
   mapEffort,
@@ -23,6 +25,12 @@ import {
   parseResponsesUsage,
   createOpenAIResponsesProvider,
   detectProviderKind,
+  getCacheControl,
+  buildAnthropicSystemBlocks,
+  partitionSystemForCache,
+  derivePromptCacheKey,
+  withToolsCacheBreakpoint,
+  addMessageCacheBreakpoint,
 } from '../packages/providers/src/index.ts'
 import type { ChatMessage } from '../packages/shared/src/index.ts'
 import { BUILTIN_TOOLS } from '../packages/tools/src/index.ts'
@@ -240,6 +248,126 @@ assert(
   'provider id openai-responses',
 )
 
+// --- Prompt cache API markers（不联网）---
+assert(getCacheControl().type === 'ephemeral', 'cache_control ephemeral')
+
+const part = partitionSystemForCache(
+  '# Identity\nBolo\n\n# Environment\nDate: today',
+)
+assert(part.stable.includes('# Identity'), 'partition stable')
+assert(part.volatile.startsWith('# Environment'), 'partition volatile')
+
+const sysBlocks = buildAnthropicSystemBlocks(
+  '# Identity\nHi\n\n# Environment\nDate: x',
+)
+assert(Array.isArray(sysBlocks) && sysBlocks.length === 2, 'system 2 blocks')
+assert(
+  sysBlocks![0]!.cache_control?.type === 'ephemeral',
+  'stable system cache_control',
+)
+assert(sysBlocks![1]!.cache_control == null, 'volatile no cache_control')
+
+const antBody = buildAnthropicRequestBody(
+  [
+    { role: 'system', content: '# Identity\nBolo\n\n# Environment\nDate: 1' },
+    { role: 'user', content: 'ping' },
+  ],
+  { model: 'claude-test', maxTokens: 256 },
+  { tools: BUILTIN_TOOLS, stream: true },
+)
+assert(Array.isArray(antBody.system), 'anthropic body system is blocks')
+const antSys = antBody.system as Array<{ cache_control?: { type: string } }>
+assert(antSys[0]?.cache_control?.type === 'ephemeral', 'body system cache')
+const antBodyTools = antBody.tools as Array<{ cache_control?: { type: string } }>
+assert(
+  antBodyTools[antBodyTools.length - 1]?.cache_control?.type === 'ephemeral',
+  'last tool cache_control',
+)
+const antMsgs = antBody.messages as Array<{
+  content: Array<{ cache_control?: { type: string } }> | string
+}>
+const lastMsg = antMsgs[antMsgs.length - 1]!
+assert(Array.isArray(lastMsg.content), 'last msg content array')
+const lastBlock = (lastMsg.content as Array<{ cache_control?: { type: string } }>)
+  .slice(-1)[0]
+assert(lastBlock?.cache_control?.type === 'ephemeral', 'last msg cache_control')
+
+const antOff = buildAnthropicRequestBody(
+  [{ role: 'user', content: 'x' }],
+  { model: 'claude-test', maxTokens: 64 },
+  { enablePromptCaching: false, stream: false },
+)
+const offMsgs = antOff.messages as Array<{ content: string | unknown[] }>
+assert(
+  typeof offMsgs[0]?.content === 'string' ||
+    !(offMsgs[0]?.content as Array<{ cache_control?: unknown }>)?.[0]
+      ?.cache_control,
+  'caching off → no message cache_control',
+)
+
+const toolBp = withToolsCacheBreakpoint([{ name: 'A' }, { name: 'B' }])
+assert(
+  (toolBp[1] as { cache_control?: { type: string } }).cache_control?.type ===
+    'ephemeral',
+  'tools breakpoint last only',
+)
+assert(
+  (toolBp[0] as { cache_control?: unknown }).cache_control == null,
+  'tools first no breakpoint',
+)
+
+const msgBp = addMessageCacheBreakpoint([
+  { role: 'user', content: 'a' },
+  { role: 'user', content: 'b' },
+])
+assert(
+  Array.isArray(msgBp[1]!.content) &&
+    (msgBp[1]!.content as Array<{ cache_control?: { type: string } }>)[0]
+      ?.cache_control?.type === 'ephemeral',
+  'message breakpoint last only',
+)
+
+const cacheMsgs: ChatMessage[] = [
+  { role: 'system', content: '# Identity\nStable\n\n# Environment\nDate: z' },
+  { role: 'user', content: 'u1' },
+]
+const oaiBody = buildOpenAICompatibleRequestBody(
+  cacheMsgs,
+  { model: 'gpt-test', maxTokens: 128 },
+  { stream: true },
+)
+assert(
+  typeof oaiBody.prompt_cache_key === 'string' &&
+    String(oaiBody.prompt_cache_key).startsWith('bolo_'),
+  'openai prompt_cache_key derived',
+)
+const key1 = derivePromptCacheKey(cacheMsgs, 'gpt-test')
+const key2 = derivePromptCacheKey(
+  [
+    ...cacheMsgs.slice(0, 1),
+    { role: 'user', content: 'different user' },
+  ],
+  'gpt-test',
+)
+assert(key1 === key2, 'prompt_cache_key stable across user text')
+const oaiNoKey = buildOpenAICompatibleRequestBody(
+  cacheMsgs,
+  { model: 'gpt-test', maxTokens: 128 },
+  { enablePromptCaching: false, stream: false },
+)
+assert(oaiNoKey.prompt_cache_key == null, 'openai caching off → no key')
+
+const rspBody = buildResponsesRequest(cacheMsgs, { model: 'gpt-test' }, {})
+assert(
+  typeof rspBody.prompt_cache_key === 'string' &&
+    rspBody.prompt_cache_key.startsWith('bolo_'),
+  'responses prompt_cache_key',
+)
+const rspOff = buildResponsesRequest(cacheMsgs, { model: 'gpt-test' }, {
+  enablePromptCaching: false,
+})
+assert(rspOff.prompt_cache_key == null, 'responses caching off')
+
 // env 别名 BOLO_PROVIDER=responses
 {
   const prev = process.env.BOLO_PROVIDER
@@ -258,5 +386,5 @@ assert(
 }
 
 console.log(
-  'PROVIDER UNIT PASS (converters + sse usage + mapEffort + responses)',
+  'PROVIDER UNIT PASS (converters + sse usage + mapEffort + responses + prompt cache)',
 )

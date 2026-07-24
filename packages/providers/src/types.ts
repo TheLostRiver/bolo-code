@@ -32,6 +32,17 @@ export type CompleteStreamOptions = {
   effort?: string
   /** 覆盖本轮 max_tokens（优先于 effort 映射结果） */
   maxTokens?: number
+  /**
+   * 是否在请求体写入 API prompt cache 标记（默认 true）。
+   * Anthropic：cache_control；OpenAI 系：prompt_cache_key。
+   * 见 packages/providers/src/promptCache.ts / docs/PROMPT_CACHE.md。
+   */
+  enablePromptCaching?: boolean
+  /**
+   * OpenAI Chat Completions / Responses 的 prompt_cache_key。
+   * 缺省时由 model + system 稳定前缀派生；设空串可关闭 key。
+   */
+  promptCacheKey?: string
 }
 
 export interface LlmProvider {

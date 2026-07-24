@@ -2,7 +2,7 @@
 
 > 对照 HelsincyCode：`getSystemPrompt` / `buildEffectiveSystemPrompt` / `getUserContext`（CLAUDE.md）。  
 > Bolo：**无遥测**、无 GrowthBook、无 `DYNAMIC_BOUNDARY` 全局缓存；文案精炼、品牌为 Bolo Code。  
-> 布局：**先 cache-stable 后 volatile**（见 `docs/PROMPT_CACHE.md`），便于上游 API prompt cache。
+> 布局：**先 cache-stable 后 volatile**（见 `docs/PROMPT_CACHE.md`），便于上游 API prompt cache；provider 侧再打 `cache_control` / `prompt_cache_key`（C5）。
 
 
 ## 1. 模块入口
@@ -12,7 +12,7 @@
 | 组装与 BOLO.md 加载 | `packages/core/src/systemPrompt.ts` |
 | 会话字段 `systemPromptSections` | `packages/core` `createSession` / `createSessionFromWorkspace` |
 | 每轮前缀 | `queryLoop` → `prepareModelMessages` → `callModel` |
-| Provider 合并 `role: system` | `packages/providers`（OpenAI / Anthropic） |
+| Provider 合并 `role: system` + cache 标记 | `packages/providers`（OpenAI / Anthropic；`promptCache.ts`） |
 
 对外导出（`@bolo/core` / 相对路径）：
 

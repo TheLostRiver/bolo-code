@@ -136,6 +136,54 @@ async function main() {
     'toolsToOpenAI names sorted by name',
   )
 
+  // 5) API cache 标记：Anthropic system 稳定段 + OpenAI prompt_cache_key
+  // （与 provider 单测互补；此处验证 layout 与 key 对 system 稳定前缀敏感）
+  const { buildAnthropicRequestBody, buildOpenAICompatibleRequestBody } =
+    await import('../packages/providers/src/index.ts')
+  const sysJoined = sections.join('\n\n')
+  const antBody = buildAnthropicRequestBody(
+    [
+      { role: 'system', content: sysJoined },
+      { role: 'user', content: 'hi' },
+    ],
+    { model: 'claude-test', maxTokens: 128 },
+    { stream: false },
+  )
+  const antSys = antBody.system as Array<{
+    text?: string
+    cache_control?: { type: string }
+  }>
+  assert(Array.isArray(antSys) && antSys.length >= 1, 'ant system blocks')
+  assert(
+    antSys[0]!.cache_control?.type === 'ephemeral',
+    'ant stable block has cache_control',
+  )
+  assert(
+    (antSys[0]!.text ?? '').includes('# Identity'),
+    'ant first block is stable identity',
+  )
+
+  const oaiBody = buildOpenAICompatibleRequestBody(
+    [
+      { role: 'system', content: sysJoined },
+      { role: 'user', content: 'a' },
+    ],
+    { model: 'gpt-test', maxTokens: 128 },
+    { stream: false },
+  )
+  const oaiBody2 = buildOpenAICompatibleRequestBody(
+    [
+      { role: 'system', content: sysJoined },
+      { role: 'user', content: 'b' },
+    ],
+    { model: 'gpt-test', maxTokens: 128 },
+    { stream: false },
+  )
+  assert(
+    oaiBody.prompt_cache_key === oaiBody2.prompt_cache_key,
+    'openai prompt_cache_key same when only user changes',
+  )
+
   console.log('PASS test-prompt-cache')
 }
 

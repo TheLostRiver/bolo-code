@@ -19,6 +19,8 @@ export {
   createOpenAICompatibleProvider,
   toolsToOpenAI,
   toOpenAIMessages,
+  buildOpenAICompatibleRequestBody,
+  resolveOpenAIPromptCacheKey,
   type OpenAICompatibleConfig,
 } from './openaiCompatible.ts'
 export {
@@ -34,8 +36,20 @@ export {
   createAnthropicProvider,
   toolsToAnthropic,
   toAnthropicMessages,
+  buildAnthropicRequestBody,
   type AnthropicConfig,
 } from './anthropic.ts'
+export {
+  getCacheControl,
+  partitionSystemForCache,
+  buildAnthropicSystemBlocks,
+  withToolsCacheBreakpoint,
+  addMessageCacheBreakpoint,
+  derivePromptCacheKey,
+  isPromptCachingEnabled,
+  type AnthropicCacheControl,
+  type AnthropicSystemTextBlock,
+} from './promptCache.ts'
 export {
   createProviderFromEnv,
   detectProviderKind,

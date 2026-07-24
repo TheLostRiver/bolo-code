@@ -119,10 +119,23 @@ npx tsx scripts/smoke-live.ts
 
 - `POST {base}/v1/messages`
 - `x-api-key` + `anthropic-version: 2023-06-01`
-- `system` 独立字段
-- tools：`input_schema`
+- `system` 独立字段（**文本块数组**；稳定段带 `cache_control: { type: 'ephemeral' }`）
+- tools：`input_schema`；可选 **末项** `cache_control`
+- messages：可选 **最后一条** 末 content 块 `cache_control`（每请求一个消息级断点）
 - 流式：`content_block_start` / `content_block_delta`（`text_delta` / `input_json_delta`）/ `message_stop`
 - tool 结果：下一条 `user` 的 `tool_result` blocks
+- 实现：`anthropic.ts` + `promptCache.ts`；`buildAnthropicRequestBody`
+
+### Prompt cache 字段（C5）
+
+| Provider | 字段 | 默认 |
+|----------|------|------|
+| Anthropic | `cache_control` on system / tools / last message | 开；`enablePromptCaching: false` 关 |
+| OpenAI Chat Completions | `prompt_cache_key` | 由 model + system 稳定前缀派生 |
+| OpenAI Responses | `prompt_cache_key` | 同上 |
+| 兼容网关 | 可能忽略 key | 仍靠 core 前缀稳定 |
+
+详见 `docs/PROMPT_CACHE.md`。
 
 内部统一为 Bolo `ProviderStreamEvent`（`text_delta` | `tool_call` | `usage` | `done` | `error`），agent loop 无需关心协议。
 
@@ -139,9 +152,10 @@ npx tsx scripts/smoke-live.ts
 
 | 文件 | 职责 |
 |------|------|
-| `openaiCompatible.ts` | Chat Completions 流 + usage |
-| `openaiResponses.ts` | Responses HTTP SSE 直连 |
-| `anthropic.ts` | Anthropic Messages 流 + usage |
+| `openaiCompatible.ts` | Chat Completions 流 + usage + `prompt_cache_key` |
+| `openaiResponses.ts` | Responses HTTP SSE 直连 + `prompt_cache_key` |
+| `anthropic.ts` | Anthropic Messages 流 + usage + `cache_control` |
+| `promptCache.ts` | cache_control / system 分块 / key 派生 |
 | `sseUsage.ts` | 解析/合并 SSE usage 片段 |
 | `effort.ts` | `mapEffort` → maxTokens |
 | `fromEnv.ts` | 装配 / 推断 |

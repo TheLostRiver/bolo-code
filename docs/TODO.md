@@ -34,7 +34,7 @@ P3  GUI / 打磨 / 后置
 | **P0-b** | **斜杠总线 + 最小命令** | `/help` `/compact` `/context` `/effort` `/model` `/clear`… |
 | **P0-c** | **`bolo` 无参新会话 + BOLO 欢迎** | TUI 最小可见产品（可与 a/b 交错） |
 | **P1-a** | **`.bolo/rules` + `/rules`** | 项目约束装载；`paths` 作用域 ✅ |
-| **P1-b** | **Prompt 缓存友好前缀** | 省 token |
+| **P1-b** | **Prompt 缓存友好前缀 + API 标记** | C1–C5 ✅ 省 token |
 | **P1-c** | **JSONL transcript 双写** | 按 `TODO_SESSION_JSONL` A+B |
 | **P1-d** | **内置 skill-creator / plugin-creator** | 元技能 |
 | **P2-a** | **Subagent 真 loop（S0–S6）** | ✅ 废 stub，Agent 工具 |
@@ -106,6 +106,7 @@ P3  GUI / 打磨 / 后置
 | R3b | **submitPrompt 刷新 path-scoped rules** | 从 messages 推 activePaths → 替换 `# Project rules` | ✅ |
 | R4 | `/rules` | 依赖 Slash | ✅ |
 | C1–C4 | **Prompt 静态/动态边界 + 前缀稳定测试** | M-Cost（`PROMPT_CACHE.md` + stable/volatile + `test-prompt-cache`） | ✅ |
+| C5 | **API cache 接线** | Anthropic `cache_control` + OpenAI/Responses `prompt_cache_key`（`promptCache.ts`） | ✅ |
 | J-A/B | **JSONL 双写** | `TODO_SESSION_JSONL` Phase A+B（commit 19f7594） | ✅ |
 | J-C | **JSONL resume 起步** | `loadTranscriptMessages` + JSON 缺失回退 | ✅ 最小 |
 | K1–K2 | **skill-creator / plugin-creator** | M-Creators | ✅ |
@@ -146,7 +147,7 @@ P3  GUI / 打磨 / 后置
 ② SL0–SL3     斜杠 P0（含 /effort）
 ③ T0–T2       BOLO 欢迎 + 无参新会话
 ④ R1–R2       .bolo/rules
-⑤ C1–C4       prompt cache 布局
+⑤ C1–C5       prompt cache 布局 + API 标记
 ⑥ J-A/B       JSONL 双写
 ⑦ K1–K2       creators
 ⑧ S0–S6       Subagent 真实现
@@ -158,7 +159,7 @@ P3  GUI / 打磨 / 后置
 
 - T0–T1 纯 banner/ASCII（无模型）  
 - `SUBAGENT.md` / `RULES.md` / `SLASH_COMMANDS.md` 文档  
-- `PROMPT_CACHE.md` 规格  
+- `PROMPT_CACHE.md` 规格 + C5 API 标记  
 
 ---
 

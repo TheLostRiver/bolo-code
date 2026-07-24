@@ -15,6 +15,12 @@ import type {
 } from './types.ts'
 import { mapEffort, DEFAULT_EFFORT_BASE_MAX_TOKENS } from './effort.ts'
 import { mergeProviderUsage, parseAnthropicStreamUsage } from './sseUsage.ts'
+import {
+  addMessageCacheBreakpoint,
+  buildAnthropicSystemBlocks,
+  isPromptCachingEnabled,
+  withToolsCacheBreakpoint,
+} from './promptCache.ts'
 
 export type AnthropicConfig = {
   apiKey: string
@@ -58,6 +64,8 @@ export function toolsToAnthropic(tools: ToolSpec[] | Parameters<typeof toolsToAn
  * - system 抽出合并为 system 字符串
  * - assistant + tool_calls → content blocks (text + tool_use)
  * - tool 结果合并进下一条 user 的 tool_result blocks
+ *
+ * 注意：返回的 system 仍为字符串；cache 块在 buildAnthropicRequestBody 中组装。
  */
 export function toAnthropicMessages(messages: ChatMessage[]): {
   system?: string
@@ -138,6 +146,34 @@ function normalizeBaseUrl(base?: string): string {
   return b.endsWith('/v1') ? b : `${b}/v1`
 }
 
+/**
+ * 组装 Anthropic Messages 请求体（含最小 cache_control 断点）。
+ * 断点策略：system 稳定段末尾 + tools 末项（若有）+ messages 最后一条末块。
+ */
+export function buildAnthropicRequestBody(
+  messages: ChatMessage[],
+  config: { model: string; maxTokens: number },
+  options?: CompleteStreamOptions & { stream?: boolean },
+): Record<string, unknown> {
+  const { system, messages: antMessages } = toAnthropicMessages(messages)
+  const caching = isPromptCachingEnabled(options)
+  const body: Record<string, unknown> = {
+    model: config.model,
+    max_tokens: config.maxTokens,
+    messages: addMessageCacheBreakpoint(antMessages, caching),
+    stream: options?.stream ?? true,
+  }
+  const systemBlocks = buildAnthropicSystemBlocks(system, caching)
+  if (systemBlocks) body.system = systemBlocks
+  if (!options?.disableTools && options?.tools?.length) {
+    body.tools = withToolsCacheBreakpoint(
+      toolsToAnthropic(options.tools) as Array<Record<string, unknown>>,
+      caching,
+    )
+  }
+  return body
+}
+
 export function createAnthropicProvider(config: AnthropicConfig): LlmProvider {
   const baseUrl = normalizeBaseUrl(config.baseUrl)
   const timeoutMs = config.timeoutMs ?? 120_000
@@ -148,22 +184,16 @@ export function createAnthropicProvider(config: AnthropicConfig): LlmProvider {
     messages: ChatMessage[],
     options?: CompleteStreamOptions,
   ): AsyncIterable<ProviderStreamEvent> {
-    const { system, messages: antMessages } = toAnthropicMessages(messages)
     const url = `${baseUrl}/messages`
     const maxTokens =
       options?.maxTokens ??
       mapEffort(options?.effort, baseMaxTokens).maxTokens
 
-    const body: Record<string, unknown> = {
-      model: config.model,
-      max_tokens: maxTokens,
-      messages: antMessages,
-      stream: true,
-    }
-    if (system) body.system = system
-    if (!options?.disableTools && options?.tools?.length) {
-      body.tools = toolsToAnthropic(options.tools)
-    }
+    const body = buildAnthropicRequestBody(
+      messages,
+      { model: config.model, maxTokens },
+      { ...options, stream: true },
+    )
 
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
@@ -332,20 +362,26 @@ export function createAnthropicProvider(config: AnthropicConfig): LlmProvider {
 
   async function completeText(
     messages: ChatMessage[],
-    options?: { signal?: AbortSignal; effort?: string; maxTokens?: number },
+    options?: {
+      signal?: AbortSignal
+      effort?: string
+      maxTokens?: number
+      enablePromptCaching?: boolean
+    },
   ): Promise<string> {
-    const { system, messages: antMessages } = toAnthropicMessages(messages)
     const url = `${baseUrl}/messages`
     const maxTokens =
       options?.maxTokens ??
       mapEffort(options?.effort, baseMaxTokens).maxTokens
-    const body: Record<string, unknown> = {
-      model: config.model,
-      max_tokens: maxTokens,
-      messages: antMessages,
-      stream: false,
-    }
-    if (system) body.system = system
+    const body = buildAnthropicRequestBody(
+      messages,
+      { model: config.model, maxTokens },
+      {
+        stream: false,
+        disableTools: true,
+        enablePromptCaching: options?.enablePromptCaching,
+      },
+    )
 
     const res = await fetch(url, {
       method: 'POST',
