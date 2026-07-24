@@ -542,9 +542,8 @@ flowchart TB
 | **M-Slash** | ✅ | 日用 `/` + SL-polish |
 | **M-Rules** | ✅ | `.bolo/rules` + path-scoped + `/rules` |
 | **M-Creators** | ✅ | bundled creators |
-| **M-Subagent** | 🟡 | S0–S7 + **S8 权限不升级** + async/fork/侧链最小 |
-| **M-TUI** | 🟡 | T0–T7 + **窄终端 P-T9**；T8 Ink ⬜ |
 | **M-Subagent** | 🟡 | S0–S8 + async/fork + **并发帽**；worktree ⬜ |
+| **M-TUI** | 🟡 | T0–T7 + **窄终端 P-T9**；T8 Ink ⬜ |
 | **M-Cost** | 🟡 | C1–C5 ✅；TTL/break 后置 |
 | **M3** | 🟡 | MCP stdio + list_changed + **HTTP/SSE 最小** + **PL2 热加载最小** + **PL-MKT 最小**；官方市场深度 / OAuth ⬜ |
 | **M5** | 🟡 | 会话/CLI 可用；JSONL 主路径 T3 ✅；title/list/migrate ✅；**system_note+lite list ✅** |
@@ -552,7 +551,7 @@ flowchart TB
 | M4–M6 | ⬜ | Electron 与体验打磨 |
 
 **一句话：**  
-Headless **主路径可日用**，相对参考实现约 **40–55%**（文档不再写 ~70% 乐观数）。  
+Headless **主路径可日用**，相对参考实现约 **45–60%**（文档不再写 ~70% 乐观数）。  
 **规则权限 + auto Y0–Y4 最小已齐**（HC auto **语义** ~85–90%；Y3.6 审计 note ✅；UI/企业策略 ⬜）。  
 **PL-MKT 最小已齐**（本地/URL 清单 install；非官方市场全家桶）。  
 扩展三层 ✅；Memory/IMPORT ✅；AUTORUN 小轨 ✅；**产品轨 TODO_PRODUCT 圆满 ✅**。  

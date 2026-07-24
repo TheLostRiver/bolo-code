@@ -50,7 +50,7 @@
   · **PL-MKT** 插件市场最小（register/search/install）
   · **auto Y0–Y4 最小**（两阶段分类 · 危险/PS 硬拦 · 熔断 demote · 对抗测 · **Y3.6 system_note 审计**）
 
-相对参考实现 headless 约 **42–58%**（勿再写 ~70% 乐观数；AUTORUN 小幅抬 Memory/导入/可观测）。
+相对参考实现 headless 约 **45–60%**（勿再写 ~70% 乐观数；产品轨抬安装/子代理/窄 TUI）。
 auto **语义**（仅对照 HC YOLO 行为，非 UI/企业）：**~85–90%**。
 P0 抬水位：~~LR / TP 日用 / CP 日用~~ ✅ 最小
 P1 主切片：~~MCP HTTP/SSE · PL2 · PL-MKT · Usage+ · RC* · STE · PERM · snip · J-D · auto Y0–Y4+Y3.6~~ ✅ 最小
@@ -66,7 +66,7 @@ P1 主切片：~~MCP HTTP/SSE · PL2 · PL-MKT · Usage+ · RC* · STE · PERM �
 | **P2** | 轨内未完成 |
 | **P3** | Electron / 完整 Ink / OAuth / 企业 YOLO / worktree（**OUT**） |
 
-粗估（相对 HC headless 整体）：**~42–58%**。主路径可日用 ≠ 产品完成。
+粗估（相对 HC headless 整体）：**~45–60%**。主路径可日用 ≠ 产品完成。
 
 ---
 
@@ -266,11 +266,9 @@ P1 主切片：~~MCP HTTP/SSE · PL2 · PL-MKT · Usage+ · RC* · STE · PERM �
 
 若只开一刀（**非 Electron**）：
 
-> **整盘执行真源：`docs/TODO_PRODUCT.md`（Product Track）**  
-> - **第一刀：`P-PL-ZIP`** → … → **P-SMOKE**（共 10 刀，严格按序）  
-> - 启动令示例：`按 TODO_PRODUCT 执行` / `开始产品轨，直到圆满`  
-> - **未圆满不得停**（除非用户说停下，或触碰 OUT）  
-> - `TODO_AUTORUN.md` = 历史余量小轨 ✅，**不是**整体路线图  
+> **docs/TODO_PRODUCT.md 已圆满收口。**  
+> - 默认**无**强制下一刀；OUT 需用户点名  
+> - 已齐：产品轨 zip/SA/doctor/窄 TUI · auto · PL-MKT · Memory · IMPORT  
 > - 红线：无遥测；不接 Claude/Codex 官方市场；不擅自 Electron/Y5+  
 
 ---
@@ -305,6 +303,5 @@ P1 主切片：~~MCP HTTP/SSE · PL2 · PL-MKT · Usage+ · RC* · STE · PERM �
 ---
 
 **一句话：**  
-主路径可日用；相对 HC **~42–58%**。  
-**整盘下一轨：`docs/TODO_PRODUCT.md`（P-PL-ZIP…P-SMOKE；未圆满不停）。**  
-Electron / 企业 YOLO / 官方市场等 OUT 需另令。
+主路径可日用；相对 HC **~45–60%**。  
+**产品轨 TODO_PRODUCT 圆满。** OUT（Electron · OAuth · 企业 YOLO · 完整 Ink…）需另令。
