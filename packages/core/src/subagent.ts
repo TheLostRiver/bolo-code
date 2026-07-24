@@ -491,10 +491,65 @@ export type BackgroundAgentStore = {
   pendingAgents: Record<string, BackgroundAgentEntry>
   /** 完成后的结果摘要（与 pending 可并存；以 results 为准可轮询） */
   backgroundAgentResults: Record<string, BackgroundAgentEntry>
+  /**
+   * 并发上限（P-SA-CAP）。未设则用 getDefaultMaxBackgroundAgents()。
+   */
+  maxConcurrent?: number
 }
 
-export function createBackgroundAgentStore(): BackgroundAgentStore {
-  return { pendingAgents: {}, backgroundAgentResults: {} }
+/** 默认后台并发；环境 BOLO_MAX_BACKGROUND_AGENTS 可覆（1–32） */
+export function getDefaultMaxBackgroundAgents(
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  const raw = env.BOLO_MAX_BACKGROUND_AGENTS?.trim()
+  if (raw) {
+    const n = Number(raw)
+    if (Number.isFinite(n) && n >= 1) return Math.min(32, Math.floor(n))
+  }
+  return 3
+}
+
+export function countRunningBackgroundAgents(
+  store: BackgroundAgentStore,
+): number {
+  return Object.values(store.pendingAgents).filter((e) => e.status === 'running')
+    .length
+}
+
+/**
+ * 是否允许再启一个后台 agent。
+ * @returns ok 或拒绝原因
+ */
+export function canStartBackgroundAgent(
+  store: BackgroundAgentStore,
+  opts?: { maxConcurrent?: number },
+): { ok: true } | { ok: false; reason: string; running: number; max: number } {
+  const max =
+    opts?.maxConcurrent ??
+    store.maxConcurrent ??
+    getDefaultMaxBackgroundAgents()
+  const running = countRunningBackgroundAgents(store)
+  if (running >= max) {
+    return {
+      ok: false,
+      running,
+      max,
+      reason: `background agent limit reached (${running}/${max}); wait for one to finish or poll /agents status · /bg`,
+    }
+  }
+  return { ok: true }
+}
+
+export function createBackgroundAgentStore(opts?: {
+  maxConcurrent?: number
+}): BackgroundAgentStore {
+  return {
+    pendingAgents: {},
+    backgroundAgentResults: {},
+    ...(opts?.maxConcurrent !== undefined
+      ? { maxConcurrent: opts.maxConcurrent }
+      : {}),
+  }
 }
 
 export function markBackgroundAgentRunning(
@@ -565,8 +620,10 @@ export function formatBackgroundAgentsStatus(
   const nRun = rows.filter((r) => r.status === 'running').length
   const nDone = rows.filter((r) => r.status === 'done').length
   const nErr = rows.filter((r) => r.status === 'error').length
+  const max =
+    store.maxConcurrent ?? getDefaultMaxBackgroundAgents()
   const lines: string[] = [
-    `Background agents: total=${rows.length}  running=${nRun}  done=${nDone}  error=${nErr}`,
+    `Background agents: total=${rows.length}  running=${nRun}/${max}  done=${nDone}  error=${nErr}`,
     '',
   ]
   for (const r of rows) {
@@ -962,6 +1019,15 @@ export function createAgentTool(
             output:
               'Agent run_in_background requires session backgroundStore (createSession wires it).',
             errorCode: 'no_background_store',
+          }
+        }
+        const cap = canStartBackgroundAgent(store)
+        if (!cap.ok) {
+          return {
+            ok: false,
+            isError: true,
+            output: cap.reason,
+            errorCode: 'background_limit',
           }
         }
         const agentId = newId('agent')

@@ -11,7 +11,9 @@
  */
 
 import { promises as fs } from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
+import { spawn } from 'node:child_process'
 import { getProjectLayout, getUserLayout } from '../../config/src/paths.ts'
 import type { PluginScope } from './index.ts'
 
@@ -422,10 +424,222 @@ async function copyDir(src: string, dest: string): Promise<void> {
   }
 }
 
+function runCmd(
+  command: string,
+  args: string[],
+): Promise<{ code: number; stderr: string }> {
+  return new Promise((resolve) => {
+    const child = spawn(command, args, {
+      stdio: ['ignore', 'ignore', 'pipe'],
+      windowsHide: true,
+    })
+    let stderr = ''
+    child.stderr?.on('data', (c: Buffer) => {
+      stderr += c.toString('utf8')
+    })
+    child.on('error', (err) => {
+      resolve({ code: 1, stderr: err.message })
+    })
+    child.on('close', (code) => {
+      resolve({ code: code ?? 1, stderr })
+    })
+  })
+}
+
+/** 是否像 zip 文件路径/URL */
+export function looksLikeZipPath(p: string): boolean {
+  const s = p.trim().split(/[?#]/)[0] ?? ''
+  return /\.zip$/i.test(s)
+}
+
+/**
+ * 解压 zip 到目标目录（无第三方依赖：优先 tar，Windows 回落 Expand-Archive）。
+ */
+export async function extractZipArchive(
+  zipPath: string,
+  destDir: string,
+): Promise<void> {
+  await fs.mkdir(destDir, { recursive: true })
+  const absZip = path.resolve(zipPath)
+  const absDest = path.resolve(destDir)
+  // Windows 10+ / macOS / Linux 常带 tar，可解 zip
+  const tar = await runCmd('tar', ['-xf', absZip, '-C', absDest])
+  if (tar.code === 0) return
+  if (process.platform === 'win32') {
+    const ps = await runCmd('powershell.exe', [
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      `Expand-Archive -LiteralPath '${absZip.replace(/'/g, "''")}' -DestinationPath '${absDest.replace(/'/g, "''")}' -Force`,
+    ])
+    if (ps.code === 0) return
+    throw new Error(
+      `extract zip failed (tar: ${tar.stderr.trim() || tar.code}; Expand-Archive: ${ps.stderr.trim() || ps.code})`,
+    )
+  }
+  throw new Error(
+    `extract zip failed: tar exited ${tar.code}${tar.stderr ? ` — ${tar.stderr.trim()}` : ''}`,
+  )
+}
+
+/**
+ * 在解压根或一层子目录中定位含 bolo.plugin.json 的插件根。
+ */
+export async function findPluginRootInExtract(
+  extractRoot: string,
+): Promise<string> {
+  const direct = path.join(extractRoot, 'bolo.plugin.json')
+  try {
+    const st = await fs.stat(direct)
+    if (st.isFile()) return extractRoot
+  } catch {
+    /* continue */
+  }
+  let entries: string[] = []
+  try {
+    entries = await fs.readdir(extractRoot)
+  } catch {
+    throw new Error(`extract empty or unreadable: ${extractRoot}`)
+  }
+  const dirs: string[] = []
+  for (const name of entries) {
+    if (name === '__MACOSX') continue
+    const full = path.join(extractRoot, name)
+    try {
+      const st = await fs.stat(full)
+      if (st.isDirectory()) dirs.push(full)
+    } catch {
+      /* skip */
+    }
+  }
+  if (dirs.length === 1) {
+    const nested = path.join(dirs[0]!, 'bolo.plugin.json')
+    try {
+      const st = await fs.stat(nested)
+      if (st.isFile()) return dirs[0]!
+    } catch {
+      /* fallthrough */
+    }
+  }
+  for (const d of dirs) {
+    const nested = path.join(d, 'bolo.plugin.json')
+    try {
+      const st = await fs.stat(nested)
+      if (st.isFile()) return d
+    } catch {
+      /* next */
+    }
+  }
+  throw new Error(
+    `zip has no bolo.plugin.json at root or one nested folder: ${extractRoot}`,
+  )
+}
+
+/**
+ * 从本地 .zip 安装插件（P-PL-ZIP）。
+ * 解压到临时目录 → 校验 manifest → 拷入 plugins/<id>。
+ */
+export async function installPluginFromZip(opts: {
+  zipPath: string
+  scope?: 'user' | 'project'
+  cwd?: string
+  boloRoot?: string
+}): Promise<InstalledPluginRecord> {
+  const zipPath = path.resolve(opts.zipPath)
+  const st = await fs.stat(zipPath).catch(() => null)
+  if (!st?.isFile()) {
+    throw new Error(`zip not found: ${zipPath}`)
+  }
+  if (!looksLikeZipPath(zipPath)) {
+    throw new Error(`not a .zip file: ${zipPath}`)
+  }
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'bolo-plug-zip-'))
+  try {
+    await extractZipArchive(zipPath, tmpRoot)
+    const sourceDir = await findPluginRootInExtract(tmpRoot)
+    const rec = await installPluginFromPath({
+      path: sourceDir,
+      scope: opts.scope,
+      cwd: opts.cwd,
+      boloRoot: opts.boloRoot,
+    })
+    return { ...rec, source: zipPath }
+  } finally {
+    await fs.rm(tmpRoot, { recursive: true, force: true }).catch(() => {})
+  }
+}
+
+/**
+ * 从 https URL 下载 zip 并安装（P-PL-URL-ZIP）。
+ * 非 zip URL 明确报错；无 OAuth。
+ */
+export async function installPluginFromUrl(opts: {
+  url: string
+  scope?: 'user' | 'project'
+  cwd?: string
+  boloRoot?: string
+  /** 测试注入 fetch */
+  fetchImpl?: typeof fetch
+}): Promise<InstalledPluginRecord> {
+  const url = opts.url.trim()
+  if (!/^https?:\/\//i.test(url)) {
+    throw new Error(`plugin url must be http(s): ${url}`)
+  }
+  if (!looksLikeZipPath(url) && !/\.zip(\?|#|$)/i.test(url)) {
+    // 仍允许 Content-Disposition；先 HEAD/GET 后按路径或类型判断
+  }
+  const fetchFn = opts.fetchImpl ?? globalThis.fetch
+  if (typeof fetchFn !== 'function') {
+    throw new Error('fetch is not available to download plugin zip')
+  }
+  const res = await fetchFn(url)
+  if (!res.ok) {
+    throw new Error(`plugin zip download HTTP ${res.status}: ${url}`)
+  }
+  const cd = res.headers.get('content-disposition') ?? ''
+  const ct = (res.headers.get('content-type') ?? '').toLowerCase()
+  const nameFromCd = /filename\*?=(?:UTF-8''|")?([^\";]+)/i.exec(cd)?.[1]
+  const fileHint = nameFromCd
+    ? decodeURIComponent(nameFromCd.replace(/"/g, ''))
+    : url
+  const isZip =
+    looksLikeZipPath(fileHint) ||
+    looksLikeZipPath(url) ||
+    ct.includes('zip') ||
+    ct.includes('octet-stream')
+  if (!isZip && !looksLikeZipPath(url)) {
+    throw new Error(
+      `plugin url is not a zip (need .zip URL or zip Content-Type/Disposition): ${url}`,
+    )
+  }
+  const buf = Buffer.from(await res.arrayBuffer())
+  // ZIP local file header magic
+  if (buf.length < 4 || buf[0] !== 0x50 || buf[1] !== 0x4b) {
+    throw new Error(
+      `downloaded content is not a zip (missing PK header): ${url}`,
+    )
+  }
+  const tmpZip = path.join(
+    os.tmpdir(),
+    `bolo-plug-dl-${process.pid}-${Date.now()}.zip`,
+  )
+  try {
+    await fs.writeFile(tmpZip, buf)
+    return await installPluginFromZip({
+      zipPath: tmpZip,
+      scope: opts.scope,
+      cwd: opts.cwd,
+      boloRoot: opts.boloRoot,
+    })
+  } finally {
+    await fs.unlink(tmpZip).catch(() => {})
+  }
+}
+
 /**
  * 从 marketplace 安装插件到 user 或 project plugins 目录。
- * 仅支持 source.type=path（相对 marketplace 根或绝对路径）。
- * url 源插件：仅当 URL 指向可 fetch 的 zip 时后置；当前报错提示用 path。
+ * - source.type=path：本地目录
+ * - source.type=url：仅 https zip（P-PL-URL-ZIP）
  */
 export async function installPluginFromMarketplace(opts: {
   pluginId: string
@@ -453,71 +667,69 @@ export async function installPluginFromMarketplace(opts: {
     )
   }
 
-  let sourceDir: string
   if (entry.source.type === 'path') {
-    sourceDir = path.isAbsolute(entry.source.path)
+    const sourceDir = path.isAbsolute(entry.source.path)
       ? entry.source.path
       : path.resolve(known.installLocation, entry.source.path)
-  } else {
-    throw new Error(
-      `plugin ${entry.id}: url install not supported in minimal marketplace (use path source or copy plugin folder to plugins/)`,
-    )
+    const st = await fs.stat(sourceDir).catch(() => null)
+    if (!st?.isDirectory()) {
+      throw new Error(`plugin source not a directory: ${sourceDir}`)
+    }
+    if (looksLikeZipPath(sourceDir)) {
+      return installPluginFromZip({
+        zipPath: sourceDir,
+        scope,
+        cwd: opts.cwd,
+        boloRoot: userRoot,
+      })
+    }
+    const rec = await installPluginFromPath({
+      path: sourceDir,
+      scope,
+      cwd: opts.cwd,
+      boloRoot: userRoot,
+    })
+    return {
+      ...rec,
+      marketplace: known.name,
+      version: entry.version ?? rec.version,
+      source: sourceDir,
+    }
   }
 
-  const st = await fs.stat(sourceDir).catch(() => null)
-  if (!st?.isDirectory()) {
-    throw new Error(`plugin source not a directory: ${sourceDir}`)
-  }
-  const manifestPath = path.join(sourceDir, 'bolo.plugin.json')
-  const manifest = await readJsonFile<{ id?: string; version?: string }>(
-    manifestPath,
-  )
-  if (!manifest?.id) {
-    throw new Error(
-      `plugin source missing bolo.plugin.json: ${sourceDir}`,
-    )
-  }
-
-  const pluginsDir =
-    scope === 'project'
-      ? getProjectLayout(opts.cwd ?? process.cwd()).pluginsDir
-      : path.join(userRoot, 'plugins')
-  const dest = path.join(pluginsDir, manifest.id)
-  await fs.rm(dest, { recursive: true, force: true }).catch(() => {})
-  await copyDir(sourceDir, dest)
-
-  const record: InstalledPluginRecord = {
-    id: manifest.id,
-    marketplace: known.name,
-    version: entry.version ?? manifest.version,
+  // url
+  const rec = await installPluginFromUrl({
+    url: entry.source.url,
     scope,
-    installPath: dest,
-    installedAt: nowIso(),
-    source: sourceDir,
+    cwd: opts.cwd,
+    boloRoot: userRoot,
+  })
+  return {
+    ...rec,
+    marketplace: known.name,
+    version: entry.version ?? rec.version,
   }
-
-  // 安装记录写在 user root（全局账本）；project 安装也记一条
-  const installed = await loadInstalledPlugins(userRoot)
-  const key =
-    scope === 'project'
-      ? `${record.id}@${path.resolve(opts.cwd ?? process.cwd())}`
-      : record.id
-  installed.plugins[key] = record
-  await writeJsonAtomic(installedPluginsPath(userRoot), installed)
-
-  return record
 }
 
-/** 从本地目录直接安装（不经 marketplace） */
+/** 从本地目录或 .zip 直接安装（不经 marketplace） */
 export async function installPluginFromPath(opts: {
   path: string
   scope?: 'user' | 'project'
   cwd?: string
   boloRoot?: string
 }): Promise<InstalledPluginRecord> {
+  const sourcePath = path.resolve(opts.path)
+  if (looksLikeZipPath(sourcePath)) {
+    return installPluginFromZip({
+      zipPath: sourcePath,
+      scope: opts.scope,
+      cwd: opts.cwd,
+      boloRoot: opts.boloRoot,
+    })
+  }
   const scope = opts.scope ?? 'user'
   const userRoot = opts.boloRoot ?? getUserLayout().root
-  const sourceDir = path.resolve(opts.path)
+  const sourceDir = sourcePath
   const manifestPath = path.join(sourceDir, 'bolo.plugin.json')
   const manifest = await readJsonFile<{ id?: string; version?: string }>(
     manifestPath,

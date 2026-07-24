@@ -152,8 +152,8 @@ Bundled skill：`packages/bundled-skills/plugin-creator/SKILL.md`
 }
 ```
 
-- `source.path`：相对 marketplace 根；插件内需有 `bolo.plugin.json`  
-- `source.url`：可登记；**安装**当前仅 path（url 请本地下载后 `path:` 装）
+- `source.path`：相对 marketplace 根；插件内需有 `bolo.plugin.json`；**也可指向本地 `.zip`**  
+- `source.url`：**仅** `https://…/*.zip`（或 zip Content-Type / Disposition）；非 zip **明确报错**（P-PL-URL-ZIP）
 
 ### Slash
 
@@ -163,12 +163,16 @@ Bundled skill：`packages/bundled-skills/plugin-creator/SKILL.md`
 /plugins market show <name>
 /plugins search [query]
 /plugins install <id>@<marketplace>
-/plugins install path:<plugin-dir>
+/plugins install path:<plugin-dir|file.zip>
+/plugins install zip:<file.zip>
+/plugins install url:<https://…/plugin.zip>
 /plugins uninstall <id>
 /plugins reload
 ```
 
 `--project`：安装/卸载到项目 `.bolo/plugins`。
+
+API：`installPluginFromZip` · `installPluginFromUrl` · `installPluginFromPath`（path 遇 `.zip` 自动走 zip）。
 
 ### 落盘
 
@@ -186,6 +190,7 @@ Bundled skill：`packages/bundled-skills/plugin-creator/SKILL.md`
 npx tsx scripts/test-plugin-manifest.ts
 npx tsx scripts/test-plugins-pl2.ts
 npx tsx scripts/test-plugins-market.ts
+npx tsx scripts/test-product-track.ts
 npx tsx scripts/test-config.ts
 ```
 
@@ -194,7 +199,7 @@ npx tsx scripts/test-config.ts
 ## 7. 明确不做
 
 - Claude / Codex **官方市场**与商标商店  
-- 完整 zip / git / npm 运营市场（另刀）  
+- 完整 git / npm 运营市场、自动更新守护  
 - 外来插件 **完整运行时**兼容（hooks/commands/agents 不保证）  
 - 遥测  
 

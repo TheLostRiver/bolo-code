@@ -13,14 +13,14 @@
 | **Headless 核心**（loop / tools / provider / compact / prompt） | **~60–70%** | 主路径可用；**STE ✅**；**规则权限 ✅**；**auto Y0–Y4 最小 ✅**（~85–90% HC auto **语义**）；**snip 最小 ✅**；仍缺 cached MC、SnipTool/UUID、完整 YOLO 企业/UI 层 |
 | 会话与 CLI | **~70–80%** | JSONL 默认写（T3）；resume/continue；title/system_note；无参 REPL；非成熟 Ink |
 | **扩展面（MCP / Plugins / Skills）** | **~60–70%** | Skills + MCP stdio/HTTP/SSE 最小 + list_changed + **PL2 热加载 ✅**；**PL-MKT 最小 ✅**（本地/URL 清单 install）；官方市场深度 / OAuth ⬜ |
-| **Subagent** | **~50–60%** | 真 loop + Agent + 目录定义；async/fork 最小；S8 不升级；worktree ⬜ |
+| **Subagent** | **~55–65%** | 真 loop + 后台/fork；**并发帽**；S8 不升级；worktree ⬜ |
 | **项目规则 Rules** | **~75–85%** | 装载 + paths + 刷新 + `/rules` |
 | **内置元技能 Creators** | **~70–80%** | skill/plugin-creator 最小 |
 | **成本与缓存** | **~45–55%** | C1–C5 标记 ✅；TTL / break / 深度 usage 后置 |
 | **斜杠命令** | **~70–80%** | 总线 + 日用 + SL-polish |
-| **CLI TUI** | **~35–45%** | T0–T7 最小；完整 Ink ⬜ |
+| **CLI TUI** | **~40–50%** | T0–T7 + **P-T9 窄终端 plain/短状态**；完整 Ink ⬜ |
 | **Electron GUI** | **~5%** | 占位 |
-| **产品整体（可日用 headless agent）** | **~42–58%** | 相对 HelsincyCode headless；**主路径可脚本/CLI 跑**；Memory/IMPORT/可观测小幅抬水位，**不**把整体抬到 ~70% |
+| **产品整体（可日用 headless agent）** | **~45–60%** | 相对 HelsincyCode headless；产品轨抬了安装/子代理/可观测/窄 TUI；**不**写 ~70% |
 
 **口径说明：**
 
@@ -54,7 +54,7 @@
 21. ~~**扩展三层** — Skill 可移植 → MCP 通用 → Bolo 插件规范~~ ✅（**`docs/TODO_SKILL_MCP_PLUGIN.md`**）  
 22. ~~**跨会话 Memory 最小**~~ ✅（MEM-0…5；**`docs/TODO_MEMORY.md`** / **`docs/MEMORY.md`**）  
 23. ~~**AUTORUN 余量小轨**~~ ✅（Memory/IMPORT/可观测；**非**整盘）  
-24. **整盘产品轨（进行中）：** **`docs/TODO_PRODUCT.md`** — zip 安装 → SA 并发帽 → doctor → 窄 TUI → 收口  
+24. ~~**整盘产品轨**~~ ✅（**`docs/TODO_PRODUCT.md`** — zip · SA 帽 · doctor · 窄 TUI · 收口）  
 25. **OUT（另令）：** Electron · T8 完整 Ink · OAuth · 官方市场 · worktree · 企业 YOLO · cached MC  
 
 ---
@@ -461,7 +461,7 @@ flowchart TB
 | H 韧性 | 错误分类 + model 退避 + PTL | 🟡 最小 |
 | I 权限 auto | Y0–Y4 最小 + Y3.6 审计 note | ✅ 最小（HC auto 语义 ~85–90%；UI/企业 ⬜） |
 
-**默认下一刀：** 见 **`docs/TODO_PRODUCT.md`**（第一刀 **P-PL-ZIP**；整轨未圆满不停；启动令见该文 §6）。
+**默认下一刀：** 无强制默认；OUT 见 `docs/TODO.md` §8（需用户点名）。
 
 ---
 
@@ -543,7 +543,8 @@ flowchart TB
 | **M-Rules** | ✅ | `.bolo/rules` + path-scoped + `/rules` |
 | **M-Creators** | ✅ | bundled creators |
 | **M-Subagent** | 🟡 | S0–S7 + **S8 权限不升级** + async/fork/侧链最小 |
-| **M-TUI** | 🟡 | T0–T7 ✅；T8 Ink ⬜ |
+| **M-TUI** | 🟡 | T0–T7 + **窄终端 P-T9**；T8 Ink ⬜ |
+| **M-Subagent** | 🟡 | S0–S8 + async/fork + **并发帽**；worktree ⬜ |
 | **M-Cost** | 🟡 | C1–C5 ✅；TTL/break 后置 |
 | **M3** | 🟡 | MCP stdio + list_changed + **HTTP/SSE 最小** + **PL2 热加载最小** + **PL-MKT 最小**；官方市场深度 / OAuth ⬜ |
 | **M5** | 🟡 | 会话/CLI 可用；JSONL 主路径 T3 ✅；title/list/migrate ✅；**system_note+lite list ✅** |
@@ -554,7 +555,6 @@ flowchart TB
 Headless **主路径可日用**，相对参考实现约 **40–55%**（文档不再写 ~70% 乐观数）。  
 **规则权限 + auto Y0–Y4 最小已齐**（HC auto **语义** ~85–90%；Y3.6 审计 note ✅；UI/企业策略 ⬜）。  
 **PL-MKT 最小已齐**（本地/URL 清单 install；非官方市场全家桶）。  
-扩展三层 ✅；Memory/IMPORT ✅；AUTORUN 小轨 ✅（**非整盘**）。  
-**整盘执行中（待令/进行）：`docs/TODO_PRODUCT.md`** — zip 安装 → SA 帽 → doctor → 窄 TUI → 收口。  
+扩展三层 ✅；Memory/IMPORT ✅；AUTORUN 小轨 ✅；**产品轨 TODO_PRODUCT 圆满 ✅**。  
 OUT：Electron · OAuth · 官方市场 · worktree · 企业 YOLO · cached MC · 完整 Ink。  
-执行序 → **`docs/TODO.md` §8** + **`docs/TODO_PRODUCT.md`**。
+执行序 → **`docs/TODO.md`**（无强制默认刀）。

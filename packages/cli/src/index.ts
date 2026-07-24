@@ -32,11 +32,15 @@ export { runNewSessionCli, type NewSessionCliOptions } from './newSessionCli.ts'
 export {
   renderWelcomeBanner,
   shouldUsePlainBanner,
+  isNarrowTerminal,
+  getTerminalColumns,
+  NARROW_TERMINAL_COLUMNS,
   type BannerOptions,
 } from './tui/banner.ts'
 export {
   formatSessionStatusLine,
   type StatusLineSession,
+  type StatusLineOptions,
 } from './tui/statusLine.ts'
 export {
   formatToolEventLine,

@@ -5,6 +5,7 @@
  */
 
 import { existsSync } from 'node:fs'
+import path from 'node:path'
 import { getBoloHomeDir } from '../../config/src/paths.ts'
 import {
   ensureAllLayouts,
@@ -772,6 +773,7 @@ async function cmdAutocompact(
 /**
  * 极简本地诊断（对照参考 /doctor · /status）。
  * 无 Electron、无遥测；只读会话与本机环境。
+ * P-DOC-HEALTH：memory 根、plugins、警告、autoCompact。
  */
 function cmdDoctor(session: SlashSession, _args: string): SlashDispatchResult {
   const boloHome = getBoloHomeDir()
@@ -786,12 +788,28 @@ function cmdDoctor(session: SlashSession, _args: string): SlashDispatchResult {
   const mcpFail = session.mcpDiagnostics?.failures?.length ?? 0
   const mcpCfgW = session.mcpDiagnostics?.configWarnings?.length ?? 0
   const pluginsCount = session.plugins?.length ?? 0
+  const pluginMergeErrs =
+    (session as { pluginMerge?: { errors?: string[] } }).pluginMerge?.errors
+      ?.length ?? 0
   const autoCompact =
     session.autoCompactEnabled === true ? 'on' : 'off'
   const maxPtl =
     session.maxPtlRetries === undefined
       ? '(unset)'
       : String(session.maxPtlRetries)
+
+  const memDisable = process.env.BOLO_DISABLE_MEMORY?.trim().toLowerCase()
+  const memOff =
+    memDisable === '1' ||
+    memDisable === 'true' ||
+    memDisable === 'yes' ||
+    memDisable === 'on'
+  const memoryUserDir =
+    process.env.BOLO_MEMORY_DIR?.trim() ||
+    path.join(boloHome, 'memory')
+  const memoryProjectDir = path.join(session.cwd, '.bolo', 'memory')
+  const memoryUser = `${memoryUserDir} (${existsSync(memoryUserDir) ? 'exists' : 'missing'}${memOff ? ', disabled' : ''})`
+  const memoryProject = `${memoryProjectDir} (${existsSync(memoryProjectDir) ? 'exists' : 'missing'})`
 
   const lines = [
     `node:            ${process.version}`,
@@ -808,7 +826,10 @@ function cmdDoctor(session: SlashSession, _args: string): SlashDispatchResult {
     `tools:           ${toolsCount}`,
     `skills:          ${skillsCount}`,
     `agent types:     ${agentTypesCount}`,
-    `plugins:         ${pluginsCount}`,
+    `plugins:         ${pluginsCount}` +
+      (pluginMergeErrs ? `  warnings=${pluginMergeErrs}` : ''),
+    `memory user:     ${memoryUser}`,
+    `memory project:  ${memoryProject}`,
   ]
   lines.push(
     `mcp connections: ${mcpCount}` +
@@ -1236,21 +1257,57 @@ async function cmdPluginsInstall(
   const {
     installPluginFromMarketplace,
     installPluginFromPath,
+    installPluginFromZip,
+    installPluginFromUrl,
+    looksLikeZipPath,
   } = await import('../../plugins/src/marketplace.ts')
   const raw = parts[0] ?? ''
   if (!raw) {
     return {
       ok: false,
       message:
-        'Usage: /plugins install <id>@<marketplace> | /plugins install path:<dir>  [--project]',
+        'Usage: /plugins install <id>@<marketplace> | path:<dir|zip> | zip:<file.zip> | url:<https://…/x.zip>  [--project]',
     }
   }
   const scope = parts.includes('--project') ? 'project' : 'user'
   try {
-    if (raw.startsWith('path:') || raw.startsWith('file:')) {
-      const p = raw.replace(/^(path|file):/i, '')
-      const rec = await installPluginFromPath({
-        path: p,
+    if (/^https?:\/\//i.test(raw) || raw.startsWith('url:')) {
+      const u = raw.replace(/^url:/i, '')
+      const rec = await installPluginFromUrl({
+        url: u,
+        scope,
+        cwd: session.cwd,
+      })
+      return {
+        ok: true,
+        message: `Installed ${rec.id} from url → ${rec.installPath}\nRun /plugins reload to activate.`,
+      }
+    }
+    if (
+      raw.startsWith('path:') ||
+      raw.startsWith('file:') ||
+      raw.startsWith('zip:')
+    ) {
+      const p = raw.replace(/^(path|file|zip):/i, '')
+      const rec = looksLikeZipPath(p)
+        ? await installPluginFromZip({
+            zipPath: p,
+            scope,
+            cwd: session.cwd,
+          })
+        : await installPluginFromPath({
+            path: p,
+            scope,
+            cwd: session.cwd,
+          })
+      return {
+        ok: true,
+        message: `Installed ${rec.id} → ${rec.installPath}\nRun /plugins reload to activate.`,
+      }
+    }
+    if (looksLikeZipPath(raw)) {
+      const rec = await installPluginFromZip({
+        zipPath: raw,
         scope,
         cwd: session.cwd,
       })
@@ -1264,7 +1321,7 @@ async function cmdPluginsInstall(
       return {
         ok: false,
         message:
-          'Usage: /plugins install <id>@<marketplace>  or  path:<plugin-dir>',
+          'Usage: /plugins install <id>@<marketplace>  or  path:<plugin-dir|zip>  or  url:<https zip>',
       }
     }
     const pluginId = raw.slice(0, at)

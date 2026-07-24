@@ -114,6 +114,77 @@ async function main() {
   }
   assert(gone, 'uninstalled')
 
+  // P-PL-ZIP：本地 zip 安装
+  const { installPluginFromZip, looksLikeZipPath } = await import(
+    '../packages/plugins/src/marketplace.ts'
+  )
+  assert(looksLikeZipPath('x.ZIP'), 'looksLikeZipPath')
+  const zipPath = path.join(tmp, 'demo-plug.zip')
+  // 用 tar 打 zip（Windows/mac/linux 常见）
+  const { spawnSync } = await import('node:child_process')
+  const pack = spawnSync(
+    'tar',
+    ['-a', '-cf', zipPath, '-C', path.dirname(pluginSrc), path.basename(pluginSrc)],
+    { encoding: 'utf8' },
+  )
+  if (pack.status !== 0) {
+    // 回落：powershell Compress-Archive
+    const ps = spawnSync(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-Command',
+        `Compress-Archive -Path '${pluginSrc.replace(/'/g, "''")}' -DestinationPath '${zipPath.replace(/'/g, "''")}' -Force`,
+      ],
+      { encoding: 'utf8' },
+    )
+    assert(ps.status === 0, `zip pack failed: ${ps.stderr || pack.stderr}`)
+  }
+  const zrec = await installPluginFromZip({
+    zipPath,
+    scope: 'user',
+    boloRoot: userRoot,
+  })
+  assert(zrec.id === 'demo-plug', 'zip install id')
+  assert(
+    (await fs.stat(path.join(zrec.installPath, 'bolo.plugin.json'))).isFile(),
+    'zip installed manifest',
+  )
+
+  // P-PL-URL-ZIP：mock fetch
+  const { installPluginFromUrl } = await import(
+    '../packages/plugins/src/marketplace.ts'
+  )
+  const zipBuf = await fs.readFile(zipPath)
+  const urec = await installPluginFromUrl({
+    url: 'https://example.test/plugins/demo-plug.zip',
+    scope: 'user',
+    boloRoot: userRoot,
+    fetchImpl: async () =>
+      new Response(zipBuf, {
+        status: 200,
+        headers: { 'content-type': 'application/zip' },
+      }),
+  })
+  assert(urec.id === 'demo-plug', 'url zip install')
+
+  // 非 zip URL 应失败
+  let urlFail = false
+  try {
+    await installPluginFromUrl({
+      url: 'https://example.test/not-a-plugin',
+      boloRoot: userRoot,
+      fetchImpl: async () =>
+        new Response('hello', {
+          status: 200,
+          headers: { 'content-type': 'text/plain' },
+        }),
+    })
+  } catch {
+    urlFail = true
+  }
+  assert(urlFail, 'non-zip url rejected')
+
   console.log('ok: test-plugins-market')
 }
 

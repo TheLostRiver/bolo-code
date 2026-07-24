@@ -27,16 +27,24 @@
 |------|------|
 | TTY + 无参 | 全量 banner → `createSessionFromWorkspace` → readline（`submitUserInput`） |
 | plain / `NO_COLOR` / `BOLO_PLAIN=1` | 单行 `BOLO · …`，无多行艺术字 |
+| **窄终端**（列数 **&lt; 80**，`NARROW_TERMINAL_COLUMNS`） | **自动 plain banner** + **缩短状态行**（P-T9-NARROW） |
 | 非 TTY 无参 | 打印 help / 错误并退出，**不**挂起 |
 | `--resume` 成功 | **缩略**一行 `BOLO · session <id>`（T7 轻量）+ 会话摘要 |
 
-## 运行时行为（T3–T6）
+## 运行时行为（T3–T6 · T9）
 
 ### T3 状态行
 
 - 每次 `bolo>` 前、banner/摘要后打印一行：  
-  `mode=<permissionMode> · model=… · effort=… · messages=N`
-- 实现：`packages/cli/src/tui/statusLine.ts`
+  宽终端：`mode=<permissionMode> · model=… · effort=… · messages=N`  
+  窄终端：`m=… · <model> · e=… · n=N`
+- 实现：`packages/cli/src/tui/statusLine.ts`（`formatSessionStatusLine(session, { columns })`）
+
+### T9 窄终端（P-T9，非完整 Ink）
+
+- `getTerminalColumns` / `isNarrowTerminal` / `shouldUsePlainBanner`（`tui/banner.ts`）
+- 阈值默认 **80**；`COLUMNS` 或 `process.stdout.columns`
+- **不做**：箭头键 picker、完整 Ink 布局（**T8 仍 OUT**）
 
 ### T4 流式 assistant + 工具简行
 
@@ -65,23 +73,21 @@
 
 ## 模块
 
-- `packages/cli/src/tui/banner.ts` — `renderWelcomeBanner`
-- `packages/cli/src/tui/statusLine.ts` — 状态行
+- `packages/cli/src/tui/banner.ts` — `renderWelcomeBanner` · 窄终端
+- `packages/cli/src/tui/statusLine.ts` — 状态行（含 compact）
 - `packages/cli/src/tui/formatSessionEvent.ts` — 事件格式化
 - `packages/cli/src/tui/askPermissionTty.ts` — 权限 y/a/N
 - `packages/cli/src/newSessionCli.ts` — 新会话入口
 - `packages/cli/src/resumeCli.ts` — resume / REPL / `runOnePrompt`
 - `packages/cli/src/main.ts` — 路由 bare / resume
 
-## 后续（未做）
+## 测试
 
-- 完整 Ink 布局 / 箭头键会话 picker 美化
-- 主题、窄终端、吉祥物开关
+```bash
+node --import tsx/esm scripts/test-product-track.ts
+```
 
-## 验收
+## 后续（明确 OUT）
 
-- plain 输出包含 `BOLO`
-- 无参 TTY 路径可进 REPL；非 TTY 不阻塞
-- 斜杠经总线；`/help` 可读
-- `scripts/test-cli-events.ts`：工具行与权限解析
-- 无遥测
+- **T8** 完整 Ink 布局 / 箭头键会话 picker（**本产品轨不做**）
+- 主题、吉祥物开关（可选后置）

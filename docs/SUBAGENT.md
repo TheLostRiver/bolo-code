@@ -124,6 +124,8 @@ fork 路径不走白名单表，直接 `parent.allTools` 去掉 `Agent`。
 
 **SA-PAR：** `/agents status` · `/bg` 展示 `total/running/done/error` 计数 + `RUNNING|DONE|ERROR` 标签 + finished 时间。
 
+**P-SA-CAP：** 后台并发上限默认 **3**（`BOLO_MAX_BACKGROUND_AGENTS` 或 `store.maxConcurrent`）；超额拒绝并提示 `/agents status`。
+
 ## 完成定义
 
 `spawnSubagentStub`（只发 hook）**不算完成**。
@@ -133,3 +135,4 @@ fork 路径不走白名单表，直接 `parent.allTools` 去掉 `Agent`。
 - **S8 最小：** 子权限不升级（`resolveSubagentPermissionMode`）
 - **S12 partial：** 可选后台 subagent + **fork 继承父 messages**（无 worktree）
 - **SA-PAR：** 后台队列可见性（计数 + 状态标签）
+- **P-SA-CAP：** 并发上限（默认 3）
