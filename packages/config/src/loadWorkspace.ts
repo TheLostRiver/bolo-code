@@ -89,9 +89,11 @@ export function resolveProviderFromConfig(config: BoloConfigJson): {
       ? 'anthropic'
       : kindRaw === 'mock'
         ? 'mock'
-        : kindRaw === 'openai-compatible'
-          ? 'openai-compatible'
-          : undefined
+        : kindRaw === 'openai-responses'
+          ? 'openai-responses'
+          : kindRaw === 'openai-compatible'
+            ? 'openai-compatible'
+            : undefined
 
   return createProviderFromEnv({
     kind,

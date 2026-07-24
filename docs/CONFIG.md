@@ -79,6 +79,7 @@ defaults
 }
 ```
 
+`provider.kind` 还可为：`openai-responses`（原生 Responses `/responses`）、`anthropic`、`mock`。详见 [PROVIDERS.md](./PROVIDERS.md)。
 | 字段 | 默认 | 说明 |
 |------|------|------|
 | `autoCompactEnabled` | `false` | 为 true 且会话有 `compactSummarizer` 时，queryLoop 的 `prepareMessages` 达 token 阈值会走 full compact（对照 HC autoCompactIfNeeded） |

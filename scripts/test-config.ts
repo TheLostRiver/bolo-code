@@ -11,6 +11,7 @@ import {
   getProjectBoloDir,
   loadWorkspace,
   mergeConfigs,
+  resolveProviderFromConfig,
   writeJsonFile,
   type BoloConfigJson,
 } from '../packages/config/src/index.ts'
@@ -117,6 +118,17 @@ async function main() {
     'plugin skill merged into catalog',
   )
   assert(ws.providerKind === 'mock', 'no key → mock')
+
+  // openai-responses kind 经 resolveProviderFromConfig 识别
+  process.env.OPENAI_API_KEY = 'sk-test-responses'
+  delete process.env.BOLO_PROVIDER
+  const rsp = resolveProviderFromConfig({
+    provider: { kind: 'openai-responses', model: 'gpt-4o' },
+  })
+  assert(rsp.kind === 'openai-responses', 'config openai-responses kind')
+  assert(rsp.provider.id === 'openai-responses', 'provider id responses')
+  delete process.env.OPENAI_API_KEY
+  process.env.BOLO_PROVIDER = 'mock'
 
   const merged = mergeConfigs(
     { provider: { model: 'a' } },

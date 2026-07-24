@@ -77,7 +77,7 @@
 | 协议 | 端点（典型） | Bolo 现状 | 配置 kind（目标） |
 |------|----------------|-----------|-------------------|
 | **Chat Completions** | `POST {base}/chat/completions` | **已支持** | `openai-compatible` |
-| **Responses API（原生）** | `POST {base}/responses`（SSE；可选 WS） | **未实现**（产品目标：直连） | `openai-responses`（拟定） |
+| **Responses API（原生）** | `POST {base}/responses`（SSE；可选 WS） | **已支持** HTTP SSE | `openai-responses` |
 
 #### Chat Completions（现有）
 
@@ -86,15 +86,34 @@
 - 流：`data: {choices[0].delta…}` + 可选 `stream_options.include_usage`
 - 实现：`openaiCompatible.ts`
 
-#### Responses API（待实现 · 直连，不经 Chat Completions 伪装）
+#### Responses API（HTTP SSE 直连）
 
-- **目标**：供应商原生 Responses 时走独立适配器，**不**把请求先转成 Chat Completions 再发。
-- 仍映射进统一 `ProviderStreamEvent`（loop 不改）。
-- 请求侧：`ChatMessage[]` + tools → Responses `input` / `tools` / `instructions`（system）。
-- 流侧：解析 `response.output_item.*` / `response.output_text.delta` / `response.completed` 等 → `text_delta` / `tool_call` / `usage` / `done`。
-- tool 回灌：function_call 结果按 Responses 约定写回下一轮 `input`（与 Chat Completions 的 `role:tool` 不同，适配器内处理）。
-- 配置草案：`provider.kind: "openai-responses"`，`BOLO_PROVIDER=openai-responses|responses`；key 仍 `OPENAI_API_KEY` / `BOLO_API_KEY`。
-- **第一刀范围**：HTTP SSE 直连 + tools + usage；WebSocket Responses **后置**。
+- 实现：`openaiResponses.ts`；`POST {base}/responses`，`Authorization: Bearer`
+- `system` → `instructions`；对话/tools → `input`（`function_call` / `function_call_output`）
+- 流：`response.output_text.delta`、`response.output_item.done`（function_call）、`response.completed` / `failed`
+- effort → `max_output_tokens`（同 `mapEffort`）
+- 默认 `store: false`（会话自管 transcript）
+- 环境：`BOLO_PROVIDER=openai-responses` 或 `responses`；key/base/model 与 Completions 共用 `OPENAI_*` / `BOLO_*`
+
+```json
+{
+  "provider": {
+    "kind": "openai-responses",
+    "model": "gpt-4o",
+    "baseUrl": "https://api.openai.com/v1"
+  }
+}
+```
+
+```bash
+set BOLO_PROVIDER=openai-responses
+set OPENAI_API_KEY=sk-...
+npx tsx scripts/smoke-live.ts
+```
+
+#### Chat Completions（现有）
+
+- 实现：`openaiCompatible.ts`（上文 OpenAI 系表）
 
 ### Anthropic（对照 HC 流式事件）
 
@@ -121,7 +140,7 @@
 | 文件 | 职责 |
 |------|------|
 | `openaiCompatible.ts` | Chat Completions 流 + usage |
-| `openaiResponses.ts` | **待实现** Responses HTTP SSE 直连 |
+| `openaiResponses.ts` | Responses HTTP SSE 直连 |
 | `anthropic.ts` | Anthropic Messages 流 + usage |
 | `sseUsage.ts` | 解析/合并 SSE usage 片段 |
 | `effort.ts` | `mapEffort` → maxTokens |
