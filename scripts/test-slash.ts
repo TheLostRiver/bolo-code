@@ -96,6 +96,15 @@ async function main() {
     assert(doctor.message.includes('tools:'), 'doctor has tools count')
     assert(doctor.message.includes('skills:'), 'doctor has skills count')
     assert(doctor.message.includes('agent types:'), 'doctor has agent types')
+    assert(
+      doctor.message.includes('provider:') &&
+        doctor.message.includes('mock'),
+      'doctor has provider id',
+    )
+    assert(
+      doctor.message.includes('mcp connections:'),
+      'doctor always shows mcp line',
+    )
     assert(doctor.message.includes('usage:'), 'doctor has usage line')
     assert(doctor.message.includes('autoCompact:'), 'doctor has autoCompact')
     assert(doctor.message.includes('maxPtlRetries:'), 'doctor has maxPtlRetries')
@@ -114,6 +123,31 @@ async function main() {
       'status has mode',
     )
   }
+
+  // /mcp 无连接
+  const mcpNone = await submitUserInput(session, '/mcp')
+  assert(mcpNone.type === 'slash', 'mcp slash')
+  if (mcpNone.type === 'slash') {
+    assert(
+      mcpNone.message.includes('none') || mcpNone.message.includes('mcp'),
+      'mcp empty message',
+    )
+  }
+  session.mcpConnections = [
+    {
+      name: 'echo',
+      tools: [{ name: 'ping', description: 'Ping tool' }],
+    },
+  ]
+  const mcpList = await submitUserInput(session, '/mcp')
+  assert(mcpList.type === 'slash' && mcpList.message.includes('echo'), 'mcp list server')
+  const mcpTools = await submitUserInput(session, '/mcp tools')
+  assert(
+    mcpTools.type === 'slash' &&
+      mcpTools.message.includes('mcp__echo__ping'),
+    'mcp tools namespaced',
+  )
+  session.mcpConnections = []
 
   // /cost 初始为空
   const cost0 = await submitUserInput(session, '/cost')

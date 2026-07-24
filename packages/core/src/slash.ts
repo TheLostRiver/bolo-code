@@ -51,12 +51,17 @@ export type SlashSession = {
   usage?: SessionUsage
   /** 会话工具表；/doctor 计数 */
   tools?: { name: string }[]
+  /** provider id；/doctor */
+  provider?: { id?: string }
   /** auto compact 开关；/doctor */
   autoCompactEnabled?: boolean
   /** PTL 重试上限；/doctor */
   maxPtlRetries?: number
-  /** 已连接 MCP；/doctor 有则显示 */
-  mcpConnections?: unknown[]
+  /** 已连接 MCP；/doctor · /mcp */
+  mcpConnections?: Array<{
+    name: string
+    tools?: Array<{ name: string; description?: string }>
+  }>
 }
 
 export type ParseSlashResult =
@@ -233,6 +238,7 @@ function cmdDoctor(session: SlashSession, _args: string): SlashDispatchResult {
     `platform:        ${process.platform}`,
     `cwd:             ${session.cwd}`,
     `session id:      ${session.id}`,
+    `provider:        ${session.provider?.id ?? '(unset)'}`,
     `permissionMode:  ${session.permissionMode}`,
     `model:           ${session.model ?? '(unset)'}`,
     `effort:          ${session.effortLevel ?? 'auto'}`,
@@ -240,15 +246,47 @@ function cmdDoctor(session: SlashSession, _args: string): SlashDispatchResult {
     `skills:          ${skillsCount}`,
     `agent types:     ${agentTypesCount}`,
   ]
-  if (mcpCount > 0) {
-    lines.push(`mcp connections: ${mcpCount}`)
-  }
+  lines.push(`mcp connections: ${mcpCount}`)
   lines.push(
     formatUsageOneLiner(session.usage),
     `autoCompact:     ${autoCompact}`,
     `maxPtlRetries:   ${maxPtl}`,
     `~/.bolo:         ${boloHome} (${boloHomeExists ? 'exists' : 'missing'})`,
   )
+  return { ok: true, message: lines.join('\n') }
+}
+
+function cmdMcp(session: SlashSession, args: string): SlashDispatchResult {
+  const conns = session.mcpConnections ?? []
+  const sub = args.trim().toLowerCase()
+  if (!conns.length) {
+    return {
+      ok: true,
+      message:
+        'mcp: (none connected)\nConfigure ~/.bolo/mcp.json or .bolo/mcp.json and createSessionFromWorkspace({ connectMcp: true }).',
+    }
+  }
+  if (sub === 'tools' || sub.startsWith('tools ')) {
+    const lines: string[] = [`mcp tools (${conns.length} server(s)):`]
+    for (const s of conns) {
+      const tools = s.tools ?? []
+      if (!tools.length) {
+        lines.push(`  ${s.name}: (no tools listed)`)
+        continue
+      }
+      for (const t of tools) {
+        const desc = t.description ? ` — ${t.description.slice(0, 60)}` : ''
+        lines.push(`  mcp__${s.name}__${t.name}${desc}`)
+      }
+    }
+    return { ok: true, message: lines.join('\n') }
+  }
+  const lines = [`mcp servers (${conns.length}):`]
+  for (const s of conns) {
+    const n = s.tools?.length ?? 0
+    lines.push(`  ${s.name}  tools=${n}`)
+  }
+  lines.push('Use /mcp tools for full tool names (mcp__server__tool).')
   return { ok: true, message: lines.join('\n') }
 }
 
@@ -611,6 +649,12 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     name: 'status',
     summary: 'Alias of /doctor',
     run: cmdDoctor,
+  },
+  {
+    name: 'mcp',
+    summary: 'List connected MCP servers or tools',
+    usage: '[tools]',
+    run: cmdMcp,
   },
   {
     name: 'cost',

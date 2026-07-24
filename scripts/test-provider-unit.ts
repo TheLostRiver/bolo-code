@@ -240,6 +240,23 @@ assert(
   'provider id openai-responses',
 )
 
+// env 别名 BOLO_PROVIDER=responses
+{
+  const prev = process.env.BOLO_PROVIDER
+  process.env.BOLO_PROVIDER = 'responses'
+  assert(
+    detectProviderKind() === 'openai-responses',
+    'env BOLO_PROVIDER=responses → openai-responses',
+  )
+  process.env.BOLO_PROVIDER = 'openai-responses'
+  assert(
+    detectProviderKind() === 'openai-responses',
+    'env BOLO_PROVIDER=openai-responses',
+  )
+  if (prev === undefined) delete process.env.BOLO_PROVIDER
+  else process.env.BOLO_PROVIDER = prev
+}
+
 console.log(
   'PROVIDER UNIT PASS (converters + sse usage + mapEffort + responses)',
 )
