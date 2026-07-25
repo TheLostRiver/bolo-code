@@ -349,6 +349,7 @@ const parsedSuccessResult = parseRuntimeCommandResult({
   requestId: 'request_inspect',
   action: 'runtime.inspect',
   ok: true,
+  warnings: ['accepted with durable audit warning'],
   snapshot: {
     ...snapshot,
     futureSnapshotField: true,
@@ -359,6 +360,9 @@ if (parsedSuccessResult.ok) {
   assert.equal(parsedSuccessResult.value.ok, true)
   if (parsedSuccessResult.value.ok) {
     assert.deepEqual(parsedSuccessResult.value.snapshot, snapshot)
+    assert.deepEqual(parsedSuccessResult.value.warnings, [
+      'accepted with durable audit warning',
+    ])
   }
 }
 

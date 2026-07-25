@@ -27,8 +27,16 @@ import {
   type PermissionMode,
   type SessionPermissionRules,
 } from '../../permissions/src/index.ts'
-import type { ChatMessage, HooksConfig, HookEvent } from '../../shared/src/index.ts'
-import { HOOK_EVENTS } from '../../shared/src/index.ts'
+import {
+  HOOK_EVENTS,
+  RUNTIME_PROTOCOL_VERSION,
+  type ChatMessage,
+  type HooksConfig,
+  type HookEvent,
+  type RuntimeCommand,
+  type RuntimeCommandResult,
+  type RuntimeSnapshot,
+} from '../../shared/src/index.ts'
 import {
   estimateSystemSectionsTokens,
   estimateTokens,
@@ -82,11 +90,16 @@ import {
   requestSessionControl,
   type SessionControlRuntimeSession,
 } from './sessionControlRuntime.ts'
+import {
+  executeRuntimeCommand,
+  type RuntimeCommandSession,
+} from './runtimeCommand.ts'
 
 /** slash 需要的会话切片（与 BoloSession 兼容） */
 export type SlashSession = {
   id: string
   cwd: string
+  phase?: import('../../shared/src/index.ts').SessionPhase
   messages: ChatMessage[]
   systemPromptSections: string[]
   permissionMode: PermissionMode
@@ -116,6 +129,10 @@ export type SlashSession = {
   agentPolicy?: import('./subagent.ts').AgentPolicy
   /** 后台 subagent 表；/agents status · /bg */
   backgroundAgents?: import('./subagent.ts').BackgroundAgentStore
+  /** DR4 runtime protocol projection inputs. */
+  durableTurns?: import('./durableTurn.ts').DurableTurnRecord[]
+  durableControls?: import('./durableControl.ts').DurableControlRecord[]
+  durableTasks?: import('./durableTask.ts').DurableTaskRecord[]
   /** 本地 usage 累计；/cost · /context · /doctor */
   usage?: SessionUsage
   /** 本地 prompt-cache 观测；/cost */
@@ -1060,6 +1077,217 @@ async function cmdTurn(
     ok: false,
     message:
       'Usage: /turn status | steer <text> | interrupt | queue <text> | cancel <controlId>',
+  }
+}
+
+function runtimeCommandId(): string {
+  return `runtime_${randomUUID().replaceAll('-', '')}`
+}
+
+function asRuntimeCommandSession(
+  session: SlashSession,
+): RuntimeCommandSession | null {
+  if (
+    !session.coordinator ||
+    !session.phase ||
+    !Array.isArray(session.durableTurns) ||
+    !Array.isArray(session.durableControls) ||
+    !Array.isArray(session.durableTasks)
+  ) {
+    return null
+  }
+  return session as unknown as RuntimeCommandSession
+}
+
+function runtimeInspectCommand(sessionId: string): RuntimeCommand {
+  return {
+    protocolVersion: RUNTIME_PROTOCOL_VERSION,
+    kind: 'runtime.command',
+    requestId: runtimeCommandId(),
+    action: 'runtime.inspect',
+    target: { sessionId },
+  }
+}
+
+function runtimeResultMessage(result: RuntimeCommandResult): string {
+  if (!result.ok) {
+    return `runtime command rejected [${result.code}]: ${result.detail}`
+  }
+  const lines = [`runtime command accepted: ${result.action}`]
+  for (const warning of result.warnings ?? []) {
+    lines.push(`warning: ${warning}`)
+  }
+  return lines.join('\n')
+}
+
+function formatRuntimeList(snapshot: RuntimeSnapshot): string {
+  const { session } = snapshot
+  const lines = [
+    `Runtime protocol v${snapshot.protocolVersion}`,
+    `session: ${session.sessionId} · phase=${session.phase}`,
+    session.runner.state === 'running'
+      ? `runner: running · turn=${session.runner.active.turnId}`
+      : 'runner: idle',
+    `turns (${session.turns.length}):`,
+    ...session.turns.map(
+      (turn) => `  ${turn.turnId} · ${turn.state}`,
+    ),
+    `controls (${session.controls.length}):`,
+    ...session.controls.map(
+      (control) =>
+        `  ${control.controlId} · ${control.kind}/${control.state}`,
+    ),
+    `tasks (${session.tasks.length}):`,
+    ...session.tasks.map(
+      (task) => `  ${task.taskId} · ${task.agentType}/${task.state}`,
+    ),
+  ]
+  return lines.join('\n')
+}
+
+async function cmdRuntime(
+  session: SlashSession,
+  args: string,
+): Promise<SlashDispatchResult> {
+  const runtimeSession = asRuntimeCommandSession(session)
+  if (!runtimeSession) {
+    return {
+      ok: false,
+      message: 'runtime protocol unavailable on this session',
+    }
+  }
+  const parts = args.trim().split(/\s+/).filter(Boolean)
+  const action = (parts[0] ?? 'list').toLowerCase()
+  const inspected = await executeRuntimeCommand(
+    runtimeSession,
+    runtimeInspectCommand(session.id),
+  )
+  if (!inspected.ok || !inspected.snapshot) {
+    return { ok: false, message: runtimeResultMessage(inspected) }
+  }
+  const snapshot = inspected.snapshot
+
+  if (action === 'list' || action === 'status') {
+    if (parts.length > 1) {
+      return {
+        ok: false,
+        message:
+          'Usage: /runtime [list|json|inspect [turn|control|task] [id]|interrupt <turnId>|cancel <control|task> <id>]',
+      }
+    }
+    return { ok: true, message: formatRuntimeList(snapshot) }
+  }
+  if (action === 'json') {
+    if (parts.length > 1) {
+      return { ok: false, message: 'Usage: /runtime json' }
+    }
+    return { ok: true, message: JSON.stringify(snapshot, null, 2) }
+  }
+  if (action === 'inspect') {
+    if (parts.length === 1) {
+      return { ok: true, message: JSON.stringify(snapshot, null, 2) }
+    }
+    const entity = parts[1]?.toLowerCase()
+    const id = parts[2]
+    if (!id || parts.length !== 3) {
+      return {
+        ok: false,
+        message:
+          'Usage: /runtime inspect [turn <turnId>|control <controlId>|task <taskId>]',
+      }
+    }
+    const row =
+      entity === 'turn'
+        ? snapshot.session.turns.find((turn) => turn.turnId === id)
+        : entity === 'control'
+          ? snapshot.session.controls.find(
+              (control) => control.controlId === id,
+            )
+          : entity === 'task'
+            ? snapshot.session.tasks.find((task) => task.taskId === id)
+            : undefined
+    if (!row) {
+      return {
+        ok: false,
+        message: `runtime ${entity ?? 'entity'} "${id}" not found`,
+      }
+    }
+    return { ok: true, message: JSON.stringify(row, null, 2) }
+  }
+  if (action === 'interrupt') {
+    const turnId = parts[1]
+    if (!turnId || parts.length !== 2) {
+      return { ok: false, message: 'Usage: /runtime interrupt <turnId>' }
+    }
+    const result = await executeRuntimeCommand(runtimeSession, {
+      protocolVersion: RUNTIME_PROTOCOL_VERSION,
+      kind: 'runtime.command',
+      requestId: runtimeCommandId(),
+      action: 'turn.interrupt',
+      target: {
+        sessionId: session.id,
+        turnId,
+        expectedState: 'running',
+      },
+    })
+    return { ok: result.ok, message: runtimeResultMessage(result) }
+  }
+  if (action === 'cancel') {
+    const entity = parts[1]?.toLowerCase()
+    const id = parts[2]
+    if (!id || parts.length !== 3) {
+      return {
+        ok: false,
+        message: 'Usage: /runtime cancel <control|task> <id>',
+      }
+    }
+    let command: RuntimeCommand | undefined
+    if (entity === 'control') {
+      const control = snapshot.session.controls.find(
+        (row) => row.controlId === id,
+      )
+      if (control?.state === 'pending' || control?.state === 'ready') {
+        command = {
+          protocolVersion: RUNTIME_PROTOCOL_VERSION,
+          kind: 'runtime.command',
+          requestId: runtimeCommandId(),
+          action: 'control.cancel',
+          target: {
+            sessionId: session.id,
+            controlId: id,
+            expectedState: control.state,
+          },
+        }
+      }
+    } else if (entity === 'task') {
+      const task = snapshot.session.tasks.find((row) => row.taskId === id)
+      if (task?.state === 'queued') {
+        command = {
+          protocolVersion: RUNTIME_PROTOCOL_VERSION,
+          kind: 'runtime.command',
+          requestId: runtimeCommandId(),
+          action: 'task.cancel',
+          target: {
+            sessionId: session.id,
+            taskId: id,
+            expectedState: 'queued',
+          },
+        }
+      }
+    }
+    if (!command) {
+      return {
+        ok: false,
+        message: `runtime ${entity ?? 'entity'} "${id}" is not cancellable`,
+      }
+    }
+    const result = await executeRuntimeCommand(runtimeSession, command)
+    return { ok: result.ok, message: runtimeResultMessage(result) }
+  }
+  return {
+    ok: false,
+    message:
+      'Usage: /runtime [list|json|inspect [turn|control|task] [id]|interrupt <turnId>|cancel <control|task> <id>]',
   }
 }
 
@@ -3247,6 +3475,14 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     usage: '[status | steer <text> | interrupt | queue <text> | cancel <id>]',
     group: 'session',
     run: cmdTurn,
+  },
+  {
+    name: 'runtime',
+    summary: 'Protocol v1 runtime list/inspect/interrupt/cancel',
+    usage:
+      '[list|json|inspect [turn|control|task] [id]|interrupt <turnId>|cancel <control|task> <id>]',
+    group: 'session',
+    run: cmdRuntime,
   },
   {
     name: 'cost',

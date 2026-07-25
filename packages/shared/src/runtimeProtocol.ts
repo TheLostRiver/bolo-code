@@ -294,6 +294,7 @@ export type RuntimeCommandResult =
   | (RuntimeCommandResultBase & {
       ok: true
       snapshot?: RuntimeSnapshot
+      warnings?: string[]
     })
   | (RuntimeCommandResultBase & {
       ok: false
@@ -1027,10 +1028,23 @@ export function parseRuntimeCommandResult(
     }
     if (record.ok) {
       let snapshot: RuntimeSnapshot | undefined
+      let warnings: string[] | undefined
       if (record.snapshot !== undefined) {
         const parsed = parseRuntimeSnapshot(record.snapshot)
         if (!parsed.ok) throw new Error(parsed.detail)
         snapshot = parsed.value
+      }
+      if (record.warnings !== undefined) {
+        if (!Array.isArray(record.warnings)) {
+          throw new Error('result.warnings must be an array')
+        }
+        warnings = record.warnings.map((warning, index) =>
+          requiredString(
+            warning,
+            `result.warnings[${index}]`,
+            10_000,
+          ),
+        )
       }
       return {
         ok: true,
@@ -1038,6 +1052,7 @@ export function parseRuntimeCommandResult(
           ...base,
           ok: true,
           ...(snapshot ? { snapshot } : {}),
+          ...(warnings?.length ? { warnings } : {}),
         },
       }
     }

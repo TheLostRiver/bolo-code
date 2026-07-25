@@ -2925,3 +2925,8 @@ export {
   type BuildRuntimeSnapshotOptions,
   type RuntimeSnapshotSource,
 } from './runtimeSnapshot.ts'
+
+export {
+  executeRuntimeCommand,
+  type RuntimeCommandSession,
+} from './runtimeCommand.ts'
