@@ -147,7 +147,31 @@ defaults
 **热切失败**（缺 key / 未知 id）→ 明确错误，**保留**当前 provider。  
 **后置（P5）：** Desktop 设置下拉；resume 快照持久化 `providerId`。
 
-| 字段 | 默认 | 说明 |
+### Effort 方言（**E 轨 · 规划**）
+
+推理强度不按厂商写死分支，而用 **dialect 表** 映射到请求体。完整契约：[EFFORT.md](./EFFORT.md) · [ROADMAP.md](./ROADMAP.md) §10。
+
+```jsonc
+{
+  "providers": {
+    "sf": {
+      "kind": "openai-compatible",
+      "baseUrl": "https://api.siliconflow.cn/v1",
+      "model": "deepseek-ai/DeepSeek-V4-Flash",
+      "apiKeyEnv": "SILICONFLOW_API_KEY",
+      // 规划字段（E4）：内置 id 或内联 dialect
+      "effort": { "dialect": "deepseek-chat" }
+    }
+  }
+}
+```
+
+| 现状 | 说明 |
+|------|------|
+| `/effort` | 已有；**当前**只影响 max_tokens 倍率 |
+| E 轨落地后 | 按方言写 `reasoning_effort` / `reasoning.effort` 等 |
+
+**Key：** 优先 `apiKeyEnv` / 环境变量；不要把密钥提交进项目配置。
 |------|------|------|
 | `autoCompactEnabled` | `true` | 为 true 且会话有 `compactSummarizer` 时，queryLoop 的 `prepareMessages` 达 token 阈值会走 full compact（对照参考 autoCompactIfNeeded）。会话内 `/autocompact on\|off` 可改；环境变量 `BOLO_DISABLE_AUTO_COMPACT` / `BOLO_DISABLE_COMPACT` 熔断 auto（manual `/compact` 仍可用） |
 | `contextWindowTokens` | `128000` | 用于 `getAutoCompactThreshold` / `getContextPressure`；token 估见 `estimateTokens`（加权启发式，非 tokenizer） |

@@ -181,6 +181,7 @@ scripts/       单测与 smoke
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 分层 · 模块边界 |
 | [docs/CONFIG.md](docs/CONFIG.md) | 配置布局 · 合并规则 |
 | [docs/PROVIDERS.md](docs/PROVIDERS.md) | 协议 · 多 provider · 热切 |
+| [docs/EFFORT.md](docs/EFFORT.md) | **推理强度方言（E 轨规划）** |
 | [docs/HOOKS.md](docs/HOOKS.md) | Hook 事件（含 SessionEnd） |
 | [docs/COMPACTION.md](docs/COMPACTION.md) | 压缩管道 |
 | [docs/FILE_DIFF_SPEC.md](docs/FILE_DIFF_SPEC.md) | 文件 Diff 日用 + UI |

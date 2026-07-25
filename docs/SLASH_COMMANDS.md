@@ -35,7 +35,7 @@
 | `/init` · `/init all\|user\|project` | 确保 `~/.bolo` / 项目 `.bolo` 布局（skills/plugins/sessions/rules/agents/memory + 默认 json） |
 | `/cost` · `/usage` | 会话内本地 token 累计 + **cache + by-model breakdown**（`session.usage`）；无遥测、不上报；`/usage` 为隐藏别名 |
 | `/model [name]` | 无参显示；有参设 `session.model` |
-| `/effort [low\|medium\|high\|max\|auto]` | 会话字段 `effortLevel`；`auto` 清除覆盖；非法参数返回 **Usage** 文案 |
+| `/effort [low\|medium\|high\|max\|auto]` | 会话字段 `effortLevel`；`auto` 清除覆盖；非法参数返回 **Usage** 文案。**现状：** 仅映射 `max_tokens` 倍率。**规划：** 按 effort 方言写入各家 reasoning 字段（见 [EFFORT.md](./EFFORT.md)） |
 | `/thinking [on\|off]` | 会话 `showThinking`（默认 **on**）：CLI 是否渲染思考链；off 仍解析不渲染 |
 | `/thinking persist [on\|off]` | 会话 `persistReasoning`（默认 **off**）：是否写入 `assistant.reasoning_content` 供 openai-compatible 回灌 |
 | `/plan` | `permissionMode = plan` |

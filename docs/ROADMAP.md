@@ -23,12 +23,13 @@
 | **Hooks · 日用契约** | **~96–98%** | **H0–H5 已落地**（SessionEnd · exit 语义 · updatedInput · `/hooks recent`）；trust/UI 菜单后置 |
 | **Compact · 日用管道** | **~92–95%** | **C0–C5 已落地**；后置 partial/remote/真 tokenizer（§8.9） |
 | **Provider · 多实例热切** | **~92–96%** | **P0–P4.1 已落地**（`providers` · 热切 · TTY 箭头选）；P5 Desktop / resume `providerId` 后置 |
+| **Effort · 推理强度方言** | **~15–25%** | 现仅 `max_tokens` 倍率；**E 轨规划**见 [EFFORT.md](./EFFORT.md)（引擎 + 可插拔方言，非厂商 if） |
 | **产品整体（相对 HC）** | **~72–86%** | 日用高；UI 全家桶另计 |
 
 **主线已闭环：** headless 日用 → Diff · Hooks · Compact C0–C5 · **Provider P0–P4.1**。
 
-**开放轨（非阻塞）：**  
-P5 Desktop 多 provider UI · Compact §8.9 后置 · U5 可选 · resume 持久化 `providerId`。
+**开放轨（当前可着重）：**  
+**E 轨 · Effort 方言**（[EFFORT.md](./EFFORT.md)）· P5 Desktop 多 provider · Compact §8.9 后置 · U5 可选 · resume 持久化 `providerId`。
 
 ---
 
@@ -716,3 +717,41 @@ function switchSessionModel(session, model: string): { ok, reason? }
 | [PROVIDERS.md](./PROVIDERS.md) | 协议 + **多实例配置真源** |
 | [CONFIG.md](./CONFIG.md) | 文件布局与合并 |
 | [PROMPT_CACHE.md](./PROMPT_CACHE.md) | 切换时 cache-break |
+
+---
+
+## 10. Effort 轨（E0–E5 · **规划 · 推理强度方言**）
+
+> **痛点：** `/effort` 现只把 low/medium/high/max/auto 映射为 **`max_tokens` 倍率**，并不写 DeepSeek `reasoning_effort`、OpenAI `reasoning.effort`、HC `output_config.effort`。  
+> **另：** 各家档位集合不同（DS 仅 high/max；OpenAI 可至 xhigh/max；HC 四档+auto）。若按厂商写死 `if`，不可扩展。  
+> **目标：** **通用 resolve 引擎 + 可插拔 EffortDialect 数据**（内置包 + 用户 config）；新后端以改表为主。  
+> **完整契约：** [EFFORT.md](./EFFORT.md)（真源）。
+
+### 10.1 原则（摘录）
+
+```text
+用户意图字符串  →  dialect 表折叠  →  有限 wire shape 打进 body
+禁止：每品牌永久 TS 适配器；禁止只扩枚举不写 wire
+```
+
+### 10.2 阶段
+
+| 阶段 | 交付 | 状态 |
+|------|------|------|
+| **E0** | 规格：EFFORT.md + 本 § | 📋 |
+| **E1** | `resolveEffortWire` · body patch · 纯函数单测 | 📋 |
+| **E2** | builtin `deepseek-chat` + compatible 接线；`/effort` 超集与预览 | 📋 |
+| **E3** | builtin `openai-responses` → `reasoning.effort` | 📋 |
+| **E4** | `providers.*.effort.dialect` 配置 / 内联 | 📋 |
+| **E5** | anthropic 协同 · doctor · 回归水位 | 📋 |
+| 后置 | `reasoning.mode=pro` · 数字档 · Desktop | 🚫 |
+
+**顺序：** E0 → E1 引擎 → E2 DS 日用 → E3 OpenAI → E4 配置开放 → E5。
+
+### 10.3 文档入口
+
+| 文档 | 角色 |
+|------|------|
+| [EFFORT.md](./EFFORT.md) | **E 轨真源** |
+| [PROVIDERS.md](./PROVIDERS.md) | 与 kind / 多实例交叉 |
+| [CONFIG.md](./CONFIG.md) | `effort.dialect` 配置位 |
