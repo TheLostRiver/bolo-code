@@ -35,13 +35,13 @@
 | **多 Provider 热切** | **~92–96%** | P0–P4.1 + CX7 Desktop |
 | **Effort 方言** | **~92–95%** | E0–E9 |
 | **Provider UX** | **~95–98%** | CX0–CX8（ultrathink 默认 off） |
-| Durable Runtime | DR0–DR4B ✅ | admission · recovery · 单 runner · durable control/task · FIFO/promotion · v1 protocol/resolution |
+| Durable Runtime | DR0–DR4 ✅ | admission · recovery · 单 runner · durable control/task · FIFO/promotion · v1 protocol/resolution · crash/restart closeout |
 | Electron GUI | ~65–75% | 壳 + 流式 + 权限 + Settings + 多 provider |
 | 相对 HC 全家桶 UI | 另计 | 不设 100% |
 
-**已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Runtime DR0–DR4B。
+**已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Runtime DR0–DR4。
 
-**当前主线：** Durable Runtime DR4C protocol closeout；DR4B append-only discard/retry-safe 已落地，随后进入 AR1–AR5。
+**当前主线：** Autonomous Road **AR1A**：稳定 CLI/TUI 的 runtime turn/task list 与 inspect 契约；随后按 AR1–AR5 推进可操作性、Compact、Desktop 与发布硬化。
 
 **非阻塞开放轨：** Compact §8.9 · U5 真·Ink/IDE · adaptive thinking · Desktop 体验打磨。
 

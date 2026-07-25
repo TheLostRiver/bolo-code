@@ -172,7 +172,7 @@ controlId + sessionId + kind + state + timestamp
 - 若父 turn 已结束，result 等待下一 turn 的 `before_provider`；同一进程只 delivery 一次。resume 只恢复 `/bg` 诊断，不自动重复 delivery。
 - worktree path/保全摘要随 task_result 和 `/bg` 保留；dirty/untracked worktree 仍不得自动删除。
 
-### 1.6 Runtime Protocol v1（DR4A–DR4B）
+### 1.6 Runtime Protocol v1（DR4A–DR4C）
 
 - `packages/shared/src/runtimeProtocol.ts` 是 transport-neutral schema：`runtime.hello`、`runtime.snapshot`、`runtime.command`、`runtime.result`，当前 `protocolVersion = 1`。
 - snapshot 只含纯数据 `session/runner/turns/controls/tasks`；core builder 不遍历或序列化 provider、tools、AbortController、Promise、lease/callback/closure。
@@ -184,9 +184,12 @@ controlId + sessionId + kind + state + timestamp
 - `resolution` 是 append-only JSONL entry：记录 `resolutionId/sessionId/entityKind/entityId/action`，retry-safe 另含 replacement turn id；compact rewrite 与 resume 保留，原 lifecycle 不删除。
 - discard 可用于任意 interrupted turn/control/task。retry-safe 只接受 admitted-only turn 或 pending/ready queue control，并创建新的 admitted turn + ready control；running/steer/task 一律 fail-closed。
 - retry-safe requestId 稳定派生 replacement id；同请求幂等、同 entity 的不同 resolution 冲突。queue 已接受但 resolution 后写失败时返回 accepted + warning，marker 阻止另一请求重复排队。
-- 这仍不是 daemon/RPC。DR4C 只做真实 consumer 反馈、crash/restart E2E 与旧 transcript 兼容收紧。
+- DR4C 把 crash → resume → retry-safe → CLI drain/runOnePrompt → 再次 resume 串成默认 E2E；replacement 只执行一次，消费前重启也不会重建 executable queue。
+- 旧 v1 snapshot 可以缺少新增 optional resolution/provenance 字段与 DR4B features。transcript 中 unknown/orphan/cross-session/kind-mismatch/completed-target resolution fail-closed 跳过，不能毒化其它 runtime 诊断。
+- 外部 JSONL 的引用过滤不放宽 core invariant：手工构造的非法 runtime source 仍由 snapshot builder/parser 明确拒绝。
+- 这仍不是 daemon/RPC；当前没有第二客户端需求，不引入 app-server 或传输框架。
 
-DR0–DR4B 已收口；当前 DR4C 做 protocol closeout。
+DR0–DR4 已收口；当前主线为 AR1A CLI/TUI runtime UX。
 
 ## 2. 快照格式（version 1，只读兼容）
 

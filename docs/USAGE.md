@@ -417,6 +417,8 @@ CLI：
 - interrupted turn/control/task 可用 `/runtime inspect` 查看、用 `/runtime discard` 追加确认。discard 不删除 lifecycle，只把 resolution 嵌入后续 snapshot。
 - `/runtime retry-safe` 仅接受崩溃前还在 admitted 的 turn，或 pending/ready queue control；它会创建新的 durable turn/control 并进入 FIFO，不复活旧 ID。running turn、steer 与 background task 都返回 `not_retry_safe`。
 - retry-safe 只表示“重新排队”，不会在命令内调用模型。若返回 accepted + warning，说明新 queue 可能已生效，不要换 requestId 重试；同 requestId 可安全补齐缺失的 resolution 审计。
+- 若 retry-safe 后尚未消费就再次重启，replacement 只显示为 interrupted 诊断，不会自动重建 executable queue；可分别 `/runtime inspect` 原记录与 replacement，再决定是否对 replacement 发起新的显式 retry-safe。
+- 旧 JSONL 中未知、orphan、跨 session、类型错配或指向非 interrupted 实体的 resolution 会被忽略，其它合法 lifecycle 与 `/runtime` 诊断仍可使用。
 
 ```bash
 npx bolo --list
@@ -448,6 +450,7 @@ npx tsx scripts/test-model-retry.ts
 npx tsx scripts/test-cli-events.ts
 npx tsx scripts/test-worktree-safety.ts
 npm run test:runtime-protocol
+npm run test:runtime-closeout
 npx tsx scripts/test-slash.ts
 npx tsx scripts/test-multi-provider.ts
 npx tsx scripts/test-ultrathink.ts
