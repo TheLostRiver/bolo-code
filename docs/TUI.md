@@ -48,13 +48,14 @@
 ## 4. U 轨挂载点（规划）
 
 ```text
+packages/core/src/diffViewModel.ts   ← U0 VM
 packages/cli/src/tui/
-  diffViewModel.ts   ← 可放 core 导出的 VM 适配
-  diffPane.ts        ← U1：raw mode 列表+展开（模式类似 arrowPicker）
-  diffKeys.ts        ← 键位
-  askPermissionTty.ts ← U2：复用 diffPane 子集
-formatSessionEvent.ts ← U3：可折叠 cell 标记（或事件字段）
+  diffPane.ts        ← U1：raw mode 列表+展开
+  askPermissionTty.ts ← U2：复用 diffPane 子集（待）
+formatSessionEvent.ts ← U3：可折叠 cell（待）
 ```
+
+**环境：** `BOLO_DIFF_PANEL=0` 强制纯文本 `/diff`（不进面板）。
 
 **约束：**
 
@@ -62,7 +63,14 @@ formatSessionEvent.ts ← U3：可折叠 cell 标记（或事件字段）
 - 非 TTY：禁止挂起面板，回落纯文本。  
 - 不引入 ratatui；真·Ink 仅 U5 评估。
 
-**键位草案：** 见 FILE_DIFF_SPEC §2.3。
+**键位（U1）：** `j/k` 选文件 · `Enter` 展开 · `h` 返回 · `q` 退出。
+
+**测试：**
+
+```bash
+npx tsx scripts/test-diff-view.ts
+npx tsx scripts/test-file-diff.ts
+```
 
 ---
 

@@ -16,7 +16,7 @@
 | **Rules / Creators** | **~75–85%** | 日用齐 |
 | **成本与缓存** | **~94–97%** | /cost 日用近满 |
 | **文件 Diff · 日用契约** | **~95%+** | **D0–D7 已收口**；见 [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) |
-| **文件 Diff · 交互 UI** | **~45–55%** | **U 轨规划中**（对齐 HC Ink / Codex ratatui 语义，不照搬依赖） |
+| **文件 Diff · 交互 UI** | **~60–70%** | **U0–U1 已落地**（ViewModel + TTY diff 面板）；U2+ 规划中 |
 | **斜杠** | **~80–88%** | 日用 + polish |
 | **CLI TUI（壳）** | **~70–80%** | 文本框布局/picker/主题；**非**真 React Ink |
 | **Electron GUI** | **~55–65%** | 壳 + 流式 + 权限 + 设置 |

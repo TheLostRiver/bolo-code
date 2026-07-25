@@ -82,12 +82,12 @@ tool success ──► meta ──► fileDiffLog ──► transcript file_diff
 
 | 阶段 | 交付 | 验收要点 |
 |------|------|----------|
-| **U0** | `DiffViewModel`：由 `fileDiffLog` / preview / git 生成「文件行 + hunk 行」 | 纯函数单测；无 I/O |
-| **U1** | 终端 **Diff 面板**：`/diff` 在 TTY 下进入可滚 UI | j/k 选文件 · Enter 展开 · q 退出；非 TTY 回落 A |
-| **U2** | **权限预览面板**：ask 内嵌可滚 preview | 多文件切换 · 保留 y/a/N |
-| **U3** | **写后 cell** + Desktop 复用 VM | tool_end 可折叠；桌面等宽预览区 |
-| **U4** | 行号 · 主题 · 可选语法色 | 与 `theme.ts` 对齐 |
-| **U5** | 可选真·Ink / IDE / merge-base | 产品决策后置 |
+| **U0** | `DiffViewModel`：由 `fileDiffLog` / preview 生成可渲染行 | ✅ `diffViewModel.ts` |
+| **U1** | 终端 **Diff 面板**：TTY 下 `/diff` 进入可滚 UI | ✅ `tui/diffPane.ts` · `runOnePrompt` |
+| **U2** | **权限预览面板**：ask 内嵌可滚 preview | 📋 |
+| **U3** | **写后 cell** + Desktop 复用 VM | 📋 |
+| **U4** | 行号 · 主题 · 可选语法色 | 📋 |
+| **U5** | 可选真·Ink / IDE / merge-base | 📋 |
 
 ### 2.2 ViewModel 草图（U0）
 
