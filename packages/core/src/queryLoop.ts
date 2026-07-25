@@ -102,10 +102,12 @@ export type QueryLoopParams = {
   /** auto 分类器 / 状态 */
   classifyPermission?: import('../../permissions/src/index.ts').AutoClassifyFn
   autoModeState?: import('../../permissions/src/index.ts').AutoModeState
-  /** 熔断 demote 时写回 mode */
+  /** 熔断 demote 时写回 mode；亦可挂 fileDiffLog */
   sessionRef?: {
     permissionMode: import('../../permissions/src/index.ts').PermissionMode
     autoModeState?: import('../../permissions/src/index.ts').AutoModeState
+    fileDiffLog?: import('./fileDiffLog.ts').FileChangeRecord[]
+    diffTurn?: number
   }
   /** Y3.6 auto 分类审计 → system_note */
   onAutoClassifyAudit?: (note: {

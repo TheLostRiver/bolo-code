@@ -546,17 +546,89 @@ export function createApplyPatchTool(): BoloTool {
         if (patch.trim()) {
           const result = await applyPatchToCwd(ctx.cwd, patch)
           if (ctx.signal?.aborted) return abortedResult()
-          return { ok: true, output: result.output }
+          const first = result.files[0]
+          const unifiedParts: string[] = []
+          for (const f of result.files.slice(0, 2)) {
+            if (!f.structuredPatch?.length) continue
+            const u = formatUnifiedDiff(f.path, f.structuredPatch)
+            if (u) unifiedParts.push(u)
+          }
+          return {
+            ok: true,
+            output: result.output,
+            meta: {
+              kind: 'apply_patch',
+              path: first?.path,
+              paths: result.changed,
+              op: first?.op,
+              added: result.added,
+              removed: result.removed,
+              files: result.files.map((f) => ({
+                path: f.path,
+                op: f.op,
+                added: f.added,
+                removed: f.removed,
+                ...(f.structuredPatch?.length
+                  ? { structuredPatch: f.structuredPatch }
+                  : {}),
+              })),
+              ...(first?.structuredPatch?.length
+                ? { structuredPatch: first.structuredPatch }
+                : {}),
+              ...(unifiedParts.length
+                ? { unified: unifiedParts.join('\n') }
+                : {}),
+            },
+          }
         }
         // legacy: full-file write via path + content
         const filePath = input.path != null ? String(input.path) : ''
         if (filePath && input.content != null) {
           const p = resolveSafe(ctx.cwd, filePath)
           if (ctx.signal?.aborted) return abortedResult()
+          let before = ''
+          let created = true
+          try {
+            before = await fs.readFile(p, 'utf8')
+            created = false
+          } catch {
+            created = true
+          }
           await fs.mkdir(path.dirname(p), { recursive: true })
-          await fs.writeFile(p, String(input.content), 'utf8')
+          const content = String(input.content)
+          await fs.writeFile(p, content, 'utf8')
           if (ctx.signal?.aborted) return abortedResult()
-          return { ok: true, output: `wrote ${filePath}` }
+          const hunks = created
+            ? diffHunksFromFullReplace('', content)
+            : diffHunksFromFullReplace(before, content)
+          const { added, removed } = countHunkLines(hunks)
+          const unified = formatUnifiedDiff(filePath, hunks)
+          const head = created
+            ? `wrote ${filePath} (new file; +${added})`
+            : `wrote ${filePath} (+${added}/-${removed})`
+          return {
+            ok: true,
+            output: unified ? `${head}\n${unified}` : head,
+            meta: {
+              kind: 'apply_patch',
+              path: filePath,
+              paths: [filePath],
+              op: created ? 'add' : 'update',
+              added,
+              removed,
+              files: [
+                {
+                  path: filePath,
+                  op: created ? 'add' : 'update',
+                  added,
+                  removed,
+                  ...(hunks.length ? { structuredPatch: hunks } : {}),
+                },
+              ],
+              ...(hunks.length ? { structuredPatch: hunks } : {}),
+              ...(unified ? { unified } : {}),
+            },
+          }
         }
         return {
           ok: false,

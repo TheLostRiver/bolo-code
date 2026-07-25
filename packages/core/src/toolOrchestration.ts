@@ -34,6 +34,8 @@ export type RunToolsParams = {
   sessionRef?: {
     permissionMode: import('../../permissions/src/index.ts').PermissionMode
     autoModeState?: import('../../permissions/src/index.ts').AutoModeState
+    fileDiffLog?: import('./fileDiffLog.ts').FileChangeRecord[]
+    diffTurn?: number
   }
   onAutoClassifyAudit?: (note: {
     text: string

@@ -19,7 +19,7 @@
 | Skill 按需 | `Skill` 工具 + catalog |
 | **Edit** | `old_string` / `new_string`；默认**唯一**匹配；`replace_all` 可选；成功结果含 **+N/−M + unified 摘要** 与 `meta.structuredPatch`（见 FILE_DIFF_SPEC） |
 | Write | 全文写入；成功结果含行数 diff 摘要 + `meta` |
-| apply_patch | `*** Begin Patch`：Add / Update / Delete / **Move|Rename File**；或简易 unified diff |
+| apply_patch | `*** Begin Patch`：Add / Update / Delete / **Move|Rename File**；或简易 unified；成功 `meta.kind=apply_patch` + `files[]` 行数/hunks；会话记入 `fileDiffLog`，`/diff` 可读 |
 | AbortSignal | Bash / Read / Write / Edit / apply_patch 尊重中段 abort → `Error: tool cancelled` |
 | interruptBehavior | 默认 **block**；**Bash = cancel**（用户 interrupt 可杀 shell） |
 | tool_progress | `ToolContext.onProgress` → `tool_progress` 事件；CLI dim `… Tool msg` |
@@ -55,8 +55,8 @@ Bash, Write, Edit, apply_patch    → false → 独占串行
 
 | 工具 | 场景 |
 |------|------|
-| **Edit** | 小范围精确替换（唯一 old_string；或 `replace_all`） |
-| **Write** | 整文件重写 / 新建 |
+| **Edit** | 小范围精确替换（唯一 old_string；或 `replace_all`）；结果带 structured/unified diff |
+| **Write** | 整文件重写 / 新建；结果带 +/− 摘要 |
 | **apply_patch** | 多文件 / 多 hunk 补丁 |
 
 Edit 失败形态（示例）：

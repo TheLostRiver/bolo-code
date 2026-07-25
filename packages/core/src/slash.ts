@@ -50,6 +50,7 @@ import {
 } from './sessionUsage.ts'
 import { formatPromptCacheSessionLine } from '../../compact/src/index.ts'
 import { formatDurationMs } from './modelCost.ts'
+import { formatDiffSlash } from './fileDiffLog.ts'
 
 /** slash 需要的会话切片（与 BoloSession 兼容） */
 export type SlashSession = {
@@ -82,6 +83,10 @@ export type SlashSession = {
   promptCacheState?: import('../../compact/src/index.ts').PromptCacheSessionState
   /** 会话墙钟起点 ms；/cost wall duration */
   sessionStartedAtMs?: number
+  /** 文件改动 log；/diff */
+  fileDiffLog?: import('./fileDiffLog.ts').FileChangeRecord[]
+  /** 当前用户 turn；/diff last */
+  diffTurn?: number
   /** 会话工具表；/doctor 计数 */
   tools?: { name: string }[]
   /** provider id；/doctor */
@@ -1579,6 +1584,24 @@ function cmdCost(session: SlashSession, _args: string): SlashDispatchResult {
   return { ok: true, message: body }
 }
 
+/**
+ * `/diff`：会话文件改动（Edit/Write/apply_patch meta 侧信道）。
+ * - 无参：累计
+ * - last：最近用户 turn
+ * - <path>：该路径最近一次 structured 摘要
+ */
+function cmdDiff(session: SlashSession, args: string): SlashDispatchResult {
+  const raw = args.trim()
+  const log = session.fileDiffLog
+  if (!raw) {
+    return { ok: true, message: formatDiffSlash(log) }
+  }
+  if (raw === 'last' || raw === 'turn') {
+    return { ok: true, message: formatDiffSlash(log, { lastTurn: true }) }
+  }
+  return { ok: true, message: formatDiffSlash(log, { pathFilter: raw }) }
+}
+
 function cmdModel(session: SlashSession, args: string): SlashDispatchResult {
   const name = args.trim()
   if (!name) {
@@ -2321,6 +2344,13 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     summary: 'Show session token usage (local only)',
     group: 'session',
     run: cmdCost,
+  },
+  {
+    name: 'diff',
+    summary: 'Show session file changes (Edit/Write/apply_patch; memory only)',
+    usage: '[last | <path>]',
+    group: 'session',
+    run: cmdDiff,
   },
   {
     name: 'usage',

@@ -41,6 +41,7 @@ export {
   parseApplyPatch,
   resolveSafe,
   type ApplyPatchResult,
+  type ApplyPatchFileMeta,
   type PatchOp,
   type PatchHunk,
 } from './applyPatch.ts'

@@ -225,6 +225,16 @@ export {
   truncateToolResultOutput,
 } from './toolExecution.ts'
 export {
+  appendFileChange,
+  createEmptyFileDiffLog,
+  formatDiffSlash,
+  recordsFromToolMeta,
+  summarizeFileDiffLog,
+  type FileChangeRecord,
+  type FileDiffSummary,
+  type FileChangeOp,
+} from './fileDiffLog.ts'
+export {
   loadBoloMd,
   getSystemPrompt,
   getSystemPromptPartition,
@@ -419,7 +429,7 @@ export type SessionEvent =
       name: string
       message: string
     }
-  | { type: 'tool_end'; id: string; name: string; output: string; ok: boolean }
+  | { type: 'tool_end'; id: string; name: string; output: string; ok: boolean; path?: string; added?: number; removed?: number }
   | { type: 'permission_request'; id: string; name: string; input: unknown }
   | { type: 'hook'; event: string; exitCode: number; blocked?: boolean }
   | { type: 'permission_decision'; mode: string; behavior: string; reason: string }
@@ -617,6 +627,15 @@ export type BoloSession = {
    * 会话墙钟起点（ms epoch）；/cost 显示 wall duration。
    */
   sessionStartedAtMs?: number
+  /**
+   * 本会话文件改动 log（Edit/Write/apply_patch）；内存 only，/diff 读取。
+   * 不进 ChatMessage；resume 默认不恢复。
+   */
+  fileDiffLog?: import('./fileDiffLog.ts').FileChangeRecord[]
+  /**
+   * 用户 turn 序号；submitPrompt 成功入队 user message 前递增，写入 fileDiffLog。
+   */
+  diffTurn?: number
   /**
    * 会话工具表（内置 + Agent + 可选 MCP）。
    * 未设置时 submitPrompt 回落 createDefaultTools()。
@@ -1286,6 +1305,9 @@ export async function submitPrompt(
 
   let userContent = prompt
   if (submit.injectText) userContent = `${prompt}\n\n${submit.injectText}`
+  // D2：用户 turn 边界 — fileDiffLog 打 turn 号
+  session.diffTurn = (session.diffTurn ?? 0) + 1
+  if (!session.fileDiffLog) session.fileDiffLog = []
   session.messages.push({ role: 'user', content: userContent })
 
   // path-scope：发模型前按对话中的 active paths 刷新 rules 段

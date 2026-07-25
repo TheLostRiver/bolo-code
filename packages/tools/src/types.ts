@@ -25,6 +25,9 @@ export type ToolResult = {
   meta?: {
     kind?: 'file_edit' | 'file_write' | 'apply_patch'
     path?: string
+    /** apply_patch 多文件路径摘要 */
+    paths?: string[]
+    op?: 'add' | 'update' | 'delete' | 'move'
     added?: number
     removed?: number
     replacements?: number
@@ -34,6 +37,20 @@ export type ToolResult = {
       newStart: number
       newLines: number
       lines: string[]
+    }>
+    /** apply_patch 等多文件时的 per-file 摘要 */
+    files?: Array<{
+      path: string
+      op?: 'add' | 'update' | 'delete' | 'move'
+      added?: number
+      removed?: number
+      structuredPatch?: Array<{
+        oldStart: number
+        oldLines: number
+        newStart: number
+        newLines: number
+        lines: string[]
+      }>
     }>
     unified?: string
   }

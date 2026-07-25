@@ -108,6 +108,10 @@ export type ToolExecutionEvent =
       output: string
       ok: boolean
       isError?: boolean
+      /** 文件改动摘要（Edit/Write/apply_patch） */
+      path?: string
+      added?: number
+      removed?: number
     }
 
 /** UI/CLI 权限应答：allow_always = 本会话记住该 tool 名 */
@@ -166,10 +170,14 @@ export type RunToolUseContext = {
   autoModeState?: AutoModeState
   /**
    * 可选：会话引用，用于 auto 熔断 demote 回 default（Y3.2）。
+   * 亦可挂 fileDiffLog / diffTurn（D2 文件改动 side-channel）。
    */
   sessionRef?: {
     permissionMode: PermissionMode
     autoModeState?: AutoModeState
+    fileDiffLog?: import('./fileDiffLog.ts').FileChangeRecord[]
+    /** 当前用户 turn 序号；submitPrompt 递增 */
+    diffTurn?: number
   }
   /**
    * Y3.6：auto 分类结果审计（对照 HC decision 事件；本地 system_note，无遥测）。
@@ -773,7 +781,37 @@ export async function runToolUse(
     output: content,
     ok: result.ok,
     isError: result.isError,
+    ...(result.ok && result.meta?.path
+      ? {
+          path: result.meta.path,
+          added: result.meta.added,
+          removed: result.meta.removed,
+        }
+      : {}),
   })
+
+  // --- 会话 fileDiffLog（D2；不污染 tool_result 文本）---
+  if (result.ok && result.meta && ctx.sessionRef) {
+    try {
+      const { appendFileChange, recordsFromToolMeta } = await import(
+        './fileDiffLog.ts'
+      )
+      const records = recordsFromToolMeta({
+        toolName: name,
+        meta: result.meta,
+        at: nowIso(),
+        turn: ctx.sessionRef.diffTurn,
+      })
+      for (const rec of records) {
+        ctx.sessionRef.fileDiffLog = appendFileChange(
+          ctx.sessionRef.fileDiffLog,
+          rec,
+        )
+      }
+    } catch {
+      // log 失败不拖垮 tool 路径
+    }
+  }
 
   // --- PostToolUse ---
   const post = await runHooks(

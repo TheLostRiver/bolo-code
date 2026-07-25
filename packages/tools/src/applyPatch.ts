@@ -11,6 +11,12 @@
 
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
+import {
+  countHunkLines,
+  diffHunksFromFullReplace,
+  formatUnifiedDiff,
+  type DiffHunk,
+} from './textDiff.ts'
 
 export function resolveSafe(cwd: string, filePath: string): string {
   const abs = path.isAbsolute(filePath) ? filePath : path.join(cwd, filePath)
@@ -36,10 +42,65 @@ export type PatchHunk = {
   newLines: string[]
 }
 
+export type ApplyPatchFileMeta = {
+  path: string
+  op: 'add' | 'update' | 'delete' | 'move'
+  added: number
+  removed: number
+  structuredPatch?: DiffHunk[]
+}
+
 export type ApplyPatchResult = {
   ok: true
   output: string
   changed: string[]
+  files: ApplyPatchFileMeta[]
+  added: number
+  removed: number
+}
+
+function fileMetaFromTexts(
+  filePath: string,
+  op: ApplyPatchFileMeta['op'],
+  before: string,
+  after: string,
+): ApplyPatchFileMeta {
+  const structuredPatch = diffHunksFromFullReplace(before, after)
+  const { added, removed } = countHunkLines(structuredPatch)
+  return {
+    path: filePath,
+    op,
+    added,
+    removed,
+    ...(structuredPatch.length ? { structuredPatch } : {}),
+  }
+}
+
+function formatApplyPatchOutput(
+  files: readonly ApplyPatchFileMeta[],
+  notes: readonly string[],
+): string {
+  const totalAdded = files.reduce((s, f) => s + f.added, 0)
+  const totalRemoved = files.reduce((s, f) => s + f.removed, 0)
+  const head =
+    notes.join('\n') ||
+    (files.length ? files.map((f) => `${f.op} ${f.path}`).join('\n') : 'applied')
+  const summary = `apply_patch: ${files.length} file(s); +${totalAdded}/-${totalRemoved}`
+  const body: string[] = [summary, head]
+  // 预算：最多 2 个文件的 unified 摘要
+  let uniBudget = 2
+  for (const f of files) {
+    if (uniBudget <= 0) break
+    if (!f.structuredPatch?.length) continue
+    const uni = formatUnifiedDiff(f.path, f.structuredPatch)
+    if (!uni) continue
+    body.push(uni)
+    uniBudget--
+  }
+  if (files.length > 2) {
+    body.push(`…(${files.length - 2} more file(s); see meta.files)`)
+  }
+  return body.join('\n')
 }
 
 function stripPatchWrapper(raw: string): string {
@@ -345,6 +406,7 @@ function findSubsequence(hay: string[], needle: string[]): number {
 
 /**
  * 将 patch 应用到 cwd 内文件。失败抛错。
+ * 成功时附带 per-file structuredPatch 行数（对照 HC，无遥测）。
  */
 export async function applyPatchToCwd(
   cwd: string,
@@ -353,6 +415,7 @@ export async function applyPatchToCwd(
   const ops = parseApplyPatch(raw)
   const changed: string[] = []
   const notes: string[] = []
+  const files: ApplyPatchFileMeta[] = []
 
   for (const op of ops) {
     if (op.kind === 'move') {
@@ -386,6 +449,9 @@ export async function applyPatchToCwd(
       await fs.unlink(absFrom)
       changed.push(relFrom, relTo)
       notes.push(`R ${relFrom} -> ${relTo}`)
+      // move：源当删除、目标当新增（行数对称）
+      files.push(fileMetaFromTexts(relFrom, 'move', body, ''))
+      files.push(fileMetaFromTexts(relTo, 'move', '', body))
       continue
     }
 
@@ -409,10 +475,21 @@ export async function applyPatchToCwd(
       await fs.writeFile(abs, body, 'utf8')
       changed.push(rel)
       notes.push(`A ${rel}`)
+      files.push(fileMetaFromTexts(rel, 'add', '', body))
       continue
     }
 
     if (op.kind === 'delete') {
+      let before = ''
+      try {
+        before = await fs.readFile(abs, 'utf8')
+      } catch (e) {
+        const code = (e as NodeJS.ErrnoException)?.code
+        if (code === 'ENOENT') {
+          throw new Error(`apply_patch: Delete File not found: ${rel}`)
+        }
+        throw e
+      }
       try {
         await fs.unlink(abs)
       } catch (e) {
@@ -424,6 +501,7 @@ export async function applyPatchToCwd(
       }
       changed.push(rel)
       notes.push(`D ${rel}`)
+      files.push(fileMetaFromTexts(rel, 'delete', before, ''))
       continue
     }
 
@@ -442,11 +520,17 @@ export async function applyPatchToCwd(
     await fs.writeFile(abs, next, 'utf8')
     changed.push(rel)
     notes.push(`M ${rel}`)
+    files.push(fileMetaFromTexts(rel, 'update', original, next))
   }
 
+  const added = files.reduce((s, f) => s + f.added, 0)
+  const removed = files.reduce((s, f) => s + f.removed, 0)
   return {
     ok: true,
-    output: notes.join('\n') || 'applied',
+    output: formatApplyPatchOutput(files, notes),
     changed,
+    files,
+    added,
+    removed,
   }
 }
