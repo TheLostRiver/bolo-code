@@ -290,7 +290,10 @@ npx tsx scripts/smoke-live.ts
 | 变量 | 说明 |
 |------|------|
 | `BOLO_PROVIDER_PANEL=0` | 禁用 `/provider` 交互选择器 |
-| `BOLO_ARROW_PICKER=0` | 禁用全部箭头 picker（含 resume / provider） |
+| `BOLO_EFFORT_PANEL=0` | 禁用 `/effort` 交互选择器 |
+| `BOLO_ARROW_PICKER=0` | 禁用全部箭头 picker |
+| `BOLO_EFFORT_LOOSE=1` | `/effort` 允许 fold 别名（非 choosable 严格模式） |
+| `BOLO_EFFORT_ALLOW_MAX=1` | 放开 Anthropic max 模型门控 |
 
 **实现入口：**
 

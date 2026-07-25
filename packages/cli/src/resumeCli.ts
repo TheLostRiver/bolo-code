@@ -593,6 +593,83 @@ export async function runOnePrompt(
         }
       }
 
+      // E8：TTY 且 /effort 无参 → 箭头选推理强度
+      if (
+        result.interactiveEffort?.mode === 'pick' &&
+        (options?.isTty ?? process.stdin.isTTY === true) &&
+        process.env.BOLO_EFFORT_PANEL !== '0' &&
+        process.env.BOLO_ARROW_PICKER !== '0'
+      ) {
+        try {
+          const {
+            buildEffortPickerItems,
+            activeEffortPickerIndex,
+            detectEffortDialectId,
+            formatEffortCapabilityStatus,
+          } = await import('../../providers/src/effortDialect.ts')
+          const dialect =
+            session.effortDialect ??
+            session.providerProfile?.effortDialect ??
+            detectEffortDialectId({
+              kind: session.provider?.id,
+              baseUrl: session.providerProfile?.baseUrl,
+              model: session.model ?? session.providerProfile?.model,
+            })
+          const model = session.model ?? session.providerProfile?.model
+          const items = buildEffortPickerItems({
+            dialect: dialect as string | undefined,
+            model,
+            isAgent: true,
+            effortLevel: session.effortLevel,
+          })
+          if (items.length) {
+            options?.pauseInput?.()
+            try {
+              const ar = await runArrowPicker({
+                items,
+                writeOut,
+                isTty: true,
+                title: 'Select effort (↑/↓ · Enter · q cancel)',
+                initialIndex: activeEffortPickerIndex({
+                  dialect: dialect as string | undefined,
+                  model,
+                  isAgent: true,
+                  effortLevel: session.effortLevel,
+                }),
+              })
+              if (ar.ok) {
+                if (ar.id === 'auto') {
+                  session.effortLevel = undefined
+                } else {
+                  session.effortLevel = ar.id
+                }
+                const out =
+                  (ar.id === 'auto'
+                    ? 'effort set to auto\n'
+                    : `effort set to ${ar.id}\n`) +
+                  formatEffortCapabilityStatus({
+                    effortLevel: ar.id === 'auto' ? 'auto' : ar.id,
+                    dialect: dialect as string | undefined,
+                    isAgent: true,
+                    model,
+                  })
+                writeOut(out.endsWith('\n') ? out : `${out}\n`)
+                return { terminalReason: 'slash', assistantText: out }
+              }
+              if (ar.reason === 'cancel') {
+                const msg = 'effort pick cancelled'
+                writeOut(`${msg}\n`)
+                return { terminalReason: 'slash', assistantText: msg }
+              }
+            } finally {
+              options?.resumeInput?.()
+            }
+          }
+        } catch {
+          /* fall through to text dump */
+        }
+      }
+
       const msg = result.message
       writeOut(msg.endsWith('\n') ? msg : `${msg}\n`)
       return { terminalReason: 'slash', assistantText: msg }

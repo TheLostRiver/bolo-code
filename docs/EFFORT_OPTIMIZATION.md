@@ -1,8 +1,8 @@
 # Effort 优化方案（E6+ · 设计）
 
-> **状态：** 📋 设计稿（在 E0–E5 日用闭环之上）  
-> **前置：** [EFFORT.md](./EFFORT.md)（方言引擎真源）· [ROADMAP.md](./ROADMAP.md) §10  
-> **对照来源（语义，不抄实现/遥测）：** HelsincyCode · Codex · OpenCode · Pi（earendil-works/pi）  
+> **状态：** ✅ E6–E9 已实现（能力视图 · strict choosable · Anthropic max 门控 · TTY picker · doctor detail · 文档水位）  
+> **前置：** [EFFORT.md](./EFFORT.md)（E0–E5 方言引擎）· [ROADMAP.md](./ROADMAP.md) §10  
+> **对照来源（语义，不抄实现/遥测）：** HelsincyCode · Codex · OpenCode · Pi  
 > **原则：** 继续 **表驱动方言**，不引入 AI SDK 全家桶；无遥测；密钥不进 log。
 
 ---
@@ -184,10 +184,10 @@ type EffortModelGate = {
 
 | 阶段 | 交付 | 对标 | 优先级 | 状态 |
 |------|------|------|--------|------|
-| **E6** | `EffortCapabilityView` · `/effort` **只接受 choosable** · 无参列出可选档与警告 | Codex/OpenCode 选档 · Pi 挖洞 | P0 | 📋 |
-| **E7** | Anthropic **max 轻门控** + env 逃生阀 · 预览 warnings | HC `modelSupportsMaxEffort` | P0 | 📋 |
-| **E8** | TTY **`/effort` 箭头选择器**（复用 arrowPicker · 信号 `interactiveEffort`） | Provider picker · OpenCode effort UI | P1 | 📋 |
-| **E9** | doctor 一行：`effort intent → wire (dialect)` · 文档/水位 · 回归 | 可观测 | P1 | 📋 |
+| **E6** | `EffortCapabilityView` · `/effort` **只接受 choosable** · 无参列出可选档与警告 | Codex/OpenCode 选档 · Pi 挖洞 | P0 | ✅ |
+| **E7** | Anthropic **max 轻门控** + env 逃生阀 · 预览 warnings | HC `modelSupportsMaxEffort` | P0 | ✅ |
+| **E8** | TTY **`/effort` 箭头选择器**（`interactiveEffort` · `BOLO_EFFORT_PANEL=0`） | Provider picker | P1 | ✅ |
+| **E9** | doctor 一行：`effort detail` · 文档/水位 · 回归 | 可观测 | P1 | ✅ |
 | 后置 | OpenAI 按 model 裁 none/xhigh；多字段 variant op；adaptive thinking 联动；Desktop | OpenCode/Pi 深水 | — | 🚫 |
 
 **顺序硬约束：**

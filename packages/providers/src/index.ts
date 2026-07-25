@@ -78,6 +78,14 @@ export {
   applyEffortToRequestBody,
   detectEffortDialectId,
   formatEffortStatusLine,
+  formatEffortCapabilityStatus,
+  listEffortChoosable,
+  describeEffortCapability,
+  assertEffortChoosable,
+  anthropicMaxAllowed,
+  isEffortLooseMode,
+  buildEffortPickerItems,
+  activeEffortPickerIndex,
   getBuiltinEffortDialect,
   listBuiltinEffortDialectIds,
   isCanonicalEffortLevel,
@@ -92,6 +100,7 @@ export {
   type EffortDialect,
   type EffortWirePlan,
   type EffortResolveResult,
+  type EffortCapabilityView,
   type CanonicalEffortLevel,
 } from './effortDialect.ts'
 export {

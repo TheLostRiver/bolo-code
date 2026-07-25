@@ -144,6 +144,11 @@ async function main() {
       doctor.message.includes('~/.bolo:') || doctor.message.includes('.bolo'),
       'doctor has bolo home path',
     )
+    assert(
+      doctor.message.includes('effort detail:') ||
+        doctor.message.includes('dialect:'),
+      'doctor has effort detail',
+    )
   }
   const statusCmd = await submitUserInput(session, '/status')
   assert(statusCmd.type === 'slash', 'status slash')
@@ -360,10 +365,16 @@ async function main() {
   // /effort
   const e0 = await dispatchSlashCommand(session, 'effort', '')
   assert(e0.message.includes('auto') || e0.message.includes('effort'), 'effort show')
+  assert(
+    e0.interactiveEffort?.mode === 'pick' || e0.message.includes('choosable'),
+    'effort bare signals pick or lists choosable',
+  )
   const e1 = await dispatchSlashCommand(session, 'effort', 'high')
   assert(e1.ok && session.effortLevel === 'high', 'effort high')
   const e2 = await dispatchSlashCommand(session, 'effort', 'auto')
   assert(e2.ok && session.effortLevel === undefined, 'effort auto clears')
+  const eList = await dispatchSlashCommand(session, 'effort', 'list')
+  assert(eList.ok && eList.interactiveEffort == null, 'effort list no pick')
 
   // /thinking
   const t0 = await dispatchSlashCommand(session, 'thinking', '')
@@ -449,8 +460,12 @@ async function main() {
   const badEffort = await dispatchSlashCommand(session, 'effort', 'nope')
   assert(
     !badEffort.ok &&
-      badEffort.message.includes('Invalid effort') &&
-      badEffort.message.includes('/effort'),
+      (badEffort.message.includes('not available') ||
+        badEffort.message.includes('Invalid effort') ||
+        badEffort.message.includes('Choosable')) &&
+      (badEffort.message.includes('/effort') ||
+        badEffort.message.includes('choosable') ||
+        badEffort.message.includes('dialect')),
     'effort validation message',
   )
   const badPerm = await dispatchSlashCommand(session, 'permissions', 'nope')

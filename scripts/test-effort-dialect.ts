@@ -9,6 +9,13 @@ import {
   applyBodyPatches,
   detectEffortDialectId,
   formatEffortStatusLine,
+  formatEffortCapabilityStatus,
+  listEffortChoosable,
+  assertEffortChoosable,
+  anthropicMaxAllowed,
+  describeEffortCapability,
+  buildEffortPickerItems,
+  activeEffortPickerIndex,
   isAcceptableEffortInput,
   DIALECT_DEEPSEEK_CHAT,
   DIALECT_OPENAI_RESPONSES,
@@ -201,4 +208,62 @@ assert(status.includes('deepseek-chat'), 'status dialect')
   assert(built.body.thinking == null, 'effort does not force thinking')
 }
 
-console.log('ok: effort-dialect E1–E5')
+// ── E6/E7/E8：choosable · anthropic max gate · picker ──
+{
+  const ds = listEffortChoosable('deepseek-chat', { isAgent: true })
+  assert(ds.includes('auto') && ds.includes('high') && ds.includes('max'), 'ds choosable core')
+  // strict：builtin choosable 只推 wire 真值，不推 fold 别名
+  assert(!ds.includes('low') && !ds.includes('medium'), 'ds hides fold aliases')
+  assert(assertEffortChoosable('deepseek-chat', 'high', {}).ok, 'ds high ok')
+  assert(!assertEffortChoosable('deepseek-chat', 'low', {}).ok, 'ds low reject strict')
+  assert(!assertEffortChoosable('deepseek-chat', 'nope', {}).ok, 'ds nope reject')
+
+  const sonnet = 'claude-sonnet-4-20250514'
+  assert(!anthropicMaxAllowed(sonnet), 'sonnet no max')
+  assert(anthropicMaxAllowed('claude-opus-4-6'), 'opus max ok')
+  const blockMax = assertEffortChoosable('anthropic-output', 'max', {
+    model: sonnet,
+  })
+  assert(!blockMax.ok, 'sonnet max blocked')
+  const allowHigh = assertEffortChoosable('anthropic-output', 'high', {
+    model: sonnet,
+  })
+  assert(allowHigh.ok, 'sonnet high ok')
+  const opusMax = assertEffortChoosable('anthropic-output', 'max', {
+    model: 'claude-opus-4-6',
+  })
+  assert(opusMax.ok, 'opus max ok')
+
+  const cap = describeEffortCapability({
+    effortLevel: 'high',
+    dialect: 'anthropic-output',
+    model: sonnet,
+  })
+  assert(cap.choosable.includes('high'), 'cap has high')
+  assert(!cap.choosable.includes('max'), 'cap hides max on sonnet')
+  assert(cap.warnings.some((w) => w.includes('max')), 'cap warns max')
+
+  const status = formatEffortCapabilityStatus({
+    effortLevel: 'auto',
+    dialect: 'deepseek-chat',
+  })
+  assert(status.includes('choosable'), 'capability status')
+
+  const items = buildEffortPickerItems({
+    dialect: 'deepseek-chat',
+    isAgent: true,
+    effortLevel: 'high',
+  })
+  assert(items.some((it) => it.id === 'high'), 'picker has high')
+  assert(!items.some((it) => it.id === 'low'), 'picker no low')
+  assert(
+    activeEffortPickerIndex({
+      dialect: 'deepseek-chat',
+      isAgent: true,
+      effortLevel: 'high',
+    }) >= 0,
+    'picker index',
+  )
+}
+
+console.log('ok: effort-dialect E1–E9')

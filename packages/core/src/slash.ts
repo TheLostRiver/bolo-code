@@ -67,7 +67,10 @@ import {
 } from './sessionProvider.ts'
 import {
   formatEffortStatusLine,
+  formatEffortCapabilityStatus,
+  assertEffortChoosable,
   detectEffortDialectId,
+  listEffortChoosable,
 } from '../../providers/src/effortDialect.ts'
 
 /** slash 需要的会话切片（与 BoloSession 兼容） */
@@ -219,6 +222,13 @@ export type SlashDispatchResult = {
   interactiveProvider?: {
     mode: 'pick'
   }
+  /**
+   * E8：TTY 下 CLI 打开 effort 箭头选择器。
+   * 非 TTY / BOLO_EFFORT_PANEL=0 时仅展示 message。
+   */
+  interactiveEffort?: {
+    mode: 'pick'
+  }
 }
 
 export type SubmitUserInputResult =
@@ -230,6 +240,9 @@ export type SubmitUserInputResult =
         pathFilter?: string
       }
       interactiveProvider?: {
+        mode: 'pick'
+      }
+      interactiveEffort?: {
         mode: 'pick'
       }
     }
@@ -945,6 +958,22 @@ function cmdDoctor(session: SlashSession, _args: string): SlashDispatchResult {
     `memory user:     ${memoryUser}`,
     `memory project:  ${memoryProject}`,
   ]
+  // E9：effort 方言预览一行
+  try {
+    const d = resolveSessionEffortDialect(session)
+    const one = formatEffortStatusLine({
+      effortLevel: session.effortLevel,
+      dialect: d as string | undefined,
+      isAgent: true,
+      model: session.model ?? session.providerProfile?.model,
+    })
+      .split('\n')
+      .filter((l) => l.startsWith('wire:') || l.startsWith('dialect:'))
+      .join(' · ')
+    if (one) lines.push(`effort detail:   ${one}`)
+  } catch {
+    /* ignore */
+  }
   lines.push(
     `mcp connections: ${mcpCount}` +
       (mcpFail ? `  failures=${mcpFail}` : '') +
@@ -1909,8 +1938,8 @@ function cmdProvider(session: SlashSession, args: string): SlashDispatchResult {
   return { ok: true, message: sw.message }
 }
 
-function cmdEffort(session: SlashSession, args: string): SlashDispatchResult {
-  const dialect =
+function resolveSessionEffortDialect(session: SlashSession) {
+  return (
     session.effortDialect ??
     session.providerProfile?.effortDialect ??
     detectEffortDialectId({
@@ -1918,51 +1947,109 @@ function cmdEffort(session: SlashSession, args: string): SlashDispatchResult {
       baseUrl: session.providerProfile?.baseUrl,
       model: session.model ?? session.providerProfile?.model,
     })
+  )
+}
 
-  const raw = args.trim().toLowerCase()
+function cmdEffort(session: SlashSession, args: string): SlashDispatchResult {
+  const dialect = resolveSessionEffortDialect(session)
+  const model = session.model ?? session.providerProfile?.model
+  const rawIn = args.trim()
+  const raw = rawIn.toLowerCase()
+
+  // 无参：能力视图 + TTY picker 信号
   if (!raw) {
+    const message = formatEffortCapabilityStatus({
+      effortLevel: session.effortLevel,
+      dialect: dialect as string | undefined,
+      isAgent: true,
+      model,
+    })
+    const choosable = listEffortChoosable(dialect as string | undefined, {
+      isAgent: true,
+      model,
+    })
     return {
       ok: true,
-      message: formatEffortStatusLine({
+      message,
+      ...(choosable.length
+        ? { interactiveEffort: { mode: 'pick' as const } }
+        : {}),
+    }
+  }
+
+  // list：仅文本，不开 picker
+  if (raw === 'list' || raw === 'show' || raw === 'ls') {
+    return {
+      ok: true,
+      message: formatEffortCapabilityStatus({
         effortLevel: session.effortLevel,
         dialect: dialect as string | undefined,
         isAgent: true,
-        model: session.model,
+        model,
       }),
     }
   }
-  if (!isEffortLevel(raw)) {
-    return {
-      ok: false,
-      message:
-        `Invalid effort "${args.trim()}". Usage: /effort [auto|none|minimal|low|medium|high|xhigh|max|ultra]\n` +
-        'See docs/EFFORT.md — wire mapping depends on provider dialect.',
-    }
-  }
+
   if (raw === 'auto') {
     session.effortLevel = undefined
     return {
       ok: true,
       message:
         'effort set to auto (cleared session override)\n' +
-        formatEffortStatusLine({
+        formatEffortCapabilityStatus({
           effortLevel: 'auto',
           dialect: dialect as string | undefined,
           isAgent: true,
-          model: session.model,
+          model,
         }),
     }
   }
-  session.effortLevel = raw
+
+  // E6 strict choosable + E7 anthropic max gate
+  const check = assertEffortChoosable(dialect as string | undefined, raw, {
+    isAgent: true,
+    model,
+  })
+  if (!check.ok) {
+    return {
+      ok: false,
+      message:
+        check.reason +
+        '\n' +
+        formatEffortCapabilityStatus({
+          effortLevel: session.effortLevel,
+          dialect: dialect as string | undefined,
+          isAgent: true,
+          model,
+        }),
+    }
+  }
+
+  // 兼容：仍要求是可识别 token（防止垃圾输入在 loose 下乱入）
+  if (!isEffortLevel(raw) && !listEffortChoosable(dialect as string | undefined, { model }).includes(raw)) {
+    return {
+      ok: false,
+      message:
+        `Invalid effort "${rawIn}". Usage: /effort [list | auto|…] — see choosable below.\n` +
+        formatEffortCapabilityStatus({
+          effortLevel: session.effortLevel,
+          dialect: dialect as string | undefined,
+          isAgent: true,
+          model,
+        }),
+    }
+  }
+
+  session.effortLevel = check.intent
   return {
     ok: true,
     message:
-      `effort set to ${raw}\n` +
-      formatEffortStatusLine({
-        effortLevel: raw,
+      `effort set to ${check.intent}\n` +
+      formatEffortCapabilityStatus({
+        effortLevel: check.intent,
         dialect: dialect as string | undefined,
         isAgent: true,
-        model: session.model,
+        model,
       }),
   }
 }
@@ -2766,8 +2853,8 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
   {
     name: 'effort',
     summary:
-      'Show/set reasoning effort (dialect maps to API; see docs/EFFORT.md)',
-    usage: '[auto|none|minimal|low|medium|high|xhigh|max|ultra]',
+      'TTY pick / show / set reasoning effort (dialect wire; docs/EFFORT.md)',
+    usage: '[list | auto|low|medium|high|xhigh|max|…]',
     group: 'model',
     run: cmdEffort,
   },
@@ -2894,6 +2981,9 @@ export async function submitUserInput(
       ...(r.interactiveDiff ? { interactiveDiff: r.interactiveDiff } : {}),
       ...(r.interactiveProvider
         ? { interactiveProvider: r.interactiveProvider }
+        : {}),
+      ...(r.interactiveEffort
+        ? { interactiveEffort: r.interactiveEffort }
         : {}),
     }
   }

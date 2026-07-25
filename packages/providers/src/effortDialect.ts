@@ -68,6 +68,15 @@ export type EffortDialect = {
    * 多值用逗号与已有同名 header 合并去重。
    */
   requestHeaders?: Record<string, string>
+  /**
+   * E6：显式 UI/校验可选意图；缺省从 map keys 推导。
+   * 不含 auto（auto 始终可选）。
+   */
+  choosable?: string[]
+  /**
+   * E6：永不展示/不可选的意图（即使 map 能 fold）。
+   */
+  hide?: string[]
   notes?: string
 }
 
@@ -76,6 +85,27 @@ export type EffortResolveContext = {
   isAgent?: boolean
   model?: string
   baseMaxTokens?: number
+}
+
+/** E6：当前方言+模型下的可选档视图 */
+export type EffortCapabilityView = {
+  dialectId?: string
+  /** UI / 校验允许（含 auto） */
+  choosable: string[]
+  /** 方言原生 wire levels */
+  wireLevels: string[]
+  preview: {
+    intent: string
+    display: string
+    resolvedWire: string | null
+  }
+  warnings: string[]
+  gates?: {
+    maxAllowed?: boolean
+    notes?: string
+  }
+  loose?: boolean
+  notes?: string
 }
 
 export type EffortWirePlan = {
@@ -108,6 +138,8 @@ export type EffortResolveResult = EffortWirePlan | EffortWireError
 export const DIALECT_MAX_TOKENS: EffortDialect = {
   id: 'max-tokens',
   levels: ['low', 'medium', 'high', 'max'],
+  /** UI/校验只推原生档；fold 别名走 BOLO_EFFORT_LOOSE */
+  choosable: ['low', 'medium', 'high', 'max'],
   default: null,
   agentDefault: null,
   map: {
@@ -142,6 +174,8 @@ export const DIALECT_OFF: EffortDialect = {
 export const DIALECT_DEEPSEEK_CHAT: EffortDialect = {
   id: 'deepseek-chat',
   levels: ['high', 'max'],
+  /** strict：只推 wire 真值；low/medium 等 fold 需 BOLO_EFFORT_LOOSE=1 */
+  choosable: ['high', 'max'],
   default: null,
   agentDefault: 'max',
   map: {
@@ -181,6 +215,7 @@ export const DIALECT_DEEPSEEK_CHAT: EffortDialect = {
 export const DIALECT_OPENAI_RESPONSES: EffortDialect = {
   id: 'openai-responses',
   levels: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'],
+  choosable: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'],
   default: null,
   agentDefault: null,
   map: {
@@ -211,6 +246,8 @@ export const DIALECT_OPENAI_RESPONSES: EffortDialect = {
 export const DIALECT_ANTHROPIC_OUTPUT: EffortDialect = {
   id: 'anthropic-output',
   levels: ['low', 'medium', 'high', 'max'],
+  /** max 仍受 model gate；xhigh/ultra fold 需 loose */
+  choosable: ['low', 'medium', 'high', 'max'],
   default: null,
   agentDefault: null,
   map: {
@@ -309,6 +346,8 @@ function cloneDialect(d: EffortDialect): EffortDialect {
     wire: d.wire.map((w) => ({ ...w })),
     ...(d.onNone ? { onNone: d.onNone.map((w) => ({ ...w })) } : {}),
     ...(d.requestHeaders ? { requestHeaders: { ...d.requestHeaders } } : {}),
+    ...(d.choosable ? { choosable: [...d.choosable] } : {}),
+    ...(d.hide ? { hide: [...d.hide] } : {}),
   }
 }
 
@@ -341,6 +380,8 @@ export function resolveEffortDialect(
     requestHeaders: raw.requestHeaders
       ? { ...(base.requestHeaders ?? {}), ...raw.requestHeaders }
       : base.requestHeaders,
+    choosable: raw.choosable ?? base.choosable,
+    hide: raw.hide ?? base.hide,
     id: raw.id ?? base.id,
   }
 }
@@ -361,7 +402,7 @@ export function detectEffortDialectId(opts: {
   if (kind === 'anthropic' || kind === 'claude') {
     return 'anthropic-output'
   }
-  if (kind === 'mock') return 'off'
+  if (kind === 'mock') return 'max-tokens'
   if (blob.includes('deepseek')) return 'deepseek-chat'
   // 兼容口默认不瞎写 reasoning_effort
   return 'max-tokens'
@@ -652,32 +693,324 @@ export function formatEffortStatusLine(opts: {
   isAgent?: boolean
   model?: string
 }): string {
+  return formatEffortCapabilityStatus(opts)
+}
+
+// ── E6/E7：能力视图 · choosable · Anthropic max 门控 ──
+
+function envTruthy(name: string): boolean {
+  const v = process.env[name]?.trim().toLowerCase()
+  return v === '1' || v === 'true' || v === 'yes' || v === 'on'
+}
+
+/** BOLO_EFFORT_LOOSE=1 → 任意能 resolve 的 canonical 都可设（旧 fold 行为） */
+export function isEffortLooseMode(): boolean {
+  return envTruthy('BOLO_EFFORT_LOOSE')
+}
+
+/**
+ * Anthropic max 是否允许（对照 HC modelSupportsMaxEffort，缩小版）。
+ * BOLO_EFFORT_ALLOW_MAX=1 强制放开。
+ */
+export function anthropicMaxAllowed(model?: string | null): boolean {
+  if (envTruthy('BOLO_EFFORT_ALLOW_MAX')) return true
+  const m = (model ?? '').toLowerCase()
+  if (!m) return false
+  // Opus 4.6+ 公网常支持 max；可 env 扩展
+  return /opus-4-6|opus-4\.6|opus-4-7|opus-4\.7|opus-4-8|opus-4\.8/.test(m)
+}
+
+function intentResolvesToMax(
+  dialect: EffortDialect,
+  intent: string,
+  ctx?: EffortResolveContext,
+): boolean {
+  const plan = resolveEffortWire(dialect, intent, ctx)
+  return plan.ok && plan.resolvedWire === 'max'
+}
+
+/**
+ * 当前方言下用户可选意图（含 auto）。
+ * strict：map 有键、不在 hide、能 resolve，且过 model gate。
+ * loose：canonical 中能 resolve 的都可。
+ */
+export function listEffortChoosable(
+  dialectInput?: string | EffortDialect | null,
+  ctx?: EffortResolveContext,
+): string[] {
+  const dialect = resolveEffortDialect(dialectInput)
+  const loose = isEffortLooseMode()
+  const hide = new Set(
+    (dialect.hide ?? []).map((h) => h.toLowerCase().trim()).filter(Boolean),
+  )
+
+  let candidates: string[]
+  if (loose) {
+    candidates = [...CANONICAL_EFFORT_LEVELS]
+  } else if (dialect.choosable?.length) {
+    candidates = [
+      'auto',
+      ...dialect.choosable.map((c) => c.toLowerCase().trim()).filter(Boolean),
+    ]
+  } else {
+    // 默认：map 的 key（用户意图）∪ wire levels（可直接设原生档）
+    const keys = new Set<string>(['auto'])
+    for (const k of Object.keys(dialect.map)) {
+      keys.add(k.toLowerCase())
+    }
+    for (const lv of dialect.levels) {
+      keys.add(lv.toLowerCase())
+    }
+    // 不默认塞满整个 canonical（避免 DS 上出现 low 当「推荐档」）
+    candidates = [...keys]
+  }
+
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const raw of candidates) {
+    const intent = raw.toLowerCase().trim()
+    if (!intent || seen.has(intent)) continue
+    if (intent !== 'auto' && hide.has(intent)) continue
+
+    if (intent === 'auto') {
+      seen.add('auto')
+      out.push('auto')
+      continue
+    }
+
+    const plan = resolveEffortWire(dialect, intent, {
+      isAgent: ctx?.isAgent ?? true,
+      model: ctx?.model,
+      baseMaxTokens: ctx?.baseMaxTokens,
+    })
+    if (!plan.ok) continue
+
+    // E7：anthropic max 门控
+    if (
+      (dialect.id === 'anthropic-output' || dialect.id === 'anthropic') &&
+      intentResolvesToMax(dialect, intent, ctx) &&
+      !anthropicMaxAllowed(ctx?.model)
+    ) {
+      continue
+    }
+
+    // strict：意图应在 map 或等于 wire levels（原生档）
+    if (!loose) {
+      const inMap = Object.prototype.hasOwnProperty.call(dialect.map, intent)
+      const inLevels = dialect.levels.map((l) => l.toLowerCase()).includes(intent)
+      if (!inMap && !inLevels) continue
+    }
+
+    seen.add(intent)
+    out.push(intent)
+  }
+
+  // 稳定顺序：auto 先，再按 canonical 序，其余按字母
+  const rank = new Map(
+    CANONICAL_EFFORT_LEVELS.map((c, i) => [c, i] as const),
+  )
+  out.sort((a, b) => {
+    if (a === 'auto') return -1
+    if (b === 'auto') return 1
+    const ra = rank.get(a as CanonicalEffortLevel)
+    const rb = rank.get(b as CanonicalEffortLevel)
+    if (ra != null && rb != null) return ra - rb
+    if (ra != null) return -1
+    if (rb != null) return 1
+    return a.localeCompare(b)
+  })
+  return out
+}
+
+export function describeEffortCapability(opts: {
+  effortLevel?: string | null
+  dialect?: string | EffortDialect | null
+  isAgent?: boolean
+  model?: string
+  baseMaxTokens?: number
+}): EffortCapabilityView {
   const dialect = resolveEffortDialect(opts.dialect)
-  const level = opts.effortLevel?.trim() || 'auto'
-  const plan = resolveEffortWire(dialect, level, {
+  const ctx: EffortResolveContext = {
     isAgent: opts.isAgent ?? true,
     model: opts.model,
+    baseMaxTokens: opts.baseMaxTokens,
+  }
+  const level = opts.effortLevel?.trim() || 'auto'
+  const plan = resolveEffortWire(dialect, level, ctx)
+  const choosable = listEffortChoosable(dialect, ctx)
+  const warnings: string[] = []
+  const loose = isEffortLooseMode()
+
+  if (loose) {
+    warnings.push('BOLO_EFFORT_LOOSE=1: accepting foldable intents beyond choosable')
+  }
+
+  const maxOk = anthropicMaxAllowed(opts.model)
+  if (dialect.id === 'anthropic-output' || dialect.id === 'anthropic') {
+    if (!maxOk) {
+      warnings.push(
+        'max/xhigh/ultra not choosable for this model (need opus-4.6+ or BOLO_EFFORT_ALLOW_MAX=1)',
+      )
+    }
+  }
+
+  if (plan.ok && plan.intent !== 'auto' && plan.resolvedWire && plan.intent !== plan.resolvedWire) {
+    warnings.push(`folds to wire "${plan.resolvedWire}"`)
+  }
+
+  if (!plan.ok) {
+    warnings.push(plan.reason)
+  }
+
+  return {
+    dialectId: dialect.id,
+    choosable,
+    wireLevels: [...dialect.levels],
+    preview: {
+      intent: level,
+      display: plan.ok ? plan.display : `error: ${plan.reason}`,
+      resolvedWire: plan.ok ? plan.resolvedWire : null,
+    },
+    warnings,
+    gates: {
+      maxAllowed:
+        dialect.id === 'anthropic-output' || dialect.id === 'anthropic'
+          ? maxOk
+          : undefined,
+      notes:
+        dialect.id === 'anthropic-output'
+          ? 'Anthropic max gated by model id; thinking is separate (/thinking · anthropicThinking)'
+          : undefined,
+    },
+    loose,
+    ...(dialect.notes ? { notes: dialect.notes } : {}),
+  }
+}
+
+/**
+ * 校验意图是否可设。
+ * auto 始终 ok；strict 下须 ∈ choosable；loose 下须 resolve 成功且过 gate。
+ */
+export function assertEffortChoosable(
+  dialectInput: string | EffortDialect | null | undefined,
+  level: string,
+  ctx?: EffortResolveContext,
+): { ok: true; intent: string } | { ok: false; reason: string } {
+  const intent = level.trim().toLowerCase() || 'auto'
+  if (intent === 'auto') return { ok: true, intent: 'auto' }
+
+  const dialect = resolveEffortDialect(dialectInput)
+  const choosable = listEffortChoosable(dialect, ctx)
+  const loose = isEffortLooseMode()
+
+  if (!loose && !choosable.includes(intent)) {
+    return {
+      ok: false,
+      reason:
+        `effort "${intent}" not available for dialect ${dialect.id ?? '(custom)'}. ` +
+        `Choosable: ${choosable.join(', ')}. ` +
+        `(Set BOLO_EFFORT_LOOSE=1 to allow foldable aliases.)`,
+    }
+  }
+
+  const plan = resolveEffortWire(dialect, intent, {
+    isAgent: ctx?.isAgent ?? true,
+    model: ctx?.model,
+    baseMaxTokens: ctx?.baseMaxTokens,
   })
+  if (!plan.ok) {
+    return { ok: false, reason: plan.reason }
+  }
+
+  if (
+    (dialect.id === 'anthropic-output' || dialect.id === 'anthropic') &&
+    plan.resolvedWire === 'max' &&
+    !anthropicMaxAllowed(ctx?.model)
+  ) {
+    return {
+      ok: false,
+      reason:
+        `effort "${intent}" → max is not allowed for model "${ctx?.model ?? ''}". ` +
+        `Use high, or set BOLO_EFFORT_ALLOW_MAX=1, or switch to opus-4.6+.`,
+    }
+  }
+
+  return { ok: true, intent }
+}
+
+/** /effort 无参 · doctor：能力视图文案 */
+export function formatEffortCapabilityStatus(opts: {
+  effortLevel?: string | null
+  dialect?: string | EffortDialect | null
+  isAgent?: boolean
+  model?: string
+}): string {
+  const view = describeEffortCapability(opts)
   const lines = [
-    `effort: ${level}`,
-    `dialect: ${dialect.id ?? '(custom)'}`,
+    `effort: ${opts.effortLevel?.trim() || 'auto'}`,
+    `dialect: ${view.dialectId ?? '(custom)'}`,
+    `wire: ${view.preview.display}`,
+    view.preview.resolvedWire != null
+      ? `api value: ${view.preview.resolvedWire}`
+      : 'api value: (omit)',
+    `choosable: ${view.choosable.join(', ')}`,
   ]
-  if (plan.ok) {
-    lines.push(`wire: ${plan.display}`)
-    if (plan.resolvedWire != null) {
-      lines.push(`api value: ${plan.resolvedWire}`)
-    } else {
-      lines.push('api value: (omit)')
-    }
-    if (plan.maxTokens != null) {
-      lines.push(`max_tokens scale: ${plan.maxTokens}`)
-    }
-  } else {
-    lines.push(`wire: error — ${plan.reason}`)
+  if (view.wireLevels.length) {
+    lines.push(`wire levels: ${view.wireLevels.join(', ')}`)
   }
-  if (dialect.levels.length) {
-    lines.push(`dialect levels: ${dialect.levels.join(', ')}`)
+  if (view.gates?.maxAllowed === false) {
+    lines.push('gate: anthropic max blocked for this model')
+  } else if (view.gates?.maxAllowed === true) {
+    lines.push('gate: anthropic max allowed')
   }
-  if (dialect.notes) lines.push(`note: ${dialect.notes}`)
+  if (view.warnings.length) {
+    for (const w of view.warnings) lines.push(`warning: ${w}`)
+  }
+  if (view.notes) lines.push(`note: ${view.notes}`)
+  lines.push(
+    'tip: /effort does not enable Anthropic thinking blocks (use anthropicThinking / separate config)',
+  )
   return lines.join('\n')
+}
+
+/** TTY picker 条目 */
+export function buildEffortPickerItems(opts: {
+  dialect?: string | EffortDialect | null
+  model?: string
+  isAgent?: boolean
+  effortLevel?: string | null
+}): Array<{ id: string; label: string }> {
+  const dialect = resolveEffortDialect(opts.dialect)
+  const ctx: EffortResolveContext = {
+    isAgent: opts.isAgent ?? true,
+    model: opts.model,
+  }
+  const choosable = listEffortChoosable(dialect, ctx)
+  return choosable.map((id) => {
+    const plan = resolveEffortWire(dialect, id, ctx)
+    const wire =
+      plan.ok && plan.resolvedWire != null && plan.resolvedWire !== id
+        ? ` → ${plan.resolvedWire}`
+        : plan.ok && plan.resolvedWire == null && id === 'auto'
+          ? ' (omit / default)'
+          : ''
+    const mark =
+      (opts.effortLevel?.trim() || 'auto').toLowerCase() === id ? '*' : ' '
+    return {
+      id,
+      label: `${mark} ${id}${wire}`,
+    }
+  })
+}
+
+export function activeEffortPickerIndex(opts: {
+  dialect?: string | EffortDialect | null
+  model?: string
+  isAgent?: boolean
+  effortLevel?: string | null
+}): number {
+  const items = buildEffortPickerItems(opts)
+  const cur = (opts.effortLevel?.trim() || 'auto').toLowerCase()
+  const i = items.findIndex((it) => it.id === cur)
+  return i >= 0 ? i : 0
 }

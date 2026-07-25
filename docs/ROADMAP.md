@@ -23,13 +23,13 @@
 | **Hooks · 日用契约** | **~96–98%** | **H0–H5 已落地**（SessionEnd · exit 语义 · updatedInput · `/hooks recent`）；trust/UI 菜单后置 |
 | **Compact · 日用管道** | **~92–95%** | **C0–C5 已落地**；后置 partial/remote/真 tokenizer（§8.9） |
 | **Provider · 多实例热切** | **~92–96%** | **P0–P4.1 已落地**（`providers` · 热切 · TTY 箭头选）；P5 Desktop / resume `providerId` 后置 |
-| **Effort · 推理强度方言** | **~88–92%** wire · 体验 ~55–65% | **E0–E5** 真·wire 已闭环；**E6+** 可选档/门控/TTY 见 [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md) |
+| **Effort · 推理强度方言** | **~92–95%** | **E0–E9**：真·wire + choosable 校验 + Anthropic max 门控 + TTY `/effort`；后置 OAI 按模型裁档 / adaptive thinking |
 | **产品整体（相对 HC）** | **~72–86%** | 日用高；UI 全家桶另计 |
 
-**主线已闭环：** headless 日用 → Diff · Hooks · Compact C0–C5 · **Provider P0–P4.1** · **Effort E0–E5**。
+**主线已闭环：** headless 日用 → Diff · Hooks · Compact · Provider · **Effort E0–E9**。
 
 **开放轨（非阻塞）：**  
-**Effort E6+**（[EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md)：可选档 · max 门控 · TTY 选档）· P5 Desktop 多 provider · Compact §8.9 · U5 · resume `providerId`。
+Effort 后置（OAI 按模型裁档 · adaptive thinking）· P5 Desktop 多 provider · Compact §8.9 · U5 · resume `providerId`。
 
 ---
 
@@ -743,13 +743,13 @@ function switchSessionModel(session, model: string): { ok, reason? }
 | **E3** | builtin `openai-responses` → `reasoning.effort` | ✅ |
 | **E4** | `providers.*.effort.dialect` 配置 / 内联 | ✅ |
 | **E5** | anthropic-output：`output_config.effort` + beta · detect · 单测 | ✅ |
-| **E6** | EffortCapabilityView · strict choosable | 📋 |
-| **E7** | Anthropic max 轻门控 | 📋 |
-| **E8** | TTY `/effort` 箭头选择器 | 📋 |
-| **E9** | doctor 一行 + 文档水位 | 📋 |
+| **E6** | EffortCapabilityView · strict choosable | ✅ |
+| **E7** | Anthropic max 轻门控 | ✅ |
+| **E8** | TTY `/effort` 箭头选择器 | ✅ |
+| **E9** | doctor 一行 + 文档水位 | ✅ |
 | 后置 | adaptive thinking 联动 · pro mode · Desktop · OAI 按模型裁档 | 🚫 |
 
-**顺序：** E0–E5 已完成 → **E6 能力视图** → E7 门控 → E8 TTY → E9 doctor。
+**顺序：** E0–E9 主路径完成。
 
 ### 10.3 文档入口
 

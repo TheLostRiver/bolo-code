@@ -1,8 +1,8 @@
 # Effort 轨 · 推理强度方言（规划）
 
-> **状态：** E0–E5 日用已落地（引擎 + deepseek / openai-responses / anthropic-output + config）  
-> **下一阶段优化：** [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md)（E6+ 能力视图 · 门控 · TTY 选档）  
-> **痛点（E0–E5 已缓解）：** `/effort` 曾只映射 `max_tokens`；现按 **EffortDialect 表** 写入各家 reasoning 字段。  
+> **状态：** **E0–E9 主路径完成**（方言引擎 + choosable · Anthropic max 门控 · TTY 选档 · doctor）  
+> **优化设计：** [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md)  
+> **痛点（已缓解）：** `/effort` 曾只映射 `max_tokens`；现按 **EffortDialect 表** 写入各家 reasoning 字段，并按方言限制可选档。  
 > **原则：** 无遥测；密钥不进 log；借鉴 HC / OpenAI / DeepSeek / Pi / OpenCode / Codex **语义**，不抄实现。
 
 相关入口：
@@ -44,12 +44,14 @@
 | DeepSeek `reasoning_effort` | ✅ |
 | OpenAI Responses `reasoning.effort` | ✅ |
 | **Anthropic `output_config.effort` + beta** | ✅ E5 |
-| Anthropic 模型门控 max / adaptive thinking 联动 | 📋 见 [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md) E7 |
-| 按方言限制 UI 可选档 / TTY 选择器 | 📋 见优化方案 E6 / E8 |
+| Anthropic 模型门控 max | ✅ E7（`BOLO_EFFORT_ALLOW_MAX` 逃生） |
+| 按方言限制 UI 可选档 / TTY 选择器 | ✅ E6 / E8 |
+| doctor `effort detail` | ✅ E9 |
+| adaptive thinking 联动 · Desktop effort UI | 🚫 后置 |
 | 读流 thinking_delta | ✅ |
 
-**结论（E5 后）：** 主路径已能写 DS / OpenAI Responses / Anthropic 真·effort 字段。  
-剩余主要是 **按模型/方言约束可选档、少 400、TTY 选档**（优化轨），不是「再发明一套 wire」。
+**结论（E0–E9）：** 日用 wire + choosable + 门控 + TTY 选档已闭环。  
+后置主要是 **按模型裁档目录 / adaptive thinking / Desktop**，不是再发明 wire。
 
 ### 1.2 各家客观差异（对照）
 
