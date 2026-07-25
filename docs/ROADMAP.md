@@ -518,14 +518,14 @@ compact 成功且非 override system 时：
 |----|------|
 | 单 `provider.kind` + env 推断 | ✅ `resolveProviderFromConfig` / `createProviderFromEnv` |
 | 协议：openai-compatible / openai-responses / anthropic / mock | ✅ |
-| `/model <name>` 仅改 session.model | ✅ 弱（不换 endpoint） |
+| `/model <name>` 仅改 session.model | ✅（P3 起可带 provider 糖） |
 | `/effort` · `/thinking` | ✅ |
-| **多 provider 配置表** | ❌ |
-| **运行时切换 provider（baseUrl/key/kind）** | ❌ |
-| **按 provider 列模型 / 校验** | ❌ |
-| Desktop 设置里多后端 | ❌ 轻量/后置 |
+| **多 provider 配置表** | ✅ `providers` + `defaultProvider` + 旧 `provider` 兼容 |
+| **运行时切换 provider（baseUrl/key/kind）** | ✅ `switchSessionProvider` · `/provider use` |
+| **按 provider 列模型 / 校验** | ✅ 列表 + 缺 key 拒绝切换；远程 catalog 后置 |
+| Desktop 设置里多后端 | ❌ 轻量/后置（P5） |
 
-**粗估：** 日用单后端 **~85%+**；**多后端热切体验 ~25–35%** → P 轨目标日用 **~90–95%**。
+**粗估：** 日用单后端 **~85%+**；**多后端热切体验 ~90–95%**（P0–P4）；Desktop / resume `providerId` 仍后置。
 
 ### 9.2 目标与验收（P 轨完成定义）
 
@@ -656,15 +656,17 @@ function switchSessionModel(session, model: string): { ok, reason? }
 
 | 阶段 | 交付 | 优先级 | 状态 |
 |------|------|--------|------|
-| **P0** | 规格：本 § + PROVIDERS/CONFIG 草案；兼容矩阵 | P0 | 📋 |
-| **P1** | `providers` + `defaultProvider` 加载；旧 `provider` 兼容；Registry 类型 | P0 | 📋 |
-| **P2** | `switchSessionProvider` + 重挂 deps；`/provider` list/use | P0 | 📋 |
-| **P3** | `/model` 增强 + cache break + `/doctor` 显示 active | P1 | 📋 |
-| **P4** | CLI 启动摘要 · 错误信息（缺 key）· 单测 | P1 | 📋 |
+| **P0** | 规格：本 § + PROVIDERS/CONFIG 草案；兼容矩阵 | P0 | ✅ |
+| **P1** | `providers` + `defaultProvider` 加载；旧 `provider` 兼容；Registry 类型 | P0 | ✅ |
+| **P2** | `switchSessionProvider` + 重挂 deps；`/provider` list/use | P0 | ✅ |
+| **P3** | `/model` 增强 + cache break + `/doctor` 显示 active | P1 | ✅ |
+| **P4** | CLI 启动摘要 · 错误信息（缺 key）· 单测 | P1 | ✅ |
 | **P5** | Desktop 设置选 provider（最小下拉）；可选 | P2 | 📋 |
 | 后置 | 远程拉模型列表 · 官方市场 · 按 turn 自动 failover 路由 | — | 🚫 非本轨默认 |
 
 **顺序硬约束：** **P0 文档 → P1 配置 → P2 热切 → P3 model/doctor → P4 测 → P5 Desktop**。
+
+**日用水位（P0–P4）：** 多后端热切体验 **~90–95%**（Desktop 选 active / resume 持久化 providerId 仍后置）。
 
 ### 9.7 与 Compact / 会话交叉
 

@@ -57,9 +57,12 @@ export {
 } from './promptCache.ts'
 export {
   createProviderFromEnv,
+  createProviderFromProfile,
   detectProviderKind,
+  resolveProviderApiKey,
   type EnvProviderResult,
   type CreateProviderOptions,
+  type ProviderProfileInput,
   type ProviderKind,
 } from './fromEnv.ts'
 export { createCompactSummarizerFromProvider } from './compactSummarizer.ts'

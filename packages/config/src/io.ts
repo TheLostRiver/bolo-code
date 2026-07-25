@@ -6,6 +6,7 @@ import { promises as fs } from 'node:fs'
 import type { BoloConfigJson, HooksFileJson, McpFileJson } from './types.ts'
 import { DEFAULT_CONFIG } from './types.ts'
 import type { BoloLayoutPaths } from './paths.ts'
+import { mergeProvidersMaps } from './providerRegistry.ts'
 
 /**
  * 去掉 JSONC 注释与尾逗号，便于 config.json 写说明。
@@ -118,7 +119,7 @@ export async function loadHooksJson(
   return (await readJsonFile<HooksFileJson>(layout.hooksJson)) ?? {}
 }
 
-/** 浅合并 config：后写覆盖前写；provider / agents 字段深度合并；list 字段拼接去重 */
+/** 浅合并 config：后写覆盖前写；provider / providers / agents 深度合并；list 字段拼接去重 */
 export function mergeConfigJson(
   base: BoloConfigJson,
   over: BoloConfigJson,
@@ -135,6 +136,11 @@ export function mergeConfigJson(
     base.agents || over.agents
       ? { ...(base.agents ?? {}), ...(over.agents ?? {}) }
       : undefined
+  const providers = mergeProvidersMaps(base.providers, over.providers)
+  const defaultProvider =
+    over.defaultProvider?.trim() ||
+    base.defaultProvider?.trim() ||
+    undefined
   return {
     ...base,
     ...over,
@@ -142,6 +148,10 @@ export function mergeConfigJson(
       ...base.provider,
       ...over.provider,
     },
+    ...(providers && Object.keys(providers).length
+      ? { providers }
+      : { providers: undefined }),
+    ...(defaultProvider ? { defaultProvider } : { defaultProvider: undefined }),
     ...(agents ? { agents } : {}),
     ...(extraSkillRoots.length
       ? { extraSkillRoots }

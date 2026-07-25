@@ -25,7 +25,10 @@ import {
 import {
   loadWorkspace,
   type ResolvedWorkspace,
+  type ProviderRegistry,
+  type ProviderProfile,
 } from '../../config/src/index.ts'
+import { attachProviderRegistry } from './sessionProvider.ts'
 import {
   closeMcpConnections,
   connectMcpServers,
@@ -340,6 +343,7 @@ export {
 } from './rules.ts'
 export {
   createProviderFromEnv,
+  createProviderFromProfile,
   createOpenAICompatibleProvider,
   createAnthropicProvider,
   createMockProvider,
@@ -352,7 +356,22 @@ export {
   ensureAllLayouts,
   getBoloHomeDir,
   getProjectBoloDir,
+  normalizeProviderRegistry,
+  resolveProviderFromConfig,
+  type ProviderRegistry,
+  type ProviderProfile,
+  type ProviderConfigJson,
 } from '../../config/src/index.ts'
+export {
+  switchSessionProvider,
+  switchSessionModel,
+  listSessionProviders,
+  formatSessionProvidersSlash,
+  attachProviderRegistry,
+  type SwitchSessionProviderResult,
+  type SwitchSessionModelResult,
+  type SwitchableProviderSession,
+} from './sessionProvider.ts'
 export {
   PERMISSION_MODES,
   PERMISSION_MODE_META,
@@ -597,6 +616,15 @@ export type CreateSessionOptions = {
   maxPtlRetries?: number
   /** 模型名（写入环境段；可从 workspace 传入） */
   model?: string
+  /**
+   * P 轨：多 provider 注册表（热切 /provider use）。
+   * createSessionFromWorkspace 自动注入。
+   */
+  providerRegistry?: ProviderRegistry
+  /** 当前 active profile id */
+  providerId?: string
+  /** active profile 快照 */
+  providerProfile?: ProviderProfile
   source?: SessionStartSource
   onEvent?: (e: SessionEvent) => void
   /**
@@ -663,6 +691,13 @@ export type BoloSession = {
   compactSummarizer?: CompactSummarizer
   skills: LoadedSkill[]
   model?: string
+  /**
+   * P 轨：命名 provider 注册表；`/provider use` 热切。
+   */
+  providerRegistry?: ProviderRegistry
+  /** 当前 active profile id（非 LlmProvider.id 协议 kind） */
+  providerId?: string
+  providerProfile?: ProviderProfile
   /**
    * 会话级 effort 档位（/effort）。
    * 经 callModel → completeStream options.effort → mapEffort → max_tokens。
@@ -930,6 +965,9 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
     compactSummarizer: opts.compactSummarizer,
     skills,
     model: opts.model,
+    providerRegistry: opts.providerRegistry,
+    providerId: opts.providerId,
+    providerProfile: opts.providerProfile,
     effortLevel:
       typeof opts.effortLevel === 'string' && opts.effortLevel.trim()
         ? opts.effortLevel.trim()
@@ -1152,6 +1190,9 @@ export async function createSessionFromWorkspace(
     compactSummarizer,
     skills: workspace.skills,
     model: workspace.providerModel,
+    providerRegistry: workspace.providerRegistry,
+    providerId: workspace.providerId,
+    providerProfile: workspace.providerProfile,
     source: opts.source,
     onEvent: opts.onEvent,
     agentPolicy,
@@ -1187,6 +1228,14 @@ export async function createSessionFromWorkspace(
   session.pluginMergeErrors = workspace.pluginMerge?.errors?.length
     ? [...workspace.pluginMerge.errors]
     : undefined
+  // P 轨：确保 registry 已挂（createSession 已写；双保险）
+  if (workspace.providerRegistry) {
+    attachProviderRegistry(
+      session,
+      workspace.providerRegistry,
+      workspace.providerId,
+    )
+  }
   // tools 已在 createSession 按 agentDefinitions 装配；MCP 再追加
 
   let mcp: ConnectMcpResult | undefined

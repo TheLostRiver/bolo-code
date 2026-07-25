@@ -8,7 +8,18 @@ import type { PermissionMode } from '../../permissions/src/index.ts'
 export type ProviderConfigJson = {
   /** mock | openai-compatible | openai-responses | anthropic */
   kind?: 'mock' | 'openai-compatible' | 'openai-responses' | 'anthropic'
+  /** 显示名；缺省用 providers map 的 key */
+  label?: string
+  /**
+   * 明文 key（不推荐写入仓库）。
+   * 优先 `apiKeyEnv` 或进程环境变量。
+   */
   apiKey?: string
+  /**
+   * 从该环境变量名读 key（如 `DEEPSEEK_API_KEY`）。
+   * 有值时优先于全局 OPENAI_/ANTHROPIC_/BOLO_ 回落。
+   */
+  apiKeyEnv?: string
   baseUrl?: string
   model?: string
   timeoutMs?: number
@@ -19,7 +30,18 @@ export type ProviderConfigJson = {
 export type BoloConfigJson = {
   /** schema 版本 */
   version?: number
+  /**
+   * 旧：单后端。无 `providers` 时合成 id=`default`。
+   * 与 `providers` 共存时：`providers` 为主；可选把本字段填进缺省 `default`。
+   */
   provider?: ProviderConfigJson
+  /**
+   * 命名后端表（P 轨）。运行时 `/provider use <id>` 热切。
+   * 见 docs/ROADMAP.md §9 · docs/PROVIDERS.md。
+   */
+  providers?: Record<string, ProviderConfigJson>
+  /** 启动默认 provider id；缺省 `default` 或 map 第一项 */
+  defaultProvider?: string
   /** 默认权限模式 */
   permissionMode?: PermissionMode
   /**
@@ -146,17 +168,36 @@ export const DEFAULT_CONFIG: BoloConfigJson = {
 export const DEFAULT_CONFIG_JSONC = `{
   // Bolo config.json（JSONC：可用 // 与 /* */ 注释；勿提交 API Key）
   // 合并：defaults < ~/.bolo/config.json < .bolo/config.json < 环境变量
-  // 详见 docs/CONFIG.md · docs/SUBAGENT_SPEC.md
+  // 详见 docs/CONFIG.md · docs/PROVIDERS.md · docs/SUBAGENT_SPEC.md
 
   "version": 1,
 
+  // ── 单后端（旧字段，仍支持）──
   "provider": {
     // kind: mock | openai-compatible | openai-responses | anthropic
     "kind": "openai-compatible",
     // "baseUrl": "https://api.openai.com/v1",
     "model": "gpt-4o-mini"
-    // apiKey 优先用环境变量 BOLO_API_KEY / OPENAI_API_KEY，不要写进仓库
+    // apiKey 优先用环境变量；不要写进仓库
   },
+
+  // ── 多后端（P 轨，可选）──
+  // "defaultProvider": "work",
+  // "providers": {
+  //   "work": {
+  //     "kind": "openai-compatible",
+  //     "baseUrl": "https://api.openai.com/v1",
+  //     "model": "gpt-4o-mini",
+  //     "apiKeyEnv": "OPENAI_API_KEY"
+  //   },
+  //   "deepseek": {
+  //     "kind": "openai-compatible",
+  //     "baseUrl": "https://api.deepseek.com",
+  //     "model": "deepseek-chat",
+  //     "apiKeyEnv": "DEEPSEEK_API_KEY"
+  //   }
+  // },
+  // 运行中 /provider use <id> 热切，无需重启
 
   // default | acceptEdits | plan | auto | bypassPermissions
   "permissionMode": "default",

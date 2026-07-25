@@ -52,6 +52,12 @@ import {
 import { formatPromptCacheSessionLine } from '../../compact/src/index.ts'
 import { formatDurationMs } from './modelCost.ts'
 import { formatDiffSlash } from './fileDiffLog.ts'
+import {
+  switchSessionProvider,
+  switchSessionModel,
+  formatSessionProvidersSlash,
+  type SwitchableProviderSession,
+} from './sessionProvider.ts'
 
 /** slash 需要的会话切片（与 BoloSession 兼容） */
 export type SlashSession = {
@@ -90,8 +96,15 @@ export type SlashSession = {
   diffTurn?: number
   /** 会话工具表；/doctor 计数 */
   tools?: { name: string }[]
-  /** provider id；/doctor */
+  /** 协议 kind（LlmProvider.id）；/doctor */
   provider?: { id?: string }
+  /**
+   * P 轨：命名 profile id（config.providers 的 key）。
+   * 与 provider.id（协议 kind）不同。
+   */
+  providerId?: string
+  providerRegistry?: import('../../config/src/providerRegistry.ts').ProviderRegistry
+  providerProfile?: import('../../config/src/providerRegistry.ts').ProviderProfile
   /** auto compact 开关；/doctor · /context */
   autoCompactEnabled?: boolean
   /** 上下文窗口（token 粗估基准）；/context 压力 */
@@ -887,7 +900,7 @@ function cmdDoctor(session: SlashSession, _args: string): SlashDispatchResult {
     `platform:        ${process.platform}`,
     `cwd:             ${session.cwd}`,
     `session id:      ${session.id}`,
-    `provider:        ${session.provider?.id ?? '(unset)'}`,
+    `provider:        ${session.providerId ? `${session.providerId} (kind=${session.provider?.id ?? '?'})` : (session.provider?.id ?? '(unset)')}`,
     `permissionMode:  ${session.permissionMode}`,
     `model:           ${session.model ?? '(unset)'}`,
     `effort:          ${session.effortLevel ?? 'auto'}`,
@@ -1758,15 +1771,97 @@ async function cmdDiff(
 }
 
 function cmdModel(session: SlashSession, args: string): SlashDispatchResult {
-  const name = args.trim()
-  if (!name) {
+  const raw = args.trim()
+  if (!raw) {
+    const pid = session.providerId
+    const kind = session.provider?.id
+    const bits = [
+      `model: ${session.model ?? '(unset)'}`,
+      pid ? `provider: ${pid}` : null,
+      kind ? `kind: ${kind}` : null,
+    ].filter(Boolean)
+    return { ok: true, message: bits.join('  |  ') }
+  }
+
+  // 糖：providerId/model 或 providerId:model
+  const slash = raw.match(/^([^/:\s]+)[/:](.+)$/)
+  if (slash) {
+    const id = slash[1]!.trim()
+    const model = slash[2]!.trim()
+    if (session.providerRegistry) {
+      const sw = switchSessionProvider(session as SwitchableProviderSession, id, {
+        model,
+      })
+      if (!sw.ok) return { ok: false, message: sw.reason }
+      return { ok: true, message: sw.message }
+    }
+    // 无 registry：仅设 model 名（兼容）
+    const m = switchSessionModel(session as SwitchableProviderSession, model)
+    if (!m.ok) return { ok: false, message: m.reason }
     return {
       ok: true,
-      message: `model: ${session.model ?? '(unset)'}`,
+      message: `${m.message} (no providers map; ignored provider id "${id}")`,
     }
   }
-  session.model = name
-  return { ok: true, message: `model set to ${name}` }
+
+  const m = switchSessionModel(session as SwitchableProviderSession, raw)
+  if (!m.ok) return { ok: false, message: m.reason }
+  return { ok: true, message: m.message }
+}
+
+/**
+ * /provider — 列出命名后端；/provider use <id> [model] 热切。
+ */
+function cmdProvider(session: SlashSession, args: string): SlashDispatchResult {
+  const raw = args.trim()
+  if (!raw || raw === 'list' || raw === 'show' || raw === 'ls') {
+    return {
+      ok: true,
+      message: formatSessionProvidersSlash(session as SwitchableProviderSession),
+    }
+  }
+
+  const parts = raw.split(/\s+/).filter(Boolean)
+  const head = parts[0]!.toLowerCase()
+  if (head === 'use' || head === 'set' || head === 'switch') {
+    const id = parts[1]
+    if (!id) {
+      return {
+        ok: false,
+        message: 'Usage: /provider use <id> [model]',
+      }
+    }
+    const model = parts.slice(2).join(' ').trim() || undefined
+    const sw = switchSessionProvider(session as SwitchableProviderSession, id, {
+      model,
+    })
+    if (!sw.ok) return { ok: false, message: sw.reason }
+    return { ok: true, message: sw.message }
+  }
+
+  // 无子命令：把第一词当 id（/provider deepseek）
+  if (parts.length >= 1 && !['help', '?'].includes(head)) {
+    const id = parts[0]!
+    const model = parts.slice(1).join(' ').trim() || undefined
+    const sw = switchSessionProvider(session as SwitchableProviderSession, id, {
+      model,
+    })
+    if (!sw.ok) {
+      return {
+        ok: false,
+        message: `${sw.reason}\n${formatSessionProvidersSlash(session as SwitchableProviderSession)}`,
+      }
+    }
+    return { ok: true, message: sw.message }
+  }
+
+  return {
+    ok: true,
+    message: [
+      formatSessionProvidersSlash(session as SwitchableProviderSession),
+      'usage: /provider | /provider use <id> [model]',
+    ].join('\n'),
+  }
 }
 
 function cmdEffort(session: SlashSession, args: string): SlashDispatchResult {
@@ -2574,10 +2669,17 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
   },
   {
     name: 'model',
-    summary: 'Show or set session.model',
-    usage: '[name]',
+    summary: 'Show or set model; optional providerId/model sugar',
+    usage: '[name | providerId/model]',
     group: 'model',
     run: cmdModel,
+  },
+  {
+    name: 'provider',
+    summary: 'List or hot-switch named providers (config.providers)',
+    usage: '[list | use <id> [model]]',
+    group: 'model',
+    run: cmdProvider,
   },
   {
     name: 'effort',

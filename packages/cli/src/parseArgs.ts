@@ -232,7 +232,7 @@ export function formatHelp(): string {
   也可用绝对/相对 .json / .jsonl 路径作为 id。
 
 REPL 斜杠命令（会话内）:
-  /help  /clear  /title  /compact  /context  /model  /effort  /thinking  /plan  /permissions
+  /help  /clear  /title  /compact  /context  /model  /provider  /effort  /thinking  /plan  /permissions
   详见 docs/SLASH_COMMANDS.md
 
 选项:

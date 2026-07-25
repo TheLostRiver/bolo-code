@@ -1,5 +1,5 @@
 /**
- * 从环境变量 / 显式 kind 创建 Provider
+ * 从环境变量 / 显式 kind / 命名 profile 创建 Provider
  *
  * BOLO_PROVIDER = mock | openai-compatible | openai | openai-responses | responses
  *               | anthropic | claude
@@ -13,6 +13,8 @@
  *   ANTHROPIC_API_KEY / BOLO_API_KEY
  *   ANTHROPIC_BASE_URL / BOLO_BASE_URL
  *   ANTHROPIC_MODEL / BOLO_MODEL
+ *
+ * Profile（P 轨）：apiKeyEnv 优先于全局 key 回落；见 createProviderFromProfile。
  */
 
 import { createMockProvider } from './mock.ts'
@@ -37,6 +39,10 @@ export type EnvProviderResult = {
   kind: ProviderKind
   model?: string
   baseUrl?: string
+  /** 命名 profile id（若从 profile 创建） */
+  profileId?: string
+  /** true：需要 key 的 kind 但未解析到 key，已降级 mock */
+  missingKey?: boolean
 }
 
 function env(name: string): string | undefined {
@@ -60,10 +66,45 @@ export type CreateProviderOptions = {
   forceMock?: boolean
   kind?: ProviderKind
   apiKey?: string
+  /** 显式 env 名；优先于默认 OPENAI_/ANTHROPIC_/BOLO_ 回落 */
+  apiKeyEnv?: string
   baseUrl?: string
   model?: string
   timeoutMs?: number
   maxTokens?: number
+}
+
+/** 命名 profile → Provider（P 轨工厂） */
+export type ProviderProfileInput = {
+  id?: string
+  kind?: string
+  apiKey?: string
+  apiKeyEnv?: string
+  baseUrl?: string
+  model?: string
+  timeoutMs?: number
+  maxTokens?: number
+  forceMock?: boolean
+}
+
+/**
+ * 解析 api key：显式 apiKey > apiKeyEnv 指向的 env > kind 默认 env 链。
+ * 不把 key 写入日志。
+ */
+export function resolveProviderApiKey(
+  kind: ProviderKind,
+  overrides?: Pick<CreateProviderOptions, 'apiKey' | 'apiKeyEnv'>,
+): string | undefined {
+  if (overrides?.apiKey?.trim()) return overrides.apiKey.trim()
+  if (overrides?.apiKeyEnv?.trim()) {
+    const fromNamed = env(overrides.apiKeyEnv.trim())
+    if (fromNamed) return fromNamed
+  }
+  if (kind === 'anthropic') {
+    return env('ANTHROPIC_API_KEY') ?? env('BOLO_API_KEY')
+  }
+  if (kind === 'mock') return undefined
+  return env('BOLO_API_KEY') ?? env('OPENAI_API_KEY')
 }
 
 /**
@@ -92,12 +133,9 @@ export function createProviderFromEnv(
   }
 
   if (kind === 'anthropic') {
-    const apiKey =
-      overrides?.apiKey ??
-      env('ANTHROPIC_API_KEY') ??
-      env('BOLO_API_KEY')
+    const apiKey = resolveProviderApiKey('anthropic', overrides)
     if (!apiKey) {
-      return { provider: createMockProvider(), kind: 'mock' }
+      return { provider: createMockProvider(), kind: 'mock', missingKey: true }
     }
     const baseUrl =
       overrides?.baseUrl ??
@@ -125,10 +163,9 @@ export function createProviderFromEnv(
   }
 
   // openai-compatible | openai-responses（共用 key / base / model）
-  const apiKey =
-    overrides?.apiKey ?? env('BOLO_API_KEY') ?? env('OPENAI_API_KEY')
+  const apiKey = resolveProviderApiKey(kind, overrides)
   if (!apiKey) {
-    return { provider: createMockProvider(), kind: 'mock' }
+    return { provider: createMockProvider(), kind: 'mock', missingKey: true }
   }
   const baseUrl =
     overrides?.baseUrl ?? env('BOLO_BASE_URL') ?? env('OPENAI_BASE_URL')
@@ -165,5 +202,58 @@ export function createProviderFromEnv(
     kind: 'openai-compatible',
     model,
     baseUrl: baseUrl ?? 'https://api.openai.com/v1',
+  }
+}
+
+/**
+ * 从命名 profile 装配 LlmProvider。
+ * - kind 以 profile 为准（不因 BOLO_PROVIDER 覆盖，除非 profile 无 kind）
+ * - apiKeyEnv / apiKey 按 profile；缺 key 时降级 mock 并标 missingKey
+ * - 热切失败应由调用方在 missingKey 时拒绝并保留旧实例
+ */
+export function createProviderFromProfile(
+  profile: ProviderProfileInput,
+  opts?: { modelOverride?: string },
+): EnvProviderResult {
+  const kindRaw = normalizeKind(profile.kind)
+  const kind: ProviderKind =
+    profile.forceMock || kindRaw === 'mock'
+      ? 'mock'
+      : kindRaw ??
+        detectProviderKind({
+          forceMock: profile.forceMock,
+          kind: kindRaw,
+        })
+
+  const model =
+    opts?.modelOverride?.trim() ||
+    profile.model?.trim() ||
+    undefined
+
+  if (kind === 'mock') {
+    return {
+      provider: createMockProvider(),
+      kind: 'mock',
+      model,
+      profileId: profile.id,
+    }
+  }
+
+  const result = createProviderFromEnv({
+    kind,
+    apiKey: profile.apiKey,
+    apiKeyEnv: profile.apiKeyEnv,
+    baseUrl: profile.baseUrl,
+    model,
+    timeoutMs: profile.timeoutMs,
+    maxTokens: profile.maxTokens,
+  })
+
+  return {
+    ...result,
+    // 工厂可能因 env 另有 model；显式 override / profile 优先
+    model: model ?? result.model,
+    profileId: profile.id,
+    ...(result.missingKey ? { missingKey: true } : {}),
   }
 }

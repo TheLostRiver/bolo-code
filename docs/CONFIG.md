@@ -113,13 +113,13 @@ defaults
 
 `provider.kind` 还可为：`openai-responses`（原生 Responses `/responses`）、`anthropic`、`mock`。详见 [PROVIDERS.md](./PROVIDERS.md)。
 
-### 多 Provider（**P 轨 · 规划**）
+### 多 Provider（**P 轨 · P0–P4 日用已闭环**）
 
-日用目标：配置里同时登记多个后端，**运行中** `/provider use` 热切，无需改文件重启。完整契约见 [ROADMAP.md §9](./ROADMAP.md)。
+日用：配置里同时登记多个后端，**运行中** `/provider use` 热切，无需改文件重启。完整契约见 [ROADMAP.md §9](./ROADMAP.md) · [PROVIDERS.md](./PROVIDERS.md)。
 
 | 字段 | 说明 |
 |------|------|
-| `providers` | `Record<id, { kind, baseUrl?, model?, apiKeyEnv?, … }>` |
+| `providers` | `Record<id, { kind, baseUrl?, model?, apiKeyEnv?, label?, … }>` |
 | `defaultProvider` | 启动 active id |
 | `provider`（旧） | 单后端；无 `providers` 时仍可用，合成 id=`default` |
 
@@ -142,7 +142,10 @@ defaults
 }
 ```
 
-**Key：** 优先 `apiKeyEnv` / 环境变量；不要把密钥提交进项目配置。
+**合并：** user/project 同 id 字段浅合并；`defaultProvider` 后写覆盖。  
+**Key：** 优先 `apiKeyEnv` / 环境变量；不要把密钥提交进项目配置。  
+**热切失败**（缺 key / 未知 id）→ 明确错误，**保留**当前 provider。  
+**后置（P5）：** Desktop 设置下拉；resume 快照持久化 `providerId`。
 
 | 字段 | 默认 | 说明 |
 |------|------|------|

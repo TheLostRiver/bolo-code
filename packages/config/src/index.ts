@@ -29,6 +29,20 @@ export {
 } from './types.ts'
 
 export {
+  normalizeProviderRegistry,
+  mergeProviderConfigJson,
+  mergeProvidersMaps,
+  profileFromConfigJson,
+  getProviderProfile,
+  listProviderProfileSummaries,
+  formatProviderProfileLine,
+  type ProviderProfile,
+  type ProviderRegistry,
+  type ProviderProfileSummary,
+  type ProviderKindName,
+} from './providerRegistry.ts'
+
+export {
   ensureLayout,
   ensureUserLayout,
   ensureProjectLayout,

@@ -237,21 +237,21 @@ npx tsx scripts/smoke-live.ts
 | OR5 | 单测（fixture SSE，无真 key） | ✅ |
 | OR6 | Responses WebSocket | ⬜ 后置 |
 
-## 路线：多 Provider 并存 + 运行时热切（**P 轨 · 当前着重**）
+## 路线：多 Provider 并存 + 运行时热切（**P 轨 · P0–P4 日用已闭环**）
 
-> 总规划见 [ROADMAP.md §9](./ROADMAP.md)。**痛点：** 现仅单 `provider`；`/model` 只改模型名，不换 baseUrl/key/kind。  
-> **目标：** `providers` 表 + `/provider use` 热切，无需关 agent。
+> 总规划见 [ROADMAP.md §9](./ROADMAP.md)。**痛点：** 旧仅单 `provider`；`/model` 只改模型名。  
+> **现状：** `providers` 表 + `/provider use` 热切；旧 `provider` 仍兼容。
 
 | ID | 切片 | 状态 |
 |----|------|------|
-| **P0** | 规格（ROADMAP §9 + 本文） | 📋 |
-| **P1** | `providers` + `defaultProvider` 加载；旧 `provider` 兼容 | 📋 |
-| **P2** | `switchSessionProvider` + `/provider` list/use | 📋 |
-| **P3** | `/model` 增强 · cache-break · `/doctor` | 📋 |
-| **P4** | 单测 · CLI 摘要 · 缺 key 错误 | 📋 |
+| **P0** | 规格（ROADMAP §9 + 本文） | ✅ |
+| **P1** | `providers` + `defaultProvider` 加载；旧 `provider` 兼容 | ✅ |
+| **P2** | `switchSessionProvider` + `/provider` list/use | ✅ |
+| **P3** | `/model` 增强 · cache-break · `/doctor` | ✅ |
+| **P4** | 单测 · CLI 摘要 · 缺 key 错误 | ✅ |
 | **P5** | Desktop 选 active（可选） | 📋 |
 
-配置草案（实现真源以 ROADMAP §9.4 为准）：
+配置示例：
 
 ```jsonc
 {
@@ -273,5 +273,24 @@ npx tsx scripts/smoke-live.ts
 }
 ```
 
-Slash 目标：`/provider` · `/provider use <id>` · `/model`（可带 `id/model`）。  
-**不做：** 官方市场、密钥入库、遥测、默认同 turn 自动 failover。
+**Slash：**
+
+| 命令 | 行为 |
+|------|------|
+| `/provider` | 列出 id · kind · model（`*` active） |
+| `/provider use <id> [model]` | 热切；缺 key **拒绝**并保留旧后端 |
+| `/model` | 显示 model + providerId + kind |
+| `/model <name>` | 仅改当前后端 model（本地 cache-break） |
+| `/model <id>/<name>` | 切后端并设 model |
+
+**实现入口：**
+
+| 模块 | 职责 |
+|------|------|
+| `packages/config/src/providerRegistry.ts` | 归一化 `providers` / 旧 `provider` |
+| `packages/providers/src/fromEnv.ts` | `createProviderFromProfile` · `apiKeyEnv` |
+| `packages/core/src/sessionProvider.ts` | `switchSessionProvider` · rebind deps/summarizer |
+| `packages/core/src/slash.ts` | `/provider` · `/model` |
+
+**不做：** 官方市场、密钥入库、遥测、默认同 turn 自动 failover。  
+**测试：** `scripts/test-multi-provider.ts`。

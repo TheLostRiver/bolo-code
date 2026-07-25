@@ -101,6 +101,10 @@ export async function runNewSessionCli(
   })
 
   if (!opts.skipBanner) {
+    const active =
+      session.providerId != null
+        ? `${session.providerId}/${session.model ?? session.provider?.id ?? '?'}`
+        : session.model
     const useLayout =
       process.env.BOLO_TUI_LAYOUT !== '0' &&
       process.env.BOLO_TUI_LAYOUT !== 'false' &&
@@ -109,7 +113,7 @@ export async function runNewSessionCli(
       const layout = renderInkLayout({
         version: '0.0.1',
         cwd: session.cwd,
-        model: session.model,
+        model: active,
         sessionId: session.id,
         plain: opts.plainBanner,
         session: {
@@ -118,19 +122,24 @@ export async function runNewSessionCli(
           effortLevel: session.effortLevel,
           messages: session.messages,
         },
-        hint: 'bolo> type a message or /help',
+        hint: 'bolo> type a message or /help · /provider',
       })
       writeOut(layout.endsWith('\n') ? layout : `${layout}\n`)
     } else {
       const banner = renderWelcomeBanner({
         version: '0.0.1',
         cwd: session.cwd,
-        model: session.model,
+        model: active,
         sessionId: session.id,
         plain: opts.plainBanner,
       })
       writeOut(banner.endsWith('\n') ? banner : `${banner}\n`)
       writeOut(`${formatSessionStatusLine(session)}\n`)
+      if (session.providerId) {
+        writeOut(
+          `provider: ${session.providerId}  kind=${session.provider?.id ?? '?'}  (/provider to list/switch)\n`,
+        )
+      }
     }
   }
 

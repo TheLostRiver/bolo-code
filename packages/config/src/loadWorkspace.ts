@@ -26,6 +26,7 @@ import {
 } from '../../plugins/src/index.ts'
 import {
   createProviderFromEnv,
+  createProviderFromProfile,
   type LlmProvider,
   type ProviderKind,
 } from '../../providers/src/index.ts'
@@ -37,6 +38,12 @@ import {
   type BoloLayoutPaths,
 } from './paths.ts'
 import type { BoloConfigJson } from './types.ts'
+import {
+  getProviderProfile,
+  normalizeProviderRegistry,
+  type ProviderProfile,
+  type ProviderRegistry,
+} from './providerRegistry.ts'
 
 export type ResolvedWorkspace = {
   cwd: string
@@ -55,6 +62,12 @@ export type ResolvedWorkspace = {
   providerKind: ProviderKind
   providerModel?: string
   providerBaseUrl?: string
+  /** P1：归一化后的多 provider 表 */
+  providerRegistry: ProviderRegistry
+  /** 启动 active profile id */
+  providerId: string
+  /** active profile 快照（无运行时 client） */
+  providerProfile?: ProviderProfile
   createdPaths: string[]
 }
 
@@ -71,36 +84,45 @@ function mergeHooks(a: HooksConfig, b: HooksConfig): HooksConfig {
 }
 
 /**
- * 文件 config + 环境变量 → Provider
- * 优先级：env > config.provider > defaults
+ * 文件 config + 环境变量 → Provider（active = defaultProvider）。
+ * 优先级：profile 字段 / apiKeyEnv > 全局 env 回落 > defaults
  */
 export function resolveProviderFromConfig(config: BoloConfigJson): {
   provider: LlmProvider
   kind: ProviderKind
   model?: string
   baseUrl?: string
+  profileId: string
+  registry: ProviderRegistry
+  profile?: ProviderProfile
+  missingKey?: boolean
 } {
-  const kindRaw = config.provider?.kind
-  const kind =
-    kindRaw === 'anthropic'
-      ? 'anthropic'
-      : kindRaw === 'mock'
-        ? 'mock'
-        : kindRaw === 'openai-responses'
-          ? 'openai-responses'
-          : kindRaw === 'openai-compatible'
-            ? 'openai-compatible'
-            : undefined
+  const registry = normalizeProviderRegistry(config)
+  const profileId = registry.defaultId
+  const profile = getProviderProfile(registry, profileId)
 
-  return createProviderFromEnv({
-    kind,
-    apiKey: config.provider?.apiKey,
-    baseUrl: config.provider?.baseUrl,
-    model: config.provider?.model,
-    timeoutMs: config.provider?.timeoutMs,
-    maxTokens: config.provider?.maxTokens,
-    forceMock: kindRaw === 'mock',
-  })
+  if (!profile) {
+    // 不应发生；兜底 mock
+    const fallback = createProviderFromEnv({ forceMock: true })
+    return {
+      ...fallback,
+      profileId: 'default',
+      registry,
+      missingKey: true,
+    }
+  }
+
+  const built = createProviderFromProfile(profile)
+  return {
+    provider: built.provider,
+    kind: built.kind,
+    model: built.model ?? profile.model,
+    baseUrl: built.baseUrl ?? profile.baseUrl,
+    profileId,
+    registry,
+    profile,
+    ...(built.missingKey ? { missingKey: true } : {}),
+  }
 }
 
 export type LoadWorkspaceOptions = {
@@ -238,7 +260,7 @@ export async function loadWorkspace(
   mcpConfigWarnings.push(...mcpMerged.warnings)
   const mcpServers = mcpMerged.servers
 
-  const { provider, kind, model, baseUrl } = resolveProviderFromConfig(config)
+  const resolved = resolveProviderFromConfig(config)
   const permissionMode = (config.permissionMode ?? 'default') as PermissionMode
 
   return {
@@ -253,10 +275,13 @@ export async function loadWorkspace(
     skills,
     plugins,
     pluginMerge,
-    provider,
-    providerKind: kind,
-    providerModel: model,
-    providerBaseUrl: baseUrl,
+    provider: resolved.provider,
+    providerKind: resolved.kind,
+    providerModel: resolved.model,
+    providerBaseUrl: resolved.baseUrl,
+    providerRegistry: resolved.registry,
+    providerId: resolved.profileId,
+    providerProfile: resolved.profile,
     createdPaths,
   }
 }
