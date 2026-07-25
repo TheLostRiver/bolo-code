@@ -27,7 +27,8 @@
 | `tui/theme.ts` | F-T9：主题 |
 | `tui/banner.ts` · `statusLine.ts` | 启动/状态 |
 | `tui/formatSessionEvent.ts` | 流式事件 · tool_end 摘要 |
-| `tui/askPermissionTty.ts` | 权限 y/a/N + preview 文本 |
+| `tui/diffPane.ts` | U1 browse · U2 approve 面板 |
+| `tui/askPermissionTty.ts` | 权限 y/a/N；有 files 时进审批面板 |
 | `newSessionCli.ts` · `resumeCli.ts` · `main.ts` | 入口 |
 
 ---
@@ -37,25 +38,30 @@
 | 层 | 状态 | 说明 |
 |----|------|------|
 | 文本 dump `/diff` · tool_end ANSI | ✅ D7 | 轨 A |
-| 权限 preview 多行着色 | ✅ D7 | 仍一次性打印 |
+| 权限 preview 多行着色 | ✅ D7 | 回落文本路径 |
 | **可滚 Diff 面板** | ✅ U1 | TTY `/diff` · `BOLO_DIFF_PANEL=0` 关 |
-| **ask 内嵌可滚 preview** | 📋 U2 | 轨 B |
+| **ask 内嵌可滚 preview** | ✅ U2 | `y/a/N` · `BOLO_PERM_DIFF_PANEL=0` 关 |
 | **写后可折叠 cell** | 📋 U3 | 轨 B |
 | 真·React Ink 依赖 | 📋 U5 可选 | 非默认 |
 
 ---
 
-## 4. U 轨挂载点（规划）
+## 4. U 轨挂载点
 
 ```text
-packages/core/src/diffViewModel.ts   ← U0 VM
+packages/core/src/diffViewModel.ts   ← U0 VM · approve 键
 packages/cli/src/tui/
-  diffPane.ts        ← U1：raw mode 列表+展开
-  askPermissionTty.ts ← U2：复用 diffPane 子集（待）
+  diffPane.ts        ← U1 browse · U2 approve
+  askPermissionTty.ts ← U2：files preview → 审批面板
 formatSessionEvent.ts ← U3：可折叠 cell（待）
 ```
 
-**环境：** `BOLO_DIFF_PANEL=0` 强制纯文本 `/diff`（不进面板）。
+**环境：**
+
+| 变量 | 作用 |
+|------|------|
+| `BOLO_DIFF_PANEL=0` | `/diff` 强制纯文本 |
+| `BOLO_PERM_DIFF_PANEL=0` | 权限 ask 不用审批面板（仅文本 y/a/N） |
 
 **约束：**
 
@@ -63,7 +69,12 @@ formatSessionEvent.ts ← U3：可折叠 cell（待）
 - 非 TTY：禁止挂起面板，回落纯文本。  
 - 不引入 ratatui；真·Ink 仅 U5 评估。
 
-**键位（U1）：** `j/k` 选文件 · `Enter` 展开 · `h` 返回 · `q` 退出。
+**键位：**
+
+| 模式 | 键 |
+|------|-----|
+| browse (`/diff`) | `j/k` 选文件 · `Enter` 展开 · `h` 返回 · `q` 退出 |
+| approve (ask) | 同上浏览 · **`y` allow · `a` always · `n`/`q` deny** |
 
 **测试：**
 
@@ -78,7 +89,7 @@ npx tsx scripts/test-file-diff.ts
 
 - Desktop **不**实现第二套 diff 算法。  
 - U3：renderer 消费与 CLI 相同的 `DiffViewModel` JSON（IPC）。  
-- 当前：权限 `summaryText` + tool_end 多行（D7）。
+- 当前：权限 `summaryText`（+ 可选 files 字段）+ tool_end 多行。
 
 ---
 
@@ -88,7 +99,7 @@ npx tsx scripts/test-file-diff.ts
 node --import tsx/esm scripts/test-full-track.ts
 node --import tsx/esm scripts/test-product-track.ts
 npx tsx scripts/test-file-diff.ts
-# U0+：scripts/test-diff-view.ts（待加）
+npx tsx scripts/test-diff-view.ts
 ```
 
 ---

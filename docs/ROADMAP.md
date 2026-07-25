@@ -16,7 +16,7 @@
 | **Rules / Creators** | **~75–85%** | 日用齐 |
 | **成本与缓存** | **~94–97%** | /cost 日用近满 |
 | **文件 Diff · 日用契约** | **~95%+** | **D0–D7 已收口**；见 [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) |
-| **文件 Diff · 交互 UI** | **~60–70%** | **U0–U1 已落地**（ViewModel + TTY diff 面板）；U2+ 规划中 |
+| **文件 Diff · 交互 UI** | **~75–85%** | **U0–U2 已落地**（ViewModel + TTY `/diff` 面板 + 权限审批面板）；U3+ 规划中 |
 | **斜杠** | **~80–88%** | 日用 + polish |
 | **CLI TUI（壳）** | **~70–80%** | 文本框布局/picker/主题；**非**真 React Ink |
 | **Electron GUI** | **~55–65%** | 壳 + 流式 + 权限 + 设置 |
@@ -45,7 +45,7 @@
 | | 轨 A 日用 | 轨 B UI |
 |--|-----------|---------|
 | 目标 | 工作流正确、可查、可 resume | 浏览体验接近 HC/Codex |
-| 现状 | D0–D7 ✅ | U0 文档/契约 → U1+ 实现 |
+| 现状 | D0–D7 ✅ | **U0–U2 ✅**（VM + `/diff` 面板 + 权限审批）；U3+ 待做 |
 | 对标 | HC 工具结果 + Codex patch 摘要 | HC Ink 组件 + Codex ratatui |
 | 不做 | — | 遥测 · 官方市场 · 必抄 React/Rust |
 
@@ -93,24 +93,29 @@ apps/desktop       消费同一 DiffViewModel                 （U3）
 
 ### 3.3 阶段 U0–U5
 
-| 阶段 | 交付 | 相对「交互 UI」 | 依赖 |
+| 阶段 | 交付 | 相对「交互 UI」 | 状态 |
 |------|------|-----------------|------|
-| **U0** | 规格 + `DiffViewModel` 类型（log→可渲染行） | 契约 | D7 ✅ |
-| **U1** | **终端 Diff 面板（最小）**：`/diff` 进入可滚列表；j/k 或 ↑↓；Enter 展开文件；q 退出 | ~60–70% | U0 |
-| **U2** | **权限预览面板**：ask 时多文件列表 + 当前文件 hunk 可滚；y/a/N 仍有效 | ~75–80% | U1 |
-| **U3** | **写后 History cell**：tool_end 后可折叠块；Desktop 右侧/弹层复用 VM | ~85–90% | U1 |
-| **U4** | **渲染加深**：行号 · 统一主题色 · 可选语法高亮（无强制 native color-diff） | ~90–95% | U1–U3 |
-| **U5** | **可选真·Ink** 或 IDE 推送；PR merge-base | 全家桶尾声 | 产品决策 |
+| **U0** | 规格 + `DiffViewModel`（log/preview→可渲染行） | 契约 | ✅ |
+| **U1** | **终端 Diff 面板**：`/diff` 可滚列表；j/k；Enter 展开；q 退出 | ~60–70% | ✅ |
+| **U2** | **权限预览面板**：ask 多文件 + hunk 可滚；y/a/N | ~75–85% | ✅ |
+| **U3** | **写后 History cell**；Desktop 复用 VM | ~85–90% | 📋 |
+| **U4** | 行号 · 主题色 · 可选语法高亮 | ~90–95% | 📋 |
+| **U5** | 可选真·Ink / IDE / merge-base | 全家桶尾声 | 📋 |
 
-### 3.4 U1 最小行为（验收）
+### 3.4 U1/U2 行为（验收）
 
 ```text
 用户: /diff
-  → 全屏或半屏面板（非一次性 dump）
-  → 文件列表 + 总 +N/−M（createDiffSummary 数据）
+  → TTY 全屏/半屏面板（非一次性 dump）
+  → 文件列表 + 总 +N/−M
   → 选中文件显示 structuredPatch / 或提示 /diff git
   → q / Esc 回到 REPL
-非 TTY: 保持现有纯文本 /diff（不挂起）
+非 TTY: 纯文本 /diff
+
+权限 ask（Edit/Write/apply_patch 且有 preview.files）:
+  → 同一面板 mode=approve
+  → jk 浏览 · Enter 看 hunk · y allow · a always · n/q deny
+  → BOLO_PERM_DIFF_PANEL=0 回落文本 [y/a/N]
 ```
 
 ### 3.5 技术选型（建议默认）
@@ -163,7 +168,7 @@ apps/desktop       消费同一 DiffViewModel                 （U3）
 | M-TUI（文本壳） | ✅ | 布局/picker/主题；非真 Ink |
 | M4 Electron | ✅ | 壳 + 流式 + 权限 + Settings |
 | **M-Diff-A（D0–D7）** | ✅ | 日用文件 diff 契约 |
-| **M-Diff-B（U0–U4）** | 📋 U0–U1 ✅ | 交互 diff UI；U2+ 待做 |
+| **M-Diff-B（U0–U4）** | 📋 U0–U2 ✅ | 交互 diff UI；U3+ 待做 |
 | 官方市场 / 遥测 | 🚫 | 永不 |
 
 **一句话：**  

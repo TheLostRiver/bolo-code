@@ -11,7 +11,7 @@
 | 轨 | 含义 | 水位 | 状态 |
 |----|------|------|------|
 | **A · 日用** | 写前可见 / 写后可读 / 会话可查 / git / resume | **~95%+** | D0–D7 ✅ |
-| **B · 交互 UI** | 可滚面板 / 权限内嵌 / history cell / 行渲染 | **~60–70%** → 目标 **~90%+** | U0–U1 ✅ · U2+ 📋 |
+| **B · 交互 UI** | 可滚面板 / 权限内嵌 / history cell / 行渲染 | **~75–85%** → 目标 **~90%+** | U0–U2 ✅ · U3+ 📋 |
 | 全家桶尾 | 真 Ink · IDE · PR merge-base | 不设 100% | 后置 |
 
 ---
@@ -84,7 +84,7 @@ tool success ──► meta ──► fileDiffLog ──► transcript file_diff
 |------|------|----------|
 | **U0** | `DiffViewModel`：由 `fileDiffLog` / preview 生成可渲染行 | ✅ `diffViewModel.ts` |
 | **U1** | 终端 **Diff 面板**：TTY 下 `/diff` 进入可滚 UI | ✅ `tui/diffPane.ts` · `runOnePrompt` |
-| **U2** | **权限预览面板**：ask 内嵌可滚 preview | 📋 |
+| **U2** | **权限预览面板**：ask 内嵌可滚 preview + y/a/N | ✅ `runDiffApprovePane` · `createTtyAskPermission` |
 | **U3** | **写后 cell** + Desktop 复用 VM | 📋 |
 | **U4** | 行号 · 主题 · 可选语法色 | 📋 |
 | **U5** | 可选真·Ink / IDE / merge-base | 📋 |
