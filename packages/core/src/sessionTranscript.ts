@@ -331,15 +331,52 @@ export function buildMetaEntry(meta: TranscriptMetaInput): TranscriptMetaEntry {
   }
 }
 
-/** UTF-8 一行 JSON + `\n`；确保目录存在 */
+/**
+ * 同一 transcript 的所有 append/rewrite 共用进程内写屏障。
+ * 前一写失败不会毒化后续队列；锁只按绝对路径串行，不阻塞其它 session。
+ */
+const transcriptWriteTails = new Map<string, Promise<void>>()
+
+async function withTranscriptWriteBarrier<T>(
+  file: string,
+  operation: (filePath: string) => Promise<T>,
+): Promise<T> {
+  const filePath = path.resolve(file)
+  const previous = transcriptWriteTails.get(filePath) ?? Promise.resolve()
+  let unlock!: () => void
+  const gate = new Promise<void>((resolve) => {
+    unlock = resolve
+  })
+  const tail = previous.catch(() => undefined).then(() => gate)
+  transcriptWriteTails.set(filePath, tail)
+  await previous.catch(() => undefined)
+  try {
+    return await operation(filePath)
+  } finally {
+    unlock()
+    if (transcriptWriteTails.get(filePath) === tail) {
+      transcriptWriteTails.delete(filePath)
+    }
+  }
+}
+
+async function appendTranscriptLineUnlocked(
+  filePath: string,
+  entry: TranscriptEntry,
+): Promise<void> {
+  await fs.mkdir(path.dirname(filePath), { recursive: true })
+  const line = JSON.stringify(entry) + '\n'
+  await fs.appendFile(filePath, line, 'utf8')
+}
+
+/** UTF-8 一行 JSON + `\n`；同路径串行追加。 */
 export async function appendTranscriptLine(
   file: string,
   entry: TranscriptEntry,
 ): Promise<void> {
-  const filePath = path.resolve(file)
-  await fs.mkdir(path.dirname(filePath), { recursive: true })
-  const line = JSON.stringify(entry) + '\n'
-  await fs.appendFile(filePath, line, 'utf8')
+  await withTranscriptWriteBarrier(file, (filePath) =>
+    appendTranscriptLineUnlocked(filePath, entry),
+  )
 }
 
 /**
@@ -350,17 +387,17 @@ export async function ensureTranscriptFile(
   file: string,
   meta: TranscriptMetaInput,
 ): Promise<boolean> {
-  const filePath = path.resolve(file)
-  try {
-    await fs.access(filePath)
-    return false
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException)?.code
-    if (code !== 'ENOENT') throw err
-  }
-
-  await appendTranscriptLine(filePath, buildMetaEntry(meta))
-  return true
+  return await withTranscriptWriteBarrier(file, async (filePath) => {
+    try {
+      await fs.access(filePath)
+      return false
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException)?.code
+      if (code !== 'ENOENT') throw err
+    }
+    await appendTranscriptLineUnlocked(filePath, buildMetaEntry(meta))
+    return true
+  })
 }
 
 /** 将 messages 编成 `message` entry 依次追加 */
@@ -370,19 +407,21 @@ export async function recordSessionMessages(
   opts?: { sessionId?: string },
 ): Promise<number> {
   if (!messages.length) return 0
-  const sessionId = opts?.sessionId ?? ''
-  let n = 0
-  for (const m of messages) {
-    const entry: TranscriptMessageEntry = {
-      type: 'message',
-      sessionId,
-      timestamp: nowIso(),
-      message: cloneMessage(m),
+  return await withTranscriptWriteBarrier(file, async (filePath) => {
+    const sessionId = opts?.sessionId ?? ''
+    let n = 0
+    for (const m of messages) {
+      const entry: TranscriptMessageEntry = {
+        type: 'message',
+        sessionId,
+        timestamp: nowIso(),
+        message: cloneMessage(m),
+      }
+      await appendTranscriptLineUnlocked(filePath, entry)
+      n++
     }
-    await appendTranscriptLine(file, entry)
-    n++
-  }
-  return n
+    return n
+  })
 }
 
 export async function appendCompactBoundary(
@@ -768,19 +807,30 @@ export function setTranscriptWriteState(
  * 用于 compact 后 messages 变短等无法纯 append 的情况。
  * title / system_note：显式 opts 优先；否则读旧文件保留（title last-wins；notes 全量保留）。
  */
+export type RewriteTranscriptOptions = {
+  createdAt?: string
+  compactBoundarySummary?: string
+  /** 显式标题；省略则尽量保留磁盘上最后一条 title */
+  title?: string
+  /** 显式 system_notes；省略则尽量保留磁盘上已有 notes */
+  systemNotes?: Array<{ text: string; kind?: string }>
+}
+
 export async function rewriteTranscriptFromMessages(
   file: string,
   session: PersistableSession,
-  opts?: {
-    createdAt?: string
-    compactBoundarySummary?: string
-    /** 显式标题；省略则尽量保留磁盘上最后一条 title */
-    title?: string
-    /** 显式 system_notes；省略则尽量保留磁盘上已有 notes */
-    systemNotes?: Array<{ text: string; kind?: string }>
-  },
+  opts?: RewriteTranscriptOptions,
 ): Promise<void> {
-  const filePath = path.resolve(file)
+  await withTranscriptWriteBarrier(file, (filePath) =>
+    rewriteTranscriptFromMessagesUnlocked(filePath, session, opts),
+  )
+}
+
+async function rewriteTranscriptFromMessagesUnlocked(
+  filePath: string,
+  session: PersistableSession,
+  opts?: RewriteTranscriptOptions,
+): Promise<void> {
   await fs.mkdir(path.dirname(filePath), { recursive: true })
 
   let preservedTitle: string | undefined
