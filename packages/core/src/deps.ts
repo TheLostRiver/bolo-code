@@ -159,15 +159,19 @@ export function createAutoCompactPrepare(opts: {
   enabled: boolean
   contextWindowTokens: number
   runAutoCompact: (messages: ChatMessage[]) => Promise<ChatMessage[] | null>
+  /** C2：返回最近 API input tokens；无则 undefined → 用 estimate */
+  getUsageInputTokens?: () => number | undefined
 }): PrepareMessagesFn {
   let failures = 0
   return async ({ messages, querySource }) => {
     if (!opts.enabled) return { messages }
     // snip 后 messages 已变短；Bolo 用内容启发式，无需再扣 snipTokensFreed
     const tokenCount = estimateTokens(messages as CompactChatMessage[])
+    const usageInputTokens = opts.getUsageInputTokens?.()
     if (
       !shouldAutoCompact({
         tokenCount,
+        usageInputTokens,
         contextWindowTokens: opts.contextWindowTokens,
         enabled: true,
         consecutiveFailures: failures,

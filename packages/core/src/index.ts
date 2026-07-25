@@ -165,7 +165,12 @@ export {
   isPromptTooLongError,
   truncateHeadForPtlRetry,
   groupMessagesByApiRound,
+  groupMessagesByUserTurn,
+  splitMessagesForCompactKeep,
+  adjustCutForToolPairing,
+  resolveAutoCompactTokenCount,
   DEFAULT_MAX_PTL_RETRIES,
+  DEFAULT_KEEP_RECENT_USER_TURNS,
   PTL_RETRY_MARKER,
   estimateTokens,
   estimateTextTokens,
@@ -1765,6 +1770,15 @@ export function wireSessionPrepareMessages(
         createAutoCompactPrepare({
           enabled: true,
           contextWindowTokens: session.contextWindowTokens,
+          getUsageInputTokens: () => {
+            const u = session.usage
+            if (!u) return undefined
+            // 优先 lastCall.input；否则会话累计 input
+            const last = u.lastCall?.inputTokens
+            if (last != null && last > 0) return last
+            if (u.inputTokens > 0) return u.inputTokens
+            return undefined
+          },
           runAutoCompact: async () => {
             const r = await compactSession(session, { trigger: 'auto' })
             return r.ok ? session.messages : null
@@ -1804,6 +1818,10 @@ export function setSessionAutoCompact(
 export type CompactSessionOptions = {
   trigger?: 'manual' | 'auto'
   customInstructions?: string
+  /** C1：按 user 轮次保留；不传则 runFullCompact 智能默认 */
+  keepRecentUserTurns?: number
+  keepMaxTokens?: number
+  /** @deprecated 用 keepRecentUserTurns */
   keepRecentMessageCount?: number
 }
 
@@ -1864,7 +1882,13 @@ export async function compactSession(
     maxPtlRetries: session.maxPtlRetries,
     hookInstructions: pre.injectText || undefined,
     summarize: session.compactSummarizer,
-    keepRecentMessageCount: opts.keepRecentMessageCount ?? 0,
+    ...(opts.keepRecentUserTurns != null
+      ? { keepRecentUserTurns: opts.keepRecentUserTurns }
+      : {}),
+    ...(opts.keepMaxTokens != null ? { keepMaxTokens: opts.keepMaxTokens } : {}),
+    ...(opts.keepRecentMessageCount != null
+      ? { keepRecentMessageCount: opts.keepRecentMessageCount }
+      : {}),
     suppressFollowUpQuestions: trigger === 'auto',
   })
 

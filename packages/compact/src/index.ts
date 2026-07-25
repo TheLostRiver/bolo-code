@@ -222,6 +222,160 @@ export type CompactSummarizer = (req: {
   compactPrompt: string
 }) => Promise<{ text: string }>
 
+/** C1：默认保留最近 user 轮次数（对照 HC 尾部 verbatim；可 0=全量摘要） */
+export const DEFAULT_KEEP_RECENT_USER_TURNS = 2
+
+export type KeepTailOptions = {
+  /**
+   * 保留最近 N 个 **user 开启的 turn**（含其后 assistant/tool）。
+   * 与 `keepRecentMessageCount` 二选一；同时设时 **优先本字段**。
+   */
+  keepRecentUserTurns?: number
+  /** keep 段 token 上限；超出则从 keep 最旧 turn 再丢回 summarize */
+  keepMaxTokens?: number
+  /**
+   * @deprecated 按 raw message 条数保留；优先改用 keepRecentUserTurns
+   */
+  keepRecentMessageCount?: number
+}
+
+/**
+ * 按 user 轮次分组：每条 `role=user` 开启新组（含其后 assistant/tool）。
+ * 开头非 user 的前缀并入第一组（不单独成 turn）。
+ */
+export function groupMessagesByUserTurn(
+  messages: ChatMessage[],
+): ChatMessage[][] {
+  const groups: ChatMessage[][] = []
+  let current: ChatMessage[] = []
+  for (const msg of messages) {
+    if (msg.role === 'user' && current.length > 0) {
+      groups.push(current)
+      current = [msg]
+    } else {
+      current.push(msg)
+    }
+  }
+  if (current.length > 0) groups.push(current)
+  return groups
+}
+
+/**
+ * 切点落在 tool 上时左移，避免 tool_result 与 tool_use 分家
+ *（对照 HC adjustIndexToPreserveAPIInvariants 缩小版）。
+ */
+export function adjustCutForToolPairing(
+  messages: ChatMessage[],
+  cut: number,
+): number {
+  let c = Math.max(0, Math.min(cut, messages.length))
+  // cut 指向 messages[c] 为 keep 首条；若是 tool，左移
+  while (c > 0 && c < messages.length && messages[c]?.role === 'tool') {
+    c -= 1
+  }
+  // 若 keep 从 tool 开始的前一条是带 tool_calls 的 assistant，再左移到 assistant 之前
+  while (
+    c > 0 &&
+    messages[c]?.role === 'tool' &&
+    messages[c - 1]?.role === 'assistant'
+  ) {
+    c -= 1
+  }
+  // 若 cut 落在 tool 紧跟的 assistant(tool_calls) 上，keep 应从 assistant 开始（cut=c 即可）
+  // 若 assistant 有 tool_calls 且下一条是 tool，而 cut 在 tool 上已处理
+  while (
+    c > 0 &&
+    c < messages.length &&
+    messages[c - 1]?.role === 'assistant' &&
+    Array.isArray(
+      (messages[c - 1] as { tool_calls?: unknown }).tool_calls,
+    ) &&
+    ((messages[c - 1] as { tool_calls?: unknown[] }).tool_calls?.length ?? 0) >
+      0 &&
+    messages[c]?.role === 'tool'
+  ) {
+    c -= 1
+  }
+  return c
+}
+
+/**
+ * C1：拆分 full compact 的 summarize 前缀与 verbatim 后缀。
+ * - 默认/推荐：`keepRecentUserTurns`
+ * - 兼容：`keepRecentMessageCount`（仅当未设 turns）
+ */
+export function splitMessagesForCompactKeep(
+  messages: ChatMessage[],
+  opts?: KeepTailOptions,
+): { toSummarize: ChatMessage[]; messagesToKeep: ChatMessage[] } {
+  if (!messages.length) {
+    return { toSummarize: [], messagesToKeep: [] }
+  }
+
+  const useTurns =
+    opts?.keepRecentUserTurns != null &&
+    Number.isFinite(opts.keepRecentUserTurns)
+
+  if (!useTurns && opts?.keepRecentMessageCount != null) {
+    const n = Math.max(0, Math.floor(opts.keepRecentMessageCount))
+    if (n <= 0) return { toSummarize: [...messages], messagesToKeep: [] }
+    if (n >= messages.length) {
+      return { toSummarize: [], messagesToKeep: [...messages] }
+    }
+    let cut = messages.length - n
+    cut = adjustCutForToolPairing(messages, cut)
+    return {
+      toSummarize: messages.slice(0, cut),
+      messagesToKeep: messages.slice(cut),
+    }
+  }
+
+  const turnsRaw = useTurns
+    ? opts!.keepRecentUserTurns!
+    : opts?.keepRecentUserTurns
+  if (turnsRaw == null || !Number.isFinite(turnsRaw) || turnsRaw <= 0) {
+    return { toSummarize: [...messages], messagesToKeep: [] }
+  }
+
+  const groups = groupMessagesByUserTurn(messages)
+  const k = Math.min(Math.max(0, Math.floor(turnsRaw)), groups.length)
+  if (k <= 0) return { toSummarize: [...messages], messagesToKeep: [] }
+  if (k >= groups.length) {
+    return { toSummarize: [], messagesToKeep: [...messages] }
+  }
+
+  let sumGroups = groups.slice(0, -k)
+  let keepGroups = groups.slice(-k)
+  let toSummarize = sumGroups.flat()
+  let messagesToKeep = keepGroups.flat()
+
+  const maxTok =
+    opts?.keepMaxTokens != null && Number.isFinite(opts.keepMaxTokens)
+      ? Math.max(0, Math.floor(opts.keepMaxTokens))
+      : 0
+  if (maxTok > 0) {
+    while (
+      keepGroups.length > 1 &&
+      estimateTokens(messagesToKeep) > maxTok
+    ) {
+      const moved = keepGroups.shift()!
+      sumGroups = [...sumGroups, moved]
+      toSummarize = sumGroups.flat()
+      messagesToKeep = keepGroups.flat()
+    }
+  }
+
+  // 边界再保险（通常 user 切点已安全）
+  const cut = adjustCutForToolPairing(messages, toSummarize.length)
+  if (cut !== toSummarize.length) {
+    return {
+      toSummarize: messages.slice(0, cut),
+      messagesToKeep: messages.slice(cut),
+    }
+  }
+  return { toSummarize, messagesToKeep }
+}
+
 export type FullCompactInput = {
   messages: ChatMessage[]
   trigger: CompactTrigger
@@ -231,7 +385,16 @@ export type FullCompactInput = {
   hookInstructions?: string
   /** 无 summarizer 时必须失败，禁止 truncate 冒充 */
   summarize: CompactSummarizer
-  /** 后缀保留条数（按 message 条，P0.5 可改为按 turn）；0 = 全量摘要 */
+  /**
+   * C1：按 user 轮次保留尾部。未设且未设 keepRecentMessageCount 时默认
+   * {@link DEFAULT_KEEP_RECENT_USER_TURNS}；显式 `0` = 全量摘要。
+   */
+  keepRecentUserTurns?: number
+  /** keep 段 token 上限（可选） */
+  keepMaxTokens?: number
+  /**
+   * @deprecated 按 message 条数；与 keepRecentUserTurns 同时设时后者优先
+   */
   keepRecentMessageCount?: number
   suppressFollowUpQuestions?: boolean
   /**
@@ -284,8 +447,33 @@ export async function runFullCompact(
       ? DEFAULT_MAX_PTL_RETRIES
       : Math.max(0, input.maxPtlRetries)
 
+  // C1：先拆 keep，summarizer 只吃前缀（降成本；尾部 verbatim）
+  const keepOpts: KeepTailOptions = {
+    keepMaxTokens: input.keepMaxTokens,
+  }
+  if (input.keepRecentUserTurns != null) {
+    keepOpts.keepRecentUserTurns = input.keepRecentUserTurns
+  } else if (input.keepRecentMessageCount != null) {
+    keepOpts.keepRecentMessageCount = input.keepRecentMessageCount
+  } else {
+    // 默认：保留尾部轮次，但至少留 1 个 user turn 给摘要（短会话不 keep）
+    const groups = groupMessagesByUserTurn(input.messages)
+    keepOpts.keepRecentUserTurns =
+      groups.length > 1
+        ? Math.min(DEFAULT_KEEP_RECENT_USER_TURNS, groups.length - 1)
+        : 0
+  }
+  const split = splitMessagesForCompactKeep(input.messages, keepOpts)
+  if (split.toSummarize.length === 0) {
+    return {
+      ok: false,
+      reason: 'Nothing to summarize (all messages kept as tail).',
+      messagesUnchanged: true,
+    }
+  }
+
   // 对照 HC compactConversation：summarizer 命中 PTL 时截断最旧 API 轮次再试
-  let messagesToSummarize = input.messages
+  let messagesToSummarize = split.toSummarize
   let raw: string | undefined
   let lastError: string | undefined
   let ptlAttempts = 0
@@ -324,10 +512,7 @@ export async function runFullCompact(
     return { ok: false, reason: 'Empty compact summary.', messagesUnchanged: true }
   }
 
-  const keepN = Math.max(0, input.keepRecentMessageCount ?? 0)
-  // 后缀保留仍相对调用方原 messages（失败不毁原会话）
-  const messagesToKeep =
-    keepN > 0 ? input.messages.slice(-keepN) : []
+  const messagesToKeep = split.messagesToKeep
 
   const summaryBody = getCompactUserSummaryMessage(raw, {
     suppressFollowUpQuestions: input.suppressFollowUpQuestions ?? input.trigger === 'auto',
@@ -483,6 +668,10 @@ export function isAutoCompactEnvDisabled(
 
 export function shouldAutoCompact(opts: {
   tokenCount: number
+  /**
+   * C2：最近一次（或会话）API input tokens；有则**优先**于 tokenCount 做阈值判断。
+   */
+  usageInputTokens?: number
   contextWindowTokens: number
   enabled: boolean
   consecutiveFailures: number
@@ -498,7 +687,32 @@ export function shouldAutoCompact(opts: {
   if (opts.querySource === 'session_memory') return false
   const maxFail = opts.maxConsecutiveFailures ?? DEFAULT_MAX_AUTOCOMPACT_FAILURES
   if (opts.consecutiveFailures >= maxFail) return false
-  return opts.tokenCount >= getAutoCompactThreshold(opts.contextWindowTokens)
+  const usage =
+    opts.usageInputTokens != null &&
+    Number.isFinite(opts.usageInputTokens) &&
+    opts.usageInputTokens > 0
+      ? Math.floor(opts.usageInputTokens)
+      : undefined
+  const effective = usage ?? opts.tokenCount
+  return effective >= getAutoCompactThreshold(opts.contextWindowTokens)
+}
+
+/** C2：压力展示用 — usage 优先 */
+export function resolveAutoCompactTokenCount(opts: {
+  estimateTokens: number
+  usageInputTokens?: number
+}): { tokenCount: number; source: 'usage' | 'estimate' } {
+  const usage =
+    opts.usageInputTokens != null &&
+    Number.isFinite(opts.usageInputTokens) &&
+    opts.usageInputTokens > 0
+      ? Math.floor(opts.usageInputTokens)
+      : undefined
+  if (usage != null) return { tokenCount: usage, source: 'usage' }
+  return {
+    tokenCount: Math.max(0, Math.floor(opts.estimateTokens)),
+    source: 'estimate',
+  }
 }
 
 // ── PTL（prompt too long）识别 + 截断重试（对照 HC compact.ts / errors.ts）──
