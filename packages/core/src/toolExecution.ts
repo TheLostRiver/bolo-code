@@ -139,6 +139,20 @@ export type PermissionPreviewPayload = {
   paths: string[]
   summaryText: string
   unifiedPreview?: string
+  tool?: string
+  files?: Array<{
+    path: string
+    op?: string
+    added?: number
+    removed?: number
+    structuredPatch?: Array<{
+      oldStart: number
+      oldLines: number
+      newStart: number
+      newLines: number
+      lines: string[]
+    }>
+  }>
 }
 
 export type AskPermissionFn = (req: {
@@ -640,15 +654,9 @@ export async function runToolUse(
     }
 
     if (finalBehavior === 'ask') {
-    // D3：写前 preview（失败静默）
+    // D3：写前 preview（失败静默）；U2 可含 files 供审批面板
     let previewPayload:
-      | {
-          added: number
-          removed: number
-          paths: string[]
-          summaryText: string
-          unifiedPreview?: string
-        }
+      | import('../../tools/src/fileChangePreview.ts').PermissionPreviewPayload
       | undefined
     try {
       const { previewFileToolChange, toPermissionPreviewPayload } = await import(

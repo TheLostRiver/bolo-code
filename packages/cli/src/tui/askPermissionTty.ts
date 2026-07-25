@@ -1,11 +1,11 @@
 /**
- * T5：权限 ask — TTY 下 readline y/N/a；非 TTY 默认 deny
- * 对接 core AskPermissionFn / PermissionRequest 流程。
- * a = allow always for this tool name this session
- * D3：可选 preview.summaryText（写前 diff）
+ * T5/U2：权限 ask — TTY 下 y/N/a；有 files preview 时进可滚审批面板
+ * 对接 core AskPermissionFn / PermissionRequest。
  */
 
 import * as readline from 'node:readline'
+import { buildDiffViewModelFromPreview } from '../../../core/src/diffViewModel.ts'
+import { runDiffApprovePane } from './diffPane.ts'
 
 export type AskPermissionDecision = 'allow' | 'deny' | 'allow_always'
 
@@ -15,6 +15,20 @@ export type PermissionPreview = {
   paths?: string[]
   summaryText?: string
   unifiedPreview?: string
+  tool?: string
+  files?: Array<{
+    path: string
+    op?: string
+    added?: number
+    removed?: number
+    structuredPatch?: Array<{
+      oldStart: number
+      oldLines: number
+      newStart: number
+      newLines: number
+      lines: string[]
+    }>
+  }>
 }
 
 export type AskPermissionRequest = {
@@ -45,7 +59,6 @@ export function formatPermissionPrompt(
   const head = `Allow ${toolName}? [y/a/N] `
   const body = preview?.summaryText?.trim()
   if (!body) return head
-  // 预览在问题前展示；着色 +/− 行（若已是 plain unified）
   const colored = colorizePreviewBody(body)
   return `${colored}\n${head}`
 }
@@ -71,28 +84,35 @@ function colorizePreviewBody(body: string): string {
 }
 
 export type CreateTtyAskPermissionOptions = {
-  /** 默认 process.stdin.isTTY */
   isTty?: boolean
-  /**
-   * 注入问答（测试 / 与 REPL 共用同一 readline）。
-   * 未注入且 TTY 时临时 createInterface。
-   */
   readAnswer?: (prompt: string) => Promise<string>
-  /** 非 TTY 策略：默认 deny */
   nonTtyDecision?: AskPermissionDecision
+  /**
+   * U2：有 files 的 preview 时用可滚面板。
+   * 默认 true；`BOLO_PERM_DIFF_PANEL=0` 或 false 关闭。
+   */
+  useDiffPanel?: boolean
+  writeOut?: (s: string) => void
+  /** 测试注入 raw key */
+  readKey?: () => Promise<string>
+  /** 面板前后（REPL 暂停 readline） */
+  pauseInput?: () => void
+  resumeInput?: () => void
 }
 
 /**
  * 创建 askPermission：
- * - TTY：`Allow <tool>? [y/a/N]`，默认 N；a = 本会话 always-allow 该工具
- * - 可附带 preview.summaryText
- * - 非 TTY：deny（或 nonTtyDecision），不挂起
+ * - TTY + preview.files → 审批 diff 面板（U2）
+ * - 否则：文本 summary + [y/a/N]
+ * - 非 TTY：deny（或 nonTtyDecision）
  */
 export function createTtyAskPermission(
   opts: CreateTtyAskPermissionOptions = {},
 ): AskPermissionFn {
   const isTty = opts.isTty ?? process.stdin.isTTY === true
   const nonTty = opts.nonTtyDecision ?? 'deny'
+  const usePanel =
+    opts.useDiffPanel !== false && process.env.BOLO_PERM_DIFF_PANEL !== '0'
 
   const defaultRead = async (prompt: string): Promise<string> => {
     const rl = readline.createInterface({
@@ -110,9 +130,40 @@ export function createTtyAskPermission(
   }
 
   const readAnswer = opts.readAnswer ?? defaultRead
+  const writeOut = opts.writeOut ?? ((s: string) => process.stdout.write(s))
 
   return async (req) => {
     if (!isTty) return nonTty
+
+    // U2：结构化 files → 可滚审批
+    if (usePanel && req.preview?.files && req.preview.files.length > 0) {
+      try {
+        const vm = buildDiffViewModelFromPreview({
+          tool: req.preview.tool ?? req.toolName,
+          files: req.preview.files,
+          added: req.preview.added,
+          removed: req.preview.removed,
+        })
+        if (vm.files.length) {
+          opts.pauseInput?.()
+          try {
+            const pane = await runDiffApprovePane({
+              model: vm,
+              toolName: req.toolName,
+              writeOut,
+              isTty: true,
+              readKey: opts.readKey,
+            })
+            if (pane.ok) return pane.decision
+          } finally {
+            opts.resumeInput?.()
+          }
+        }
+      } catch {
+        /* fall through to text prompt */
+      }
+    }
+
     const raw = await readAnswer(
       formatPermissionPrompt(req.toolName, req.preview),
     )

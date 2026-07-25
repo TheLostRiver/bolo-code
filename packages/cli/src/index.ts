@@ -59,7 +59,10 @@ export {
 } from './tui/arrowPicker.ts'
 export {
   runDiffPane,
+  runDiffApprovePane,
   type DiffPaneResult,
+  type DiffPaneBrowseResult,
+  type DiffPaneApproveResult,
 } from './tui/diffPane.ts'
 export {
   formatToolEventLine,

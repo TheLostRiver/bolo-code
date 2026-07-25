@@ -75,6 +75,7 @@ export async function runNewSessionCli(
     isTty,
     readAnswer: opts.readPermissionAnswer,
     nonTtyDecision: opts.nonTtyPermission ?? 'deny',
+    writeOut,
   })
 
   const { session } = await createSessionFromWorkspace({

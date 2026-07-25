@@ -457,6 +457,7 @@ export async function resumeFromIdOrPath(
     isTty,
     readAnswer: opts.readPermissionAnswer,
     nonTtyDecision: opts.nonTtyPermission ?? 'deny',
+    writeOut,
   })
 
   const { session, snapshot, path: filePath } = await resumeSession({
@@ -600,12 +601,29 @@ export async function runRepl(
       rl.question(q, resolve)
     })
 
-  // T5：REPL 内权限与输入共用 readline，避免双 Interface 抢 stdin
+  // T5/U2：REPL 内权限与输入共用 readline；有 files 时开审批面板并 pause rl
   const isTty = options?.isTty ?? process.stdin.isTTY === true
+  const pauseRl = () => {
+    try {
+      rl.pause()
+    } catch {
+      /* ignore */
+    }
+  }
+  const resumeRl = () => {
+    try {
+      rl.resume()
+    } catch {
+      /* ignore */
+    }
+  }
   session.askPermission = createTtyAskPermission({
     isTty,
     readAnswer: question,
     nonTtyDecision: 'deny',
+    writeOut,
+    pauseInput: pauseRl,
+    resumeInput: resumeRl,
   })
 
   try {
@@ -619,20 +637,8 @@ export async function runRepl(
           writeOut,
           writeErr,
           isTty,
-          pauseInput: () => {
-            try {
-              rl.pause()
-            } catch {
-              /* ignore */
-            }
-          },
-          resumeInput: () => {
-            try {
-              rl.resume()
-            } catch {
-              /* ignore */
-            }
-          },
+          pauseInput: pauseRl,
+          resumeInput: resumeRl,
         })
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)

@@ -1,6 +1,6 @@
 /**
- * U1：终端 Diff 面板 — 对照 HC DiffDialog / Codex patch 列表（无 ink/ratatui 依赖）
- * raw mode 键位与 arrowPicker 同族。
+ * U1/U2：终端 Diff 面板 — 对照 HC DiffDialog / Codex patch 审批（无 ink/ratatui）
+ * browse：/diff · approve：权限 y/a/N + 可滚 preview
  */
 
 import {
@@ -9,9 +9,16 @@ import {
   type DiffViewModel,
 } from '../../../core/src/diffViewModel.ts'
 
-export type DiffPaneResult =
+export type DiffPaneBrowseResult =
   | { ok: true; reason: 'quit' }
   | { ok: false; reason: 'unsupported' | 'empty'; message: string }
+
+export type DiffPaneApproveResult =
+  | { ok: true; decision: 'allow' | 'deny' | 'allow_always' }
+  | { ok: false; reason: 'unsupported' | 'empty'; message: string }
+
+/** @deprecated 用 DiffPaneBrowseResult */
+export type DiffPaneResult = DiffPaneBrowseResult
 
 function parseRawKey(s: string): string {
   if (s === '\u0003') return 'ctrl-c'
@@ -23,6 +30,9 @@ function parseRawKey(s: string): string {
   if (s === '\u001b[C') return 'right'
   if (s === '\u007f' || s === '\b') return 'backspace'
   if (s === 'q' || s === 'Q') return 'q'
+  if (s === 'y' || s === 'Y') return 'y'
+  if (s === 'a' || s === 'A') return 'a'
+  if (s === 'n' || s === 'N') return 'n'
   if (s === 'k') return 'up'
   if (s === 'j') return 'down'
   if (s === 'h') return 'h'
@@ -32,35 +42,59 @@ function parseRawKey(s: string): string {
   return 'none'
 }
 
-/**
- * 交互 Diff 面板。stdin 需 TTY（或注入 readKey）。
- */
-export async function runDiffPane(opts: {
+function defaultReadKeyFactory(): () => Promise<string> {
+  return async () => {
+    const stdin = process.stdin
+    if (!stdin.isTTY) return 'q'
+    return await new Promise<string>((resolve) => {
+      const wasRaw = stdin.isRaw
+      stdin.setRawMode?.(true)
+      stdin.resume()
+      stdin.once('data', (buf: Buffer) => {
+        stdin.setRawMode?.(wasRaw ?? false)
+        resolve(parseRawKey(buf.toString('utf8')))
+      })
+    })
+  }
+}
+
+async function runDiffPaneLoop(opts: {
   model: DiffViewModel
+  mode: 'browse' | 'approve'
+  toolName?: string
   writeOut?: (s: string) => void
   readKey?: () => Promise<string>
   isTty?: boolean
   rows?: number
   cols?: number
-}): Promise<DiffPaneResult> {
+}): Promise<
+  | { kind: 'browse'; result: DiffPaneBrowseResult }
+  | { kind: 'approve'; result: DiffPaneApproveResult }
+> {
   let vm = opts.model
-  if (!vm.files.length) {
-    return {
-      ok: false,
-      reason: 'empty',
-      message: 'No file changes to show in panel.',
-    }
-  }
-
   const writeOut = opts.writeOut ?? ((s) => process.stdout.write(s))
   const isTty = opts.isTty ?? process.stdin.isTTY === true
 
+  if (!vm.files.length) {
+    const empty = {
+      ok: false as const,
+      reason: 'empty' as const,
+      message: 'No file changes to show in panel.',
+    }
+    return opts.mode === 'approve'
+      ? { kind: 'approve', result: empty }
+      : { kind: 'browse', result: empty }
+  }
+
   if (!isTty && !opts.readKey) {
-    return {
-      ok: false,
-      reason: 'unsupported',
+    const unsupported = {
+      ok: false as const,
+      reason: 'unsupported' as const,
       message: 'diff panel requires TTY',
     }
+    return opts.mode === 'approve'
+      ? { kind: 'approve', result: unsupported }
+      : { kind: 'browse', result: unsupported }
   }
 
   const rows =
@@ -73,41 +107,81 @@ export async function runDiffPane(opts: {
       : 80)
 
   let toast: string | undefined
+  const readKey = opts.readKey ?? defaultReadKeyFactory()
 
   const paint = () => {
     writeOut('\x1b[2J\x1b[H')
     writeOut(
-      formatDiffViewScreen(vm, { rows, cols, toast }) + '\n',
+      formatDiffViewScreen(vm, {
+        rows,
+        cols,
+        toast,
+        mode: opts.mode,
+        toolName: opts.toolName,
+      }) + '\n',
     )
   }
-
-  const readKey =
-    opts.readKey ??
-    (async () => {
-      const stdin = process.stdin
-      if (!stdin.isTTY) return 'q'
-      return await new Promise<string>((resolve) => {
-        const wasRaw = stdin.isRaw
-        stdin.setRawMode?.(true)
-        stdin.resume()
-        stdin.once('data', (buf: Buffer) => {
-          stdin.setRawMode?.(wasRaw ?? false)
-          resolve(parseRawKey(buf.toString('utf8')))
-        })
-      })
-    })
 
   paint()
   for (;;) {
     const key = await readKey()
     if (key === 'none') continue
-    const next = applyDiffViewKey(vm, key)
+    const next = applyDiffViewKey(vm, key, { mode: opts.mode })
     vm = next.vm
     toast = next.toast
-    if (next.done === 'quit') {
+    if (opts.mode === 'approve') {
+      if (
+        next.done === 'allow' ||
+        next.done === 'deny' ||
+        next.done === 'allow_always'
+      ) {
+        writeOut('\x1b[2J\x1b[H')
+        return {
+          kind: 'approve',
+          result: { ok: true, decision: next.done },
+        }
+      }
+    } else if (next.done === 'quit') {
       writeOut('\x1b[2J\x1b[H')
-      return { ok: true, reason: 'quit' }
+      return { kind: 'browse', result: { ok: true, reason: 'quit' } }
     }
     paint()
   }
+}
+
+/**
+ * 浏览面板（/diff）。
+ */
+export async function runDiffPane(opts: {
+  model: DiffViewModel
+  writeOut?: (s: string) => void
+  readKey?: () => Promise<string>
+  isTty?: boolean
+  rows?: number
+  cols?: number
+}): Promise<DiffPaneBrowseResult> {
+  const r = await runDiffPaneLoop({ ...opts, mode: 'browse' })
+  return r.kind === 'browse' ? r.result : { ok: true, reason: 'quit' }
+}
+
+/**
+ * 权限审批面板（U2）：可滚 preview + y/a/N。
+ */
+export async function runDiffApprovePane(opts: {
+  model: DiffViewModel
+  toolName: string
+  writeOut?: (s: string) => void
+  readKey?: () => Promise<string>
+  isTty?: boolean
+  rows?: number
+  cols?: number
+}): Promise<DiffPaneApproveResult> {
+  const r = await runDiffPaneLoop({
+    ...opts,
+    mode: 'approve',
+    toolName: opts.toolName,
+  })
+  return r.kind === 'approve'
+    ? r.result
+    : { ok: false, reason: 'unsupported', message: 'internal' }
 }

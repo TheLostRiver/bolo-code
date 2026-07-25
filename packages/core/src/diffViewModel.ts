@@ -40,7 +40,7 @@ export type DiffViewModel = {
 
 export type DiffViewKeyResult = {
   vm: DiffViewModel
-  done?: 'quit'
+  done?: 'quit' | 'allow' | 'deny' | 'allow_always'
   /** 提示一行（如无 hunk） */
   toast?: string
 }
@@ -198,17 +198,36 @@ export function flattenHunkLines(file: DiffViewFile): string[] {
  * 纯函数键处理（对照 arrowPicker）。
  * list: j/k 选文件 · Enter/l 开详情 · q 退出
  * detail: j/k 滚 hunk · h/Backspace 回列表 · q 退出
+ * approve 模式额外：y allow · a always · n/q/esc deny
  */
 export function applyDiffViewKey(
   vm: DiffViewModel,
   key: string,
+  opts?: { mode?: 'browse' | 'approve' },
 ): DiffViewKeyResult {
   const k = key.toLowerCase()
-  if (k === 'q' || k === 'esc' || k === 'ctrl-c') {
-    return { vm, done: 'quit' }
+  const mode = opts?.mode ?? 'browse'
+
+  if (mode === 'approve') {
+    if (k === 'y') return { vm, done: 'allow' }
+    if (k === 'a') return { vm, done: 'allow_always' }
+    if (k === 'n') return { vm, done: 'deny' }
+    // esc/q/ctrl-c = deny（fail-closed）
+    if (k === 'q' || k === 'esc' || k === 'ctrl-c') {
+      return { vm, done: 'deny' }
+    }
+  } else {
+    if (k === 'q' || k === 'esc' || k === 'ctrl-c') {
+      return { vm, done: 'quit' }
+    }
   }
 
   if (!vm.files.length) {
+    if (mode === 'approve') {
+      if (k === 'y') return { vm, done: 'allow' }
+      if (k === 'a') return { vm, done: 'allow_always' }
+      return { vm, done: 'deny' }
+    }
     if (k === 'enter' || k === 'q') return { vm, done: 'quit' }
     return { vm }
   }
@@ -244,7 +263,6 @@ export function applyDiffViewKey(
       }
     }
     if (k === 'enter' || k === 'l' || k === 'right') {
-      // 已在详情：保持
       return { vm: { ...vm, selectedIndex: idx } }
     }
     return { vm: { ...vm, selectedIndex: idx } }
@@ -274,7 +292,9 @@ export function applyDiffViewKey(
   if (k === 'enter' || k === 'l' || k === 'right' || k === ' ') {
     const file = vm.files[idx]!
     const toast = !file.hunks.length
-      ? `no hunks · try /diff git ${file.path}`
+      ? mode === 'approve'
+        ? `no hunks for ${file.path}`
+        : `no hunks · try /diff git ${file.path}`
       : undefined
     return {
       vm: {
@@ -315,10 +335,17 @@ function opGlyph(op?: string): string {
  */
 export function formatDiffViewScreen(
   vm: DiffViewModel,
-  opts?: { rows?: number; cols?: number; toast?: string },
+  opts?: {
+    rows?: number
+    cols?: number
+    toast?: string
+    mode?: 'browse' | 'approve'
+    toolName?: string
+  },
 ): string {
   const rows = Math.max(8, opts?.rows ?? 24)
   const cols = Math.max(40, opts?.cols ?? 80)
+  const mode = opts?.mode ?? 'browse'
   const lines: string[] = []
 
   const head = `${vm.title}  ${vm.totals.files} file(s)  (+${vm.totals.added}/-${vm.totals.removed})`
@@ -328,17 +355,32 @@ export function formatDiffViewScreen(
   if (!vm.files.length) {
     lines.push('(no file changes)')
     lines.push('')
-    lines.push('q quit')
+    if (mode === 'approve') {
+      lines.push(
+        `Allow ${opts?.toolName ?? 'tool'}?  y allow · a always · n/q deny`,
+      )
+    } else {
+      lines.push('q quit')
+    }
     return lines.join('\n')
   }
 
   if (!vm.detailOpen) {
-    lines.push('↑↓/jk select · Enter open · q quit')
+    if (mode === 'approve') {
+      lines.push(
+        `↑↓/jk · Enter detail · y allow · a always · n/q deny`,
+      )
+    } else {
+      lines.push('↑↓/jk select · Enter open · q quit')
+    }
     lines.push('')
-    const listBudget = Math.max(4, rows - 6)
+    const listBudget = Math.max(4, rows - 7)
     const start = Math.max(
       0,
-      Math.min(vm.selectedIndex - Math.floor(listBudget / 2), vm.files.length - listBudget),
+      Math.min(
+        vm.selectedIndex - Math.floor(listBudget / 2),
+        vm.files.length - listBudget,
+      ),
     )
     const slice = vm.files.slice(start, start + listBudget)
     slice.forEach((f, i) => {
@@ -350,13 +392,20 @@ export function formatDiffViewScreen(
     })
   } else {
     const file = selectedFile(vm)!
+    const backHint =
+      mode === 'approve'
+        ? 'h back · y/a/n decide'
+        : 'h back · q quit'
     lines.push(
-      `detail: ${opGlyph(file.op)} ${file.path}  +${file.added}/-${file.removed}  (h back · q quit)`,
+      `detail: ${opGlyph(file.op)} ${file.path}  +${file.added}/-${file.removed}  (${backHint})`,
     )
     lines.push('')
     const body = flattenHunkLines(file)
-    const budget = Math.max(4, rows - 6)
-    const scroll = Math.max(0, Math.min(vm.detailScroll, Math.max(0, body.length - 1)))
+    const budget = Math.max(4, rows - 7)
+    const scroll = Math.max(
+      0,
+      Math.min(vm.detailScroll, Math.max(0, body.length - 1)),
+    )
     const view = body.slice(scroll, scroll + budget)
     for (const L of view) {
       lines.push(L.length > cols ? L.slice(0, cols - 1) + '…' : L)
@@ -369,6 +418,12 @@ export function formatDiffViewScreen(
   if (opts?.toast) {
     lines.push('')
     lines.push(`! ${opts.toast}`)
+  }
+  if (mode === 'approve' && !vm.detailOpen) {
+    lines.push('')
+    lines.push(
+      `Allow ${opts?.toolName ?? 'tool'}? [y/a/N]  (browse with jk first)`,
+    )
   }
   return lines.join('\n')
 }

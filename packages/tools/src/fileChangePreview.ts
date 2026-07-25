@@ -275,13 +275,28 @@ export async function previewFileToolChange(
   return null
 }
 
-/** 权限事件 / askPermission 用的瘦形态 */
+/** 权限事件 / askPermission 用的瘦形态（U2 可带 files 供面板） */
 export type PermissionPreviewPayload = {
   added: number
   removed: number
   paths: string[]
   summaryText: string
   unifiedPreview?: string
+  tool?: string
+  /** 供 DiffViewModel / 权限面板；可省略 structuredPatch 以省体积 */
+  files?: Array<{
+    path: string
+    op?: string
+    added?: number
+    removed?: number
+    structuredPatch?: Array<{
+      oldStart: number
+      oldLines: number
+      newStart: number
+      newLines: number
+      lines: string[]
+    }>
+  }>
 }
 
 export function toPermissionPreviewPayload(
@@ -293,6 +308,20 @@ export function toPermissionPreviewPayload(
     removed: p.removed,
     paths: p.paths,
     summaryText: p.summaryText,
+    tool: p.tool,
     ...(p.unifiedPreview ? { unifiedPreview: p.unifiedPreview } : {}),
+    ...(p.files?.length
+      ? {
+          files: p.files.map((f) => ({
+            path: f.path,
+            ...(f.op ? { op: f.op } : {}),
+            added: f.added,
+            removed: f.removed,
+            ...(f.structuredPatch?.length
+              ? { structuredPatch: f.structuredPatch }
+              : {}),
+          })),
+        }
+      : {}),
   }
 }
