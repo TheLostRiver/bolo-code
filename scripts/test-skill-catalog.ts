@@ -95,7 +95,7 @@ const fmUnknown = parseSkillFrontmatterFields({
 })
 assert(fmUnknown.description === 'ok', 'known field')
 assert(
-  fmUnknown.canonical.weird_future_key === undefined,
+  !('weird_future_key' in fmUnknown.canonical),
   'unknown not in canonical',
 )
 assert(fmUnknown.raw.weird_future_key === 'ignore-me', 'unknown kept in raw')

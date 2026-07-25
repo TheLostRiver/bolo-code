@@ -14,7 +14,6 @@ import {
   diffHunksFromFullReplace,
   formatUnifiedDiff,
   previewFileToolChange,
-  colorizeUnifiedText,
   formatFileChangeEndLine,
   createDiffSummary,
   formatGitStatusSlash,

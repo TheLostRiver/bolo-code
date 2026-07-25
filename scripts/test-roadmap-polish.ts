@@ -20,7 +20,7 @@ import {
 } from '../packages/mcp/src/oauth.ts'
 import { createBashTool } from '../packages/tools/src/index.ts'
 
-function assert(c, m) {
+function assert(c: unknown, m: string): asserts c {
   if (!c) {
     console.error('FAIL', m)
     process.exit(1)

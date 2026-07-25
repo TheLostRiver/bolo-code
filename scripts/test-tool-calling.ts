@@ -6,7 +6,6 @@ import {
   createBuiltinTools,
   findToolByName,
   validateAgainstJsonSchema,
-  formatToolUseError,
 } from '../packages/tools/src/index.ts'
 import { partitionToolCalls } from '../packages/core/src/toolOrchestration.ts'
 import { runToolUse } from '../packages/core/src/toolExecution.ts'

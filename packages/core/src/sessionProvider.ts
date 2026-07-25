@@ -285,16 +285,7 @@ export function switchSessionModel(
   }
 }
 
-export function listSessionProviders(session: SwitchableProviderSession): Array<{
-  id: string
-  kind?: string
-  model?: string
-  label?: string
-  baseUrl?: string
-  hasKeyConfig: boolean
-  isDefault: boolean
-  isActive: boolean
-}> {
+export function listSessionProviders(session: SwitchableProviderSession) {
   const reg = session.providerRegistry
   if (!reg) return []
   return listProviderProfileSummaries(reg, session.providerId).map((p) => ({

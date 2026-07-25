@@ -14,7 +14,6 @@ import path from 'node:path'
 import {
   addAlwaysAllowToolName,
   decidePermission,
-  createAutoModeState,
   recordAutoClassifySuccess,
   recordAutoClassifyFailure,
   formatAutoClassifyAuditNote,
@@ -327,7 +326,7 @@ function toolResultMessage(
   toolUseId: string,
   name: string,
   content: string,
-  isError?: boolean,
+  _isError?: boolean,
 ): ChatMessage {
   return {
     role: 'tool',

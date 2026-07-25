@@ -113,7 +113,7 @@ export class McpStdioClient implements McpClient {
   readonly serverName: string
   readonly transport = 'stdio' as const
   private proc: ChildProcessWithoutNullStreams | null = null
-  private buf = Buffer.alloc(0)
+  private buf: Buffer<ArrayBufferLike> = Buffer.alloc(0)
   private nextId = 1
   private pending = new Map<
     string,

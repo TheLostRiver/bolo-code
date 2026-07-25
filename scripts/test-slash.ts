@@ -7,7 +7,6 @@ import {
   parseSlashLine,
   submitUserInput,
   dispatchSlashCommand,
-  type BoloSession,
 } from '../packages/core/src/index.ts'
 import {
   parseArgs,
@@ -177,8 +176,8 @@ async function main() {
       status: 'connected',
       endpointSummary: 'echo [stdio] node server.js',
       tools: [{ name: 'ping', description: 'Ping tool' }],
-      capabilities: { tools: true },
-    },
+      capabilities: { tools: true, resources: false, prompts: false },
+    } as NonNullable<typeof session.mcpConnections>[number],
   ]
   session.mcpDiagnostics = {
     failures: [
@@ -221,7 +220,8 @@ async function main() {
       transport: 'stdio',
       status: 'connected',
       tools: [{ name: 'ping' }],
-    },
+      capabilities: { tools: true, resources: false, prompts: false },
+    } as NonNullable<typeof session.mcpConnections>[number],
   ]
   const doctor2 = await submitUserInput(session, '/doctor')
   assert(
@@ -243,6 +243,7 @@ async function main() {
   session.plugins = [
     {
       manifest: { id: 'demo-plugin', name: 'Demo', version: '0.1.0' },
+      root: process.cwd(),
       scope: 'project',
     },
   ]

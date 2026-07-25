@@ -17,7 +17,6 @@ import {
   runToolUse,
   type AskPermissionFn,
   type RunToolUseContext,
-  type ToolExecutionEvent,
   type ToolUseBlock,
 } from './toolExecution.ts'
 
@@ -68,7 +67,7 @@ export type RunToolsParams = {
   agentPolicy?: import('./subagent.ts').AgentPolicy
   spawnDepth?: number
   signal?: AbortSignal
-  onEvent?: (e: ToolExecutionEvent) => void
+  onEvent?: RunToolUseContext['onEvent']
 }
 
 export type RunToolsResult = {

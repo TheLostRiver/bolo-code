@@ -131,8 +131,11 @@ export function filterChoosableByModelCaps(
     if (r.effortAllow?.length) {
       const a = new Set(r.effortAllow.map((x) => x.toLowerCase()))
       a.add('auto')
-      allow = allow
-        ? new Set([...allow].filter((x) => a.has(x)))
+      const previousAllow: Set<string> | null = allow
+      allow = previousAllow
+        ? new Set<string>(
+            [...previousAllow].filter((x: string) => a.has(x)),
+          )
         : a
     }
     if (r.maxAllowed === false) maxBlocked = true

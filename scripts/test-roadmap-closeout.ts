@@ -18,7 +18,7 @@ import {
   createBuiltinTools,
 } from '../packages/tools/src/index.ts'
 
-function assert(c, m) {
+function assert(c: unknown, m: string): asserts c {
   if (!c) {
     console.error('FAIL', m)
     process.exit(1)
@@ -30,12 +30,16 @@ const names = createBuiltinTools().map((t) => t.name)
 assert(names.includes('WebFetch'), 'WebFetch registered')
 
 // local HTTP server for fetch
-const server = createServer((req, res) => {
+const server = createServer((_req, res) => {
   res.writeHead(200, { 'content-type': 'text/plain' })
   res.end('hello-bolo-fetch')
 })
-await new Promise((r) => server.listen(0, '127.0.0.1', r))
-const port = server.address().port
+await new Promise<void>((resolve) =>
+  server.listen(0, '127.0.0.1', resolve),
+)
+const address = server.address()
+assert(address && typeof address === 'object', 'server address')
+const port = address.port
 
 const fetchTool = createWebFetchTool()
 // 127.0.0.1 应被 SSRF 拦

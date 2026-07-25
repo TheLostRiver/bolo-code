@@ -147,7 +147,7 @@ export function buildTool(def: ToolDef): BoloTool {
       def.interruptBehavior ?? TOOL_DEFAULTS.interruptBehavior,
     checkPermissions:
       def.checkPermissions ??
-      (async (input) => ({ behavior: 'allow' as const })),
+      (async (_input) => ({ behavior: 'allow' as const })),
     ...def,
   } as BoloTool
 }

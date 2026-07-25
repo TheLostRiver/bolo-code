@@ -80,6 +80,9 @@ async function main() {
     PermissionMode,
     { must: string[] }
   > = {
+    auto: {
+      must: ['Permission mode: auto', 'local security classifier'],
+    },
     default: {
       must: ['Permission mode: default', 'writes and shell typically ask'],
     },

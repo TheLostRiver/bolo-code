@@ -78,7 +78,7 @@ export function createCallModelFromProvider(
   }) {
     yield* provider.completeStream(messages, {
       signal,
-      tools,
+      tools: tools ? [...tools] : undefined,
       disableTools,
       model,
       effort,

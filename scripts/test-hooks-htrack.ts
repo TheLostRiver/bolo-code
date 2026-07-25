@@ -151,9 +151,9 @@ fs.writeFileSync(out, Buffer.concat(chunks));
   assert(session.phase === 'ready', 'runSessionEndHooks keeps phase')
 
   await endSession(session, { reason: 'prompt_input_exit' })
-  assert(session.phase === 'ended', 'endSession → ended')
+  assert((session.phase as string) === 'ended', 'endSession → ended')
   await endSession(session, { reason: 'other' })
-  assert(session.phase === 'ended', 'endSession idempotent')
+  assert((session.phase as string) === 'ended', 'endSession idempotent')
 
   // --- Stop exit 2 continuation ---
   const countFile = path.join(tmp, 'stop-count')
@@ -351,7 +351,6 @@ process.exit(0);
     onEvent: () => {},
   })
   // mock 第一轮会调 Bash；Pre 应改写 command
-  const { submitPrompt } = await import('../packages/core/src/index.ts')
   // 用 queryLoop 更直接
   const msgs4: ChatMessage[] = [{ role: 'user', content: 'run' }]
   await queryLoop({

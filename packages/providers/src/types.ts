@@ -4,8 +4,10 @@ import type { ToolSpec } from '../../tools/src/index.ts'
 export type ProviderId =
   | 'openai-compatible'
   | 'openai-responses'
+  | 'openai-responses-ws'
   | 'anthropic'
   | 'mock'
+  | (string & {})
 
 /** 可选 token 用量（本地累计；无遥测） */
 export type ProviderUsage = {

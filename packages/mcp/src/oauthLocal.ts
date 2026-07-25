@@ -126,7 +126,6 @@ export async function runLocalOAuthCallbackFlow(
 
   // 测试捷径：直接 exchange
   if (opts.exchangeCode) {
-    const redirectUri = `http://127.0.0.1:${port || 8765}/callback`
     const raw = await opts.exchangeCode('test-code')
     const tokenFile = await saveOAuthTokenFile(opts.tokenFile, raw)
     const access = String(raw.access_token ?? raw.accessToken ?? '')

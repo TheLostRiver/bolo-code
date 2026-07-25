@@ -831,4 +831,4 @@ export function pluginUpdateHint(
   return `update available: ${installed.version} → ${catalogVersion}`
 }
 
-export type { LoadedPlugin }
+export type { LoadedPlugin } from './index.ts'

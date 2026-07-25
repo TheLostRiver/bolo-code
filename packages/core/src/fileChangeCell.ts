@@ -71,7 +71,7 @@ export function formatFileChangeHistoryCell(
     color,
   })
 
-  const files = input.files?.length
+  const files: FileChangeCellFile[] = input.files?.length
     ? input.files
     : input.path
       ? [

@@ -94,7 +94,7 @@ export function formatToolEventLine(e: CliSessionEvent): string | null {
         const hasMore =
           e.summaryLine.includes('\n') ||
           e.ansiUnified ||
-          (e.files && e.files.length > 0)
+          (Array.isArray(e.files) && e.files.length > 0)
         if (hasMore) {
           return `${first}\n${DIM}  ▸ folded · /diff to browse${RESET}`
         }

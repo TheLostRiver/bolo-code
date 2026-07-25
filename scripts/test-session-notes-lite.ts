@@ -100,6 +100,9 @@ async function main() {
       { role: 'user', content: 'after compact only' } as ChatMessage,
     ],
     systemPromptSections: [] as string[],
+    autoCompactEnabled: true,
+    contextWindowTokens: 128_000,
+    maxPtlRetries: 3,
   }
   await rewriteTranscriptFromMessages(file, session, {
     compactBoundarySummary: 'sum',

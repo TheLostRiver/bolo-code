@@ -27,7 +27,6 @@ import {
   parseMarkdownFrontmatter,
   parseSkillBoolean,
   normalizeSkillId,
-  type ParsedSkillFrontmatter,
 } from './frontmatter.ts'
 
 export type {

@@ -106,6 +106,10 @@ export type SubagentLifecycleInput = HookBaseInput & {
   agent_id: string
   agent_type: string
   agent_transcript_path?: string
+  description?: string
+  total_duration_ms?: number
+  total_tool_use_count?: number
+  total_tokens?: number
 }
 
 export type AnyHookInput =

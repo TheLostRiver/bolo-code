@@ -34,7 +34,6 @@ import {
 import {
   buildTool,
   type BoloTool,
-  type ToolContext,
   type ToolResult,
 } from './types.ts'
 

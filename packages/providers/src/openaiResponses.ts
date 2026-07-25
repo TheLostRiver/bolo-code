@@ -617,7 +617,10 @@ export function createOpenAIResponsesProvider(
 
           const r = processResponsesSseJson(json, state)
           for (const ev of r.events) yield ev
-          if (r.usage) streamUsage = mergeProviderUsage(streamUsage, r.usage)
+          if (r.usage) {
+            streamUsage =
+              mergeProviderUsage(streamUsage, r.usage) ?? undefined
+          }
           if (r.failed) {
             yield { type: 'error', message: r.failed }
             finished = true

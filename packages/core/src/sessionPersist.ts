@@ -28,9 +28,7 @@ import {
 } from '../../permissions/src/index.ts'
 import {
   dualWriteSessionTranscript,
-  loadTranscriptFile,
   loadTranscriptMessages,
-  messagesFromTranscriptEntries,
   resolveTranscriptPathFromJson,
   rewriteTranscriptFromMessages,
   setTranscriptWriteState,
@@ -42,7 +40,6 @@ import {
   getTranscriptWriteState,
   normalizeSessionTitle,
   scanTranscriptLite,
-  fileDiffsFromTranscriptEntries,
 } from './sessionTranscript.ts'
 import type { SessionUsage } from './sessionUsage.ts'
 import { cloneSessionUsage } from './sessionUsage.ts'

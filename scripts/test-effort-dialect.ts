@@ -18,8 +18,6 @@ import {
   activeEffortPickerIndex,
   isAcceptableEffortInput,
   DIALECT_DEEPSEEK_CHAT,
-  DIALECT_OPENAI_RESPONSES,
-  DIALECT_MAX_TOKENS,
   buildOpenAICompatibleRequestBody,
   buildResponsesRequest,
   buildAnthropicRequestBody,
@@ -119,7 +117,18 @@ assert(
       effortDialect: 'deepseek-chat',
       baseUrl: 'https://api.deepseek.com',
     },
-    { stream: true, effort: 'max', tools: [{ name: 'Bash', description: 'x', inputSchema: {} }], isAgent: true },
+    {
+      stream: true,
+      effort: 'max',
+      tools: [
+        {
+          name: 'Bash',
+          description: 'x',
+          requiresPermission: true,
+        },
+      ],
+      isAgent: true,
+    },
   )
   assert(body.reasoning_effort === 'max', 'compatible body reasoning_effort max')
   assert(body.max_tokens === 4096, 'compatible keeps max_tokens')

@@ -268,8 +268,6 @@ async function main() {
         content: '',
         tool_calls: [
           {
-            id: '1',
-            name: 'Read',
             arguments: JSON.stringify({ path: 'src/b.ts' }),
           },
         ],

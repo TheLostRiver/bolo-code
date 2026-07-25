@@ -136,7 +136,11 @@ async function main() {
     assert(setTip.ok && session.ultrathinkMode === 'tip', 'slash tip')
 
     const setTurn = await dispatchSlashCommand(session, 'ultrathink', 'turn')
-    assert(setTurn.ok && session.ultrathinkMode === 'turn', 'slash turn')
+    assert(
+      setTurn.ok &&
+        (session.ultrathinkMode as string | undefined) === 'turn',
+      'slash turn',
+    )
 
     const setOff = await dispatchSlashCommand(session, 'ultrathink', 'off')
     assert(setOff.ok && session.ultrathinkMode === undefined, 'slash off clears')

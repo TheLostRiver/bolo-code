@@ -18,7 +18,6 @@ import {
   productionDeps,
   switchSessionProvider,
   switchSessionModel,
-  attachProviderRegistry,
   dispatchSlashCommand,
   listSessionProviders,
   buildProviderPickerItems,

@@ -20,7 +20,6 @@ import {
   parsePluginManifest,
   formatPluginManifestIssues,
   BOLO_PLUGIN_MANIFEST_FILE,
-  isValidPluginId,
 } from './manifest.ts'
 
 export {

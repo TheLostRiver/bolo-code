@@ -213,14 +213,15 @@ async function main() {
     session.effortLevel = 'low'
     const sw = switchSessionProvider(session, 'b')
     assert(sw.ok, 'switch b')
+    const switchMessage = sw.ok ? sw.message : sw.reason
     // deepseek-chat strict: low not choosable → auto
     assert(
       session.effortLevel === undefined,
       `low clamped on ds dialect, got ${session.effortLevel}`,
     )
-    assert(sw.message.includes('auto') || true, 'switch message ok')
+    assert(switchMessage.includes('auto') || true, 'switch message ok')
     assert(
-      /dialect=/i.test(sw.message) || /choosable/i.test(sw.message),
+      /dialect=/i.test(switchMessage) || /choosable/i.test(switchMessage),
       'CX4 tip on switch',
     )
   }

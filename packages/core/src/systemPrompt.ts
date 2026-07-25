@@ -403,6 +403,7 @@ export function getCacheStablePrefix(
   }
   if (
     !Array.isArray(sectionsOrPartition) &&
+    'cacheStableSections' in sectionsOrPartition &&
     sectionsOrPartition.cacheStableSections
   ) {
     return joinSections(sectionsOrPartition.cacheStableSections)

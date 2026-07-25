@@ -254,7 +254,8 @@ export function createProviderFromProfile(
     model,
     timeoutMs: profile.timeoutMs,
     maxTokens: profile.maxTokens,
-    effortDialect: profile.effortDialect,
+    effortDialect:
+      profile.effortDialect as CreateProviderOptions['effortDialect'],
   })
 
   return {
