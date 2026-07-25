@@ -21,13 +21,13 @@
 | **CLI TUI（壳）** | **~70–80%** | 文本框布局/picker/主题；**非**真 React Ink |
 | **Electron GUI** | **~55–65%** | 壳 + 流式 + 权限 + 设置 |
 | **Hooks · 日用契约** | **~96–98%** | **H0–H5 已落地**（SessionEnd · exit 语义 · updatedInput · `/hooks recent`）；trust/UI 菜单后置 |
-| **Compact · 日用管道** | **~88–92%** | **C1 keep 轮次 · C2 usage 阈值已落地**；C3 mid-turn · C4 再注入 → 目标 **~92–95%** |
+| **Compact · 日用管道** | **~92–95%** | **C0–C5 已落地**（keep 轮次 · usage 阈值 · mid-turn · 再注入 · /context 诊断） |
 | **产品整体（相对 HC）** | **~70–85%** | 日用高；UI 全家桶另计 |
 
 **主线已闭环：** headless 日用 → FULL → M4 → sandbox/OAuth/settings → **Diff D0–D7** · **U0–U4** · **Hooks H0–H5**。
 
-**开放轨（下一刀 · 当前着重）：**  
-**C 轨 · Compact 日用打磨**（§8）· U5 可选真·Ink/IDE · Hooks trust/managed（后置）。
+**开放轨（下一刀）：**  
+U5 可选真·Ink/IDE · Hooks trust/managed · Compact partial/remote（后置，见 §8.9）。
 
 ---
 
@@ -157,7 +157,7 @@ apps/desktop       消费同一 DiffViewModel                 （U3）
 | Diff 日用契约 D0–D7 | ✅ |
 | Diff 交互 UI U0–U4 | ✅（U5 可选） |
 | Hooks 日用 11 事件 + exit 语义 | ✅ **H0–H5** |
-| Compact 日用管道打磨 | 📋 **C 轨**（§8 · 当前着重） |
+| Compact 日用管道打磨 | ✅ **C0–C5** |
 | 无遥测 | ✅ |
 
 ---
@@ -174,11 +174,11 @@ apps/desktop       消费同一 DiffViewModel                 （U3）
 | **M-Diff-A（D0–D7）** | ✅ | 日用文件 diff 契约 |
 | **M-Diff-B（U0–U4）** | ✅ U0–U4 | 交互 diff UI 主路径收口；U5 可选 |
 | **M-Hooks（H0–H5）** | ✅ H0–H5 | SessionEnd + exit + updatedInput + `/hooks recent` |
-| **M-Compact（C0–C5）** | ✅ C0–C2 · C3–C5 📋 | keep 轮次 · usage 阈值已落地；mid-turn/再注入见 §8 |
+| **M-Compact（C0–C5）** | ✅ C0–C5 | keep · usage · mid-turn · reinject · /context；见 §8 |
 | 官方市场 / 遥测 | 🚫 | 永不 |
 
 **一句话：**  
-主路径、Diff、Hooks 日用已收口。**下一刀：Compact C 轨**（日用 82–88% → **~92–95%**；不追 HC/Codex 全家桶）。
+主路径、Diff、Hooks、**Compact C 轨**日用已收口（compact ~**92–95%**）。不追 HC/Codex 全家桶。
 
 ---
 
@@ -351,11 +351,12 @@ PostToolUse exit 2
 | jsonl `compact_boundary` + resume R1 | ✅ |
 | **messagesToKeep 按 user 轮次 / token** | ✅ **C1** — `splitMessagesForCompactKeep`；默认智能 keep |
 | **auto 阈值接 session usage（有则用）** | ✅ **C2** — `usageInputTokens` / `getUsageInputTokens` |
-| **工具环中途接近阈值再 full 一次** | ❌ **C3** |
-| **post-compact 最小再注入**（技能 catalog / 关键提示） | 弱 / ❌ **C4** |
+| **工具环中途接近阈值再 full 一次** | ✅ **C3** — `tryMidTurnCompact` · 每 outer turn ≤1 |
+| **post-compact 最小再注入**（技能 catalog） | ✅ **C4** — `postCompactReinjection`（可关） |
+| **`/context` 来源与策略** | ✅ **C5** — pressure source · keep · last compact |
 | partial / remote / session memory / 真 tokenizer | 后置 |
 
-**粗估：** 日用 **~88–92%**（C1+C2 已落地）→ C3–C5 目标 **~92–95%**。
+**粗估：** 日用 **~92–95%**（C0–C5）；vs HC 全家桶 / Codex 窗口机另计。
 
 ### 8.2 目标与验收（C 轨完成定义）
 
@@ -385,9 +386,9 @@ apps/desktop         可选展示 compact 状态（不大改壳）
 | **C0** | 规格对齐：本 § + COMPACTION 日用缺口表；验收清单 | P0 | ✅ |
 | **C1** | **messagesToKeep 按 user 轮次**（可选 token 上限）；manual/auto 默认可配 | P0 | ✅ |
 | **C2** | **usage 感知阈值**：`shouldAutoCompact` 可读 last usage；无 usage 则启发 | P0 | ✅ |
-| **C3** | **mid-turn 一次**：tool drain 后若超阈值且未本 turn compact → 试 auto full（熔断共用） | P1 | 📋 |
-| **C4** | **post-compact 再注入最小**：catalog 短段 / rules 提示；可关 | P1 | 📋 |
-| **C5** | `/context`·`/compact` 诊断加深 + 回归测 + 水位 ~92–95% | P2 | 📋 |
+| **C3** | **mid-turn 一次**：tool drain 后若超阈值且未本 turn compact → 试 auto full | P1 | ✅ |
+| **C4** | **post-compact 再注入最小**：catalog 短段；可关 | P1 | ✅ |
+| **C5** | `/context`·`/compact` 诊断加深 + 回归测 + 水位 ~92–95% | P2 | ✅ |
 | 后置 | partial · remote · session memory · 真 tokenizer · cache_edits API | — | 🚫 非本轨 |
 
 **顺序硬约束：** **C0 文档 → C1 keep → C2 usage → C3 mid-turn → C4 再注入 → C5 UX/测**。  

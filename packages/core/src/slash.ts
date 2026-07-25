@@ -32,6 +32,7 @@ import {
   estimateSystemSectionsTokens,
   estimateTokens,
   getContextPressure,
+  resolveAutoCompactTokenCount,
   type CompactSummarizer,
 } from '../../compact/src/index.ts'
 import {
@@ -95,6 +96,13 @@ export type SlashSession = {
   autoCompactEnabled?: boolean
   /** 上下文窗口（token 粗估基准）；/context 压力 */
   contextWindowTokens?: number
+  /** C5：最近 compact 摘要；/context */
+  lastCompact?: {
+    at: string
+    trigger: 'manual' | 'auto'
+    summaryChars: number
+    messagesAfter: number
+  }
   /** PTL 重试上限；/doctor */
   maxPtlRetries?: number
   /** 已连接 MCP；/doctor · /mcp */
@@ -679,8 +687,18 @@ function cmdContext(session: SlashSession, _args: string): SlashDispatchResult {
     session.contextWindowTokens > 0
       ? session.contextWindowTokens
       : 128_000
+  // C5：pressure 计数优先 usage
+  const usageIn =
+    session.usage?.lastCall?.inputTokens ??
+    (session.usage && session.usage.inputTokens > 0
+      ? session.usage.inputTokens
+      : undefined)
+  const resolved = resolveAutoCompactTokenCount({
+    estimateTokens: est.totalTokens,
+    usageInputTokens: usageIn,
+  })
   const pressure = getContextPressure({
-    tokenCount: est.totalTokens,
+    tokenCount: resolved.tokenCount,
     contextWindowTokens: window,
   })
   const autoOn = session.autoCompactEnabled === true
@@ -707,15 +725,23 @@ function cmdContext(session: SlashSession, _args: string): SlashDispatchResult {
     `chars (approx):  ${chars}`,
     `tokens (est):    ~${est.totalTokens}  (messages ~${est.messagesTokens} + system ~${est.systemTokens})`,
     `  heuristic:     text≈chars/4; dense JSON≈chars/2; tool_calls counted (local only, not billing)`,
+    `pressure source: ${resolved.source}${usageIn != null ? `  (usage input ~${usageIn})` : ''}`,
     `window:          ${window}  (effective ~${pressure.effectiveWindow}; auto threshold ~${pressure.autoThreshold})`,
     `pressure:        ${pressure.level}  (~${pressure.percentOfWindow}% of window; ~${pressure.percentOfThreshold}% of auto threshold)`,
-    `autoCompact:     ${autoOn ? 'on' : 'off'}${autoOn && pressure.aboveAutoThreshold && !envDisabled ? '  (would trigger on next prepare)' : ''}${envDisabled ? '  (env-disabled)' : ''}`,
+    `autoCompact:     ${autoOn ? 'on' : 'off'}${autoOn && pressure.aboveAutoThreshold && !envDisabled ? '  (would trigger on next prepare/mid-turn)' : ''}${envDisabled ? '  (env-disabled)' : ''}`,
+    `keep policy:     user-turns (default smart; keepRecentUserTurns / keepRecentMessageCount)`,
     `permissionMode:  ${session.permissionMode}`,
     `model:           ${session.model ?? '(unset)'}`,
     `effort:          ${session.effortLevel ?? 'auto'}`,
     `thinking:        ${session.showThinking === false ? 'off' : 'on'}  (/thinking; persist=${session.persistReasoning === true ? 'on' : 'off'})`,
     `system sections: ${sections.length}`,
   ]
+  if (session.lastCompact) {
+    const lc = session.lastCompact
+    lines.push(
+      `last compact:    ${lc.trigger} @ ${lc.at}  summaryChars=${lc.summaryChars}  messagesAfter=${lc.messagesAfter}`,
+    )
+  }
   if (sections.length) {
     for (let i = 0; i < sections.length; i++) {
       const s = sections[i] ?? ''
@@ -749,7 +775,7 @@ function cmdContext(session: SlashSession, _args: string): SlashDispatchResult {
     lines.push(pcLine.replace(/^\s*promptCache:\s*/, 'promptCache:     '))
   }
   lines.push(
-    'prepare order:   snip → microcompact → auto full compact → callModel (PTL truncate is fallback)',
+    'prepare order:   snip → microcompact → auto full compact → callModel; mid-turn after tools (C3); PTL truncate fallback',
     'toggle:          /autocompact [on|off]',
     formatUsageOneLiner(session.usage),
   )

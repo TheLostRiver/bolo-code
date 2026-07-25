@@ -223,7 +223,7 @@ export type CompactSummarizer = (req: {
 }) => Promise<{ text: string }>
 
 /** C1：默认保留最近 user 轮次数（对照 HC 尾部 verbatim；可 0=全量摘要） */
-export const DEFAULT_KEEP_RECENT_USER_TURNS = 2
+export const DEFAULT_KEEP_RECENT_USER_TURNS = 1
 
 export type KeepTailOptions = {
   /**

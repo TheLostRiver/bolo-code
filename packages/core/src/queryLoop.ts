@@ -73,6 +73,10 @@ export type QueryLoopEvent =
       droppedMessageCount: number
     }
   | {
+      type: 'mid_turn_compact'
+      ok: boolean
+    }
+  | {
       type: 'model_retry'
       attempt: number
       maxRetries: number
@@ -113,6 +117,11 @@ export type QueryLoopParams = {
       rec: import('./fileDiffLog.ts').FileChangeRecord,
     ) => void | Promise<void>
     hookDiagLog?: import('./hookDiag.ts').HookDiagLog
+    /**
+     * C3：mid-turn compact 钩子（由 createSession/submit 挂上）。
+     * 成功压消息后返回 true。
+     */
+    tryMidTurnCompact?: () => Promise<boolean>
   }
   /** Y3.6 auto 分类审计 → system_note */
   onAutoClassifyAudit?: (note: {
@@ -171,6 +180,16 @@ export type QueryLoopParams = {
    * 默认 3；0 = 不续跑（仍 emit hook）。
    */
   maxStopContinuations?: number
+  /**
+   * C3：tool drain 后 mid-turn auto compact（每 outer turn 最多一次）。
+   * 默认 true；false 关闭。需 sessionRef 上能跑 compact 或提供 tryMidTurnCompact。
+   */
+  midTurnAutoCompact?: boolean
+  /**
+   * C3：可选注入 mid-turn compact；返回 true 表示已压消息。
+   * 未传时若 sessionRef 带 tryMidTurnCompact 则调用。
+   */
+  tryMidTurnCompact?: () => Promise<boolean>
   onEvent?: (e: QueryLoopEvent) => void
   signal?: AbortSignal
 }
@@ -231,6 +250,9 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
     params.maxStopContinuations === undefined
       ? 3
       : Math.max(0, Math.floor(params.maxStopContinuations))
+  /** C3：本 outer turn 是否已 mid-turn compact */
+  let midTurnCompacted = false
+  const midTurnEnabled = params.midTurnAutoCompact !== false
 
   while (true) {
     if (params.signal?.aborted) {
@@ -240,6 +262,7 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
     }
 
     turnCount += 1
+    midTurnCompacted = false
     if (turnCount > maxTurns) {
       const terminal: Terminal = {
         reason: 'max_turns',
@@ -551,6 +574,23 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
 
     for (const m of toolResultMessages) {
       params.messages.push(m)
+    }
+
+    // C3：tool 批后、下一 callModel 前 — mid-turn auto compact（每 outer turn ≤1）
+    if (midTurnEnabled && !midTurnCompacted) {
+      const tryFn =
+        params.tryMidTurnCompact ?? params.sessionRef?.tryMidTurnCompact
+      if (typeof tryFn === 'function') {
+        try {
+          const did = await tryFn()
+          if (did) {
+            midTurnCompacted = true
+            emit(params, { type: 'mid_turn_compact', ok: true })
+          }
+        } catch {
+          emit(params, { type: 'mid_turn_compact', ok: false })
+        }
+      }
     }
   }
 }

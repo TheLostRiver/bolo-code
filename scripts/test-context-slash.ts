@@ -37,10 +37,10 @@ async function main() {
     cwd: process.cwd(),
     systemPrompt: false,
     autoCompactEnabled: true,
-    contextWindowTokens: 8_000,
+    contextWindowTokens: 128_000,
     provider: textOnlyProvider(),
     compactSummarizer: async () => ({
-      text: `<summary>\n1. Primary Request and Intent:\n   Slash compact test.\n</summary>`,
+      text: `<summary>\n1. Primary Request and Intent:\n   Slash compact test.\n8. Current Work:\n   verifying compact slash.\n</summary>`,
     }),
   })
   session.systemPromptSections = ['# Stable\nkeep me']
@@ -70,6 +70,8 @@ async function main() {
   assert(ctx.message.includes('heuristic:'), 'context explains heuristic')
   assert(ctx.message.includes('prepare order:'), 'context shows prepare order')
   assert(ctx.message.includes('autoCompact:     on'), 'context auto on')
+  assert(ctx.message.includes('pressure source:'), 'context pressure source')
+  assert(ctx.message.includes('keep policy:'), 'context keep policy')
   assert(ctx.message.includes('~'), 'token estimates present')
   assert(ctx.message.includes('/autocompact'), 'context points to toggle')
   assert(
@@ -96,9 +98,12 @@ async function main() {
   assert(ctxSkills.message.includes('listed'), 'context catalog listed')
   assert(ctxSkills.message.includes('chars'), 'context catalog chars')
 
+  // 多轮：大前缀 + 小尾部 keep，确保 compact 后 messages token 下降
   const thr = getAutoCompactThreshold(8_000)
   const pad = 'p'.repeat((thr + 200) * 4)
   session.messages.push({ role: 'user', content: pad })
+  session.messages.push({ role: 'assistant', content: 'ack pad' })
+  session.messages.push({ role: 'user', content: 'continue after pad' })
   assert(estimateTokens(session.messages) >= thr, 'over threshold for compact demo')
 
   const beforeTok = estimateTokens(session.messages)
@@ -109,11 +114,21 @@ async function main() {
   assert(comp.message.includes('system tokens:'), 'compact system unchanged line')
   assert(comp.message.includes('note-me') || comp.message.includes('note='), 'note echoed')
   const afterTok = estimateTokens(session.messages)
-  assert(afterTok < beforeTok, 'messages tokens decreased')
+  assert(
+    afterTok < beforeTok,
+    `messages tokens decreased ${beforeTok}→${afterTok}`,
+  )
   assert(
     session.systemPromptSections[0]?.includes('keep me'),
     'system section still present',
   )
+  assert(
+    Boolean((session as { lastCompact?: unknown }).lastCompact),
+    'lastCompact set after manual compact',
+  )
+
+  const ctxAfter = await dispatchSlashCommand(session, 'context', '')
+  assert(ctxAfter.message.includes('last compact:'), 'context last compact line')
 
   // /autocompact 可见性
   const ac = await dispatchSlashCommand(session, 'autocompact', 'off')

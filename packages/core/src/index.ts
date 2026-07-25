@@ -8,6 +8,8 @@ import path from 'node:path'
 import {
   runFullCompact,
   isAutoCompactEnvDisabled,
+  estimateTokens,
+  shouldAutoCompact,
   type CompactSummarizer,
   type MicrocompactOptions,
   type SnipOptions,
@@ -716,6 +718,23 @@ export type BoloSession = {
    */
   hookDiagLog?: import('./hookDiag.ts').HookDiagLog
   /**
+   * C3：queryLoop mid-turn auto compact 钩子（createSession 注入）。
+   */
+  tryMidTurnCompact?: () => Promise<boolean>
+  /**
+   * C4：compact 成功后刷新短 skill catalog 段；默认 true。
+   */
+  postCompactReinjection?: boolean
+  /**
+   * C5：最近一次成功 compact 的本地摘要（/context；无遥测）。
+   */
+  lastCompact?: {
+    at: string
+    trigger: 'manual' | 'auto'
+    summaryChars: number
+    messagesAfter: number
+  }
+  /**
    * 会话工具表（内置 + Agent + 可选 MCP）。
    * 未设置时 submitPrompt 回落 createDefaultTools()。
    */
@@ -939,7 +958,36 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
     fileDiffLog: [],
     diffTurn: 0,
     hookDiagLog: createHookDiagLog(),
+    postCompactReinjection: true,
     onEvent: opts.onEvent ?? (() => {}),
+  }
+
+  session.tryMidTurnCompact = async () => {
+    // C3：仅 auto 开 + 有 summarizer 时尝试；阈值/熔断由 shouldAutoCompact 判断
+    if (!session.autoCompactEnabled || !session.compactSummarizer) {
+      return false
+    }
+    if (isAutoCompactEnvDisabled()) return false
+    const estimate = estimateTokens(session.messages)
+    const usage =
+      session.usage?.lastCall?.inputTokens ??
+      (session.usage && session.usage.inputTokens > 0
+        ? session.usage.inputTokens
+        : undefined)
+    if (
+      !shouldAutoCompact({
+        tokenCount: estimate,
+        usageInputTokens: usage,
+        contextWindowTokens: session.contextWindowTokens,
+        enabled: true,
+        consecutiveFailures: 0,
+        querySource: 'repl_main_thread',
+      })
+    ) {
+      return false
+    }
+    const r = await compactSession(session, { trigger: 'auto' })
+    return r.ok === true
   }
 
   session.onFileDiffRecord = async (rec) => {
@@ -1576,6 +1624,8 @@ export async function submitPrompt(
     effortLevel: session.effortLevel,
     promptCacheState: session.promptCacheState,
     persistReasoning: session.persistReasoning === true,
+    midTurnAutoCompact: true,
+    tryMidTurnCompact: session.tryMidTurnCompact,
     signal: options?.signal,
     onEvent: (e) => mapLoopEvent(session, e),
   })
@@ -1905,8 +1955,30 @@ export async function compactSession(
   session.messages.length = 0
   session.messages.push(...outcome.apiMessages)
 
-  // full compact 只改对话 messages；systemPromptSections（含 BOLO / rules 稳定前缀）不动
+  // full compact 只改对话 messages；systemPromptSections 稳定前缀不动
   // boundary 为 apiMessages[0] system「Conversation compacted」
+
+  // C4：短 skill catalog 再注入（可关；不灌全文）
+  if (session.postCompactReinjection !== false && session.skills?.length) {
+    try {
+      const catalog = formatSkillCatalog(session.skills, {
+        contextWindowTokens: session.contextWindowTokens,
+      })
+      session.systemPromptSections = replaceSkillCatalogSection(
+        session.systemPromptSections,
+        catalog || undefined,
+      )
+    } catch {
+      /* 再注入失败不拖垮 compact */
+    }
+  }
+
+  session.lastCompact = {
+    at: nowIso(),
+    trigger,
+    summaryChars: outcome.result.summaryText?.length ?? 0,
+    messagesAfter: session.messages.length,
+  }
 
   const post = await runHooks(
     'PostCompact',

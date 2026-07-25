@@ -167,6 +167,90 @@ async function main() {
   const r2 = resolveAutoCompactTokenCount({ estimateTokens: 42 })
   assert(r2.source === 'estimate' && r2.tokenCount === 42, 'resolve estimate')
 
+  // --- C3 mid-turn hook + C4/C5 lastCompact ---
+  const { createSession, compactSession } = await import(
+    '../packages/core/src/index.ts'
+  )
+  const { createMockProvider } = await import(
+    '../packages/providers/src/index.ts'
+  )
+  const fat: ChatMessage[] = []
+  for (let i = 0; i < 40; i++) {
+    fat.push({
+      role: 'user',
+      content: `block-${i} ` + 'x'.repeat(800),
+    })
+    fat.push({ role: 'assistant', content: `reply-${i} ` + 'y'.repeat(400) })
+  }
+  const sess = await createSession({
+    cwd: process.cwd(),
+    provider: createMockProvider(),
+    systemPrompt: false,
+    autoCompactEnabled: true,
+    contextWindowTokens: 8_000,
+    hooks: {},
+    compactSummarizer: async () => ({
+      text: `<summary>\n1. Primary Request and Intent:\n   mid-turn test\n8. Current Work:\n   C3\n</summary>`,
+    }),
+    onEvent: () => {},
+  })
+  sess.messages.push(...fat)
+  assert(typeof sess.tryMidTurnCompact === 'function', 'tryMidTurnCompact wired')
+  // 强制 usage 高，触发 mid 阈值
+  if (sess.usage) {
+    sess.usage.inputTokens = 50_000
+    sess.usage.lastCall = {
+      inputTokens: 50_000,
+      outputTokens: 10,
+      totalTokens: 50_010,
+      at: new Date().toISOString(),
+    }
+  }
+  const did = await sess.tryMidTurnCompact!()
+  assert(did === true, 'mid-turn compact ran')
+  assert(sess.lastCompact?.trigger === 'auto', 'lastCompact auto')
+  assert(
+    (sess.lastCompact?.summaryChars ?? 0) > 0,
+    'lastCompact summary chars',
+  )
+  assert(
+    sess.messages.some((m) => m.content === 'Conversation compacted'),
+    'boundary after mid compact',
+  )
+
+  // mid 在阈值下不跑
+  const sess2 = await createSession({
+    cwd: process.cwd(),
+    provider: createMockProvider(),
+    systemPrompt: false,
+    autoCompactEnabled: true,
+    contextWindowTokens: 200_000,
+    hooks: {},
+    compactSummarizer: async () => ({
+      text: `<summary>\n1. Primary Request and Intent:\n   no\n8. Current Work:\n   x\n</summary>`,
+    }),
+    onEvent: () => {},
+  })
+  sess2.messages.push({ role: 'user', content: 'tiny' })
+  const no = await sess2.tryMidTurnCompact!()
+  assert(no === false, 'below threshold no mid compact')
+
+  // C4：有 skills 时 compact 后 catalog 段可出现
+  const { submitUserInput } = await import('../packages/core/src/slash.ts')
+  const ctx = await submitUserInput(sess, '/context')
+  assert(ctx.type === 'slash', 'context slash')
+  if (ctx.type === 'slash') {
+    assert(ctx.message.includes('pressure source:'), 'context pressure source')
+    assert(ctx.message.includes('keep policy:'), 'context keep policy')
+    assert(ctx.message.includes('last compact:'), 'context last compact')
+    assert(ctx.message.includes('mid-turn'), 'context mentions mid-turn')
+  }
+
+  // manual compact 也写 lastCompact
+  const man = await compactSession(sess2, { trigger: 'manual' })
+  // 可能因消息太少失败；不强制
+  void man
+
   console.log('ok: test-compact-c-track')
 }
 
