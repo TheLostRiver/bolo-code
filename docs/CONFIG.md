@@ -147,9 +147,14 @@ defaults
 **热切失败**（缺 key / 未知 id）→ 明确错误，**保留**当前 provider。  
 **后置（P5）：** Desktop 设置下拉；resume 快照持久化 `providerId`。
 
-### Effort 方言（**E 轨 · E0–E4 已落地**）
+### Effort 方言（**E 轨 · E0–E5 已落地**）
 
-推理强度用 **dialect 表** 映射到请求体（非厂商 if）。契约：[EFFORT.md](./EFFORT.md)。
+推理强度用 **dialect 表** 映射到请求体（非厂商 if）。
+
+| 文档 | 角色 |
+|------|------|
+| [EFFORT.md](./EFFORT.md) | 实现契约 |
+| [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md) | E6+ 可选档 / 门控 / TTY |
 
 ```jsonc
 {
@@ -160,6 +165,11 @@ defaults
       "model": "deepseek-ai/DeepSeek-V4-Flash",
       "apiKeyEnv": "SILICONFLOW_API_KEY",
       "effort": { "dialect": "deepseek-chat" }
+    },
+    "claude": {
+      "kind": "anthropic",
+      "model": "claude-sonnet-4-20250514",
+      "effort": { "dialect": "anthropic-output" }
     }
   }
 }
@@ -170,7 +180,9 @@ defaults
 | `/effort` | 显示意图 · 方言 · **将发成的 wire** |
 | `/effort max` · `xhigh` · `ultra` … | 设会话意图；由方言折叠 |
 
-未写 `effort` 时：DeepSeek 类 baseUrl/model 会自动 detect；其它兼容口默认旧 `max-tokens` 倍率。
+未写 `effort` 时：DeepSeek / Anthropic / Responses 会 **detect**；其它兼容口默认旧 `max-tokens` 倍率。
+
+| 字段 | 默认 | 说明 |
 |------|------|------|
 | `autoCompactEnabled` | `true` | 为 true 且会话有 `compactSummarizer` 时，queryLoop 的 `prepareMessages` 达 token 阈值会走 full compact（对照参考 autoCompactIfNeeded）。会话内 `/autocompact on\|off` 可改；环境变量 `BOLO_DISABLE_AUTO_COMPACT` / `BOLO_DISABLE_COMPACT` 熔断 auto（manual `/compact` 仍可用） |
 | `contextWindowTokens` | `128000` | 用于 `getAutoCompactThreshold` / `getContextPressure`；token 估见 `estimateTokens`（加权启发式，非 tokenizer） |
