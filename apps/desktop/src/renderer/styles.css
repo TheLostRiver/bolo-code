@@ -19,13 +19,48 @@ body {
   background: var(--bg);
   color: var(--text);
 }
-.top {
+.top-actions {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border);
-  background: var(--panel);
+  gap: 10px;
+}
+button.ghost {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.settings-card label {
+  display: block;
+  margin: 10px 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.settings-card select,
+.settings-card input[type='text'] {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+.settings-card label.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.settings-card .hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+.settings-card h3 {
+  margin: 0 0 8px;
+  color: var(--text);
 }
 .brand {
   font-weight: 700;

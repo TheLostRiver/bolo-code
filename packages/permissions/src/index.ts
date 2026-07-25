@@ -845,3 +845,10 @@ export {
   type BoloPolicyFile,
   type SandboxMode,
 } from './policy.ts'
+export {
+  detectOsSandboxKind,
+  planSandboxedShell,
+  cleanupOsSandboxPlan,
+  type OsSandboxKind,
+  type OsSandboxPlan,
+} from './osSandbox.ts'

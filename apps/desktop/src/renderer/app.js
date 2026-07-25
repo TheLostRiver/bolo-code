@@ -1,5 +1,5 @@
 /**
- * Renderer — 会话 UI + 流式 text + 权限对话框
+ * Renderer — 会话 · 流式 · 权限 · 设置
  */
 
 const statusEl = document.getElementById('status')
@@ -8,6 +8,10 @@ const promptEl = document.getElementById('prompt')
 const sendBtn = document.getElementById('send')
 const permEl = document.getElementById('perm')
 const permText = document.getElementById('perm-text')
+const settingsEl = document.getElementById('settings')
+const setMode = document.getElementById('set-mode')
+const setMock = document.getElementById('set-mock')
+const setCwd = document.getElementById('set-cwd')
 
 let streamEl = null
 let streamBuf = ''
@@ -55,6 +59,30 @@ async function reloadMessages() {
   }
 }
 
+async function openSettings() {
+  const s = await window.bolo.getSettings()
+  setMode.value = s.permissionMode || 'default'
+  setMock.checked = !!s.useMock
+  setCwd.value = s.cwd || ''
+  settingsEl.hidden = false
+}
+
+async function saveSettings() {
+  const r = await window.bolo.setSettings({
+    permissionMode: setMode.value,
+    useMock: setMock.checked,
+    cwd: setCwd.value.trim(),
+  })
+  settingsEl.hidden = true
+  if (r?.ok) {
+    appendMsg('system', 'Settings applied (session recreated if cwd/mock changed).')
+    await reloadMessages()
+    await refreshStatus()
+  } else {
+    appendMsg('system', `Settings failed: ${r?.error ?? 'unknown'}`)
+  }
+}
+
 async function send() {
   const text = promptEl.value.trim()
   if (!text) return
@@ -97,9 +125,6 @@ window.bolo.onEvent((e) => {
   if (e.type === 'error' && e.message) {
     appendMsg('system', e.message)
   }
-  if (e.type === 'permission_request') {
-    // 也由 onPermissionRequest 处理；双通道兼容
-  }
 })
 
 let currentPermId = null
@@ -126,6 +151,15 @@ document.getElementById('perm-always')?.addEventListener('click', () =>
 document.getElementById('perm-deny')?.addEventListener('click', () =>
   respondPerm('deny'),
 )
+document.getElementById('btn-settings')?.addEventListener('click', () =>
+  void openSettings(),
+)
+document.getElementById('set-cancel')?.addEventListener('click', () => {
+  settingsEl.hidden = true
+})
+document.getElementById('set-save')?.addEventListener('click', () =>
+  void saveSettings(),
+)
 
 sendBtn.addEventListener('click', () => void send())
 promptEl.addEventListener('keydown', (ev) => {
@@ -140,7 +174,7 @@ void (async () => {
   await reloadMessages()
   appendMsg(
     'system',
-    'Bolo desktop — core via IPC. Streaming text + permission dialog enabled. /help works.',
+    'Bolo desktop — streaming, permissions, settings. /help works.',
   )
   promptEl.focus()
 })()

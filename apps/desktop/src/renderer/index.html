@@ -12,7 +12,10 @@
   <body>
     <header class="top">
       <div class="brand">BOLO</div>
-      <div id="status" class="status">loading…</div>
+      <div class="top-actions">
+        <button type="button" id="btn-settings" class="ghost">Settings</button>
+        <div id="status" class="status">loading…</div>
+      </div>
     </header>
     <main id="log" class="log" aria-live="polite"></main>
     <div id="perm" class="perm" hidden>
@@ -22,6 +25,31 @@
           <button type="button" id="perm-allow">Allow</button>
           <button type="button" id="perm-always">Always</button>
           <button type="button" id="perm-deny">Deny</button>
+        </div>
+      </div>
+    </div>
+    <div id="settings" class="perm" hidden>
+      <div class="perm-card settings-card">
+        <h3>Session settings</h3>
+        <label>Permission mode
+          <select id="set-mode">
+            <option value="default">default</option>
+            <option value="acceptEdits">acceptEdits</option>
+            <option value="plan">plan</option>
+            <option value="auto">auto</option>
+            <option value="bypassPermissions">bypassPermissions</option>
+          </select>
+        </label>
+        <label class="row">
+          <input type="checkbox" id="set-mock" /> Use mock provider
+        </label>
+        <label>Working directory (cwd)
+          <input type="text" id="set-cwd" spellcheck="false" />
+        </label>
+        <p class="hint">Changing cwd or mock recreates the session.</p>
+        <div class="perm-actions">
+          <button type="button" id="set-cancel" class="ghost">Cancel</button>
+          <button type="button" id="set-save">Save</button>
         </div>
       </div>
     </div>

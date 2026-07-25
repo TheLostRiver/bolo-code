@@ -18,6 +18,10 @@ import {
   resolveBoloPolicy,
   resolveSandboxMode,
 } from '../../permissions/src/policy.ts'
+import {
+  cleanupOsSandboxPlan,
+  planSandboxedShell,
+} from '../../permissions/src/osSandbox.ts'
 import { applyPatchToCwd } from './applyPatch.ts'
 import {
   buildTool,
@@ -162,16 +166,23 @@ export function createBashTool(): BoloTool {
       }
       const sandboxMode = resolveSandboxMode(process.env, policy)
       const sand = applySandboxEnv(process.env, sandboxMode)
-      if (
-        sandboxMode === 'require' &&
-        sand.warning &&
-        process.env.BOLO_SANDBOX_FAIL_CLOSED === '1'
-      ) {
-        return {
-          ok: false,
-          isError: true,
-          output: `Error: sandbox require but unavailable (${sand.warning})`,
-          errorCode: 'sandbox_unavailable',
+      const plan = await planSandboxedShell({
+        command,
+        cwd: ctx.cwd,
+        mode: sandboxMode,
+      })
+      if (sandboxMode === 'require' && !plan.isolated) {
+        if (
+          process.env.BOLO_SANDBOX_FAIL_CLOSED === '1' ||
+          process.env.BOLO_SANDBOX_FAIL_CLOSED === 'true'
+        ) {
+          await cleanupOsSandboxPlan(plan)
+          return {
+            ok: false,
+            isError: true,
+            output: `Error: sandbox require but OS isolation unavailable (${plan.warning ?? sand.warning ?? 'none'})`,
+            errorCode: 'sandbox_unavailable',
+          }
         }
       }
 
@@ -187,10 +198,7 @@ export function createBashTool(): BoloTool {
         /* progress 不得拖垮工具 */
       }
       try {
-        const shell = process.platform === 'win32' ? 'cmd.exe' : 'sh'
-        const args =
-          process.platform === 'win32' ? ['/c', command] : ['-c', command]
-        const { stdout, stderr } = await execFileAsync(shell, args, {
+        const { stdout, stderr } = await execFileAsync(plan.file, plan.args, {
           cwd: ctx.cwd,
           timeout: timeoutMs,
           maxBuffer: 2 * 1024 * 1024,
@@ -200,10 +208,12 @@ export function createBashTool(): BoloTool {
         })
         if (ctx.signal?.aborted) return abortedResult()
         const out = [stdout, stderr].filter(Boolean).join('\n').trim()
-        const note =
-          sand.warning && sandboxMode !== 'off'
-            ? `\n[sandbox] ${sand.warning}`
-            : ''
+        const notes: string[] = []
+        if (plan.isolated) notes.push(`[sandbox] os=${plan.kind}`)
+        else if (plan.warning) notes.push(`[sandbox] ${plan.warning}`)
+        else if (sand.warning && sandboxMode !== 'off')
+          notes.push(`[sandbox] ${sand.warning}`)
+        const note = notes.length ? `\n${notes.join(' ')}` : ''
         return { ok: true, output: (out || '(no output)') + note }
       } catch (e) {
         const err = e as {
@@ -233,6 +243,8 @@ export function createBashTool(): BoloTool {
             .join('\n'),
           errorCode: timedOut ? 'timeout' : 'exec_failed',
         }
+      } finally {
+        await cleanupOsSandboxPlan(plan)
       }
     },
   })

@@ -1,5 +1,5 @@
 /**
- * Electron main — @bolo/core + 权限对话框 IPC
+ * Electron main — core + 权限 + 设置（mode/mock/cwd）
  */
 
 import { app, BrowserWindow, ipcMain } from 'electron'
@@ -17,6 +17,7 @@ const {
   submitUserInput,
   closeSessionMcp,
   productionDeps,
+  setPermissionMode,
 } = await import(
   pathToFileURL(path.join(repoRoot, 'packages/core/src/index.ts')).href
 )
@@ -26,8 +27,16 @@ const { createMockProvider } = await import(
 
 let mainWindow = null
 let session = null
-/** toolUseId → resolve */
 const pendingPermissions = new Map()
+
+/** 桌面设置（会话级，重启窗口保留进程内） */
+const desktopSettings = {
+  cwd: process.env.BOLO_DESKTOP_CWD?.trim() || process.cwd(),
+  useMock:
+    process.env.BOLO_PROVIDER === 'mock' ||
+    process.env.BOLO_DESKTOP_MOCK !== '0',
+  permissionMode: 'default',
+}
 
 function send(channel, payload) {
   mainWindow?.webContents.send(channel, payload)
@@ -44,7 +53,6 @@ function createDesktopAskPermission() {
         toolInput: req.toolInput,
         toolUseId: req.toolUseId,
       })
-      // 120s 默认 deny
       setTimeout(() => {
         if (pendingPermissions.has(id)) {
           pendingPermissions.delete(id)
@@ -55,34 +63,53 @@ function createDesktopAskPermission() {
   }
 }
 
-async function ensureSession() {
-  if (session) return session
-  const forceMock =
-    process.env.BOLO_PROVIDER === 'mock' ||
-    process.env.BOLO_DESKTOP_MOCK !== '0'
+async function destroySession() {
+  if (session) {
+    try {
+      await closeSessionMcp(session)
+    } catch {
+      /* ignore */
+    }
+    session = null
+  }
+}
+
+async function ensureSession(forceNew = false) {
+  if (session && !forceNew) return session
+  if (forceNew) await destroySession()
 
   session = await createSessionFromWorkspace({
-    cwd: process.env.BOLO_DESKTOP_CWD?.trim() || process.cwd(),
+    cwd: desktopSettings.cwd,
     ensureDefaults: true,
     connectMcp: false,
     systemPrompt: true,
+    permissionMode: desktopSettings.permissionMode,
     askPermission: createDesktopAskPermission(),
     onEvent: (e) => send('bolo:event', e),
   })
 
-  if (forceMock) {
+  if (desktopSettings.useMock) {
     session.provider = createMockProvider()
     session.deps = productionDeps(session.provider)
   }
-  // 确保会话 askPermission 指向桌面对话框
   session.askPermission = createDesktopAskPermission()
+  if (
+    desktopSettings.permissionMode &&
+    session.permissionMode !== desktopSettings.permissionMode
+  ) {
+    try {
+      setPermissionMode(session, desktopSettings.permissionMode)
+    } catch {
+      session.permissionMode = desktopSettings.permissionMode
+    }
+  }
   return session
 }
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 960,
-    height: 720,
+    width: 1000,
+    height: 760,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
@@ -107,7 +134,46 @@ function registerIpc() {
       permissionMode: s.permissionMode,
       messageCount: s.messages.length,
       providerId: s.provider?.id ?? null,
+      settings: { ...desktopSettings },
     }
+  })
+
+  ipcMain.handle('bolo:getSettings', async () => ({ ...desktopSettings }))
+
+  ipcMain.handle('bolo:setSettings', async (_evt, patch) => {
+    if (!patch || typeof patch !== 'object') {
+      return { ok: false, error: 'bad patch' }
+    }
+    let needRecreate = false
+    if (typeof patch.cwd === 'string' && patch.cwd.trim()) {
+      const next = path.resolve(patch.cwd.trim())
+      if (next !== desktopSettings.cwd) {
+        desktopSettings.cwd = next
+        needRecreate = true
+      }
+    }
+    if (typeof patch.useMock === 'boolean') {
+      if (patch.useMock !== desktopSettings.useMock) {
+        desktopSettings.useMock = patch.useMock
+        needRecreate = true
+      }
+    }
+    if (typeof patch.permissionMode === 'string' && patch.permissionMode) {
+      desktopSettings.permissionMode = patch.permissionMode
+      if (session && !needRecreate) {
+        try {
+          setPermissionMode(session, patch.permissionMode)
+        } catch {
+          session.permissionMode = patch.permissionMode
+        }
+      } else if (needRecreate) {
+        // applied on recreate
+      }
+    }
+    if (needRecreate || patch.recreate === true) {
+      await ensureSession(true)
+    }
+    return { ok: true, settings: { ...desktopSettings } }
   })
 
   ipcMain.handle('bolo:submit', async (_evt, text) => {
@@ -159,13 +225,6 @@ app.whenReady().then(() => {
 app.on('window-all-closed', async () => {
   for (const [, resolve] of pendingPermissions) resolve('deny')
   pendingPermissions.clear()
-  if (session) {
-    try {
-      await closeSessionMcp(session)
-    } catch {
-      /* ignore */
-    }
-    session = null
-  }
+  await destroySession()
   if (process.platform !== 'darwin') app.quit()
 })

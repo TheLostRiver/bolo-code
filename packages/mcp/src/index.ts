@@ -107,3 +107,11 @@ export {
   maybeInjectMcpOAuthHeaders,
   type McpOAuthTokenFile,
 } from './oauth.ts'
+export {
+  exchangeAuthorizationCode,
+  saveOAuthTokenFile,
+  startLocalOAuthListener,
+  runLocalOAuthCallbackFlow,
+  type OAuthLocalFlowOptions,
+  type OAuthLocalFlowResult,
+} from './oauthLocal.ts'
