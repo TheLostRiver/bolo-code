@@ -41,7 +41,7 @@
 
 **已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Runtime DR0–DR4A。
 
-**当前主线：** Durable Runtime DR4B CLI diagnostics / safe actions；随后 DR4C closeout 与 AR1–AR5。
+**当前主线：** Durable Runtime DR4B2 interrupted discard/retry-safe；DR4B1 protocol executor + `/runtime` diagnostics 已落地，随后 DR4C 与 AR1–AR5。
 
 **非阻塞开放轨：** Compact §8.9 · U5 真·Ink/IDE · adaptive thinking · Desktop 体验打磨。
 
@@ -108,6 +108,8 @@ npx bolo --resume <id>
 | `/model` · `/effort` · `/ultrathink` | 模型 · 推理强度 · CX8 糖 |
 | `/agents` · `/bg` · `/bg cancel <taskId>` | Subagent 后台 FIFO/status；只取消 queued；resume 后含 interrupted 诊断 |
 | `/turn status` · `/turn queue` · `/turn interrupt` | turn/control 状态与安全控制 |
+| `/runtime list` · `/runtime inspect …` · `/runtime json` | protocol v1 的 turn/control/task 共用诊断视图 |
+| `/runtime interrupt <turnId>` · `/runtime cancel <control\|task> <id>` | expected-state 安全动作；竞态 fail-closed |
 | `/diff` · `/compact` · `/context` · `/cost` | Diff · 压缩 · 费用 |
 | `/permissions` · `/hooks` · `/doctor` | 权限 · Hooks · 诊断 |
 

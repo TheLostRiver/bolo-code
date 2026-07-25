@@ -31,7 +31,7 @@
 
 **已闭环主线：** headless 日用 → Diff · Hooks · Compact · Provider · Effort · **Provider UX CX0–CX8** · **CLI/Agent 可靠性 R0–R4**。
 
-**当前主线：** **Durable Runtime DR4B**（§13：CLI diagnostics + safe action policy；DR4A versioned runtime protocol 已收口）。
+**当前主线：** **Durable Runtime DR4B2**（§13：interrupted discard/retry-safe resolution；DR4B1 executor + `/runtime` diagnostics 已落地）。
 
 **开放轨：**
 
@@ -198,7 +198,7 @@ apps/desktop       消费同一 DiffViewModel                 （U3）
 **一句话：**  
 主路径、Diff、Hooks、Compact、**多 Provider、Effort、Provider UX（含 CX8）、CLI/Agent 可靠性 R0–R4**日用已收口；Durable Turn 正在把“可恢复 transcript”升级为“可恢复执行”。
 
-**下一刀（当前主线）：** Durable Runtime **DR4B CLI diagnostics + safe actions**；随后 DR4C closeout → AR1–AR5。
+**下一刀（当前主线）：** Durable Runtime **DR4B2 append-only discard/retry-safe**；随后 DR4C closeout → AR1–AR5。
 
 **非阻塞加深：** Compact §8.9 · U5 · adaptive thinking · Desktop 体验打磨。
 
@@ -906,7 +906,7 @@ UserPromptSubmit hook 成功并归约最终 prompt
 | **DR3A · Durable task schema ✅** | background/subagent task 的 `admitted/running/completed/error/aborted/interrupted` append-only 记录与投影 | task/result 可恢复；未知执行状态只投影 interrupted；结果不自动注入父消息 | core/subagent + tests；docs |
 | **DR3B · Queue + promotion ✅** | `overflow: queue` 接入 coordinator；结果先持久化，只在父 turn safe boundary promotion | 并发上限、FIFO/取消、父 turn 结束竞态、worktree dirty 成果保全 | core/subagent + tests；CLI status；docs |
 | **DR4A · Runtime protocol ✅** | transport-neutral 的 session/turn/task snapshot 与 command/result schema；版本与 feature negotiation | 序列化 round-trip、未知字段兼容、非法状态迁移 fail-closed | shared/core + tests；docs |
-| **DR4B · CLI diagnostics** | list/inspect/interrupt/discard/retry-safe；明确区分“查看”“丢弃”“显式重试” | 默认永不 replay；危险动作有明确目标与结果；new/resume 共用协议投影 | core contract；CLI + tests；docs |
+| **DR4B · CLI diagnostics（B1 ✅；B2 当前）** | B1 list/inspect/interrupt/cancel protocol executor；B2 discard/retry-safe，明确区分“查看”“丢弃”“显式重试” | 默认永不 replay；危险动作有明确目标与结果；new/resume 共用协议投影 | core contract；CLI + tests；docs |
 | **DR4C · Protocol closeout** | 用真实 CLI/Desktop 消费反馈收紧协议；只在已有第二客户端需求时评估 app-server/RPC | core 不依赖传输层；兼容旧 transcript；端到端 crash/restart 回归 | protocol + consumers；docs |
 
 #### DR2A 已落地契约
@@ -1002,6 +1002,15 @@ UserPromptSubmit hook 成功并归约最终 prompt
 - object 的新增未知字段会被忽略并规范化返回；未知 protocolVersion、kind/action、生命周期枚举、跨 session 记录、重复实体 id 均 fail-closed。
 - v1 command 只定义已有 core 语义证明的 `runtime.inspect | turn.interrupt | control.cancel | task.cancel`；变更动作携带合法 `expectedState`。未定义自动 replay/retry/discard，也未宣称远程 server。
 - 默认 `npm test` 已纳入 runtime protocol round-trip、未知字段、feature negotiation、非法 expectedState、跨 session/duplicate、result envelope 与运行时对象泄漏回归。
+
+#### DR4B1 已落地契约
+
+- `executeRuntimeCommand` 是 transport-neutral executor：先构建同一 v1 snapshot 核对 session/target/expectedState，再复用 durable `requestSessionControl`、`cancelSessionControl` 与 queued background cancel。
+- `requestId` 直接作为 interrupt control 的幂等 id；同请求重复不会多发 signal/control，不同 payload 冲突稳定返回 `state_conflict`。
+- action 已生效但持久化或后置 snapshot 有问题时返回 `ok: true + warnings`，不把已发 interrupt/已取消项误报为未执行。
+- `/runtime list|json|inspect [turn|control|task]` 只消费 protocol snapshot；`/runtime interrupt <turnId>` 与 `/runtime cancel <control|task> <id>` 只构造/执行 protocol command，不读取 coordinator 私有状态。
+- target 消失、expectedState 变化、running/queued/pending/ready 竞态都 fail-closed。DR4B1 不 replay interrupted work，也没有实现 discard/retry-safe。
+- 默认 `npm test` 已纳入 executor、slash actions、幂等/stale target、旧 `/turn`/`/bg` 与 protocol warning result 回归。
 
 ### 13.5 DR2 状态机与安全边界
 
@@ -1120,7 +1129,7 @@ DR0–DR4 收口后进入 Autonomous Road（AR）。一次只推进一个可独�
 | 2 | **DR3A** | durable task schema/projection、result-before-terminal | `/bg` 能区分 running/interrupted/completed | task crash + result write failure + old transcript | ✅ |
 | 3 | **DR3B** | coordinator overflow queue、parent-boundary promotion | queue/cancel/status；dirty worktree 结果可找回 | FIFO + concurrency cap + parent terminal race + R3 | ✅ |
 | 4 | **DR4A** | versioned runtime snapshot/command/result schema | CLI/Desktop 共用 view-model | round-trip + unknown fields + illegal transition | ✅ |
-| 5 | **DR4B** | safe action policy 与 protocol executor | list/inspect/interrupt/discard/retry-safe | default no replay + target/state races | **当前** |
+| 5 | **DR4B** | B1 protocol executor ✅；B2 recovery resolution | list/inspect/interrupt/cancel 已落地；discard/retry-safe 待做 | target/state races；default no replay | **B2 当前** |
 | 6 | **DR4C** | 真实 consumer 反馈与兼容收紧 | new/resume 共用协议投影 | crash/restart E2E + old transcript | 📋 |
 | 7 | **AR1A–C** | CLI runtime query/command contracts | list/inspect/queue edit/pager/`--json` | TTY + non-TTY + race snapshots | 📋 |
 | 8 | **AR2A–C** | compact range/watermark/token budget | 可量化上下文成本与稳定回退 | lifecycle/tool pairing + token/cost baseline | 📋 |

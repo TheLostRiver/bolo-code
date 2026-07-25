@@ -123,7 +123,7 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 
 **已闭环：** Diff · Hooks · Compact · Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4A**。
 
-**当前主线：** Durable Runtime **DR4B CLI diagnostics + safe actions**；DR4A versioned runtime protocol 已完整收口，DR4C closeout 后续。
+**当前主线：** Durable Runtime **DR4B2 interrupted discard/retry-safe**；DR4B1 protocol executor + `/runtime` diagnostics 已落地，DR4C 后续。
 
 **其它开放轨（非阻塞）：**
 
@@ -148,7 +148,8 @@ DR2A 单 session runner ✅
 → DR3A durable background task ✅
 → DR3B queue + parent-boundary promotion ✅
 → DR4A runtime protocol ✅
-→ DR4B CLI diagnostics（当前）
+→ DR4B1 executor + CLI diagnostics ✅
+→ DR4B2 discard/retry-safe（当前）
 → DR4C closeout
 → AR1 CLI/TUI runtime UX
 → AR2 Compact depth
@@ -341,6 +342,7 @@ cd apps/desktop && npm install && set BOLO_DESKTOP_MOCK=1 && npm start
 | DR3A | `task` / `task_result` · result-before-terminal · parentTurnId · resume interrupted diagnostics · background no async parent write |
 | DR3B | real overflow FIFO · `/bg cancel` · cancel/start race closeout · safe-boundary single delivery · next-turn terminal race |
 | DR4A | protocol v1 · feature negotiation · pure snapshot builder · strict command/result parser · no runtime object leakage |
+| DR4B1 | expected-state executor · `/runtime` list/inspect/json/interrupt/cancel · warning/竞态 fail-closed |
 
 最新 commit 以 `git log` 为准。
 

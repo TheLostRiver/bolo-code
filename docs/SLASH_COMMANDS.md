@@ -29,6 +29,8 @@
 | `/turn status` | 显示当前进程 coordinator `idle/running`、active turn 与 live control 历史（pending/ready/promoted/cancelled） |
 | `/turn steer <text>` · `/turn interrupt` | 自动携带 snapshot 的 expected active turn；stale/no-active 由 core fail-closed |
 | `/turn queue <text>` · `/turn cancel <controlId>` | active 时 pending、idle 时 ready；REPL FIFO drain；pending/ready 可取消；durable 写成功后才交给执行器 |
+| `/runtime list` · `/runtime json` · `/runtime inspect [turn\|control\|task] [id]` | protocol v1 共用 session/runner/turn/control/task snapshot；`json` 为纯 JSON |
+| `/runtime interrupt <turnId>` · `/runtime cancel <control\|task> <id>` | 先核对 snapshot expected state，再调用 durable executor；stale target fail-closed |
 | `/agents` · `/agents status` | 列 subagent 类型/来源；`status` 显示后台 queued/running/done/error/aborted/interrupted 计数 |
 | `/bg` · `/bg status` | 显示后台 taskId、状态、完成时间、usage/worktree 与持久化 warning |
 | `/bg cancel <taskId>` | 只取消尚未启动的 queued task；running/terminal/未知 id 均 fail-closed |
@@ -82,6 +84,8 @@ REPL 额外：`/exit` `/quit` 由 CLI 处理（退出循环，不进总线）。
 - `agents.overflow: "queue"` 是真实 durable FIFO：queued 先写 admitted，取得 slot 时写 running；`/bg cancel` 会先移除 executable closure，再尝试写 result→aborted。
 - queued cancel 落盘失败会保留 warning，但任务不会在本进程启动；重启后 admitted/running 只恢复为 interrupted 诊断，不重建 queue。
 - background result 只在 queryLoop 安全边界注入父消息；父 turn 已结束时延至下一 turn。同进程只 delivery 一次，resume 不自动重复注入。
+- `/runtime` 是 DR4 protocol consumer，不维护第二套状态机；action 已生效但持久化/后置 snapshot 出现问题时显示 accepted + warning，避免错误重试。
+- DR4B1 只提供 active interrupt、pending/ready control cancel、queued task cancel；interrupted discard/retry-safe 尚未开放。
 - 模块：`packages/core/src/slash.ts`；导出见 `@bolo/core`。
 
 ## 插件 slash（PL2 最小）

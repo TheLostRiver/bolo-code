@@ -178,6 +178,8 @@ npm start
 | `/turn status` | 当前 active turn 与 queue/steer/interrupt control 状态 |
 | `/turn steer <text>` · `/turn interrupt` | 在安全边界修正或取消当前 active turn |
 | `/turn queue <text>` · `/turn cancel <controlId>` | FIFO 排队下一轮；执行前取消 pending/ready control |
+| `/runtime list` · `/runtime inspect [turn\|control\|task] <id>` · `/runtime json` | protocol v1 共用 runtime 诊断；`json` 适合自动化读取 |
+| `/runtime interrupt <turnId>` · `/runtime cancel <control\|task> <id>` | expected-state 安全动作；target/state 变化时拒绝 |
 | `/diff` · `/diff last` · `/diff git` | 本会话文件改动 |
 | `/compact` · `/context` · `/cost` | 压缩 · 压力 · 本地 token |
 | `/permissions` · `/plan` · `/allow` · `/deny` | 权限 |
@@ -409,7 +411,7 @@ CLI：
 - resume 会把未完成 background task 显示为 `/bg` 的 interrupted 诊断，并恢复已完成摘要；不会重启 worker，也不会自动把 result 注入父消息或重放工具副作用。
 - `agents.overflow: "queue"` 会在 cap 满时建立 durable FIFO；queued 可用 `/bg cancel <taskId>` 取消。取消落盘失败会 warning，但任务仍从本进程 executable queue 移除。
 - background result 仅在主 queryLoop 安全边界进入 `<background_task_result>`；父 turn 已结束时等下一 turn。重启后只供 `/bg` 检查，不自动重复注入。
-- 开发者可通过 `buildRuntimeSnapshot(session)` 取得 protocol v1 纯数据 view-model；当前仅为 package API，DR4B 才接 CLI diagnostics/safe actions，不存在后台 daemon 或自动 replay。
+- 开发者可通过 `buildRuntimeSnapshot(session)` 取得 protocol v1 纯数据 view-model，并用 `executeRuntimeCommand` 走与 `/runtime` 相同的 expected-state 安全动作；不存在后台 daemon 或自动 replay。interrupted discard/retry-safe 尚属 DR4B2。
 
 ```bash
 npx bolo --list

@@ -178,9 +178,11 @@ controlId + sessionId + kind + state + timestamp
 - feature negotiation 选择共同 v1；未知 optional feature 被忽略，缺 required feature 或无共同版本明确拒绝。
 - parser 允许 object 增加未知字段，但未知 version/kind/action/state、重复 id、跨 session control/task 均 fail-closed。
 - command 使用 `requestId + action + target + expectedState`；v1 只描述 inspect、interrupt 与 queued/pending/ready cancel，不提供自动 replay。
-- 这仍是 package API，不是 daemon/RPC。CLI 消费、safe action executor 与 crash/restart E2E 属于 DR4B–C。
+- DR4B1 已让 `/runtime list|json|inspect` 消费该 view-model，并由同一 executor 提供 expected-state interrupt/control/task cancel；target/state 竞态 fail-closed。
+- action 已生效但 durable audit 或后置 snapshot 有问题时，result 保持 accepted 并附 warnings；不会误导调用方重试已生效动作。
+- 这仍不是 daemon/RPC。interrupted discard/retry-safe 与 crash/restart E2E 属于 DR4B2–C。
 
-DR0–DR4A 已收口；当前 DR4B 将让 CLI diagnostics 消费同一 protocol/view-model。
+DR0–DR4A 与 DR4B1 已收口；当前 DR4B2 将定义 append-only discard/retry-safe resolution。
 
 ## 2. 快照格式（version 1，只读兼容）
 
