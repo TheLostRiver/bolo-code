@@ -132,7 +132,10 @@ idle
 
 ### 6.2 MCP
 
-- 传输：stdio ✅；**Streamable HTTP（`type: http`）** ✅ 最小；经典 SSE 长连接（`type: sse`）⬜
+- 传输：stdio ✅；**Streamable HTTP（`type: http`）** ✅ 最小；经典 SSE 长连接（`type: sse`）✅ 最小
+- 权限：PermissionGate + auto 分类；**policy.json** 与 **OS 沙箱包装**（bwrap / sandbox-exec）接线 Bash
+- MCP OAuth：token 文件 + **本地回调换票**（无遥测）
+- 桌面：`apps/desktop` Electron 壳（IPC · 流式 · 权限对话框 · 设置）
 - 能力：tools ✅；resources / prompts ✅（host 共用）；list_changed 热刷新 ✅（stdio 推送；http 若 SSE 帧含通知可分发）
 - 命名：远端 `mcp__<server>__<tool>`；meta：`ListMcpResources` / `ReadMcpResource` / `GetMcpPrompt`
 - PermissionRequest / PreToolUse matcher 可匹配 `mcp__*`
