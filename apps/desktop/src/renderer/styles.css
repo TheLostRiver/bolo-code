@@ -93,3 +93,52 @@ body {
   opacity: 0.5;
   cursor: default;
 }
+.perm {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+}
+.perm[hidden] {
+  display: none !important;
+}
+.perm-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  width: min(420px, 92vw);
+}
+.perm-card pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 13px;
+  margin: 0 0 12px;
+}
+.perm-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.perm-actions button {
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-weight: 600;
+}
+#perm-allow {
+  background: var(--accent);
+  color: #061018;
+}
+#perm-always {
+  background: #3d6b4f;
+  color: #e7ecf3;
+}
+#perm-deny {
+  background: #5a3030;
+  color: #e7ecf3;
+}

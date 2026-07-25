@@ -15,6 +15,16 @@
       <div id="status" class="status">loading…</div>
     </header>
     <main id="log" class="log" aria-live="polite"></main>
+    <div id="perm" class="perm" hidden>
+      <div class="perm-card">
+        <pre id="perm-text"></pre>
+        <div class="perm-actions">
+          <button type="button" id="perm-allow">Allow</button>
+          <button type="button" id="perm-always">Always</button>
+          <button type="button" id="perm-deny">Deny</button>
+        </div>
+      </div>
+    </div>
     <footer class="input-bar">
       <input
         id="prompt"

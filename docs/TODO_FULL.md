@@ -68,10 +68,10 @@ node --import tsx/esm scripts/test-subagent.ts
 - OAuth = **用户自备 token 文件**，无浏览器登录流  
 - Responses WS = **明确报错**，默认 HTTP SSE  
 - Worktree = 需 git + `BOLO_SUBAGENT_WORKTREE=1`  
-- Electron = **未做**
+- Electron = **M4 最小壳已落地**（IPC + mock；非完整 UX）
 
 ---
 
 ## 4. 一句话
 
-> **FULL 轨代码/文档最小出口已齐；Electron 仍后置。相对 HC 未宣称 100%。**
+> **FULL + M4 + policy/WebFetch 接线已齐。** 相对 HC ~65–80%，非 100%。

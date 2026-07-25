@@ -26,6 +26,7 @@ export {
   createGlobTool,
   createGrepTool,
   createSkillTool,
+  createWebFetchTool,
   executeTool,
   listToolNames,
   getToolSpec,

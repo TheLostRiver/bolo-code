@@ -1,6 +1,5 @@
 /**
- * Electron main (plain ESM) — 托管 @bolo/core
- * 通过 tsx 注册加载 monorepo TS 源码。
+ * Electron main — @bolo/core + 权限对话框 IPC
  */
 
 import { app, BrowserWindow, ipcMain } from 'electron'
@@ -27,9 +26,33 @@ const { createMockProvider } = await import(
 
 let mainWindow = null
 let session = null
+/** toolUseId → resolve */
+const pendingPermissions = new Map()
 
 function send(channel, payload) {
   mainWindow?.webContents.send(channel, payload)
+}
+
+function createDesktopAskPermission() {
+  return async (req) => {
+    const id = req.toolUseId || `p_${Date.now()}`
+    return await new Promise((resolve) => {
+      pendingPermissions.set(id, resolve)
+      send('bolo:permission_request', {
+        id,
+        toolName: req.toolName,
+        toolInput: req.toolInput,
+        toolUseId: req.toolUseId,
+      })
+      // 120s 默认 deny
+      setTimeout(() => {
+        if (pendingPermissions.has(id)) {
+          pendingPermissions.delete(id)
+          resolve('deny')
+        }
+      }, 120_000)
+    })
+  }
 }
 
 async function ensureSession() {
@@ -43,14 +66,16 @@ async function ensureSession() {
     ensureDefaults: true,
     connectMcp: false,
     systemPrompt: true,
+    askPermission: createDesktopAskPermission(),
     onEvent: (e) => send('bolo:event', e),
   })
 
-  // 桌面默认 mock，无 key 可启动；设 BOLO_DESKTOP_MOCK=0 用 workspace provider
   if (forceMock) {
     session.provider = createMockProvider()
     session.deps = productionDeps(session.provider)
   }
+  // 确保会话 askPermission 指向桌面对话框
+  session.askPermission = createDesktopAskPermission()
   return session
 }
 
@@ -105,6 +130,22 @@ function registerIpc() {
       content: String(m.content ?? '').slice(0, 4000),
     }))
   })
+
+  ipcMain.handle('bolo:permission_response', async (_evt, payload) => {
+    const id = payload?.id
+    const decision = payload?.decision
+    const resolve = id ? pendingPermissions.get(id) : undefined
+    if (resolve) {
+      pendingPermissions.delete(id)
+      if (decision === 'allow' || decision === 'allow_always') {
+        resolve(decision)
+      } else {
+        resolve('deny')
+      }
+      return { ok: true }
+    }
+    return { ok: false, error: 'unknown permission id' }
+  })
 }
 
 app.whenReady().then(() => {
@@ -116,6 +157,8 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', async () => {
+  for (const [, resolve] of pendingPermissions) resolve('deny')
+  pendingPermissions.clear()
   if (session) {
     try {
       await closeSessionMcp(session)

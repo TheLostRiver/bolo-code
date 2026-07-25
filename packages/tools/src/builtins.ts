@@ -12,6 +12,12 @@ import {
   skillModelInvokeBlockReason,
   type LoadedSkill,
 } from '../../skills/src/index.ts'
+import {
+  applySandboxEnv,
+  mergePolicyDenyPrefixes,
+  resolveBoloPolicy,
+  resolveSandboxMode,
+} from '../../permissions/src/policy.ts'
 import { applyPatchToCwd } from './applyPatch.ts'
 import {
   buildTool,
@@ -131,6 +137,44 @@ export function createBashTool(): BoloTool {
       if (ctx.signal?.aborted) {
         return abortedResult()
       }
+
+      // Y5：策略 deny 前缀 + sandbox 环境标记（对照 HC sandbox 语义的最小接线）
+      const { policy } = await resolveBoloPolicy({ cwd: ctx.cwd })
+      if (policy?.denyTools?.includes('Bash')) {
+        return {
+          ok: false,
+          isError: true,
+          output: 'Error: Bash denied by policy.denyTools',
+          errorCode: 'policy_deny',
+        }
+      }
+      const denyPrefixes = mergePolicyDenyPrefixes([], policy)
+      const cmdTrim = command.trim()
+      for (const pfx of denyPrefixes) {
+        if (pfx && (cmdTrim === pfx || cmdTrim.startsWith(pfx + ' ') || cmdTrim.startsWith(pfx))) {
+          return {
+            ok: false,
+            isError: true,
+            output: `Error: command denied by policy prefix: ${pfx}`,
+            errorCode: 'policy_deny',
+          }
+        }
+      }
+      const sandboxMode = resolveSandboxMode(process.env, policy)
+      const sand = applySandboxEnv(process.env, sandboxMode)
+      if (
+        sandboxMode === 'require' &&
+        sand.warning &&
+        process.env.BOLO_SANDBOX_FAIL_CLOSED === '1'
+      ) {
+        return {
+          ok: false,
+          isError: true,
+          output: `Error: sandbox require but unavailable (${sand.warning})`,
+          errorCode: 'sandbox_unavailable',
+        }
+      }
+
       const rawTimeout = Number(input.timeout)
       const timeoutMs = Number.isFinite(rawTimeout)
         ? Math.min(600_000, Math.max(1, Math.floor(rawTimeout)))
@@ -152,10 +196,15 @@ export function createBashTool(): BoloTool {
           maxBuffer: 2 * 1024 * 1024,
           windowsHide: true,
           signal: ctx.signal,
+          env: sand.env,
         })
         if (ctx.signal?.aborted) return abortedResult()
         const out = [stdout, stderr].filter(Boolean).join('\n').trim()
-        return { ok: true, output: out || '(no output)' }
+        const note =
+          sand.warning && sandboxMode !== 'off'
+            ? `\n[sandbox] ${sand.warning}`
+            : ''
+        return { ok: true, output: (out || '(no output)') + note }
       } catch (e) {
         const err = e as {
           stdout?: string
@@ -598,6 +647,128 @@ export function createSkillTool(): BoloTool {
   })
 }
 
+/**
+ * WebFetch — 对照 HC WebFetchTool 最小实现：HTTP(S) GET 文本，有超时与体积上限。
+ * requiresPermission：网络出站需门控。
+ */
+export function createWebFetchTool(): BoloTool {
+  return buildTool({
+    name: 'WebFetch',
+    description:
+      'Fetch a public http(s) URL and return text body (truncated). Use for docs/API pages; not for secrets.',
+    requiresPermission: true,
+    isConcurrencySafe: () => true,
+    isReadOnly: () => true,
+    inputJSONSchema: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: 'http or https URL' },
+        timeout: {
+          type: 'number',
+          description: 'Timeout ms (default 15000, max 60000)',
+        },
+      },
+      required: ['url'],
+    },
+    async call(input, ctx) {
+      if (ctx.signal?.aborted) return abortedResult()
+      const rawUrl = String(input.url ?? '').trim()
+      if (!rawUrl) {
+        return {
+          ok: false,
+          isError: true,
+          output: 'WebFetch requires { "url": "https://..." }',
+          errorCode: 'empty',
+        }
+      }
+      let u: URL
+      try {
+        u = new URL(rawUrl)
+      } catch {
+        return {
+          ok: false,
+          isError: true,
+          output: `invalid URL: ${rawUrl}`,
+          errorCode: 'bad_url',
+        }
+      }
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+        return {
+          ok: false,
+          isError: true,
+          output: 'only http/https allowed',
+          errorCode: 'bad_scheme',
+        }
+      }
+      // 基础 SSRF 防护：禁止明显本地/链路本地
+      const host = u.hostname.toLowerCase()
+      if (
+        host === 'localhost' ||
+        host === '127.0.0.1' ||
+        host === '::1' ||
+        host.endsWith('.local') ||
+        host.startsWith('10.') ||
+        host.startsWith('192.168.') ||
+        host.startsWith('169.254.')
+      ) {
+        return {
+          ok: false,
+          isError: true,
+          output: `blocked host (local/private): ${host}`,
+          errorCode: 'ssrf_block',
+        }
+      }
+      const rawTimeout = Number(input.timeout)
+      const timeoutMs = Number.isFinite(rawTimeout)
+        ? Math.min(60_000, Math.max(1, Math.floor(rawTimeout)))
+        : 15_000
+      const ac = new AbortController()
+      const onAbort = () => ac.abort()
+      ctx.signal?.addEventListener('abort', onAbort, { once: true })
+      const timer = setTimeout(() => ac.abort(), timeoutMs)
+      try {
+        const res = await fetch(u.toString(), {
+          method: 'GET',
+          redirect: 'follow',
+          signal: ac.signal,
+          headers: { 'user-agent': 'BoloCode-WebFetch/0.1' },
+        })
+        const buf = await res.arrayBuffer()
+        const max = 200_000
+        const slice = buf.byteLength > max ? buf.slice(0, max) : buf
+        const text = new TextDecoder('utf-8', { fatal: false }).decode(slice)
+        const trunc =
+          buf.byteLength > max
+            ? `\n…(truncated ${buf.byteLength}→${max} bytes)`
+            : ''
+        if (!res.ok) {
+          return {
+            ok: false,
+            isError: true,
+            output: `HTTP ${res.status} ${res.statusText}\n${text.slice(0, 4000)}${trunc}`,
+            errorCode: 'http_error',
+          }
+        }
+        return {
+          ok: true,
+          output: `URL: ${u}\nStatus: ${res.status}\n\n${text}${trunc}`,
+        }
+      } catch (e) {
+        if (ctx.signal?.aborted || ac.signal.aborted) return abortedResult()
+        return {
+          ok: false,
+          isError: true,
+          output: String(e),
+          errorCode: 'fetch_failed',
+        }
+      } finally {
+        clearTimeout(timer)
+        ctx.signal?.removeEventListener('abort', onAbort)
+      }
+    },
+  })
+}
+
 export function createBuiltinTools(): BoloTool[] {
   return [
     createBashTool(),
@@ -608,6 +779,7 @@ export function createBuiltinTools(): BoloTool[] {
     createGlobTool(),
     createGrepTool(),
     createSkillTool(),
+    createWebFetchTool(),
   ]
 }
 
