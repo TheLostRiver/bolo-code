@@ -1282,13 +1282,8 @@ async function testBackgroundSubagent(): Promise<void> {
     assert(bgSlash.message.includes(agentId), '/bg lists id')
 
     assert(
-      parentMessages.some(
-        (m) =>
-          m.role === 'system' &&
-          m.content.includes(agentId) &&
-          m.content.includes('BG_AGENT_DONE'),
-      ),
-      'parent system notify on finish',
+      parentMessages.length === 0,
+      'background completion does not mutate parent messages asynchronously',
     )
   } finally {
     await fs.rm(bgTmp, { recursive: true, force: true })

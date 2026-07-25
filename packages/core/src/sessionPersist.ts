@@ -37,12 +37,16 @@ import {
   appendFileDiffEntry,
   appendTurnEntry,
   appendControlEntry,
+  appendTaskEntry,
+  appendTaskResultEntry,
   ensureTranscriptFile,
   metaInputFromSession,
   getTranscriptWriteState,
   normalizeSessionTitle,
   scanTranscriptLite,
   type TranscriptControlEntry,
+  type TranscriptTaskEntry,
+  type TranscriptTaskResultEntry,
   type TranscriptTurnEntry,
 } from './sessionTranscript.ts'
 import type { DurableTurnRecord, DurableTurnState } from './durableTurn.ts'
@@ -52,6 +56,11 @@ import type {
   DurableControlState,
 } from './durableControl.ts'
 import type { SessionControlKind } from './sessionCoordinator.ts'
+import type {
+  DurableTaskIsolation,
+  DurableTaskRecord,
+  DurableTaskState,
+} from './durableTask.ts'
 import type { SessionUsage } from './sessionUsage.ts'
 import { cloneSessionUsage } from './sessionUsage.ts'
 import {
@@ -105,6 +114,8 @@ export type PersistableSession = {
   durableTurns?: DurableTurnRecord[]
   /** DR2C：运行时 control 投影；JSONL `control` entries 是持久化真源。 */
   durableControls?: DurableControlRecord[]
+  /** DR3A：运行时 task 投影；JSONL task/task_result 是持久化真源。 */
+  durableTasks?: DurableTaskRecord[]
   onEvent?: (e: { type: 'error'; message: string }) => void
 }
 
@@ -1453,6 +1464,81 @@ export async function appendSessionControlState(
   setSessionPersistMeta(session, {
     filePath: transcriptPath,
   })
+  return entry
+}
+
+/** DR3A：按 session persist meta 追加 background task lifecycle。 */
+export async function appendSessionTaskState(
+  session: PersistableSession,
+  opts: {
+    taskId: string
+    parentTurnId?: string
+    agentType: string
+    state: DurableTaskState
+    prompt?: string
+    description?: string
+    isolation?: DurableTaskIsolation
+    detail?: string
+    timestamp?: string
+  },
+): Promise<TranscriptTaskEntry | null> {
+  const meta = persistMeta.get(session)
+  if (!meta?.autoSave) return null
+  const rawFilePath = meta.filePath
+    ? path.resolve(meta.filePath)
+    : resolveSessionFilePath(session.id, {
+        scope: meta.scope,
+        cwd: session.cwd,
+        sessionsDir: meta.sessionsDir,
+      })
+  const transcriptPath = resolveTranscriptPathFromJson(rawFilePath)
+  await ensureTranscriptFile(
+    transcriptPath,
+    metaInputFromSession(session, { createdAt: meta.createdAt }),
+  )
+  const entry = await appendTaskEntry(transcriptPath, {
+    sessionId: session.id,
+    ...opts,
+  })
+  setSessionPersistMeta(session, { filePath: transcriptPath })
+  return entry
+}
+
+/** DR3A：result 先落盘，terminal lifecycle 才能随后完成。 */
+export async function appendSessionTaskResult(
+  session: PersistableSession,
+  opts: {
+    taskId: string
+    summary: string
+    isError: boolean
+    agentTranscriptPath?: string
+    usage?: SessionUsage
+    totalDurationMs?: number
+    totalToolUseCount?: number
+    worktreePath?: string
+    detail?: string
+    timestamp?: string
+  },
+): Promise<TranscriptTaskResultEntry | null> {
+  const meta = persistMeta.get(session)
+  if (!meta?.autoSave) return null
+  const rawFilePath = meta.filePath
+    ? path.resolve(meta.filePath)
+    : resolveSessionFilePath(session.id, {
+        scope: meta.scope,
+        cwd: session.cwd,
+        sessionsDir: meta.sessionsDir,
+      })
+  const transcriptPath = resolveTranscriptPathFromJson(rawFilePath)
+  await ensureTranscriptFile(
+    transcriptPath,
+    metaInputFromSession(session, { createdAt: meta.createdAt }),
+  )
+  const entry = await appendTaskResultEntry(transcriptPath, {
+    sessionId: session.id,
+    ...opts,
+  })
+  setSessionPersistMeta(session, { filePath: transcriptPath })
   return entry
 }
 

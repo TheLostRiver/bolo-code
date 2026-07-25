@@ -76,6 +76,7 @@ import {
   createBackgroundAgentStore,
   createDefaultTools,
   loadAgentsDir,
+  restoreBackgroundAgentStoreFromDurableTasks,
   resolveAgentPolicy,
   type ActiveAgentDefinitions,
 } from './subagent.ts'
@@ -123,6 +124,7 @@ import {
   fileDiffsFromTranscriptEntries,
   projectDurableTurns,
   projectDurableControls,
+  projectDurableTasks,
 } from './sessionTranscript.ts'
 import {
   applyDurableTurnEvent,
@@ -131,6 +133,7 @@ import {
   type DurableTurnState,
 } from './durableTurn.ts'
 import type { DurableControlRecord } from './durableControl.ts'
+import type { DurableTaskRecord } from './durableTask.ts'
 import {
   defaultSessionCoordinator,
   type SessionCoordinator,
@@ -139,6 +142,7 @@ import {
   promoteSessionControls,
   releaseSessionRunner,
 } from './sessionControlRuntime.ts'
+import { createSessionBackgroundTaskLifecycle } from './sessionTaskRuntime.ts'
 import type { SessionUsage } from './sessionUsage.ts'
 import {
   cloneSessionUsage,
@@ -492,6 +496,8 @@ export {
   appendSessionFileDiff,
   appendSessionTurnState,
   appendSessionControlState,
+  appendSessionTaskState,
+  appendSessionTaskResult,
   hasDurableSessionPersistence,
   type SessionSnapshot,
   type SessionScope,
@@ -525,6 +531,8 @@ export {
   appendFileDiffEntry,
   appendTurnEntry,
   appendControlEntry,
+  appendTaskEntry,
+  appendTaskResultEntry,
   dualWriteSessionTranscript,
   writeTranscriptAfterCompact,
   resolveTranscriptPathFromJson,
@@ -540,6 +548,7 @@ export {
   fileDiffsFromTranscriptEntries,
   projectDurableTurns,
   projectDurableControls,
+  projectDurableTasks,
   normalizeSessionTitle,
   normalizeSystemNoteText,
   buildTitleEntry,
@@ -547,6 +556,8 @@ export {
   buildFileDiffEntry,
   buildTurnEntry,
   buildControlEntry,
+  buildTaskEntry,
+  buildTaskResultEntry,
   scanTranscriptLite,
   DEFAULT_LITE_SCAN_BYTES,
   getTranscriptWriteState,
@@ -562,6 +573,8 @@ export {
   type TranscriptFileDiffEntry,
   type TranscriptTurnEntry,
   type TranscriptControlEntry,
+  type TranscriptTaskEntry,
+  type TranscriptTaskResultEntry,
   type TranscriptMetaInput,
   type TranscriptLiteScan,
 } from './sessionTranscript.ts'
@@ -590,6 +603,27 @@ export {
   type DurableControlRecord,
   type DurableControlState,
 } from './durableControl.ts'
+export {
+  DURABLE_TASK_STATES,
+  DURABLE_TASK_ISOLATIONS,
+  applyDurableTaskEvent,
+  isDurableTaskState,
+  isDurableTaskIsolation,
+  normalizeDurableTaskId,
+  normalizeDurableTaskSessionId,
+  projectDurableTaskEvents,
+  type DurableTaskEvent,
+  type DurableTaskStateEvent,
+  type DurableTaskResultEvent,
+  type DurableTaskRecord,
+  type DurableTaskResult,
+  type DurableTaskState,
+  type DurableTaskIsolation,
+} from './durableTask.ts'
+export {
+  createSessionBackgroundTaskLifecycle,
+  type SessionTaskRuntimeSession,
+} from './sessionTaskRuntime.ts'
 
 export type SessionEvent =
   | { type: 'phase'; phase: SessionPhase | string }
@@ -801,6 +835,8 @@ export type BoloSession = {
   durableTurns: DurableTurnRecord[]
   /** DR2C：由 transcript `control` entries 投影；不重建 coordinator queue。 */
   durableControls: DurableControlRecord[]
+  /** DR3A：由 transcript task/task_result entries 投影；不自动重启 worker。 */
+  durableTasks: DurableTaskRecord[]
   /**
    * 权威 system 段（对照 HC systemPrompt）。
    * callModel 时由 prepareModelMessages 前缀；对话历史尽量不混入 system。
@@ -1162,9 +1198,15 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
     diffTurn: 0,
     durableTurns: [],
     durableControls: [],
+    durableTasks: [],
     hookDiagLog: createHookDiagLog(),
     postCompactReinjection: true,
     onEvent: opts.onEvent ?? (() => {}),
+  }
+
+  if (session.backgroundAgents) {
+    session.backgroundAgents.durableLifecycle =
+      createSessionBackgroundTaskLifecycle(session)
   }
 
   session.tryMidTurnCompact = async () => {
@@ -2063,6 +2105,7 @@ async function runOwnedPrompt(
 
     terminal = await queryLoop({
       sessionId: session.id,
+      turnId,
       cwd: session.cwd,
       hooks: session.hooks,
       messages: session.messages,
@@ -2322,12 +2365,19 @@ export async function resumeSession(
     }
   }
 
-  // D6/DR1/DR2C：恢复 file_diff 与 durable turn/control 诊断投影。
+  // D6/DR1/DR2C/DR3A：恢复 file_diff 与 durable lifecycle 诊断投影。
   try {
     const tp = resolveTranscriptPathFromJson(filePath)
     const { entries } = await loadTranscriptFile(tp)
     session.durableTurns = projectDurableTurns(entries)
     session.durableControls = projectDurableControls(entries)
+    session.durableTasks = projectDurableTasks(entries)
+    if (session.backgroundAgents) {
+      restoreBackgroundAgentStoreFromDurableTasks(
+        session.backgroundAgents,
+        session.durableTasks,
+      )
+    }
     const diffs = fileDiffsFromTranscriptEntries(entries)
     if (diffs.length) {
       session.fileDiffLog = diffs.map((d) => ({
@@ -2711,6 +2761,7 @@ export {
   formatBackgroundAgentsStatus,
   markBackgroundAgentRunning,
   markBackgroundAgentFinished,
+  restoreBackgroundAgentStoreFromDurableTasks,
   canStartBackgroundAgent,
   countRunningBackgroundAgents,
   getDefaultMaxBackgroundAgents,
@@ -2749,6 +2800,9 @@ export {
   type BackgroundAgentEntry,
   type BackgroundAgentStatus,
   type BackgroundAgentStore,
+  type BackgroundTaskAdmission,
+  type BackgroundTaskCompletion,
+  type DurableBackgroundTaskLifecycle,
   type LoadAgentsDirOptions,
   type LoadAgentsDirResult,
   type ResolveAgentToolsResult,

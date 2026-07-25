@@ -177,6 +177,8 @@ export type AskPermissionFn = (req: {
 
 export type RunToolUseContext = {
   sessionId: string
+  /** DR3A：当前主 durable turn；透传给 Agent task parentTurnId。 */
+  parentTurnId?: string
   cwd: string
   hooks: HooksConfig
   permissionMode: PermissionMode
@@ -199,7 +201,7 @@ export type RunToolUseContext = {
   agentDefinitions?: import('./subagent.ts').ActiveAgentDefinitions
   /** 后台 subagent 状态表 */
   backgroundStore?: import('./subagent.ts').BackgroundAgentStore
-  /** 父会话 messages；后台完成通知 + fork 继承上下文 */
+  /** 父会话 messages；仅供 fork 继承，后台完成不得异步修改 */
   parentMessages?: import('../../shared/src/index.ts').ChatMessage[]
   /** fork 时注入子 agent 的父 system 段 */
   parentSystemPromptSections?: readonly string[]
@@ -876,6 +878,7 @@ export async function runToolUse(
         subagentParent: ctx.deps
           ? {
               parentSessionId: ctx.sessionId,
+              parentTurnId: ctx.parentTurnId,
               cwd: ctx.cwd,
               hooks: ctx.hooks,
               deps: ctx.deps,

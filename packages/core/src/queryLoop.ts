@@ -101,6 +101,8 @@ export type QueryLoopEvent =
 
 export type QueryLoopParams = {
   sessionId: string
+  /** DR3A：主会话当前 durable turn；subagent task 以此关联父 turn。 */
+  turnId?: string
   cwd: string
   hooks: HooksConfig
   messages: ChatMessage[]
@@ -384,6 +386,7 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
       streamTools = new StreamingToolExecutor({
         context: {
           sessionId: params.sessionId,
+          parentTurnId: params.turnId,
           cwd: params.cwd,
           hooks: params.hooks,
           permissionMode: params.permissionMode,

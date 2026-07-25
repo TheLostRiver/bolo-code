@@ -37,6 +37,17 @@ import {
   type DurableControlState,
 } from './durableControl.ts'
 import type { SessionControlKind } from './sessionCoordinator.ts'
+import {
+  isDurableTaskIsolation,
+  isDurableTaskState,
+  normalizeDurableTaskId,
+  normalizeDurableTaskSessionId,
+  projectDurableTaskEvents,
+  type DurableTaskEvent,
+  type DurableTaskIsolation,
+  type DurableTaskRecord,
+  type DurableTaskState,
+} from './durableTask.ts'
 
 /** 公共头字段（线性 transcript；可选 parentUuid 供分叉元数据） */
 export type TranscriptEntryBase = {
@@ -144,6 +155,33 @@ export type TranscriptControlEntry = TranscriptEntryBase & {
   detail?: string
 }
 
+/** DR3A：background/subagent task lifecycle；不进模型 messages。 */
+export type TranscriptTaskEntry = TranscriptEntryBase & {
+  type: 'task'
+  taskId: string
+  parentTurnId?: string
+  agentType: string
+  state: DurableTaskState
+  prompt?: string
+  description?: string
+  isolation?: DurableTaskIsolation
+  detail?: string
+}
+
+/** DR3A：task result 必须先于 completed/error terminal；不进模型 messages。 */
+export type TranscriptTaskResultEntry = TranscriptEntryBase & {
+  type: 'task_result'
+  taskId: string
+  summary: string
+  isError: boolean
+  agentTranscriptPath?: string
+  usage?: SessionUsage
+  totalDurationMs?: number
+  totalToolUseCount?: number
+  worktreePath?: string
+  detail?: string
+}
+
 export type TranscriptEntry =
   | TranscriptMetaEntry
   | TranscriptMessageEntry
@@ -153,6 +191,8 @@ export type TranscriptEntry =
   | TranscriptFileDiffEntry
   | TranscriptTurnEntry
   | TranscriptControlEntry
+  | TranscriptTaskEntry
+  | TranscriptTaskResultEntry
 
 export type TranscriptMetaInput = {
   sessionId: string
@@ -654,6 +694,106 @@ export async function appendControlEntry(
   return entry
 }
 
+export function buildTaskEntry(
+  opts: Omit<
+    DurableTaskEvent & { type: 'state' },
+    'type' | 'timestamp'
+  > & {
+    timestamp?: string
+  },
+): TranscriptTaskEntry {
+  const taskId = normalizeDurableTaskId(opts.taskId)
+  const sessionId = normalizeDurableTaskSessionId(opts.sessionId)
+  if (!isDurableTaskState(opts.state)) {
+    throw new Error(`buildTaskEntry: invalid state ${String(opts.state)}`)
+  }
+  if (
+    opts.isolation !== undefined &&
+    !isDurableTaskIsolation(opts.isolation)
+  ) {
+    throw new Error(
+      `buildTaskEntry: invalid isolation ${String(opts.isolation)}`,
+    )
+  }
+  const agentType = opts.agentType.trim()
+  if (!agentType) throw new Error('buildTaskEntry: agentType is empty')
+  return {
+    type: 'task',
+    sessionId,
+    taskId,
+    agentType,
+    state: opts.state,
+    timestamp: opts.timestamp ?? nowIso(),
+    ...(opts.parentTurnId?.trim()
+      ? { parentTurnId: normalizeDurableTurnId(opts.parentTurnId) }
+      : {}),
+    ...(opts.prompt !== undefined ? { prompt: opts.prompt } : {}),
+    ...(opts.description?.trim()
+      ? { description: opts.description.trim() }
+      : {}),
+    ...(opts.isolation ? { isolation: opts.isolation } : {}),
+    ...(opts.detail?.trim() ? { detail: opts.detail.trim() } : {}),
+  }
+}
+
+export async function appendTaskEntry(
+  file: string,
+  opts: Omit<DurableTaskEvent & { type: 'state' }, 'type' | 'timestamp'> & {
+    timestamp?: string
+  },
+): Promise<TranscriptTaskEntry> {
+  const entry = buildTaskEntry(opts)
+  await appendTranscriptLine(file, entry)
+  return entry
+}
+
+export function buildTaskResultEntry(
+  opts: Omit<
+    DurableTaskEvent & { type: 'result' },
+    'type' | 'timestamp'
+  > & {
+    timestamp?: string
+  },
+): TranscriptTaskResultEntry {
+  const taskId = normalizeDurableTaskId(opts.taskId)
+  const sessionId = normalizeDurableTaskSessionId(opts.sessionId)
+  const summary = opts.summary.trim()
+  if (!summary) throw new Error('buildTaskResultEntry: summary is empty')
+  return {
+    type: 'task_result',
+    sessionId,
+    taskId,
+    timestamp: opts.timestamp ?? nowIso(),
+    summary,
+    isError: opts.isError,
+    ...(opts.agentTranscriptPath?.trim()
+      ? { agentTranscriptPath: opts.agentTranscriptPath.trim() }
+      : {}),
+    ...(opts.usage ? { usage: structuredClone(opts.usage) } : {}),
+    ...(opts.totalDurationMs != null
+      ? { totalDurationMs: Math.max(0, opts.totalDurationMs) }
+      : {}),
+    ...(opts.totalToolUseCount != null
+      ? { totalToolUseCount: Math.max(0, opts.totalToolUseCount) }
+      : {}),
+    ...(opts.worktreePath?.trim()
+      ? { worktreePath: opts.worktreePath.trim() }
+      : {}),
+    ...(opts.detail?.trim() ? { detail: opts.detail.trim() } : {}),
+  }
+}
+
+export async function appendTaskResultEntry(
+  file: string,
+  opts: Omit<DurableTaskEvent & { type: 'result' }, 'type' | 'timestamp'> & {
+    timestamp?: string
+  },
+): Promise<TranscriptTaskResultEntry> {
+  const entry = buildTaskResultEntry(opts)
+  await appendTranscriptLine(file, entry)
+  return entry
+}
+
 /** 从 transcript 投影 turn；默认把 admitted/running 识别为 interrupted。 */
 export function projectDurableTurns(
   entries: readonly TranscriptEntry[],
@@ -702,6 +842,59 @@ export function projectDurableControls(
     })
   }
   return projectDurableControlEvents(events, opts)
+}
+
+/** 从 transcript 投影 background tasks；默认将 admitted/running 恢复为 interrupted。 */
+export function projectDurableTasks(
+  entries: readonly TranscriptEntry[],
+  opts?: { recoverIncomplete?: boolean },
+): DurableTaskRecord[] {
+  const events: DurableTaskEvent[] = []
+  for (const entry of entries) {
+    if (entry.type === 'task') {
+      events.push({
+        type: 'state',
+        taskId: entry.taskId,
+        sessionId: entry.sessionId,
+        agentType: entry.agentType,
+        state: entry.state,
+        timestamp: entry.timestamp,
+        ...(entry.parentTurnId
+          ? { parentTurnId: entry.parentTurnId }
+          : {}),
+        ...(entry.prompt !== undefined ? { prompt: entry.prompt } : {}),
+        ...(entry.description
+          ? { description: entry.description }
+          : {}),
+        ...(entry.isolation ? { isolation: entry.isolation } : {}),
+        ...(entry.detail ? { detail: entry.detail } : {}),
+      })
+    } else if (entry.type === 'task_result') {
+      events.push({
+        type: 'result',
+        taskId: entry.taskId,
+        sessionId: entry.sessionId,
+        timestamp: entry.timestamp,
+        summary: entry.summary,
+        isError: entry.isError,
+        ...(entry.agentTranscriptPath
+          ? { agentTranscriptPath: entry.agentTranscriptPath }
+          : {}),
+        ...(entry.usage ? { usage: structuredClone(entry.usage) } : {}),
+        ...(entry.totalDurationMs != null
+          ? { totalDurationMs: entry.totalDurationMs }
+          : {}),
+        ...(entry.totalToolUseCount != null
+          ? { totalToolUseCount: entry.totalToolUseCount }
+          : {}),
+        ...(entry.worktreePath
+          ? { worktreePath: entry.worktreePath }
+          : {}),
+        ...(entry.detail ? { detail: entry.detail } : {}),
+      })
+    }
+  }
+  return projectDurableTaskEvents(events, opts)
 }
 
 /** entries 中全部 file_diff（保持文件顺序） */
@@ -846,6 +1039,9 @@ async function rewriteTranscriptFromMessagesUnlocked(
   }> = []
   let preservedTurns: TranscriptTurnEntry[] = []
   let preservedControls: TranscriptControlEntry[] = []
+  let preservedTasks: Array<
+    TranscriptTaskEntry | TranscriptTaskResultEntry
+  > = []
   if (opts && 'title' in opts && opts.title !== undefined) {
     preservedTitle = normalizeSessionTitle(opts.title)
   }
@@ -890,6 +1086,14 @@ async function rewriteTranscriptFromMessagesUnlocked(
             entry.type === 'control',
         )
         .map((entry) => ({ ...entry }))
+      preservedTasks = entries
+        .filter(
+          (
+            entry,
+          ): entry is TranscriptTaskEntry | TranscriptTaskResultEntry =>
+            entry.type === 'task' || entry.type === 'task_result',
+        )
+        .map((entry) => ({ ...entry }))
     } catch {
       /* 新文件或不可读 */
     }
@@ -911,6 +1115,21 @@ async function rewriteTranscriptFromMessagesUnlocked(
         .filter(
           (entry): entry is TranscriptControlEntry =>
             entry.type === 'control',
+        )
+        .map((entry) => ({ ...entry }))
+    } catch {
+      /* 新文件或不可读 */
+    }
+  }
+  if (preservedTasks.length === 0) {
+    try {
+      const { entries } = await loadTranscriptFile(filePath)
+      preservedTasks = entries
+        .filter(
+          (
+            entry,
+          ): entry is TranscriptTaskEntry | TranscriptTaskResultEntry =>
+            entry.type === 'task' || entry.type === 'task_result',
         )
         .map((entry) => ({ ...entry }))
     } catch {
@@ -983,6 +1202,9 @@ async function rewriteTranscriptFromMessagesUnlocked(
   }
   for (const control of preservedControls) {
     lines.push(JSON.stringify(control))
+  }
+  for (const task of preservedTasks) {
+    lines.push(JSON.stringify(task))
   }
   const body = lines.length ? lines.join('\n') + '\n' : ''
   const tmp = path.join(
@@ -1370,6 +1592,87 @@ export async function loadTranscriptFile(
               : {}),
             ...(isDurableControlBoundary(o.boundary)
               ? { boundary: o.boundary }
+              : {}),
+            ...(typeof o.detail === 'string' ? { detail: o.detail } : {}),
+          }),
+        )
+        continue
+      }
+      if (o.type === 'task') {
+        if (
+          typeof o.taskId !== 'string' ||
+          typeof o.sessionId !== 'string' ||
+          typeof o.agentType !== 'string' ||
+          !isDurableTaskState(o.state)
+        ) {
+          continue
+        }
+        entries.push(
+          buildTaskEntry({
+            taskId: o.taskId,
+            sessionId: o.sessionId,
+            agentType: o.agentType,
+            state: o.state,
+            timestamp:
+              typeof o.timestamp === 'string' ? o.timestamp : nowIso(),
+            ...(typeof o.parentTurnId === 'string'
+              ? { parentTurnId: o.parentTurnId }
+              : {}),
+            ...(typeof o.prompt === 'string' ? { prompt: o.prompt } : {}),
+            ...(typeof o.description === 'string'
+              ? { description: o.description }
+              : {}),
+            ...(isDurableTaskIsolation(o.isolation)
+              ? { isolation: o.isolation }
+              : {}),
+            ...(typeof o.detail === 'string' ? { detail: o.detail } : {}),
+          }),
+        )
+        continue
+      }
+      if (o.type === 'task_result') {
+        if (
+          typeof o.taskId !== 'string' ||
+          typeof o.sessionId !== 'string' ||
+          typeof o.summary !== 'string' ||
+          typeof o.isError !== 'boolean'
+        ) {
+          continue
+        }
+        const rawUsage =
+          o.usage && typeof o.usage === 'object' && !Array.isArray(o.usage)
+            ? (o.usage as Partial<SessionUsage>)
+            : undefined
+        const usage =
+          rawUsage &&
+          Number.isFinite(rawUsage.inputTokens) &&
+          Number.isFinite(rawUsage.outputTokens) &&
+          Number.isFinite(rawUsage.totalTokens) &&
+          Number.isFinite(rawUsage.calls)
+            ? cloneSessionUsage(rawUsage as SessionUsage)
+            : undefined
+        entries.push(
+          buildTaskResultEntry({
+            taskId: o.taskId,
+            sessionId: o.sessionId,
+            timestamp:
+              typeof o.timestamp === 'string' ? o.timestamp : nowIso(),
+            summary: o.summary,
+            isError: o.isError,
+            ...(typeof o.agentTranscriptPath === 'string'
+              ? { agentTranscriptPath: o.agentTranscriptPath }
+              : {}),
+            ...(usage ? { usage } : {}),
+            ...(typeof o.totalDurationMs === 'number' &&
+            Number.isFinite(o.totalDurationMs)
+              ? { totalDurationMs: o.totalDurationMs }
+              : {}),
+            ...(typeof o.totalToolUseCount === 'number' &&
+            Number.isFinite(o.totalToolUseCount)
+              ? { totalToolUseCount: o.totalToolUseCount }
+              : {}),
+            ...(typeof o.worktreePath === 'string'
+              ? { worktreePath: o.worktreePath }
               : {}),
             ...(typeof o.detail === 'string' ? { detail: o.detail } : {}),
           }),
