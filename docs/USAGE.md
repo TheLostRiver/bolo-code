@@ -147,6 +147,8 @@ npx bolo --resume <id>
 npx bolo --continue
 ```
 
+REPL 中，模型或工具正在运行时按 `Ctrl-C` 会取消**当前 turn**并返回提示符；空闲提示符下按 `Ctrl-C` 才退出。若取消发生在权限问答或 diff 审批面板，默认按拒绝处理。
+
 ### 3.2 Desktop（Electron）
 
 ```bash
@@ -235,7 +237,7 @@ Bolo 里有两层「agent」概念，别混：
 |-----|------|
 | `BOLO_AGENTS_ENABLED=0` | 禁用 Agent 工具 |
 | `BOLO_SUBAGENT_MAX_SPAWN_DEPTH` | 覆盖全局 maxSpawnDepth |
-| `BOLO_SUBAGENT_WORKTREE=1` | 尝试 git worktree 隔离（失败回落父 cwd） |
+| `BOLO_SUBAGENT_WORKTREE=1` | 请求 git worktree 隔离；创建失败则子任务失败，不回落父 cwd |
 
 ### 5.2 自定义类型 — `agents/*.md`
 
@@ -322,6 +324,7 @@ CLI：
 - 子 agent **权限不得比父更宽**  
 - 默认 `maxSpawnDepth: 0` → 子工具表通常 **无 Agent**（防无限递归）  
 - auto 模式下危险 always-allow 会被清洗；Agent 常强制分类  
+- worktree 只在 clean 时自动删除；modified/untracked/ignored、复用目录或清理失败会保留并返回绝对路径
 - **无遥测**；密钥不进 transcript  
 
 ---
@@ -391,7 +394,7 @@ CLI：
 ## 9. 会话与 resume
 
 - 落盘：`~/.bolo/sessions/` 或项目 sessions（见 [SESSIONS.md](./SESSIONS.md)）  
-- resume 会尝试恢复 **`providerId` + model + effort**（缺 key 降级 + 警告）  
+- resume 会尝试恢复 **`providerId` + model + effort**，并与新会话共用当前 workspace 的 hooks / skills / plugins / agent / MCP 装配（缺 key 降级 + 警告）
 - `/diff` 摘要可经 transcript `file_diff` 恢复（无全文 hunk）  
 
 ```bash
@@ -417,7 +420,12 @@ npx bolo --resume <id>
 ## 11. 测试与开发者入口
 
 ```bash
+npm test
+npm run typecheck
 npx tsx scripts/smoke-turn.ts          # mock 一轮
+npx tsx scripts/test-model-retry.ts
+npx tsx scripts/test-cli-events.ts
+npx tsx scripts/test-worktree-safety.ts
 npx tsx scripts/test-slash.ts
 npx tsx scripts/test-multi-provider.ts
 npx tsx scripts/test-ultrathink.ts

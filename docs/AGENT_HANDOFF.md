@@ -106,10 +106,10 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 
 | 层 | 粗估 | 状态摘要 |
 |----|------|----------|
-| Headless 核心 | ~80–88% | queryLoop · STE · 权限 · tools |
-| 会话 / CLI | ~80–88% | JSONL · resume · slash · TTY 壳 |
+| Headless 核心 | ~80–88% | queryLoop · STE · 权限 · tools；partial stream fail-closed |
+| 会话 / CLI | ~80–88% | JSONL · new/resume 同构 runtime · slash · 每 turn 取消 |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
-| Subagent | ~85–92% | Spec v0；默认子不可再 spawn |
+| Subagent | ~85–92% | Spec v0；默认子不可再 spawn；worktree 成果保全 |
 | 文件 Diff 日用 | ~95%+ | **D0–D7** |
 | 文件 Diff UI | ~90–95% | **U0–U4**；U5 真 Ink/IDE 可选 |
 | Hooks 日用 | ~96–98% | **H0–H5**（含 SessionEnd） |
@@ -120,7 +120,7 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | Electron GUI | ~65–75% | 薄壳；非 HC 级 IDE |
 | 产品相对 HC 全家桶 | ~74–88% | 日用高；UI 密度另计 |
 
-**主线已闭环：** Diff · Hooks · Compact · Provider · Effort · Provider UX CX0–CX8。
+**主线已闭环：** Diff · Hooks · Compact · Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4**。
 
 **开放轨（非阻塞）：**
 
@@ -150,6 +150,7 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | §9 | Provider 多实例 |
 | §10 | Effort |
 | §11 | Provider UX（CX） |
+| §12 | CLI / Agent 可靠性（R0–R4） |
 
 历史切片命名（实现时仍会在 commit/message 出现）：
 
@@ -224,7 +225,12 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 ### 7.2 常用测试
 
 ```bash
+npm test
+npm run typecheck
 npx tsx scripts/smoke-turn.ts
+npx tsx scripts/test-model-retry.ts
+npx tsx scripts/test-cli-events.ts
+npx tsx scripts/test-worktree-safety.ts
 npx tsx scripts/test-slash.ts
 npx tsx scripts/test-multi-provider.ts
 npx tsx scripts/test-provider-ux.ts
@@ -236,7 +242,7 @@ npx tsx scripts/test-file-diff.ts
 npx tsx scripts/test-config.ts
 ```
 
-`pnpm test` 只覆盖 package.json 登记的一批；**新轨以对应 test 脚本为准**。
+`npm test` 已覆盖 R0–R4 的关键回归；其它新轨仍以对应 `test-*` 脚本为准。
 
 ### 7.3 Git
 
@@ -294,6 +300,7 @@ cd apps/desktop && npm install && set BOLO_DESKTOP_MOCK=1 && npm start
 | D0–D7 / U0–U4 | 文件 diff 日用 + 交互主路径 |
 | H0–H5 / C0–C5 | Hooks · Compact 日用 |
 | Desktop repoRoot fix | `apps/desktop` 正确加载 `packages/*` |
+| R0–R4 | provider partial-error fail-closed · new/resume 同构 · Ctrl-C 取消链 · worktree 保全 · 默认门禁 |
 
 最新 commit 以 `git log` 为准。
 

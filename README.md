@@ -25,10 +25,10 @@
 
 | 层 | 粗估 | 说明 |
 |----|------|------|
-| Headless 核心 | ~80–88% | queryLoop · 权限 · tools · STE |
-| 会话 / CLI | ~80–88% | JSONL · resume · slash · TTY 面板 |
+| Headless 核心 | ~80–88% | queryLoop · 权限 · tools · STE；partial stream fail-closed |
+| 会话 / CLI | ~80–88% | JSONL · new/resume 同构 runtime · slash · turn 取消 |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
-| Subagent | ~85–92% | `config.agents` + `agents/*.md` · Spec v0 |
+| Subagent | ~85–92% | `config.agents` + `agents/*.md` · worktree 成果保全 |
 | 文件 Diff 日用 | ~95%+ | D0–D7 · U0–U4 |
 | Hooks 日用 | ~96–98% | H0–H5（含 SessionEnd） |
 | Compact 日用 | ~92–95% | C0–C5 |
@@ -38,7 +38,7 @@
 | Electron GUI | ~65–75% | 壳 + 流式 + 权限 + Settings + 多 provider |
 | 相对 HC 全家桶 UI | 另计 | 不设 100% |
 
-**主线已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX CX0–CX8。  
+**主线已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX CX0–CX8 · CLI/Agent 可靠性 R0–R4。
 
 **开放轨（非阻塞）：** Compact §8.9 · U5 真·Ink/IDE · adaptive thinking · Desktop 体验打磨。  
 

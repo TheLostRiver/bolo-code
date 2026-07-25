@@ -11,16 +11,16 @@
 
 | 层 | 粗估 | 说明 |
 |----|------|------|
-| **Headless 核心** | **~80–88%** | loop/STE/权限/auto/snip/policy/OS sandbox |
-| 会话与 CLI | **~80–88%** | JSONL · resume · slash |
+| **Headless 核心** | **~80–88%** | loop/STE/权限/auto/snip/policy/OS sandbox；partial stream fail-closed |
+| 会话与 CLI | **~80–88%** | JSONL · new/resume 同构 runtime · slash · 每 turn 取消 |
 | **扩展面** | **~80–88%** | MCP×3 · Skills · Plugins · WebFetch · OAuth 本地 |
-| **Subagent** | **~85–92%** | 见 SUBAGENT / SUBAGENT_SPEC v0 |
+| **Subagent** | **~85–92%** | Spec v0；worktree 隔离失败 fail-closed、dirty 成果保留 |
 | **Rules / Creators** | **~75–85%** | 日用齐 |
 | **成本与缓存** | **~94–97%** | /cost 日用近满 |
 | **文件 Diff · 日用契约** | **~95%+** | **D0–D7 已收口**；见 [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) |
 | **文件 Diff · 交互 UI** | **~90–95%** | **U0–U4 已落地**（VM · 面板 · 审批 · cell · 行号/主题/轻量语法）；U5 真·Ink/IDE 可选 |
 | **斜杠** | **~80–88%** | 日用 + polish |
-| **CLI TUI（壳）** | **~70–80%** | 文本框布局/picker/主题；**非**真 React Ink |
+| **CLI TUI（壳）** | **~70–80%** | 文本框布局/picker/主题；active Ctrl-C 取消本轮；**非**真 React Ink |
 | **Electron GUI** | **~65–75%** | 壳 + 流式 + 权限 + 设置 + **多 provider（CX7）** |
 | **Hooks · 日用契约** | **~96–98%** | **H0–H5 已落地**（SessionEnd · exit 语义 · updatedInput · `/hooks recent`）；trust/UI 菜单后置 |
 | **Compact · 日用管道** | **~92–95%** | **C0–C5 已落地**；后置 partial/remote/真 tokenizer（§8.9） |
@@ -29,7 +29,7 @@
 | **Provider UX · 便利层** | **~95–98%** | **CX0–CX8 已落地**（含 ultrathink 默认 off）· [PROVIDER_UX.md](./PROVIDER_UX.md) |
 | **产品整体（相对 HC）** | **~74–88%** | 日用高；UI 全家桶另计 |
 
-**主线已闭环：** headless 日用 → Diff · Hooks · Compact · Provider · Effort · **Provider UX CX0–CX8**。
+**主线已闭环：** headless 日用 → Diff · Hooks · Compact · Provider · Effort · **Provider UX CX0–CX8** · **CLI/Agent 可靠性 R0–R4**。
 
 **开放轨（非阻塞）：**  
 Compact §8.9 · U5 · adaptive thinking。
@@ -166,6 +166,7 @@ apps/desktop       消费同一 DiffViewModel                 （U3）
 | **多 Provider 热切** | ✅ **P0–P4.1**（§9）；Desktop **CX7** |
 | **Effort 方言** | ✅ **E0–E9**（§10） |
 | **Provider UX** | ✅ **CX0–CX8**（§11；ultrathink 默认 off） |
+| **CLI / Agent 可靠性** | ✅ **R0–R4**（§12；流式终态 · runtime · 取消 · worktree · 门禁） |
 | 无遥测 | ✅ |
 
 ---
@@ -186,10 +187,11 @@ apps/desktop       消费同一 DiffViewModel                 （U3）
 | **M-Provider（P0–P4.1）** | ✅ | 多 provider + `/provider` 热切 + picker；见 §9 |
 | **M-Effort（E0–E9）** | ✅ | 方言引擎 · choosable · 门控 · TTY · doctor |
 | **M-Provider-UX（CX0–CX8）** | ✅ | preset · caps · errors · resume · Desktop · ultrathink |
+| **M-Reliability（R0–R4）** | ✅ | provider fail-closed · new/resume 同构 · Ctrl-C · worktree 保全 · 默认门禁 |
 | 官方市场 / 遥测 | 🚫 | 永不 |
 
 **一句话：**  
-主路径、Diff、Hooks、Compact、**多 Provider、Effort、Provider UX（含 CX8）**日用已收口。  
+主路径、Diff、Hooks、Compact、**多 Provider、Effort、Provider UX（含 CX8）、CLI/Agent 可靠性 R0–R4**日用已收口。
 
 **下一刀（开放 · 非阻塞）：** Compact §8.9 · U5 · adaptive thinking · Desktop 体验打磨。
 
@@ -798,3 +800,38 @@ function switchSessionModel(session, model: string): { ok, reason? }
 | **CX8** | ultrathink tip/turn（默认 off） | ✅ |
 
 **顺序：** `CX0–CX8` 主路径已落地。
+
+---
+
+## 12. CLI / Agent 可靠性轨（R0–R4 · P0 已收口）
+
+> **口径：** 本轨修正确性与可恢复性，不用新增功能数量虚抬 §0 百分比。
+> **原则：** provider 未确认成功前不产生本地工具副作用；取消必须贯穿整轮；隔离失败不得静默回落。
+
+| 阶段 | 交付 | 状态 |
+|------|------|------|
+| **R0** | provider 在 partial text / reasoning / tool call 后报错时返回 terminal `error`；不持久化截断 assistant/tool history；成功闭流后才调度工具 | ✅ |
+| **R1** | `createSessionFromWorkspace` / `resumeSessionFromWorkspace` 共用 provider、hooks、skills、plugins、agent policy、compact、MCP 装配；自定义 `apiKeyEnv` 不被通用 env 探测覆盖 | ✅ |
+| **R2** | `submitUserInput → submitPrompt → queryLoop` 贯通 `AbortSignal`；REPL 每 turn 独立 controller；active Ctrl-C 取消本轮，idle Ctrl-C 退出；权限与 diff pane 取消时 fail-closed | ✅ |
+| **R3** | subagent worktree 从 Git repo root 创建且拒绝跨仓库复用；仅在 clean 时非 force 删除；modified/untracked/ignored、复用目录、清理失败均返回绝对路径并保留；请求隔离但创建失败时模型调用为 0 | ✅ |
+| **R4** | 恢复 strict typecheck；`model-retry`、`cli-events`、`subagent`、`worktree-safety` 纳入默认 `npm test` | ✅ |
+
+### 12.1 可靠性验收
+
+- provider partial-output error 不得变成 `completed`，也不得执行已收到的 tool call
+- PTL 只在 provider 尚无 text / reasoning / tool 输出时重试
+- new / resume 使用同一 workspace runtime 语义
+- turn 取消不会卡在权限文本问答或 diff 审批面板
+- worktree 中的 modified / untracked / ignored 成果默认可恢复，保留原因对调用方可见
+- `npm test` 与 `npm run typecheck` 均为绿色门禁
+
+### 12.2 回归入口
+
+```bash
+npm test
+npm run typecheck
+npx tsx scripts/test-model-retry.ts
+npx tsx scripts/test-cli-events.ts
+npx tsx scripts/test-cli-resume.ts
+npx tsx scripts/test-worktree-safety.ts
+```
