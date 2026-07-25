@@ -14,6 +14,7 @@ import {
 } from '../packages/core/src/index.ts'
 import type { ChatMessage } from '../packages/shared/src/index.ts'
 import type { ProviderStreamEvent } from '../packages/providers/src/index.ts'
+import { buildTool } from '../packages/tools/src/index.ts'
 
 function assert(cond: unknown, msg: string) {
   if (!cond) {
@@ -219,7 +220,105 @@ async function main() {
   assert(qlCalls === 2, `queryLoop calls=${qlCalls}`)
   assert(qlRetries.length === 1, `queryLoop model_retry events=${qlRetries.length}`)
 
-  // ── 6) PTL 仍走 fatal 分类，不进 model retry 计数 ──
+  // ── 6) provider partial output 后报错：必须失败且不落盘 partial ──
+  for (const partialKind of ['text', 'reasoning'] as const) {
+    const partialMessages: ChatMessage[] = [
+      { role: 'user', content: `partial-${partialKind}` },
+    ]
+    const partialEvents: string[] = []
+    const partialDeps: QueryDeps = {
+      callModel: async function* () {
+        if (partialKind === 'text') {
+          yield { type: 'text_delta', text: 'partial text' }
+        } else {
+          yield { type: 'reasoning_delta', text: 'partial reasoning' }
+        }
+        yield { type: 'error', message: `provider failed after ${partialKind}` }
+        yield { type: 'done' }
+      },
+      prepareMessages: async ({ messages }) => ({ messages }),
+      uuid: () => `partial_${partialKind}`,
+    }
+    const partialTerminal = await queryLoop({
+      sessionId: `partial-${partialKind}`,
+      cwd: process.cwd(),
+      hooks: {},
+      messages: partialMessages,
+      deps: partialDeps,
+      permissionMode: 'bypassPermissions',
+      askPermission: async () => 'allow',
+      persistReasoning: true,
+      maxTurns: 2,
+      maxPtlRetries: 0,
+      onEvent: (event) => partialEvents.push(event.type),
+    })
+    assert(
+      partialTerminal.reason === 'error',
+      `${partialKind} partial terminal=${partialTerminal.reason}`,
+    )
+    assert(
+      partialMessages.length === 1,
+      `${partialKind} partial must not persist assistant history`,
+    )
+    assert(
+      partialEvents.includes('error'),
+      `${partialKind} partial emits terminal error`,
+    )
+  }
+
+  // ── 7) tool_call 后 provider 报错：工具不得产生本地副作用 ──
+  let partialToolRuns = 0
+  const sideEffectTool = buildTool({
+    name: 'SideEffect',
+    description: 'must not run before provider success',
+    requiresPermission: false,
+    isConcurrencySafe: () => true,
+    isReadOnly: () => false,
+    inputJSONSchema: { type: 'object', properties: {} },
+    async call() {
+      partialToolRuns += 1
+      return { ok: true, output: 'ran' }
+    },
+  })
+  const toolErrorMessages: ChatMessage[] = [
+    { role: 'user', content: 'do not run partial tool' },
+  ]
+  const toolErrorTerminal = await queryLoop({
+    sessionId: 'partial-tool',
+    cwd: process.cwd(),
+    hooks: {},
+    messages: toolErrorMessages,
+    deps: {
+      callModel: async function* () {
+        yield {
+          type: 'tool_call',
+          id: 'partial-tool-call',
+          name: 'SideEffect',
+          arguments: '{}',
+        }
+        yield { type: 'error', message: 'provider failed after tool call' }
+        yield { type: 'done' }
+      },
+      prepareMessages: async ({ messages }) => ({ messages }),
+      uuid: () => 'partial_tool_id',
+    },
+    tools: [sideEffectTool],
+    permissionMode: 'bypassPermissions',
+    askPermission: async () => 'allow',
+    maxTurns: 2,
+    maxPtlRetries: 0,
+  })
+  assert(
+    toolErrorTerminal.reason === 'error',
+    `tool partial terminal=${toolErrorTerminal.reason}`,
+  )
+  assert(partialToolRuns === 0, `partial tool runs=${partialToolRuns}`)
+  assert(
+    toolErrorMessages.length === 1,
+    'partial tool assistant/tool history must not persist',
+  )
+
+  // ── 8) PTL 仍走 fatal 分类，不进 model retry 计数 ──
   let ptlCalls = 0
   const ptlModel: CallModelFn = async function* () {
     ptlCalls += 1

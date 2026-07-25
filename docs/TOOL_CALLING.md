@@ -14,7 +14,7 @@
 | `runToolUse` 顺序 | find → schema → validate → Pre → Gate → call → **truncate** → Post |
 | 未知工具 / 校验错误 | `<tool_use_error>…</tool_use_error>`（对模型友好） |
 | `partitionToolCalls` | 只读批并发、写串行（`runTools` 批后执行） |
-| **StreamingToolExecutor** | 边收 `tool_call` 边调度；并发规则同上；**结果按入队序**；Bash 失败可取消兄弟；`discard` 放弃本轮；**tool_progress**；**interruptBehavior**（cancel/block） |
+| **StreamingToolExecutor** | queryLoop 先收集 `tool_call`，provider 成功闭流后再入队；执行期并发规则同上；**结果按入队序**；Bash 失败可取消兄弟；`discard` 放弃本轮；**tool_progress**；**interruptBehavior**（cancel/block） |
 | Glob / Grep 真实现 | `createGlobTool` / `createGrepTool` |
 | Skill 按需 | `Skill` 工具 + catalog |
 | **Edit** | `old_string` / `new_string`；默认**唯一**匹配；`replace_all` 可选；成功结果含 **+N/−M + unified 摘要** 与 `meta.structuredPatch`；ask 前 `previewFileToolChange`（见 FILE_DIFF_SPEC） |
@@ -48,7 +48,8 @@ Read, Glob, Grep, Skill           → isConcurrencySafe true  → 可并行
 Bash, Write, Edit, apply_patch    → false → 独占串行
 ```
 
-**主路径（queryLoop）：** 流式 `tool_call` 事件一到即 `StreamingToolExecutor.addTool`，模型流结束后 `drain` 按入队序取 `tool_result`。  
+**主路径（queryLoop）：** 流式阶段只收集 `tool_call`；provider 成功结束后才逐个 `StreamingToolExecutor.addTool`，随后 `drain` 按入队序取 `tool_result`。这样 partial stream 后的 provider error 不会提前产生本地副作用。
+
 **批后路径（仍保留）：** `runTools` + `partitionToolCalls` 供脚本/测试/非流场景。
 
 ## 4. 编辑类工具怎么选

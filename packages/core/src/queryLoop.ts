@@ -281,7 +281,10 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
     let assistantText = ''
     let assistantReasoning = ''
     const toolBlocks: ToolUseBlock[] = []
-    /** 边流边跑；PTL/错误回退时 discard */
+    /**
+     * 工具只在 provider stream 成功结束后入队。
+     * provider 可能在 partial text/tool_call 后报错；提前执行会产生不可回滚副作用。
+     */
     let streamTools: StreamingToolExecutor | null = null
 
     while (!modelOk) {
@@ -339,6 +342,7 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
         },
       })
       let modelError: string | undefined
+      let hadModelOutput = false
       let streamUsage: {
         inputTokens?: number
         outputTokens?: number
@@ -370,10 +374,12 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
         })) {
           if (ev.type === 'text_delta') {
             assistantText += ev.text
+            if (ev.text) hadModelOutput = true
             emit(params, { type: 'text', text: ev.text })
           } else if (ev.type === 'reasoning_delta') {
             // 展示始终转发；可选累加供 openai-compatible 回灌
             if (ev.text) {
+              hadModelOutput = true
               if (params.persistReasoning) assistantReasoning += ev.text
               emit(params, { type: 'reasoning', text: ev.text })
             }
@@ -393,9 +399,8 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
               input,
               argumentsJson: ev.arguments,
             }
+            hadModelOutput = true
             toolBlocks.push(block)
-            // 边流边入队执行（并发策略与 runTools 分区一致）
-            streamTools?.addTool(block)
           } else if (ev.type === 'usage') {
             streamUsage = {
               inputTokens: ev.usage?.inputTokens,
@@ -406,6 +411,7 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
             }
           } else if (ev.type === 'error') {
             modelError = ev.message
+            break
           }
         }
       } catch (e) {
@@ -417,12 +423,14 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
           emit(params, { type: 'done', terminal })
           return terminal
         }
-        const recovered = tryPtlRecover(
-          params,
-          msg,
-          maxPtlRetries,
-          ptlAttemptsThisTurn,
-        )
+        const recovered = hadModelOutput
+          ? null
+          : tryPtlRecover(
+              params,
+              msg,
+              maxPtlRetries,
+              ptlAttemptsThisTurn,
+            )
         if (recovered) {
           ptlAttemptsThisTurn = recovered.nextAttempts
           continue
@@ -433,7 +441,17 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
         return terminal
       }
 
-      if (modelError && !assistantText && toolBlocks.length === 0) {
+      if (params.signal?.aborted) {
+        streamTools?.discard()
+        const terminal: Terminal = {
+          reason: 'aborted',
+          detail: modelError,
+        }
+        emit(params, { type: 'done', terminal })
+        return terminal
+      }
+
+      if (modelError) {
         streamTools?.discard()
         const classified = classifyError(modelError, {
           signal: params.signal,
@@ -446,12 +464,14 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
           emit(params, { type: 'done', terminal })
           return terminal
         }
-        const recovered = tryPtlRecover(
-          params,
-          modelError,
-          maxPtlRetries,
-          ptlAttemptsThisTurn,
-        )
+        const recovered = hadModelOutput
+          ? null
+          : tryPtlRecover(
+              params,
+              modelError,
+              maxPtlRetries,
+              ptlAttemptsThisTurn,
+            )
         if (recovered) {
           ptlAttemptsThisTurn = recovered.nextAttempts
           continue
@@ -462,8 +482,10 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
         return terminal
       }
 
-      // 流中途 modelError 但已有 tool：仍完成已入队 tool（与旧行为：整批 runTools 一致取结果）
-      // 若将来做 streaming fallback 再 discard；本最小切片保留 drain。
+      // provider 已成功结束；此时才允许本地工具产生副作用。
+      for (const block of toolBlocks) {
+        streamTools?.addTool(block)
+      }
       modelOk = true
       ptlAttemptsThisTurn = 0
       const apiDurationMs = Math.max(0, Date.now() - callStartedAt)

@@ -20,6 +20,9 @@ while true:
     truncateHeadForPtlRetry(session.messages)  // 丢最旧 API 轮次
     re-prepare → retry callModel（不计额外 maxTurns）
   collect assistant text + tool_use blocks
+  if provider error:
+    discard partial assistant/tool history → terminal error
+  // provider 成功闭流后，才允许 tool_use 进入本地执行器
   if no tool_use:
     Stop hooks → terminal completed
   else:
@@ -45,7 +48,7 @@ Bolo **P0** 对齐：
 | **错误分类** | withRetry / errors | `packages/core/src/errorClassify.ts`：`retryable` / `fatal` / `user_abort` |
 | **模型退避重试** | `withRetry` | `wrapCallModelWithRetry`（默认 3 次、指数退避；`productionDeps` 默认包装） |
 | **系统提示词** | `getSystemPrompt` + query 前缀 | **`systemPromptSections` + `prepareModelMessages`**（见 `docs/SYSTEM_PROMPT.md`） |
-| 跑 tools | `runTools` / **StreamingToolExecutor** | 主路径：`StreamingToolExecutor`（边流边跑 + 入队序 drain）；批后：`toolOrchestration.runTools` 仍可用 |
+| 跑 tools | `runTools` / **StreamingToolExecutor** | 主路径：先收集 tool blocks，provider 成功闭流后统一入队；执行器内部按安全性并发、按入队序 drain；批后 `runTools` 仍可用 |
 | 单 tool | `runToolUse` | `toolExecution.ts` |
 | 结束 | stop hooks / terminal | Stop hooks + `Terminal` |
 | micro compact | `microcompactMessages` | `createMicrocompactPrepare`（默认开） |
@@ -67,6 +70,7 @@ Bolo **P0** 对齐：
 
 - PTL **故意**不走 HTTP 退避：需要改消息集合，不是同一请求重发。
 - Model retry 仅在**尚未产出** text/tool 内容时生效，避免重复 tool_use。
+- provider 在 partial text/reasoning/tool 后报错时直接 terminal `error`；partial assistant/tool history 不落盘，已收到工具也不执行。
 - 可关：`createCallModelFromProvider(provider, false)` 或 `maxRetries: 0`。
 
 ## 3. 模块边界
@@ -75,7 +79,7 @@ Bolo **P0** 对齐：
 submitPrompt / createSession     packages/core/index.ts   会话外壳
 queryLoop                        packages/core/queryLoop.ts
 errorClassify / modelRetry       packages/core/errorClassify.ts · modelRetry.ts
-StreamingToolExecutor            packages/core/streamingToolExecutor.ts  （主路径边流边跑）
+StreamingToolExecutor            packages/core/streamingToolExecutor.ts  （成功闭流后入队；执行期并发）
 runTools (partition)             packages/core/toolOrchestration.ts     （批后 / 测试）
 runToolUse                       packages/core/toolExecution.ts
 QueryDeps                        packages/core/deps.ts
@@ -112,8 +116,9 @@ type TerminalReason =
 
 - `npx tsx scripts/smoke-turn.ts` 仍绿  
 - `npx tsx scripts/test-model-retry.ts`：429→成功、abort 不重试、PTL 不进 model retry  
+- 同一脚本覆盖 partial text/reasoning/tool → error；tool 调用次数必须为 0、partial history 不落盘
 - `npx tsx scripts/test-ptl-retry.ts` 仍绿  
-- 代码路径可读：queryLoop →（retry 包装）callModel → **StreamingToolExecutor** → runToolUse  
+- 代码路径可读：queryLoop →（retry 包装）callModel → 成功闭流 → **StreamingToolExecutor** → runToolUse
 - `scripts/test-streaming-tool-executor.ts`：保序 · 并发 · 独占 · Bash 级联 · discard  
 - 文档本表与实现一致  
 
