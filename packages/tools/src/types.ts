@@ -18,6 +18,25 @@ export type ToolResult = {
   isError?: boolean
   /** 可选机器可读错误码 */
   errorCode?: string
+  /**
+   * 可选结构化结果（对照 HC FileEdit structuredPatch）。
+   * 模型侧以 output 为准；UI / /diff 可读 meta。
+   */
+  meta?: {
+    kind?: 'file_edit' | 'file_write' | 'apply_patch'
+    path?: string
+    added?: number
+    removed?: number
+    replacements?: number
+    structuredPatch?: Array<{
+      oldStart: number
+      oldLines: number
+      newStart: number
+      newLines: number
+      lines: string[]
+    }>
+    unified?: string
+  }
 }
 
 export type ToolContext = {

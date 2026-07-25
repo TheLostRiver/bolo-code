@@ -24,6 +24,14 @@ import {
 } from '../../permissions/src/osSandbox.ts'
 import { applyPatchToCwd } from './applyPatch.ts'
 import {
+  countHunkLines,
+  diffHunksFromEdit,
+  diffHunksFromFullReplace,
+  formatEditToolOutput,
+  formatUnifiedDiff,
+  formatWriteToolOutput,
+} from './textDiff.ts'
+import {
   buildTool,
   type BoloTool,
   type ToolContext,
@@ -298,16 +306,55 @@ export function createWriteTool(): BoloTool {
     async call(input, ctx) {
       if (ctx.signal?.aborted) return abortedResult()
       try {
-        const p = resolveSafe(ctx.cwd, String(input.path ?? ''))
+        const filePath = String(input.path ?? '')
+        const content = String(input.content ?? '')
+        const p = resolveSafe(ctx.cwd, filePath)
+        if (ctx.signal?.aborted) return abortedResult()
+        let before = ''
+        let created = true
+        try {
+          before = await fs.readFile(p, 'utf8')
+          created = false
+        } catch {
+          created = true
+        }
         if (ctx.signal?.aborted) return abortedResult()
         await fs.mkdir(path.dirname(p), { recursive: true })
         if (ctx.signal?.aborted) return abortedResult()
-        await fs.writeFile(p, String(input.content ?? ''), 'utf8')
+        await fs.writeFile(p, content, 'utf8')
         if (ctx.signal?.aborted) return abortedResult()
-        return { ok: true, output: `wrote ${input.path}` }
+
+        const hunks = created
+          ? diffHunksFromFullReplace('', content)
+          : diffHunksFromFullReplace(before, content)
+        const { added, removed } = countHunkLines(hunks)
+        const unified = formatUnifiedDiff(filePath, hunks)
+        const output = formatWriteToolOutput({
+          path: filePath,
+          created,
+          hunks,
+          includeUnified: true,
+        })
+        return {
+          ok: true,
+          output,
+          meta: {
+            kind: 'file_write',
+            path: filePath,
+            added,
+            removed,
+            structuredPatch: hunks,
+            ...(unified ? { unified } : {}),
+          },
+        }
       } catch (e) {
         if (ctx.signal?.aborted) return abortedResult()
-        return { ok: false, isError: true, output: String(e), errorCode: 'write_failed' }
+        return {
+          ok: false,
+          isError: true,
+          output: String(e),
+          errorCode: 'write_failed',
+        }
       }
     },
   })
@@ -436,9 +483,27 @@ export function createEditTool(): BoloTool {
         if (ctx.signal?.aborted) return abortedResult()
 
         const n = replaceAll ? count : 1
+        const hunks = diffHunksFromEdit(text, oldStr, newStr, replaceAll)
+        const { added, removed } = countHunkLines(hunks)
+        const unified = formatUnifiedDiff(filePath, hunks)
+        const output = formatEditToolOutput({
+          path: filePath,
+          replacements: n,
+          hunks,
+          includeUnified: true,
+        })
         return {
           ok: true,
-          output: `edited ${filePath} (${n} replacement${n === 1 ? '' : 's'})`,
+          output,
+          meta: {
+            kind: 'file_edit',
+            path: filePath,
+            added,
+            removed,
+            replacements: n,
+            structuredPatch: hunks,
+            ...(unified ? { unified } : {}),
+          },
         }
       } catch (e) {
         if (ctx.signal?.aborted) return abortedResult()

@@ -46,6 +46,17 @@ export {
 } from './applyPatch.ts'
 
 export {
+  countHunkLines,
+  diffHunksFromEdit,
+  diffHunksFromFullReplace,
+  formatUnifiedDiff,
+  formatEditToolOutput,
+  formatWriteToolOutput,
+  type DiffHunk,
+  type LineCounts,
+} from './textDiff.ts'
+
+export {
   toolsToOpenAI,
   toolsToAnthropic,
   type ToolLike,

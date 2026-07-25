@@ -15,7 +15,8 @@
 | **扩展面** | **~80–88%** | MCP×3 · Skills · Plugins · WebFetch · **OAuth 本地回调** |
 | **Subagent** | **~85–92%** | 已实现见 SUBAGENT.md；**目标方案** [SUBAGENT_SPEC.md](./SUBAGENT_SPEC.md) v0 |
 | **Rules / Creators** | **~75–85%** | 日用齐 |
-| **成本与缓存** | **~94–97%** | 日用 /cost 近满：USD+savings · wall · API 时长 · lastCall · break detail（tools±）· resume 恢复 promptCache · 价表细化 |
+| **成本与缓存** | **~94–97%** | 日用 /cost 近满：USD+savings · wall · API 时长 · lastCall · break detail · resume promptCache · 价表细化 |
+| **文件 Diff** | **~55–65%** | D0–D1：`textDiff` + Edit/Write structuredPatch/unified 输出；见 [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) |
 | **斜杠** | **~80–88%** | 日用 + polish |
 | **CLI TUI** | **~70–80%** | 布局/picker/主题 |
 | **Electron GUI** | **~55–65%** | 壳 + 流式 + 权限 + **设置页** |
