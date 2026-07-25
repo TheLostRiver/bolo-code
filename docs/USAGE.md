@@ -409,6 +409,7 @@ CLI：
 - resume 会把未完成 background task 显示为 `/bg` 的 interrupted 诊断，并恢复已完成摘要；不会重启 worker，也不会自动把 result 注入父消息或重放工具副作用。
 - `agents.overflow: "queue"` 会在 cap 满时建立 durable FIFO；queued 可用 `/bg cancel <taskId>` 取消。取消落盘失败会 warning，但任务仍从本进程 executable queue 移除。
 - background result 仅在主 queryLoop 安全边界进入 `<background_task_result>`；父 turn 已结束时等下一 turn。重启后只供 `/bg` 检查，不自动重复注入。
+- 开发者可通过 `buildRuntimeSnapshot(session)` 取得 protocol v1 纯数据 view-model；当前仅为 package API，DR4B 才接 CLI diagnostics/safe actions，不存在后台 daemon 或自动 replay。
 
 ```bash
 npx bolo --list
@@ -439,6 +440,7 @@ npx tsx scripts/smoke-turn.ts          # mock 一轮
 npx tsx scripts/test-model-retry.ts
 npx tsx scripts/test-cli-events.ts
 npx tsx scripts/test-worktree-safety.ts
+npm run test:runtime-protocol
 npx tsx scripts/test-slash.ts
 npx tsx scripts/test-multi-provider.ts
 npx tsx scripts/test-ultrathink.ts
