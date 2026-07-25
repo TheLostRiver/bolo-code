@@ -36,6 +36,10 @@ export type RunToolsParams = {
     autoModeState?: import('../../permissions/src/index.ts').AutoModeState
     fileDiffLog?: import('./fileDiffLog.ts').FileChangeRecord[]
     diffTurn?: number
+    id?: string
+    onFileDiffRecord?: (
+      rec: import('./fileDiffLog.ts').FileChangeRecord,
+    ) => void | Promise<void>
   }
   onAutoClassifyAudit?: (note: {
     text: string

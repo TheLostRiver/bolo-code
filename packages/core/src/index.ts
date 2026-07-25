@@ -369,6 +369,7 @@ export {
   migrateSessionToJsonl,
   setSessionTitle,
   appendSessionSystemNote,
+  appendSessionFileDiff,
   type SessionSnapshot,
   type SessionScope,
   type SessionListItem,
@@ -385,6 +386,7 @@ export {
   appendCompactBoundary,
   appendSessionTitle,
   appendSystemNote,
+  appendFileDiffEntry,
   dualWriteSessionTranscript,
   writeTranscriptAfterCompact,
   resolveTranscriptPathFromJson,
@@ -397,10 +399,12 @@ export {
   messagesFromTranscriptEntries,
   titleFromTranscriptEntries,
   systemNotesFromTranscriptEntries,
+  fileDiffsFromTranscriptEntries,
   normalizeSessionTitle,
   normalizeSystemNoteText,
   buildTitleEntry,
   buildSystemNoteEntry,
+  buildFileDiffEntry,
   scanTranscriptLite,
   DEFAULT_LITE_SCAN_BYTES,
   getTranscriptWriteState,
@@ -413,6 +417,7 @@ export {
   type TranscriptCompactBoundaryEntry,
   type TranscriptTitleEntry,
   type TranscriptSystemNoteEntry,
+  type TranscriptFileDiffEntry,
   type TranscriptMetaInput,
   type TranscriptLiteScan,
 } from './sessionTranscript.ts'
@@ -429,8 +434,20 @@ export type SessionEvent =
       name: string
       message: string
     }
-  | { type: 'tool_end'; id: string; name: string; output: string; ok: boolean; path?: string; added?: number; removed?: number }
-  | { type: 'permission_request'; id: string; name: string; input: unknown }
+  | { type: 'tool_end'; id: string; name: string; output: string; ok: boolean; path?: string; added?: number; removed?: number; summaryLine?: string; ansiUnified?: string }
+  | {
+      type: 'permission_request'
+      id: string
+      name: string
+      input: unknown
+      preview?: {
+        added: number
+        removed: number
+        paths: string[]
+        summaryText: string
+        unifiedPreview?: string
+      }
+    }
   | { type: 'hook'; event: string; exitCode: number; blocked?: boolean }
   | { type: 'permission_decision'; mode: string; behavior: string; reason: string }
   | { type: 'error'; message: string }
@@ -628,14 +645,20 @@ export type BoloSession = {
    */
   sessionStartedAtMs?: number
   /**
-   * 本会话文件改动 log（Edit/Write/apply_patch）；内存 only，/diff 读取。
-   * 不进 ChatMessage；resume 默认不恢复。
+   * 本会话文件改动 log（Edit/Write/apply_patch）；/diff 读取。
+   * 摘要可经 transcript file_diff 在 resume 后恢复（无 hunk lines）。
    */
   fileDiffLog?: import('./fileDiffLog.ts').FileChangeRecord[]
   /**
    * 用户 turn 序号；submitPrompt 成功入队 user message 前递增，写入 fileDiffLog。
    */
   diffTurn?: number
+  /**
+   * D6：file_diff 摘要落盘回调（createSession/submit 注入）。
+   */
+  onFileDiffRecord?: (
+    rec: import('./fileDiffLog.ts').FileChangeRecord,
+  ) => void | Promise<void>
   /**
    * 会话工具表（内置 + Agent + 可选 MCP）。
    * 未设置时 submitPrompt 回落 createDefaultTools()。
@@ -829,7 +852,17 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
     promptCacheState:
       opts.promptCacheState ?? createPromptCacheSessionState(),
     sessionStartedAtMs: Date.now(),
+    fileDiffLog: [],
+    diffTurn: 0,
     onEvent: opts.onEvent ?? (() => {}),
+  }
+
+  session.onFileDiffRecord = async (rec) => {
+    try {
+      await appendSessionFileDiff(session, rec)
+    } catch {
+      /* 落盘失败不拖垮 */
+    }
   }
 
   // 对照参考 query：snip → microcompact → autocompact → callModel
@@ -1460,6 +1493,33 @@ export async function resumeSession(
   applySnapshotToSession(session, snapshot, {
     restoreSystemSections: !reassemble,
   })
+
+  // D6：从 transcript 恢复 file_diff 摘要 → fileDiffLog
+  try {
+    const tp = resolveTranscriptPathFromJson(filePath)
+    const { entries } = await loadTranscriptFile(tp)
+    const diffs = fileDiffsFromTranscriptEntries(entries)
+    if (diffs.length) {
+      session.fileDiffLog = diffs.map((d) => ({
+        at: d.at,
+        tool: d.tool,
+        path: d.path,
+        kind: d.kind as import('./fileDiffLog.ts').FileChangeRecord['kind'],
+        added: d.added,
+        removed: d.removed,
+        ...(d.op
+          ? { op: d.op as import('./fileDiffLog.ts').FileChangeOp }
+          : {}),
+        ...(d.turn != null ? { turn: d.turn } : {}),
+      }))
+      const turns = diffs
+        .map((d) => d.turn ?? 0)
+        .filter((t) => t > 0)
+      if (turns.length) session.diffTurn = Math.max(...turns)
+    }
+  } catch {
+    /* 无 transcript 或旧格式 */
+  }
 
   // 重建 system 失败或为空时回退快照
   if (reassemble && session.systemPromptSections.length === 0) {

@@ -1,102 +1,72 @@
-# 文件 Diff 规格 v0（对照 HC · 实现水位）
+# 文件 Diff 规格（对照 HC + Codex · 日用 95%+）
 
-> 对照 HelsincyCode：`FileEditTool` / `utils/diff.ts` / `useTurnDiffs` / `FileEditToolDiff`。  
-> Bolo：**无遥测**；core 契约 + 文本 diff + 会话 log + `/diff`；彩色 UI / 权限预览后置。
+> 对照 HelsincyCode：`FileEditTool` / `utils/diff.ts` / `useTurnDiffs` / `FileEditToolDiff` / `gitDiff`。  
+> 对照 Codex：`diff_render` / patch history 摘要（语义）。  
+> Bolo：**无遥测**；不追求 Ink/IDE 全家桶 100%。
 
 ## 0. 目标与阶段
 
 | 阶段 | 交付 | 状态 |
 |------|------|------|
-| **D0** | 纯函数：旧→新 → hunk + unified + 行数 | ✅ |
-| **D1** | `Edit` / `Write` 结果 `meta.structuredPatch` + 可读摘要 | ✅ |
-| **D2** | `apply_patch` meta · 会话 `fileDiffLog` · `/diff` | ✅ 本批 |
-| **D3** | 权限 ask 前预览 · CLI/Desktop 彩色 | 后置 |
-| **后置** | IDE / gitDiff 远程 | HC 全家桶 |
+| **D0** | 纯函数 hunk + unified + 行数 | ✅ |
+| **D1** | Edit / Write `meta.structuredPatch` | ✅ |
+| **D2** | apply_patch meta · `fileDiffLog` · `/diff` | ✅ |
+| **D3** | 写前 `previewFileToolChange` · ask 展示 | ✅ |
+| **D4** | ANSI tool_end 摘要（模型 output 仍 plain） | ✅ |
+| **D5** | 本地 `gitDiff` · `/diff git` | ✅ |
+| **D6** | transcript `file_diff` 摘要 · resume | ✅ |
+| **后置** | IDE · 完整 DiffDialog · PR merge-base | 否 |
 
-相对 HC 文件-diff 体验粗估：**~70–80%**（有契约与会话列表，无彩色组件）。
+**日用 agent 文件-diff 体验：~95%+**（写前可见 / 写后可读 / 会话可查 / git 可对 / resume 可列）。  
+HC Ink 全家桶 + IDE：**后置**。
 
-## 1. 借鉴 HC 什么
+## 1. 数据流
 
-| HC | Bolo |
-|----|------|
-| `structuredPatch` hunk | `DiffHunk`（同形） |
-| `countLinesChanged` | `countHunkLines`；**不**进遥测 |
-| 工具结果带 patch | `ToolResult.meta`；模型吃 `output` |
-| `useTurnDiffs` | `fileDiffLog` + turn 号 + `/diff` |
-| UI 彩色 / 权限预览 | **D3** |
-| `logEvent` / LOC | **永不** |
-
-## 2. 契约
-
-### 2.1 `DiffHunk`（`packages/tools/src/textDiff.ts`）
-
-```ts
-type DiffHunk = {
-  oldStart: number  // 1-based
-  oldLines: number
-  newStart: number
-  newLines: number
-  lines: string[]   // 前缀 ' ' | '+' | '-'
-}
+```
+preview(ask) ──► permission_request.preview / askPermission.preview
+tool success ──► meta ──► fileDiffLog ──► transcript file_diff
+                    └──► tool_end summaryLine / ansiUnified (UI)
+/diff · /diff last · /diff <path> · /diff git [path]
 ```
 
-### 2.2 工具 API
+模型链只吃 plain `output`；色与完整 preview 走 side-channel。
 
-| 函数 | 作用 |
+## 2. 关键模块
+
+| 模块 | 职责 |
 |------|------|
-| `diffHunksFromEdit` | Edit 语义 |
-| `diffHunksFromFullReplace` | Write / apply_patch 前后全文 |
-| `formatUnifiedDiff` | 可读 unified（预算截断） |
-| `countHunkLines` | `{ added, removed }` |
+| `packages/tools/src/textDiff.ts` | hunk / unified / 行数 |
+| `packages/tools/src/fileChangePreview.ts` | 写前 preview（不写盘） |
+| `packages/tools/src/ansiDiff.ts` | 终端色 |
+| `packages/tools/src/gitDiff.ts` | 本地 git status / 单文件 diff |
+| `packages/core/src/fileDiffLog.ts` | 会话聚合 + `/diff` 文本 |
+| `packages/core/src/toolExecution.ts` | ask 挂 preview；log；tool_end 摘要 |
+| `packages/core/src/sessionTranscript.ts` | `file_diff` entry |
+| `packages/cli` · `apps/desktop` | 展示 preview / summary |
 
-### 2.3 `ToolResult.meta`
-
-```ts
-meta?: {
-  kind?: 'file_edit' | 'file_write' | 'apply_patch'
-  path?: string
-  paths?: string[]
-  op?: 'add' | 'update' | 'delete' | 'move'
-  added?: number
-  removed?: number
-  replacements?: number
-  structuredPatch?: DiffHunk[]
-  files?: Array<{ path; op?; added?; removed?; structuredPatch? }>
-  unified?: string
-}
-```
-
-### 2.4 会话 `fileDiffLog`（`packages/core/src/fileDiffLog.ts`）
-
-- **side-channel**：不进 `ChatMessage.content` / 不强制 jsonl
-- `submitPrompt` 递增 `diffTurn`；`runToolUse` 成功且 meta 为文件类时 append
-- **resume 默认空**（内存 only；文档诚实说明）
-
-### 2.5 `/diff`
+## 3. `/diff`
 
 | 调用 | 行为 |
 |------|------|
-| `/diff` | 会话累计文件 + 总 +N/−M |
+| `/diff` | 会话累计 |
 | `/diff last` | 最近用户 turn |
-| `/diff <path>` | 该路径最近一次 structured 行（若有） |
+| `/diff <path>` | 该路径最近 structured（内存有则） |
+| `/diff git` | `git status --porcelain` |
+| `/diff git <path>` | 相对 HEAD（untracked 合成 full-add） |
 
-## 3. 刻意不做
+## 4. 刻意不做
 
 - 外部 `diff` npm / 完整 Myers  
-- 权限弹窗彩色预览（D3）  
-- structuredPatch 强持久化进 message 行  
-- 遥测 / LOC counter  
+- IDE 推送 / GitHub repository 字段  
+- 遥测 / LOC  
+- structuredPatch 灌进模型 message  
 
-## 4. 测试
+## 5. 测试
 
 ```bash
 npx tsx scripts/test-file-diff.ts
 ```
 
-## 5. 文档地图
+## 6. 环境
 
-| 文档 | 角色 |
-|------|------|
-| 本文件 | 规格 |
-| `docs/TOOL_CALLING.md` | 工具表 |
-| `docs/ROADMAP.md` | 水位 |
+- `BOLO_DIFF_VERBOSE=1`：tool_end 附加 ANSI unified 片段

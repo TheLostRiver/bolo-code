@@ -40,6 +40,7 @@ export {
   applyPatchToCwd,
   parseApplyPatch,
   resolveSafe,
+  applyHunksToText,
   type ApplyPatchResult,
   type ApplyPatchFileMeta,
   type PatchOp,
@@ -56,6 +57,31 @@ export {
   type DiffHunk,
   type LineCounts,
 } from './textDiff.ts'
+
+export {
+  previewFileToolChange,
+  toPermissionPreviewPayload,
+  type FileChangePreview,
+  type FileChangePreviewFile,
+  type PermissionPreviewPayload,
+} from './fileChangePreview.ts'
+
+export {
+  colorizeUnifiedText,
+  formatAnsiUnifiedFromHunks,
+  formatFileChangeEndLine,
+  shouldShowVerboseDiff,
+} from './ansiDiff.ts'
+
+export {
+  fetchSingleFileGitDiff,
+  findGitRoot,
+  formatGitFileDiffSlash,
+  formatGitStatusSlash,
+  listGitStatus,
+  type GitFileDiff,
+  type GitStatusEntry,
+} from './gitDiff.ts'
 
 export {
   toolsToOpenAI,

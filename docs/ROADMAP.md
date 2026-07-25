@@ -16,7 +16,7 @@
 | **Subagent** | **~85–92%** | 已实现见 SUBAGENT.md；**目标方案** [SUBAGENT_SPEC.md](./SUBAGENT_SPEC.md) v0 |
 | **Rules / Creators** | **~75–85%** | 日用齐 |
 | **成本与缓存** | **~94–97%** | 日用 /cost 近满：USD+savings · wall · API 时长 · lastCall · break detail · resume promptCache · 价表细化 |
-| **文件 Diff** | **~70–80%** | D0–D2：`textDiff` + Edit/Write/apply_patch meta + `fileDiffLog` + `/diff`；见 [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) |
+| **文件 Diff** | **~95%+（日用）** | D0–D6：preview · ANSI tool_end · git · resume `file_diff`；IDE/Ink 全家桶后置；见 [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) |
 | **斜杠** | **~80–88%** | 日用 + polish |
 | **CLI TUI** | **~70–80%** | 布局/picker/主题 |
 | **Electron GUI** | **~55–65%** | 壳 + 流式 + 权限 + **设置页** |

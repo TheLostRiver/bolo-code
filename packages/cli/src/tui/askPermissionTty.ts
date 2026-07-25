@@ -2,16 +2,26 @@
  * T5：权限 ask — TTY 下 readline y/N/a；非 TTY 默认 deny
  * 对接 core AskPermissionFn / PermissionRequest 流程。
  * a = allow always for this tool name this session
+ * D3：可选 preview.summaryText（写前 diff）
  */
 
 import * as readline from 'node:readline'
 
 export type AskPermissionDecision = 'allow' | 'deny' | 'allow_always'
 
+export type PermissionPreview = {
+  added?: number
+  removed?: number
+  paths?: string[]
+  summaryText?: string
+  unifiedPreview?: string
+}
+
 export type AskPermissionRequest = {
   toolName: string
   toolInput: unknown
   toolUseId: string
+  preview?: PermissionPreview
 }
 
 export type AskPermissionFn = (
@@ -28,8 +38,15 @@ export function parsePermissionAnswer(raw: string): AskPermissionDecision {
   return 'deny'
 }
 
-export function formatPermissionPrompt(toolName: string): string {
-  return `Allow ${toolName}? [y/a/N] `
+export function formatPermissionPrompt(
+  toolName: string,
+  preview?: PermissionPreview,
+): string {
+  const head = `Allow ${toolName}? [y/a/N] `
+  const body = preview?.summaryText?.trim()
+  if (!body) return head
+  // 预览在问题前展示，最后一行再问
+  return `${body}\n${head}`
 }
 
 export type CreateTtyAskPermissionOptions = {
@@ -47,6 +64,7 @@ export type CreateTtyAskPermissionOptions = {
 /**
  * 创建 askPermission：
  * - TTY：`Allow <tool>? [y/a/N]`，默认 N；a = 本会话 always-allow 该工具
+ * - 可附带 preview.summaryText
  * - 非 TTY：deny（或 nonTtyDecision），不挂起
  */
 export function createTtyAskPermission(
@@ -74,7 +92,9 @@ export function createTtyAskPermission(
 
   return async (req) => {
     if (!isTty) return nonTty
-    const raw = await readAnswer(formatPermissionPrompt(req.toolName))
+    const raw = await readAnswer(
+      formatPermissionPrompt(req.toolName, req.preview),
+    )
     return parsePermissionAnswer(raw)
   }
 }

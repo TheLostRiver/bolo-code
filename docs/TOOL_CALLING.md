@@ -17,9 +17,9 @@
 | **StreamingToolExecutor** | 边收 `tool_call` 边调度；并发规则同上；**结果按入队序**；Bash 失败可取消兄弟；`discard` 放弃本轮；**tool_progress**；**interruptBehavior**（cancel/block） |
 | Glob / Grep 真实现 | `createGlobTool` / `createGrepTool` |
 | Skill 按需 | `Skill` 工具 + catalog |
-| **Edit** | `old_string` / `new_string`；默认**唯一**匹配；`replace_all` 可选；成功结果含 **+N/−M + unified 摘要** 与 `meta.structuredPatch`（见 FILE_DIFF_SPEC） |
-| Write | 全文写入；成功结果含行数 diff 摘要 + `meta` |
-| apply_patch | `*** Begin Patch`：Add / Update / Delete / **Move|Rename File**；或简易 unified；成功 `meta.kind=apply_patch` + `files[]` 行数/hunks；会话记入 `fileDiffLog`，`/diff` 可读 |
+| **Edit** | `old_string` / `new_string`；默认**唯一**匹配；`replace_all` 可选；成功结果含 **+N/−M + unified 摘要** 与 `meta.structuredPatch`；ask 前 `previewFileToolChange`（见 FILE_DIFF_SPEC） |
+| Write | 全文写入；成功结果含行数 diff 摘要 + `meta`；ask 前可 preview |
+| apply_patch | `*** Begin Patch`：Add / Update / Delete / **Move|Rename File**；或简易 unified；成功 `meta.kind=apply_patch` + `files[]`；会话 `fileDiffLog` + transcript `file_diff`；`/diff` · `/diff git` |
 | AbortSignal | Bash / Read / Write / Edit / apply_patch 尊重中段 abort → `Error: tool cancelled` |
 | interruptBehavior | 默认 **block**；**Bash = cancel**（用户 interrupt 可杀 shell） |
 | tool_progress | `ToolContext.onProgress` → `tool_progress` 事件；CLI dim `… Tool msg` |

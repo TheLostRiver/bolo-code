@@ -355,7 +355,7 @@ function readHunkLines(
   return { oldLines, newLines, next: i }
 }
 
-function applyHunksToText(original: string, hunks: PatchHunk[], fileLabel: string): string {
+export function applyHunksToText(original: string, hunks: PatchHunk[], fileLabel: string): string {
   // Normalize to \n for matching; preserve final newline preference
   const hadTrailingNl = original.endsWith('\n')
   let text = original.replace(/\r\n/g, '\n')

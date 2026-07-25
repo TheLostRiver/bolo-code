@@ -80,12 +80,28 @@ export type TranscriptSystemNoteEntry = TranscriptEntryBase & {
   kind?: string
 }
 
+/**
+ * 文件改动摘要（D6；**不进模型链**）。
+ * 仅 path/+N/−M；无 structuredPatch lines。rewrite/resume 保留。
+ */
+export type TranscriptFileDiffEntry = TranscriptEntryBase & {
+  type: 'file_diff'
+  path: string
+  tool: string
+  kind: string
+  op?: string
+  added: number
+  removed: number
+  turn?: number
+}
+
 export type TranscriptEntry =
   | TranscriptMetaEntry
   | TranscriptMessageEntry
   | TranscriptCompactBoundaryEntry
   | TranscriptTitleEntry
   | TranscriptSystemNoteEntry
+  | TranscriptFileDiffEntry
 
 export type TranscriptMetaInput = {
   sessionId: string
@@ -392,6 +408,94 @@ export async function appendSystemNote(
   return entry
 }
 
+export function buildFileDiffEntry(opts: {
+  sessionId: string
+  path: string
+  tool: string
+  kind: string
+  op?: string
+  added: number
+  removed: number
+  turn?: number
+  timestamp?: string
+}): TranscriptFileDiffEntry {
+  const filePath = opts.path.trim()
+  if (!filePath) throw new Error('buildFileDiffEntry: path is empty')
+  return {
+    type: 'file_diff',
+    sessionId: opts.sessionId,
+    timestamp: opts.timestamp ?? nowIso(),
+    path: filePath,
+    tool: opts.tool.trim() || 'unknown',
+    kind: opts.kind.trim() || 'file_edit',
+    added: Math.max(0, Math.floor(opts.added) || 0),
+    removed: Math.max(0, Math.floor(opts.removed) || 0),
+    ...(opts.op ? { op: opts.op } : {}),
+    ...(opts.turn != null && Number.isFinite(opts.turn)
+      ? { turn: Math.floor(opts.turn) }
+      : {}),
+  }
+}
+
+/** 追加 `file_diff` 摘要（不进模型链） */
+export async function appendFileDiffEntry(
+  file: string,
+  opts: {
+    sessionId: string
+    path: string
+    tool: string
+    kind: string
+    op?: string
+    added: number
+    removed: number
+    turn?: number
+  },
+): Promise<TranscriptFileDiffEntry> {
+  const entry = buildFileDiffEntry(opts)
+  await appendTranscriptLine(file, entry)
+  return entry
+}
+
+/** entries 中全部 file_diff（保持文件顺序） */
+export function fileDiffsFromTranscriptEntries(
+  entries: TranscriptEntry[],
+): Array<{
+  path: string
+  tool: string
+  kind: string
+  op?: string
+  added: number
+  removed: number
+  turn?: number
+  at: string
+}> {
+  const out: Array<{
+    path: string
+    tool: string
+    kind: string
+    op?: string
+    added: number
+    removed: number
+    turn?: number
+    at: string
+  }> = []
+  for (const e of entries) {
+    if (e.type !== 'file_diff') continue
+    if (!e.path?.trim()) continue
+    out.push({
+      path: e.path,
+      tool: e.tool || 'unknown',
+      kind: e.kind || 'file_edit',
+      added: e.added ?? 0,
+      removed: e.removed ?? 0,
+      at: e.timestamp,
+      ...(e.op ? { op: e.op } : {}),
+      ...(e.turn != null ? { turn: e.turn } : {}),
+    })
+  }
+  return out
+}
+
 /** entries 中全部 system_note（保持文件顺序） */
 export function systemNotesFromTranscriptEntries(
   entries: TranscriptEntry[],
@@ -472,6 +576,15 @@ export async function rewriteTranscriptFromMessages(
 
   let preservedTitle: string | undefined
   let preservedNotes: Array<{ text: string; kind?: string }> = []
+  let preservedFileDiffs: Array<{
+    path: string
+    tool: string
+    kind: string
+    op?: string
+    added: number
+    removed: number
+    turn?: number
+  }> = []
   if (opts && 'title' in opts && opts.title !== undefined) {
     preservedTitle = normalizeSessionTitle(opts.title)
   }
@@ -498,6 +611,15 @@ export async function rewriteTranscriptFromMessages(
           ...(n.kind ? { kind: n.kind } : {}),
         }))
       }
+      preservedFileDiffs = fileDiffsFromTranscriptEntries(entries).map((d) => ({
+        path: d.path,
+        tool: d.tool,
+        kind: d.kind,
+        added: d.added,
+        removed: d.removed,
+        ...(d.op ? { op: d.op } : {}),
+        ...(d.turn != null ? { turn: d.turn } : {}),
+      }))
     } catch {
       /* 新文件或不可读 */
     }
@@ -543,6 +665,22 @@ export async function rewriteTranscriptFromMessages(
           sessionId: session.id,
           text: n.text,
           kind: n.kind,
+        }),
+      ),
+    )
+  }
+  for (const d of preservedFileDiffs) {
+    lines.push(
+      JSON.stringify(
+        buildFileDiffEntry({
+          sessionId: session.id,
+          path: d.path,
+          tool: d.tool,
+          kind: d.kind,
+          added: d.added,
+          removed: d.removed,
+          ...(d.op ? { op: d.op } : {}),
+          ...(d.turn != null ? { turn: d.turn } : {}),
         }),
       ),
     )
@@ -916,6 +1054,36 @@ export async function loadTranscriptFile(
             typeof o.timestamp === 'string' ? o.timestamp : nowIso(),
           text,
           ...(kind ? { kind } : {}),
+          uuid: typeof o.uuid === 'string' ? o.uuid : undefined,
+        })
+        continue
+      }
+      if (o.type === 'file_diff') {
+        if (typeof o.path !== 'string' || !o.path.trim()) continue
+        const added =
+          typeof o.added === 'number' && Number.isFinite(o.added)
+            ? Math.max(0, Math.floor(o.added))
+            : 0
+        const removed =
+          typeof o.removed === 'number' && Number.isFinite(o.removed)
+            ? Math.max(0, Math.floor(o.removed))
+            : 0
+        entries.push({
+          type: 'file_diff',
+          sessionId: typeof o.sessionId === 'string' ? o.sessionId : '',
+          timestamp:
+            typeof o.timestamp === 'string' ? o.timestamp : nowIso(),
+          path: o.path.trim(),
+          tool: typeof o.tool === 'string' && o.tool.trim() ? o.tool.trim() : 'unknown',
+          kind: typeof o.kind === 'string' && o.kind.trim() ? o.kind.trim() : 'file_edit',
+          added,
+          removed,
+          ...(typeof o.op === 'string' && o.op.trim()
+            ? { op: o.op.trim() }
+            : {}),
+          ...(typeof o.turn === 'number' && Number.isFinite(o.turn)
+            ? { turn: Math.floor(o.turn) }
+            : {}),
           uuid: typeof o.uuid === 'string' ? o.uuid : undefined,
         })
       }

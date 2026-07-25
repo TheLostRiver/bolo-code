@@ -108,6 +108,10 @@ export type QueryLoopParams = {
     autoModeState?: import('../../permissions/src/index.ts').AutoModeState
     fileDiffLog?: import('./fileDiffLog.ts').FileChangeRecord[]
     diffTurn?: number
+    id?: string
+    onFileDiffRecord?: (
+      rec: import('./fileDiffLog.ts').FileChangeRecord,
+    ) => void | Promise<void>
   }
   /** Y3.6 auto 分类审计 → system_note */
   onAutoClassifyAudit?: (note: {

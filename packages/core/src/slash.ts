@@ -1588,9 +1588,13 @@ function cmdCost(session: SlashSession, _args: string): SlashDispatchResult {
  * `/diff`：会话文件改动（Edit/Write/apply_patch meta 侧信道）。
  * - 无参：累计
  * - last：最近用户 turn
+ * - git [path]：工作区 git status / 单文件 diff
  * - <path>：该路径最近一次 structured 摘要
  */
-function cmdDiff(session: SlashSession, args: string): SlashDispatchResult {
+async function cmdDiff(
+  session: SlashSession,
+  args: string,
+): Promise<SlashDispatchResult> {
   const raw = args.trim()
   const log = session.fileDiffLog
   if (!raw) {
@@ -1598,6 +1602,29 @@ function cmdDiff(session: SlashSession, args: string): SlashDispatchResult {
   }
   if (raw === 'last' || raw === 'turn') {
     return { ok: true, message: formatDiffSlash(log, { lastTurn: true }) }
+  }
+  const gitMatch = raw.match(/^git(?:\s+(.+))?$/i)
+  if (gitMatch) {
+    const pathArg = gitMatch[1]?.trim()
+    try {
+      const {
+        listGitStatus,
+        formatGitStatusSlash,
+        fetchSingleFileGitDiff,
+        formatGitFileDiffSlash,
+      } = await import('../../tools/src/gitDiff.ts')
+      if (!pathArg) {
+        const entries = await listGitStatus(session.cwd)
+        return { ok: true, message: formatGitStatusSlash(entries) }
+      }
+      const d = await fetchSingleFileGitDiff(session.cwd, pathArg)
+      return { ok: true, message: formatGitFileDiffSlash(d, pathArg) }
+    } catch (e) {
+      return {
+        ok: false,
+        message: `git diff failed: ${e instanceof Error ? e.message : String(e)}`,
+      }
+    }
   }
   return { ok: true, message: formatDiffSlash(log, { pathFilter: raw }) }
 }
@@ -2347,8 +2374,9 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
   },
   {
     name: 'diff',
-    summary: 'Show session file changes (Edit/Write/apply_patch; memory only)',
-    usage: '[last | <path>]',
+    summary:
+      'Session file changes; /diff last · /diff git [path] · /diff <path>',
+    usage: '[last | git [path] | <path>]',
     group: 'session',
     run: cmdDiff,
   },

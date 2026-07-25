@@ -91,7 +91,20 @@ export type ToolUseBlock = {
 
 export type ToolExecutionEvent =
   | { type: 'hook'; event: string; exitCode: number; blocked?: boolean }
-  | { type: 'permission_request'; id: string; name: string; input: unknown }
+  | {
+      type: 'permission_request'
+      id: string
+      name: string
+      input: unknown
+      /** 写前文件 diff 预览（Edit/Write/apply_patch） */
+      preview?: {
+        added: number
+        removed: number
+        paths: string[]
+        summaryText: string
+        unifiedPreview?: string
+      }
+    }
   | { type: 'permission_decision'; mode: string; behavior: string; reason: string }
   | { type: 'phase'; phase: 'awaiting_permission' | 'running' }
   | { type: 'tool_start'; id: string; name: string; input: unknown }
@@ -112,15 +125,27 @@ export type ToolExecutionEvent =
       path?: string
       added?: number
       removed?: number
+      summaryLine?: string
+      /** 可选 ANSI unified（仅 UI；默认不塞大段） */
+      ansiUnified?: string
     }
 
 /** UI/CLI 权限应答：allow_always = 本会话记住该 tool 名 */
 export type AskPermissionDecision = 'allow' | 'deny' | 'allow_always'
 
+export type PermissionPreviewPayload = {
+  added: number
+  removed: number
+  paths: string[]
+  summaryText: string
+  unifiedPreview?: string
+}
+
 export type AskPermissionFn = (req: {
   toolName: string
   toolInput: unknown
   toolUseId: string
+  preview?: PermissionPreviewPayload
 }) => Promise<AskPermissionDecision>
 
 export type RunToolUseContext = {
@@ -178,6 +203,11 @@ export type RunToolUseContext = {
     fileDiffLog?: import('./fileDiffLog.ts').FileChangeRecord[]
     /** 当前用户 turn 序号；submitPrompt 递增 */
     diffTurn?: number
+    id?: string
+    /** 可选：file_diff 摘要落盘（D6） */
+    onFileDiffRecord?: (
+      rec: import('./fileDiffLog.ts').FileChangeRecord,
+    ) => void | Promise<void>
   }
   /**
    * Y3.6：auto 分类结果审计（对照 HC decision 事件；本地 system_note，无遥测）。
@@ -610,12 +640,33 @@ export async function runToolUse(
     }
 
     if (finalBehavior === 'ask') {
+    // D3：写前 preview（失败静默）
+    let previewPayload:
+      | {
+          added: number
+          removed: number
+          paths: string[]
+          summaryText: string
+          unifiedPreview?: string
+        }
+      | undefined
+    try {
+      const { previewFileToolChange, toPermissionPreviewPayload } = await import(
+        '../../tools/src/fileChangePreview.ts'
+      )
+      const full = await previewFileToolChange(name, toolInput, ctx.cwd)
+      previewPayload = toPermissionPreviewPayload(full)
+    } catch {
+      previewPayload = undefined
+    }
+
     emit(ctx, { type: 'phase', phase: 'awaiting_permission' })
     emit(ctx, {
       type: 'permission_request',
       id: toolUseId,
       name,
       input: toolInput,
+      ...(previewPayload ? { preview: previewPayload } : {}),
     })
 
     const hookRes = await runHooks(
@@ -647,6 +698,9 @@ export async function runToolUse(
       const user = await ctx.askPermission({
         toolName: name,
         toolInput,
+        toolUseId,
+        ...(previewPayload ? { preview: previewPayload } : {}),
+      })
         toolUseId,
       })
       if (user === 'allow_always') {
@@ -774,6 +828,28 @@ export async function runToolUse(
     content = note
   }
 
+  // D4：tool_end 摘要行（UI）；模型 content 仍为 plain
+  let summaryLine: string | undefined
+  let ansiUnified: string | undefined
+  if (result.ok && result.meta?.kind) {
+    try {
+      const { formatFileChangeEndLine, colorizeUnifiedText, shouldShowVerboseDiff } =
+        await import('../../tools/src/ansiDiff.ts')
+      summaryLine = formatFileChangeEndLine({
+        name,
+        path: result.meta.path,
+        added: result.meta.added,
+        removed: result.meta.removed,
+        ok: true,
+      })
+      if (shouldShowVerboseDiff() && result.meta.unified) {
+        ansiUnified = colorizeUnifiedText(result.meta.unified, { maxLines: 40 })
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
   emit(ctx, {
     type: 'tool_end',
     id: toolUseId,
@@ -788,6 +864,8 @@ export async function runToolUse(
           removed: result.meta.removed,
         }
       : {}),
+    ...(summaryLine ? { summaryLine } : {}),
+    ...(ansiUnified ? { ansiUnified } : {}),
   })
 
   // --- 会话 fileDiffLog（D2；不污染 tool_result 文本）---
@@ -807,6 +885,14 @@ export async function runToolUse(
           ctx.sessionRef.fileDiffLog,
           rec,
         )
+        // D6：可选落盘摘要
+        if (ctx.sessionRef.onFileDiffRecord) {
+          try {
+            await ctx.sessionRef.onFileDiffRecord(rec)
+          } catch {
+            /* 落盘失败不拖垮 */
+          }
+        }
       }
     } catch {
       // log 失败不拖垮 tool 路径

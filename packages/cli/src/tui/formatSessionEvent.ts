@@ -20,6 +20,11 @@ export type CliSessionEvent =
       name: string
       output?: string
       ok: boolean
+      path?: string
+      added?: number
+      removed?: number
+      summaryLine?: string
+      ansiUnified?: string
     }
   | { type: 'error'; message: string }
   | { type: 'warning'; message: string }
@@ -50,7 +55,22 @@ export function formatToolEventLine(e: CliSessionEvent): string | null {
   }
   if (e.type === 'tool_end' && typeof e.name === 'string') {
     const ok = e.ok !== false
-    return ok ? `✓ ${e.name}` : `✗ ${e.name}`
+    if (typeof e.summaryLine === 'string' && e.summaryLine.trim()) {
+      const extra =
+        typeof e.ansiUnified === 'string' && e.ansiUnified.trim()
+          ? `\n${e.ansiUnified}`
+          : ''
+      return `${e.summaryLine}${extra}`
+    }
+    const pathPart =
+      typeof e.path === 'string' && e.path.trim() ? `  ${e.path}` : ''
+    const counts =
+      e.added != null || e.removed != null
+        ? `  +${e.added ?? 0}/-${e.removed ?? 0}`
+        : ''
+    return ok
+      ? `✓ ${e.name}${pathPart}${counts}`
+      : `✗ ${e.name}${pathPart}`
   }
   return null
 }

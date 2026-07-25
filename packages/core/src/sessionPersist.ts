@@ -36,11 +36,13 @@ import {
   setTranscriptWriteState,
   appendSessionTitle,
   appendSystemNote,
+  appendFileDiffEntry,
   ensureTranscriptFile,
   metaInputFromSession,
   getTranscriptWriteState,
   normalizeSessionTitle,
   scanTranscriptLite,
+  fileDiffsFromTranscriptEntries,
 } from './sessionTranscript.ts'
 import type { SessionUsage } from './sessionUsage.ts'
 import { cloneSessionUsage } from './sessionUsage.ts'
@@ -926,6 +928,66 @@ export async function appendSessionSystemNote(
     text: entry.text,
     ...(entry.kind ? { kind: entry.kind } : {}),
   }
+}
+
+/**
+ * 为会话追加 `file_diff` 摘要（不进模型链；rewrite 时保留）。
+ */
+export async function appendSessionFileDiff(
+  session: PersistableSession,
+  rec: {
+    path: string
+    tool: string
+    kind: string
+    op?: string
+    added: number
+    removed: number
+    turn?: number
+  },
+  options?: {
+    scope?: SessionScope
+    sessionsDir?: string
+    filePath?: string
+  },
+): Promise<{ transcriptPath: string }> {
+  const rawFilePath = options?.filePath
+    ? path.resolve(options.filePath)
+    : resolveSessionFilePath(session.id, {
+        scope: options?.scope,
+        cwd: session.cwd,
+        sessionsDir: options?.sessionsDir,
+      })
+  const transcriptPath = resolveTranscriptPathFromJson(rawFilePath)
+
+  await ensureTranscriptFile(
+    transcriptPath,
+    metaInputFromSession(session),
+  )
+  await appendFileDiffEntry(transcriptPath, {
+    sessionId: session.id,
+    path: rec.path,
+    tool: rec.tool,
+    kind: rec.kind,
+    added: rec.added,
+    removed: rec.removed,
+    ...(rec.op ? { op: rec.op } : {}),
+    ...(rec.turn != null ? { turn: rec.turn } : {}),
+  })
+
+  const prev = getTranscriptWriteState(session)
+  if (prev?.filePath) {
+    setTranscriptWriteState(session, {
+      filePath: prev.filePath,
+      appendedMessageCount: prev.appendedMessageCount,
+    })
+  } else {
+    setTranscriptWriteState(session, {
+      filePath: transcriptPath,
+      appendedMessageCount: session.messages.length,
+    })
+  }
+
+  return { transcriptPath }
 }
 
 async function loadSessionSnapshotFromPath(

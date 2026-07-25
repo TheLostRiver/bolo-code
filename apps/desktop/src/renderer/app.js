@@ -120,7 +120,19 @@ window.bolo.onEvent((e) => {
     appendMsg('system', `→ ${e.name}`)
   }
   if (e.type === 'tool_end' && e.name) {
-    appendMsg('system', `${e.ok === false ? '✗' : '✓'} ${e.name}`)
+    if (e.summaryLine) {
+      appendMsg('system', String(e.summaryLine))
+    } else {
+      const pathPart = e.path ? `  ${e.path}` : ''
+      const counts =
+        e.added != null || e.removed != null
+          ? `  +${e.added ?? 0}/-${e.removed ?? 0}`
+          : ''
+      appendMsg(
+        'system',
+        `${e.ok === false ? '✗' : '✓'} ${e.name}${pathPart}${counts}`,
+      )
+    }
   }
   if (e.type === 'error' && e.message) {
     appendMsg('system', e.message)
@@ -130,7 +142,14 @@ window.bolo.onEvent((e) => {
 let currentPermId = null
 window.bolo.onPermissionRequest((req) => {
   currentPermId = req.id
-  permText.textContent = `Allow ${req.toolName}?\n${JSON.stringify(req.toolInput ?? {}, null, 0).slice(0, 200)}`
+  const preview =
+    req.preview?.summaryText ||
+    (req.toolInput
+      ? JSON.stringify(req.toolInput ?? {}, null, 0).slice(0, 200)
+      : '')
+  permText.textContent = preview
+    ? `Allow ${req.toolName}?\n${preview}`
+    : `Allow ${req.toolName}?`
   permEl.hidden = false
 })
 

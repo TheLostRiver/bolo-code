@@ -52,6 +52,7 @@ function createDesktopAskPermission() {
         toolName: req.toolName,
         toolInput: req.toolInput,
         toolUseId: req.toolUseId,
+        ...(req.preview ? { preview: req.preview } : {}),
       })
       setTimeout(() => {
         if (pendingPermissions.has(id)) {

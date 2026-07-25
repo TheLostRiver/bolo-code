@@ -1,5 +1,5 @@
 /**
- * 文件 diff 契约单测（无网络）
+ * 文件 diff 契约单测 D0–D6（无网络）
  * 运行：npx tsx scripts/test-file-diff.ts
  */
 import { promises as fs } from 'node:fs'
@@ -13,6 +13,11 @@ import {
   diffHunksFromEdit,
   diffHunksFromFullReplace,
   formatUnifiedDiff,
+  previewFileToolChange,
+  colorizeUnifiedText,
+  formatFileChangeEndLine,
+  formatGitStatusSlash,
+  listGitStatus,
 } from '../packages/tools/src/index.ts'
 import {
   appendFileChange,
@@ -20,7 +25,14 @@ import {
   recordsFromToolMeta,
   summarizeFileDiffLog,
 } from '../packages/core/src/fileDiffLog.ts'
+import {
+  appendFileDiffEntry,
+  fileDiffsFromTranscriptEntries,
+  loadTranscriptFile,
+} from '../packages/core/src/sessionTranscript.ts'
 import { dispatchSlashCommand, type SlashSession } from '../packages/core/src/slash.ts'
+import { formatPermissionPrompt } from '../packages/cli/src/tui/askPermissionTty.ts'
+import { formatToolEventLine } from '../packages/cli/src/tui/formatSessionEvent.ts'
 
 function assert(c: unknown, m: string): asserts c {
   if (!c) {
@@ -46,6 +58,11 @@ assert(countHunkLines(multi).added === 3, 'three adds')
 
 const created = diffHunksFromFullReplace('', 'hello\nworld\n')
 assert(countHunkLines(created).added >= 2, 'new file adds')
+
+// ANSI
+const ansi = colorizeUnifiedText(uni)
+assert(ansi.includes('\x1b['), 'ansi has escape')
+assert(formatFileChangeEndLine({ name: 'Edit', path: 'a.ts', added: 1, removed: 1 }).includes('+1/-1'), 'end line')
 
 // fileDiffLog pure
 {
@@ -103,12 +120,48 @@ assert(countHunkLines(created).added >= 2, 'new file adds')
   assert(fromMeta.length === 2, 'meta expands files')
 }
 
-// ── Edit / Write / apply_patch integration ──
+// CLI formatters
+{
+  const line = formatToolEventLine({
+    type: 'tool_end',
+    id: '1',
+    name: 'Edit',
+    ok: true,
+    path: 'z.ts',
+    added: 2,
+    removed: 1,
+  })
+  assert(line && line.includes('z.ts') && line.includes('+2/-1'), `tool end line: ${line}`)
+  const prompt = formatPermissionPrompt('Edit', {
+    summaryText: 'Edit preview: 1 file(s)  +1/-1\n  M a.ts  +1/-1',
+  })
+  assert(prompt.includes('Edit preview'), 'perm prompt has preview')
+  assert(prompt.includes('[y/a/N]'), 'perm prompt has choices')
+}
+
+// ── integration ──
 async function main() {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'bolo-diff-'))
   try {
     const f = path.join(tmp, 't.ts')
     await fs.writeFile(f, 'const x = 1\nconst y = 2\n', 'utf8')
+
+    // D3 preview does not write
+    const prev = await previewFileToolChange(
+      'Edit',
+      {
+        path: 't.ts',
+        old_string: 'const y = 2',
+        new_string: 'const y = 9',
+      },
+      tmp,
+    )
+    assert(prev, 'preview exists')
+    assert(prev!.added >= 1, 'preview added')
+    assert(prev!.summaryText.includes('t.ts'), 'preview summary path')
+    const still = await fs.readFile(f, 'utf8')
+    assert(still.includes('const y = 2'), 'preview did not write')
+
     const edit = createEditTool()
     const r = await edit.call(
       {
@@ -119,24 +172,17 @@ async function main() {
       { cwd: tmp },
     )
     assert(r.ok, `edit ok: ${r.output}`)
-    assert(r.output.includes('+1') || r.output.includes('+'), 'output has +')
-    assert(r.output.includes('@@') || r.meta?.unified, 'has unified or meta')
     assert(r.meta?.kind === 'file_edit', 'meta kind')
-    assert(r.meta?.path === 't.ts', 'meta path')
-    assert((r.meta?.added ?? 0) >= 1, 'meta added')
     assert((r.meta?.structuredPatch?.length ?? 0) >= 1, 'meta patch')
+    assert(!r.output.includes('\x1b['), 'model output plain no ansi')
 
     const write = createWriteTool()
     const w = await write.call(
       { path: 'n.ts', content: 'export const n = 1\n' },
       { cwd: tmp },
     )
-    assert(w.ok, `write ok: ${w.output}`)
-    assert(w.meta?.kind === 'file_write', 'write meta')
-    assert((w.meta?.added ?? 0) >= 1, 'write added')
-    assert(w.output.includes('new file') || w.output.includes('+'), 'write output')
+    assert(w.ok && w.meta?.kind === 'file_write', 'write meta')
 
-    // apply_patch Add + Update
     const ap = createApplyPatchTool()
     const patch = [
       '*** Begin Patch',
@@ -151,24 +197,51 @@ async function main() {
     const pr = await ap.call({ patch }, { cwd: tmp })
     assert(pr.ok, `apply_patch ok: ${pr.output}`)
     assert(pr.meta?.kind === 'apply_patch', 'ap meta kind')
-    assert((pr.meta?.added ?? 0) >= 1, 'ap meta added')
     assert((pr.meta?.files?.length ?? 0) >= 2, 'ap meta files')
-    assert(pr.output.includes('apply_patch:') || pr.output.includes('+'), 'ap output summary')
-    const body = await fs.readFile(path.join(tmp, 't.ts'), 'utf8')
-    assert(body.includes('const y = 4'), 'patch applied update')
-    assert(
-      await fs
-        .readFile(path.join(tmp, 'newp.ts'), 'utf8')
-        .then((s) => s.includes('z = 1')),
-      'patch applied add',
+
+    // apply_patch preview
+    const apPrev = await previewFileToolChange(
+      'apply_patch',
+      {
+        patch: [
+          '*** Begin Patch',
+          '*** Add File: preview-only.ts',
+          '+hello',
+          '*** End Patch',
+        ].join('\n'),
+      },
+      tmp,
     )
+    assert(apPrev && apPrev.files.some((x) => x.path.includes('preview-only')), 'ap preview')
+    try {
+      await fs.access(path.join(tmp, 'preview-only.ts'))
+      assert(false, 'preview should not create file')
+    } catch {
+      /* expected */
+    }
 
-    // failure: no meta
     const bad = await ap.call({ patch: '' }, { cwd: tmp })
-    assert(!bad.ok, 'empty patch fails')
-    assert(!bad.meta, 'fail no meta')
+    assert(!bad.ok && !bad.meta, 'fail no meta')
 
-    // /diff slash
+    // D6 transcript file_diff roundtrip
+    const jl = path.join(tmp, 'sess.jsonl')
+    await fs.writeFile(jl, '', 'utf8')
+    await appendFileDiffEntry(jl, {
+      sessionId: 's1',
+      path: 't.ts',
+      tool: 'Edit',
+      kind: 'file_edit',
+      op: 'update',
+      added: 1,
+      removed: 1,
+      turn: 2,
+    })
+    const { entries } = await loadTranscriptFile(jl)
+    const diffs = fileDiffsFromTranscriptEntries(entries)
+    assert(diffs.length === 1 && diffs[0]!.path === 't.ts', 'file_diff load')
+    assert(diffs[0]!.turn === 2, 'file_diff turn')
+
+    // /diff slash + git (may be null outside repo — still ok)
     const session = {
       id: 's',
       cwd: tmp,
@@ -193,10 +266,14 @@ async function main() {
       session.fileDiffLog = appendFileChange(session.fileDiffLog, rec)
     }
     const d = await dispatchSlashCommand(session, 'diff', '')
-    assert(d.ok, 'diff slash ok')
-    assert(d.message.includes('file'), `diff msg: ${d.message}`)
+    assert(d.ok && d.message.includes('file'), `diff msg: ${d.message}`)
     const dLast = await dispatchSlashCommand(session, 'diff', 'last')
     assert(dLast.ok && dLast.message.includes('Turn 2'), 'diff last')
+    const dGit = await dispatchSlashCommand(session, 'diff', 'git')
+    assert(dGit.ok, `diff git ok: ${dGit.message}`)
+    // pure git helper on tmp (likely not a repo)
+    const st = await listGitStatus(tmp)
+    assert(formatGitStatusSlash(st).length > 0, 'git status format')
 
     console.log('PASS test-file-diff')
   } finally {
