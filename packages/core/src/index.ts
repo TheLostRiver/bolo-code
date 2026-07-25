@@ -628,6 +628,8 @@ export type CreateSessionOptions = {
   providerId?: string
   /** active profile 快照 */
   providerProfile?: ProviderProfile
+  /** E 轨：effort 方言（来自 profile 或显式） */
+  effortDialect?: string | Record<string, unknown>
   source?: SessionStartSource
   onEvent?: (e: SessionEvent) => void
   /**
@@ -702,9 +704,13 @@ export type BoloSession = {
   providerId?: string
   providerProfile?: ProviderProfile
   /**
+   * E 轨：effort 方言 id / 内联（/effort 预览 · 与 provider 配置对齐）。
+   */
+  effortDialect?: string | Record<string, unknown>
+  /**
    * 会话级 effort 档位（/effort）。
-   * 经 callModel → completeStream options.effort → mapEffort → max_tokens。
-   * `undefined` 视为 auto（默认 base maxTokens）。
+   * 经 callModel → completeStream options.effort → 方言 wire（或 max_tokens fallback）。
+   * `undefined` 视为 auto。
    */
   effortLevel?: string
   /**
@@ -971,6 +977,9 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
     providerRegistry: opts.providerRegistry,
     providerId: opts.providerId,
     providerProfile: opts.providerProfile,
+    effortDialect:
+      opts.effortDialect ??
+      opts.providerProfile?.effortDialect,
     effortLevel:
       typeof opts.effortLevel === 'string' && opts.effortLevel.trim()
         ? opts.effortLevel.trim()
@@ -1196,6 +1205,7 @@ export async function createSessionFromWorkspace(
     providerRegistry: workspace.providerRegistry,
     providerId: workspace.providerId,
     providerProfile: workspace.providerProfile,
+    effortDialect: workspace.providerProfile?.effortDialect,
     source: opts.source,
     onEvent: opts.onEvent,
     agentPolicy,

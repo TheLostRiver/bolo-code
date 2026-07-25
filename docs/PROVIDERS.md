@@ -305,25 +305,23 @@ npx tsx scripts/smoke-live.ts
 **不做：** 官方市场、密钥入库、遥测、默认同 turn 自动 failover。  
 **测试：** `scripts/test-multi-provider.ts`。
 
-## 路线：推理强度 · Effort 方言（**E 轨 · 规划**）
+## 路线：推理强度 · Effort 方言（**E 轨 · E0–E4 日用已闭环**）
 
 > 总规划见 [ROADMAP.md §10](./ROADMAP.md) · **真源** [EFFORT.md](./EFFORT.md)。
 
 | 现状 | 目标 |
 |------|------|
-| `/effort` → **仅** `max_tokens` 倍率 | 按 **dialect 表** 写入各家 reasoning 字段 |
-| 厂商 if 不可扩展 | **有限 wire shape** + 用户可配方言 |
+| `/effort` + **方言表** 写入 API | ✅ 引擎 + builtins |
+| 厂商 if 不可扩展 | ✅ 有限 wire shape + 用户可配方言 |
 
 | ID | 切片 | 状态 |
 |----|------|------|
-| **E0** | 规格（EFFORT.md） | 📋 |
-| **E1** | resolve 引擎 + body patch | 📋 |
-| **E2** | `deepseek-chat`：`reasoning_effort` | 📋 |
-| **E3** | `openai-responses`：`reasoning.effort` | 📋 |
-| **E4** | `providers.*.effort.dialect` | 📋 |
-| **E5** | doctor / 回归 | 📋 |
-
-配置草案（实现后）：
+| **E0** | 规格（EFFORT.md） | ✅ |
+| **E1** | resolve 引擎 + body patch | ✅ |
+| **E2** | `deepseek-chat`：`reasoning_effort` | ✅ |
+| **E3** | `openai-responses`：`reasoning.effort` | ✅ |
+| **E4** | `providers.*.effort.dialect` | ✅ |
+| **E5** | anthropic / doctor 抛光 | 📋 |
 
 ```jsonc
 {
@@ -338,5 +336,6 @@ npx tsx scripts/smoke-live.ts
 }
 ```
 
-DeepSeek 官方：`reasoning_effort` ∈ {`high`,`max`} low/medium→high，xhigh→max。  
-**不要**为每个新模型加 TS 分支——改 dialect 数据即可。
+实现：`packages/providers/src/effortDialect.ts` · 测试 `scripts/test-effort-dialect.ts`。  
+DeepSeek：`reasoning_effort` ∈ {high,max}；low/medium→high；xhigh/ultra→max；agent auto→max。  
+未配置时：baseUrl/model 含 deepseek 会 **detect** 为 `deepseek-chat`；否则 `max-tokens` 兼容旧行为。

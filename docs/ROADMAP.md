@@ -23,13 +23,13 @@
 | **Hooks · 日用契约** | **~96–98%** | **H0–H5 已落地**（SessionEnd · exit 语义 · updatedInput · `/hooks recent`）；trust/UI 菜单后置 |
 | **Compact · 日用管道** | **~92–95%** | **C0–C5 已落地**；后置 partial/remote/真 tokenizer（§8.9） |
 | **Provider · 多实例热切** | **~92–96%** | **P0–P4.1 已落地**（`providers` · 热切 · TTY 箭头选）；P5 Desktop / resume `providerId` 后置 |
-| **Effort · 推理强度方言** | **~15–25%** | 现仅 `max_tokens` 倍率；**E 轨规划**见 [EFFORT.md](./EFFORT.md)（引擎 + 可插拔方言，非厂商 if） |
+| **Effort · 推理强度方言** | **~75–85%** | **E0–E4 已落地**（引擎 + deepseek/openai-responses wire + config）；E5 anthropic 后置 |
 | **产品整体（相对 HC）** | **~72–86%** | 日用高；UI 全家桶另计 |
 
-**主线已闭环：** headless 日用 → Diff · Hooks · Compact C0–C5 · **Provider P0–P4.1**。
+**主线已闭环：** headless 日用 → Diff · Hooks · Compact C0–C5 · **Provider P0–P4.1** · **Effort E0–E4**。
 
-**开放轨（当前可着重）：**  
-**E 轨 · Effort 方言**（[EFFORT.md](./EFFORT.md)）· P5 Desktop 多 provider · Compact §8.9 后置 · U5 可选 · resume 持久化 `providerId`。
+**开放轨（非阻塞）：**  
+E5 anthropic effort · P5 Desktop 多 provider · Compact §8.9 后置 · U5 可选 · resume 持久化 `providerId`。
 
 ---
 

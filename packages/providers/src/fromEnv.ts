@@ -72,6 +72,8 @@ export type CreateProviderOptions = {
   model?: string
   timeoutMs?: number
   maxTokens?: number
+  /** Effort 方言 id 或内联；见 docs/EFFORT.md */
+  effortDialect?: string | import('./effortDialect.ts').EffortDialect
 }
 
 /** 命名 profile → Provider（P 轨工厂） */
@@ -85,6 +87,8 @@ export type ProviderProfileInput = {
   timeoutMs?: number
   maxTokens?: number
   forceMock?: boolean
+  /** string id · 内联 dialect · 或 config 传来的 Record */
+  effortDialect?: string | import('./effortDialect.ts').EffortDialect | Record<string, unknown>
 }
 
 /**
@@ -182,6 +186,7 @@ export function createProviderFromEnv(
       model,
       timeoutMs: overrides?.timeoutMs,
       maxTokens: overrides?.maxTokens,
+      effortDialect: overrides?.effortDialect,
     }
     return {
       provider: createOpenAIResponsesProvider(cfg),
@@ -198,6 +203,7 @@ export function createProviderFromEnv(
       model,
       timeoutMs: overrides?.timeoutMs,
       maxTokens: overrides?.maxTokens,
+      effortDialect: overrides?.effortDialect,
     }),
     kind: 'openai-compatible',
     model,
@@ -247,6 +253,7 @@ export function createProviderFromProfile(
     model,
     timeoutMs: profile.timeoutMs,
     maxTokens: profile.maxTokens,
+    effortDialect: profile.effortDialect,
   })
 
   return {

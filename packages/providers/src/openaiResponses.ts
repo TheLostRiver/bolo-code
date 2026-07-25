@@ -18,6 +18,13 @@ import type {
   ProviderUsage,
 } from './types.ts'
 import { mapEffort, DEFAULT_EFFORT_BASE_MAX_TOKENS } from './effort.ts'
+import {
+  applyBodyPatches,
+  detectEffortDialectId,
+  resolveEffortDialect,
+  resolveEffortWire,
+  type EffortDialect,
+} from './effortDialect.ts'
 import { mergeProviderUsage } from './sseUsage.ts'
 import {
   derivePromptCacheKey,
@@ -33,6 +40,8 @@ export type OpenAIResponsesConfig = {
   timeoutMs?: number
   /** 默认 false：不在服务端持久化 response（agent 自管 transcript） */
   store?: boolean
+  /** Effort 方言；缺省 openai-responses */
+  effortDialect?: string | EffortDialect
 }
 
 /** Responses input item（最小子集） */
@@ -143,8 +152,15 @@ export function toolsToResponses(
 
 export function buildResponsesRequest(
   messages: ChatMessage[],
-  config: { model: string; store?: boolean },
-  options?: CompleteStreamOptions & { maxOutputTokens?: number },
+  config: {
+    model: string
+    store?: boolean
+    effortDialect?: string | EffortDialect | null
+  },
+  options?: CompleteStreamOptions & {
+    maxOutputTokens?: number
+    isAgent?: boolean
+  },
 ): ResponsesRequestBody {
   const { instructions, input } = toResponsesPayload(messages)
   const body: ResponsesRequestBody = {
@@ -171,6 +187,20 @@ export function buildResponsesRequest(
     } else {
       body.prompt_cache_key = derivePromptCacheKey(messages, config.model)
     }
+  }
+
+  const dialectRaw =
+    config.effortDialect ??
+    detectEffortDialectId({ kind: 'openai-responses', model: config.model })
+  const dialect = resolveEffortDialect(dialectRaw)
+  const hasTools = Boolean(options?.tools?.length && !options?.disableTools)
+  const plan = resolveEffortWire(dialect, options?.effort, {
+    isAgent: options?.isAgent ?? hasTools,
+    model: config.model,
+    baseMaxTokens: options?.maxOutputTokens,
+  })
+  if (plan.ok) {
+    applyBodyPatches(body as unknown as Record<string, unknown>, plan.patches)
   }
   return body
 }
@@ -461,25 +491,42 @@ export function createOpenAIResponsesProvider(
   const timeoutMs = config.timeoutMs ?? 120_000
   const baseMaxTokens = config.maxTokens ?? DEFAULT_EFFORT_BASE_MAX_TOKENS
   const store = config.store ?? false
+  const effortDialect =
+    config.effortDialect ??
+    detectEffortDialectId({
+      kind: 'openai-responses',
+      baseUrl: config.baseUrl ?? baseUrl,
+      model: config.model,
+    })
 
   async function* streamResponses(
     messages: ChatMessage[],
     options?: CompleteStreamOptions,
   ): AsyncIterable<ProviderStreamEvent> {
     const url = `${baseUrl}/responses`
+    const hasTools = Boolean(options?.tools?.length && !options?.disableTools)
+    const dialect = resolveEffortDialect(effortDialect)
+    const plan = resolveEffortWire(dialect, options?.effort, {
+      isAgent: hasTools,
+      model: (options?.model && options.model.trim()) || config.model,
+      baseMaxTokens,
+    })
     const maxTokens =
       options?.maxTokens ??
-      mapEffort(options?.effort, baseMaxTokens).maxTokens
+      (plan.ok && plan.maxTokens != null
+        ? plan.maxTokens
+        : mapEffort(options?.effort, baseMaxTokens).maxTokens)
     const body = buildResponsesRequest(
       messages,
       {
-        model:
-          (options?.model && options.model.trim()) || config.model,
+        model: (options?.model && options.model.trim()) || config.model,
         store,
+        effortDialect,
       },
       {
         ...options,
         maxOutputTokens: maxTokens,
+        isAgent: hasTools,
       },
     )
 
@@ -601,13 +648,26 @@ export function createOpenAIResponsesProvider(
     options?: { signal?: AbortSignal; effort?: string; maxTokens?: number },
   ): Promise<string> {
     const url = `${baseUrl}/responses`
+    const dialect = resolveEffortDialect(effortDialect)
+    const plan = resolveEffortWire(dialect, options?.effort, {
+      isAgent: false,
+      model: config.model,
+      baseMaxTokens,
+    })
     const maxTokens =
       options?.maxTokens ??
-      mapEffort(options?.effort, baseMaxTokens).maxTokens
+      (plan.ok && plan.maxTokens != null
+        ? plan.maxTokens
+        : mapEffort(options?.effort, baseMaxTokens).maxTokens)
     const body = buildResponsesRequest(
       messages,
-      { model: config.model, store },
-      { disableTools: true, maxOutputTokens: maxTokens },
+      { model: config.model, store, effortDialect },
+      {
+        disableTools: true,
+        maxOutputTokens: maxTokens,
+        effort: options?.effort,
+        isAgent: false,
+      },
     )
     body.stream = false
 

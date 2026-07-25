@@ -33,6 +33,7 @@ export {
   mergeProviderConfigJson,
   mergeProvidersMaps,
   profileFromConfigJson,
+  normalizeEffortDialectFromConfig,
   getProviderProfile,
   listProviderProfileSummaries,
   formatProviderProfileLine,

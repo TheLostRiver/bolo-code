@@ -24,6 +24,11 @@ export type ProviderProfile = {
   model?: string
   timeoutMs?: number
   maxTokens?: number
+  /**
+   * Effort 方言：内置 id 字符串，或内联 dialect 对象。
+   * 交给 createProviderFromProfile → provider config.effortDialect
+   */
+  effortDialect?: string | Record<string, unknown>
 }
 
 export type ProviderRegistry = {
@@ -86,6 +91,31 @@ export function mergeProvidersMaps(
   return out
 }
 
+/** 从 config.effort 抽出 dialect id 或内联对象 */
+export function normalizeEffortDialectFromConfig(
+  effort?: ProviderConfigJson['effort'],
+): string | Record<string, unknown> | undefined {
+  if (effort == null) return undefined
+  if (typeof effort === 'string') {
+    const t = effort.trim()
+    return t || undefined
+  }
+  if (typeof effort === 'object' && !Array.isArray(effort)) {
+    const o = effort as Record<string, unknown>
+    if (typeof o.dialect === 'string' && o.dialect.trim()) {
+      return o.dialect.trim()
+    }
+    if (o.dialect && typeof o.dialect === 'object') {
+      return o.dialect as Record<string, unknown>
+    }
+    // 整段当作内联 dialect（含 levels/map/wire）
+    if (o.levels || o.map || o.wire || o.id) {
+      return o
+    }
+  }
+  return undefined
+}
+
 export function profileFromConfigJson(
   id: string,
   raw?: ProviderConfigJson,
@@ -97,6 +127,7 @@ export function profileFromConfigJson(
   const apiKey = p.apiKey?.trim() || undefined
   const baseUrl = p.baseUrl?.trim() || undefined
   const model = p.model?.trim() || undefined
+  const effortDialect = normalizeEffortDialectFromConfig(p.effort)
   return {
     id,
     ...(kind ? { kind } : {}),
@@ -111,6 +142,7 @@ export function profileFromConfigJson(
     ...(p.maxTokens != null && Number.isFinite(p.maxTokens)
       ? { maxTokens: Math.floor(p.maxTokens) }
       : {}),
+    ...(effortDialect != null ? { effortDialect } : {}),
   }
 }
 

@@ -25,6 +25,18 @@ export type ProviderConfigJson = {
   timeoutMs?: number
   /** Anthropic max_tokens */
   maxTokens?: number
+  /**
+   * Effort 方言（E 轨）：内置 id 或内联表。
+   * 例：`"deepseek-chat"` · `"openai-responses"` · `"max-tokens"`
+   * 或 `{ dialect: "deepseek-chat" }` / 完整 EffortDialect 对象。
+   * 见 docs/EFFORT.md
+   */
+  effort?:
+    | string
+    | {
+        dialect?: string | Record<string, unknown>
+      }
+    | Record<string, unknown>
 }
 
 export type BoloConfigJson = {

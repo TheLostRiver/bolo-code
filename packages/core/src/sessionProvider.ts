@@ -181,6 +181,10 @@ export function switchSessionProvider(
     { rebindSummarizer: opts?.rebindSummarizer },
   )
 
+  // E 轨：方言随 profile 走（供 /effort 预览）
+  ;(session as { effortDialect?: string | Record<string, unknown> }).effortDialect =
+    profile.effortDialect
+
   forcePromptCacheBreak(
     session,
     `provider ${previousId ?? prevKind ?? '?'}→${rawId}` +

@@ -65,6 +65,10 @@ import {
   type SwitchSessionModelResult,
   type SwitchableProviderSession,
 } from './sessionProvider.ts'
+import {
+  formatEffortStatusLine,
+  detectEffortDialectId,
+} from '../../providers/src/effortDialect.ts'
 
 /** slash 需要的会话切片（与 BoloSession 兼容） */
 export type SlashSession = {
@@ -112,6 +116,8 @@ export type SlashSession = {
   providerId?: string
   providerRegistry?: import('../../config/src/providerRegistry.ts').ProviderRegistry
   providerProfile?: import('../../config/src/providerRegistry.ts').ProviderProfile
+  /** E 轨：当前后端 effort 方言 id 或内联（供 /effort 预览） */
+  effortDialect?: string | Record<string, unknown>
   /** auto compact 开关；/doctor · /context */
   autoCompactEnabled?: boolean
   /** 上下文窗口（token 粗估基准）；/context 压力 */
@@ -268,18 +274,24 @@ export type SlashCommandDef = {
   ) => Promise<SlashDispatchResult> | SlashDispatchResult
 }
 
+/** 产品超集（E 轨）；与 providers/effortDialect CANONICAL 对齐 */
 export const EFFORT_LEVELS = [
+  'auto',
+  'none',
+  'off',
+  'minimal',
   'low',
   'medium',
   'high',
+  'xhigh',
   'max',
-  'auto',
+  'ultra',
 ] as const
 
 export type EffortLevel = (typeof EFFORT_LEVELS)[number]
 
 export function isEffortLevel(v: string): v is EffortLevel {
-  return (EFFORT_LEVELS as readonly string[]).includes(v)
+  return (EFFORT_LEVELS as readonly string[]).includes(v.trim().toLowerCase())
 }
 
 /**
@@ -1898,25 +1910,61 @@ function cmdProvider(session: SlashSession, args: string): SlashDispatchResult {
 }
 
 function cmdEffort(session: SlashSession, args: string): SlashDispatchResult {
+  const dialect =
+    session.effortDialect ??
+    session.providerProfile?.effortDialect ??
+    detectEffortDialectId({
+      kind: session.provider?.id,
+      baseUrl: session.providerProfile?.baseUrl,
+      model: session.model ?? session.providerProfile?.model,
+    })
+
   const raw = args.trim().toLowerCase()
   if (!raw) {
     return {
       ok: true,
-      message: `effort: ${session.effortLevel ?? 'auto'} (maps to max_tokens via mapEffort)`,
+      message: formatEffortStatusLine({
+        effortLevel: session.effortLevel,
+        dialect: dialect as string | undefined,
+        isAgent: true,
+        model: session.model,
+      }),
     }
   }
   if (!isEffortLevel(raw)) {
     return {
       ok: false,
-      message: `Invalid effort "${args.trim()}". Usage: /effort [low|medium|high|max|auto]`,
+      message:
+        `Invalid effort "${args.trim()}". Usage: /effort [auto|none|minimal|low|medium|high|xhigh|max|ultra]\n` +
+        'See docs/EFFORT.md — wire mapping depends on provider dialect.',
     }
   }
   if (raw === 'auto') {
     session.effortLevel = undefined
-    return { ok: true, message: 'effort set to auto (cleared session override)' }
+    return {
+      ok: true,
+      message:
+        'effort set to auto (cleared session override)\n' +
+        formatEffortStatusLine({
+          effortLevel: 'auto',
+          dialect: dialect as string | undefined,
+          isAgent: true,
+          model: session.model,
+        }),
+    }
   }
   session.effortLevel = raw
-  return { ok: true, message: `effort set to ${raw}` }
+  return {
+    ok: true,
+    message:
+      `effort set to ${raw}\n` +
+      formatEffortStatusLine({
+        effortLevel: raw,
+        dialect: dialect as string | undefined,
+        isAgent: true,
+        model: session.model,
+      }),
+  }
 }
 
 /**
@@ -2717,8 +2765,9 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
   },
   {
     name: 'effort',
-    summary: 'Show or set session effortLevel',
-    usage: '[low|medium|high|max|auto]',
+    summary:
+      'Show/set reasoning effort (dialect maps to API; see docs/EFFORT.md)',
+    usage: '[auto|none|minimal|low|medium|high|xhigh|max|ultra]',
     group: 'model',
     run: cmdEffort,
   },

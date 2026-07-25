@@ -1,8 +1,8 @@
 # Effort 轨 · 推理强度方言（规划）
 
-> **状态：** 📋 规划（E0 文档）· **未实现 wire**  
-> **痛点：** `/effort` 现只映射 `max_tokens` 倍率，**不是**各家 `reasoning_effort` / `reasoning.effort`；且厂商档位集合不同，硬编码 `if deepseek / if openai` 不可扩展。  
-> **目标：** **通用「强度意图 → 请求体补丁」引擎** + **可插拔方言数据**（内置包 + 用户 config）；新后端以改表为主，不以加 TS 分支为主。  
+> **状态：** E0–E4 日用已落地（引擎 + deepseek-chat + openai-responses + config）；E5 抛光后置  
+> **痛点（已缓解）：** `/effort` 曾只映射 `max_tokens`；现按 **EffortDialect 表** 写入各家 reasoning 字段。  
+> **目标：** **通用「强度意图 → 请求体补丁」引擎** + **可插拔方言数据**（内置包 + 用户 config）；新后端以改表为主。  
 > **原则：** 无遥测；密钥不进 log；借鉴 HC / OpenAI / DeepSeek **语义**，不抄实现。
 
 相关入口：

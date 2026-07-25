@@ -72,6 +72,27 @@ export {
   type EffortLevel,
 } from './effort.ts'
 export {
+  resolveEffortWire,
+  resolveEffortDialect,
+  applyBodyPatches,
+  applyEffortToRequestBody,
+  detectEffortDialectId,
+  formatEffortStatusLine,
+  getBuiltinEffortDialect,
+  listBuiltinEffortDialectIds,
+  isCanonicalEffortLevel,
+  isAcceptableEffortInput,
+  CANONICAL_EFFORT_LEVELS,
+  DIALECT_DEEPSEEK_CHAT,
+  DIALECT_OPENAI_RESPONSES,
+  DIALECT_MAX_TOKENS,
+  DIALECT_OFF,
+  type EffortDialect,
+  type EffortWirePlan,
+  type EffortResolveResult,
+  type CanonicalEffortLevel,
+} from './effortDialect.ts'
+export {
   parseOpenAIStreamUsage,
   parseAnthropicStreamUsage,
   mergeProviderUsage,
