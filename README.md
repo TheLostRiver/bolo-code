@@ -22,11 +22,12 @@
 | Hooks 日用 | ~96–98% | H0–H5（含 SessionEnd） |
 | Compact 日用 | ~92–95% | C0–C5 |
 | **多 Provider 热切** | **~92–96%** | P0–P4.1 + **CX7 Desktop** |
+| **Provider UX** | **~95–98%** | CX0–CX8（ultrathink 默认 off） |
 | Electron GUI | ~65–75% | 壳 + 流式 + 权限 + Settings + 多 provider |
 | 相对 HC 全家桶 UI | 另计 | 不设 100% |
 
-**主线已收口：** 日用 agent 改文件 · hooks · compact · 多后端热切 · Provider UX CX0–CX7。  
-**后置：** CX8 ultrathink · Compact §8.9 · U5 真·Ink/IDE。
+**主线已收口：** 日用 agent 改文件 · hooks · compact · 多后端热切 · Provider UX CX0–CX8。  
+**后置：** Compact §8.9 · U5 真·Ink/IDE · adaptive thinking。
 
 进度真源：[docs/ROADMAP.md](docs/ROADMAP.md)
 

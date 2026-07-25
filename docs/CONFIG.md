@@ -179,12 +179,14 @@ defaults
 |------|------|
 | `/effort` | 显示意图 · 方言 · **将发成的 wire** |
 | `/effort max` · `xhigh` · `ultra` … | 设会话意图；由方言折叠 |
+| `/ultrathink [off\|tip\|turn]` | **CX8** 产品糖；默认 off。见 PROVIDER_UX |
 
 未写 `effort` 时：DeepSeek / Anthropic / Responses 会 **detect**；其它兼容口默认旧 `max-tokens` 倍率。
 
 | 字段 | 默认 | 说明 |
 |------|------|------|
 | `autoCompactEnabled` | `true` | 为 true 且会话有 `compactSummarizer` 时，queryLoop 的 `prepareMessages` 达 token 阈值会走 full compact（对照参考 autoCompactIfNeeded）。会话内 `/autocompact on\|off` 可改；环境变量 `BOLO_DISABLE_AUTO_COMPACT` / `BOLO_DISABLE_COMPACT` 熔断 auto（manual `/compact` 仍可用） |
+| `ultrathink` | 省略/`off` | **CX8**：`off` \| `tip` \| `turn`。默认 off。`tip` 检测关键词只提示；`turn` 本轮 effective effort→high（不写 session）。env `BOLO_ULTRATHINK` 可覆盖；会话 `/ultrathink` 最高。见 [PROVIDER_UX.md](./PROVIDER_UX.md) |
 | `contextWindowTokens` | `128000` | 用于 `getAutoCompactThreshold` / `getContextPressure`；token 估见 `estimateTokens`（加权启发式，非 tokenizer） |
 | `microcompactEnabled` | `true` | 为 true 时 prepare 链先跑 microcompact（清旧 tool 正文，无 LLM）；`false` 关闭 |
 | `maxPtlRetries` | `3` | callModel / compact summarizer 命中上下文过长时截断最旧轮次再试的次数；`0` 关闭 |

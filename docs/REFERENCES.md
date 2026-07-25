@@ -88,7 +88,7 @@
 |------|------|
 | [EFFORT.md](./EFFORT.md) | E0–E5 wire 契约 |
 | [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md) | E6–E9 能力视图 |
-| [PROVIDER_UX.md](./PROVIDER_UX.md) | **CX 便利层**（preset · caps · resume · 错误 · ultrathink 默认 off） |
+| [PROVIDER_UX.md](./PROVIDER_UX.md) | **CX 便利层**（preset · caps · resume · 错误 · ultrathink 默认 off · tip/turn） |
 | [PROVIDERS.md](./PROVIDERS.md) | 协议与多实例 |
 
 ## 工程纪律

@@ -24,13 +24,13 @@
 | **Compact · 日用管道** | **~92–95%** | **C0–C5 已落地**；后置 partial/remote/真 tokenizer（§8.9） |
 | **Provider · 多实例热切** | **~92–96%** | **P0–P4.1 + CX7 Desktop**；preset · 错误 · resume（见 §11） |
 | **Effort · 推理强度方言** | **~92–95%** | **E0–E9** 已落地；按模型轻表裁档归 **CX2**；adaptive thinking 后置 |
-| **Provider UX · 便利层** | **~94–97%** | **CX0–CX7 已落地**（含 Desktop）；CX8 ultrathink 后置 · [PROVIDER_UX.md](./PROVIDER_UX.md) |
+| **Provider UX · 便利层** | **~95–98%** | **CX0–CX8 已落地**（含 ultrathink 默认 off）· [PROVIDER_UX.md](./PROVIDER_UX.md) |
 | **产品整体（相对 HC）** | **~74–88%** | 日用高；UI 全家桶另计 |
 
-**主线已闭环：** headless 日用 → Diff · Hooks · Compact · Provider · Effort · **Provider UX CX0–CX7**。
+**主线已闭环：** headless 日用 → Diff · Hooks · Compact · Provider · Effort · **Provider UX CX0–CX8**。
 
 **开放轨（非阻塞）：**  
-CX8 ultrathink（默认 off）· Compact §8.9 · U5 · adaptive thinking。
+Compact §8.9 · U5 · adaptive thinking。
 
 ---
 
@@ -769,7 +769,7 @@ function switchSessionModel(session, model: string): { ok, reason? }
 
 > **真源：** [PROVIDER_UX.md](./PROVIDER_UX.md)  
 > **定调：** 健壮 · 可测 · 日用方便；**不**绑 AI SDK、**不**全量 model 生成流水线。  
-> **已定决策：** Preset 先做 · 轻量 caps · resume `providerId`+clamp · ultrathink **默认 off 后置**。
+> **已定决策：** Preset 先做 · 轻量 caps · resume `providerId`+clamp · ultrathink **默认 off（CX8 已落地 tip/turn）**。
 
 | 阶段 | 交付 | 状态 |
 |------|------|------|
@@ -781,6 +781,6 @@ function switchSessionModel(session, model: string): { ok, reason? }
 | **CX4** | 状态行 / 热切 tip | ✅ |
 | **CX5** | `/model` 建议列表 | ✅ |
 | **CX7** | Desktop 对齐（P5） | ✅ |
-| **CX8** | ultrathink tip/turn（默认 off） | 🚫 后置 |
+| **CX8** | ultrathink tip/turn（默认 off） | ✅ |
 
-**顺序：** `CX0–CX7` 主路径已落地 → **CX8** 可选。
+**顺序：** `CX0–CX8` 主路径已落地。

@@ -1,11 +1,11 @@
 # Provider UX 方案（CX 轨 · 最好用 / 最稳）
 
-> **状态：** ✅ **CX0–CX7 已实现**（preset · resume · errors · caps · tip · model 建议 · **Desktop 多 provider**）；CX8 ultrathink 后置  
+> **状态：** ✅ **CX0–CX8 已实现**（preset · resume · errors · caps · tip · model 建议 · Desktop · **ultrathink 默认 off**）  
 > **目标：** 多协议日用 **便利 ~95%+**（稳健优先）；**不是**各家 API 全集 100%  
 > **前置：** [PROVIDERS.md](./PROVIDERS.md)（协议）· [EFFORT.md](./EFFORT.md) / [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md)（E0–E9）· [ROADMAP.md](./ROADMAP.md) §9–§11  
 > **对照（语义，不抄实现/遥测）：** HelsincyCode · Codex · OpenCode · Pi  
 > **原则：** 表驱动 · 无遥测 · 密钥不进 log/仓库 · **不绑 AI SDK** · 不把 Responses 伪装成 Completions  
-> **测试：** `scripts/test-provider-ux.ts` · `apps/desktop/scripts/smoke-ipc.mjs`
+> **测试：** `scripts/test-provider-ux.ts` · `scripts/test-ultrathink.ts` · `apps/desktop/scripts/smoke-ipc.mjs`
 
 ---
 
@@ -90,7 +90,7 @@ Bolo CX = HC 产品清晰度
 | G-model | `/model` 无建议列表 | **CX5** |
 | G-resume | `providerId` 不进 persist | **CX6** |
 | G-desk | Desktop 多 provider | **CX7**（P5） |
-| G-sugar | ultrathink | **CX8** 后置 |
+| G-sugar | ultrathink | **CX8** ✅ |
 
 ---
 
@@ -285,21 +285,26 @@ explainProviderError(err, ctx: {
 - 不在 renderer 维护第二份 map  
 - 可与 P5 合并交付
 
-### CX8 — ultrathink（后置 · 默认 off）
+### CX8 — ultrathink（**已落地 · 默认 off**）
 
 | 模式 | 行为 | 默认 |
 |------|------|------|
-| `off` | 无 | **默认** |
-| `tip` | 检测到词 → 提示用 `/effort high`，不改状态 | 可选 |
-| `turn` | **仅本轮** effectiveEffort 抬向 high；**不**写 session.effortLevel | 可选 |
+| `off` | 忽略关键词 | **默认** |
+| `tip` | 检测到 `ultrathink` → warning 提示 `/effort high`，**不**改状态 | 可选 |
+| `turn` | **仅本轮** `effectiveEffort` → **high**；**不**写 `session.effortLevel` | 可选 |
 
-硬约束（若做 turn）：
+**开启方式（优先级）：** `/ultrathink tip|turn`（会话） > `BOLO_ULTRATHINK=tip|turn` > `config.ultrathink` > off
 
-1. 单 turn 作用域  
-2. 必须通过 choosable ∩ caps  
-3. UI 可见 `ultrathink → high (this turn)`  
+硬约束（turn）：
+
+1. 单 turn 作用域（`submitPrompt` → `queryLoop.effortLevel`）  
+2. 必须通过 `assertEffortChoosable` ∩ caps；目标 **high**（HC 语义，非 API `ultra`）  
+3. UI 可见 `ultrathink → high (this turn)`（`warning` 事件）  
 4. **无遥测**  
-5. config / env 显式开启（如 `ultrathink: "tip"|"turn"` / `BOLO_ULTRATHINK=tip|turn`）
+5. 已 ≥ high（含 xhigh/max/ultra）则不压低  
+6. 默认 off：即使用户文本含 `ultrathink` 也不抬档  
+
+实现：`packages/core/src/ultrathink.ts` · `/ultrathink` · `scripts/test-ultrathink.ts`
 
 ---
 
@@ -314,7 +319,7 @@ CX2  modelCapability 轻表                 ← 少 400
 CX4  状态行 / 热切 tip
 CX5  /model 建议列表
 CX7  Desktop
-CX8  ultrathink（可选）
+CX8  ultrathink（✅ 默认 off · tip/turn）
 ```
 
 **并行注意：** CX6 可与 CX1 紧随；CX2 依赖 E6 API 扩展点，不阻塞 preset。
@@ -387,5 +392,5 @@ CX8  ultrathink（可选）
 
 ## 11. 综合决策（再压缩）
 
-> **Preset 接通 + 轻量 caps 少 400 + 错误会说话 + resume 粘 providerId + clamp；ultrathink 默认关后置。**  
+> **Preset 接通 + 轻量 caps 少 400 + 错误会说话 + resume 粘 providerId + clamp + ultrathink 默认关可选 tip/turn。**  
 > 多后端表驱动便利，不堆第四套 SDK、不堆全宇宙模型表。

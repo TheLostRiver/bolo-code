@@ -67,6 +67,12 @@ import {
 } from './sessionProvider.ts'
 import { clampEffortForSession } from './effortClamp.ts'
 import {
+  formatUltrathinkStatus,
+  normalizeUltrathinkMode,
+  resolveUltrathinkMode,
+  type UltrathinkMode,
+} from './ultrathink.ts'
+import {
   getProviderPreset,
 } from '../../config/src/providerPresets.ts'
 import {
@@ -88,6 +94,10 @@ export type SlashSession = {
   permissionRules?: SessionPermissionRules
   model?: string
   effortLevel?: string
+  /**
+   * CX8 ultrathink 会话覆盖（off|tip|turn）；默认 off。
+   */
+  ultrathinkMode?: UltrathinkMode
   /**
    * 是否在 CLI 渲染思考链（默认 true）。
    * false 时仍解析 provider 事件，仅不显示。
@@ -950,6 +960,7 @@ function cmdDoctor(session: SlashSession, _args: string): SlashDispatchResult {
     `permissionMode:  ${session.permissionMode}`,
     `model:           ${session.model ?? '(unset)'}`,
     `effort:          ${session.effortLevel ?? 'auto'}`,
+    `ultrathink:      ${resolveUltrathinkMode({ sessionMode: session.ultrathinkMode })}`,
     `thinking:        ${session.showThinking === false ? 'off' : 'on'}`,
     `messages:        ${session.messages.length}`,
     `system sections: ${session.systemPromptSections.length}`,
@@ -2226,6 +2237,53 @@ function cmdEffort(session: SlashSession, args: string): SlashDispatchResult {
 }
 
 /**
+ * /ultrathink [off|tip|turn] — CX8 产品糖（默认 off）。
+ * tip：检测关键词提示 /effort high；turn：本轮抬 high，不写 session.effortLevel。
+ */
+function cmdUltrathink(session: SlashSession, args: string): SlashDispatchResult {
+  const raw = args.trim().toLowerCase()
+  const effective = resolveUltrathinkMode({
+    sessionMode: session.ultrathinkMode,
+  })
+
+  if (!raw || raw === 'status' || raw === 'show') {
+    return {
+      ok: true,
+      message:
+        formatUltrathinkStatus(effective) +
+        (session.ultrathinkMode
+          ? `\nsession override: ${session.ultrathinkMode}`
+          : '\nsession override: (none — using env/config/default off)'),
+    }
+  }
+
+  const next = normalizeUltrathinkMode(raw)
+  if (!next) {
+    return {
+      ok: false,
+      message:
+        `Invalid ultrathink mode "${args.trim()}". Usage: /ultrathink [off|tip|turn]\n` +
+        formatUltrathinkStatus(effective),
+    }
+  }
+
+  if (next === 'off') {
+    session.ultrathinkMode = undefined
+  } else {
+    session.ultrathinkMode = next
+  }
+
+  return {
+    ok: true,
+    message:
+      `ultrathink set to ${next}` +
+      (next === 'off' ? ' (session override cleared)' : '') +
+      '\n' +
+      formatUltrathinkStatus(next),
+  }
+}
+
+/**
  * /thinking [on|off] — CLI 是否渲染 reasoning。
  * /thinking persist [on|off] — 是否写入 assistant.reasoning_content（openai-compatible 回灌；默认 off）。
  */
@@ -3028,6 +3086,14 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     usage: '[list | auto|low|medium|high|xhigh|max|…]',
     group: 'model',
     run: cmdEffort,
+  },
+  {
+    name: 'ultrathink',
+    summary:
+      'CX8 sugar: off (default) | tip (hint /effort high) | turn (this-turn high)',
+    usage: '[off|tip|turn]',
+    group: 'model',
+    run: cmdUltrathink,
   },
   {
     name: 'thinking',

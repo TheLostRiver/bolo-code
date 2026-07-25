@@ -57,6 +57,15 @@ export type BoloConfigJson = {
   /** 默认权限模式 */
   permissionMode?: PermissionMode
   /**
+   * CX8 ultrathink 产品糖（默认 off）。
+   * - off：忽略关键词
+   * - tip：检测到 "ultrathink" → 提示 /effort high，不改状态
+   * - turn：仅本轮 effective effort → high；**不**写 session.effortLevel
+   * 环境变量 `BOLO_ULTRATHINK` 可覆盖（优先级高于本字段，低于会话 `/ultrathink`）。
+   * 见 docs/PROVIDER_UX.md §CX8
+   */
+  ultrathink?: 'off' | 'tip' | 'turn' | string
+  /**
    * 是否启用 auto compact（挂 prepareMessages 时用）。
    * 默认 true（对照参考全局 config）；可用 config / 会话 / 环境变量关掉。
    */

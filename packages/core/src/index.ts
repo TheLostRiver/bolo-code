@@ -30,6 +30,12 @@ import {
 } from '../../config/src/index.ts'
 import { attachProviderRegistry } from './sessionProvider.ts'
 import {
+  normalizeUltrathinkMode,
+  planUltrathinkTurn,
+  resolveUltrathinkMode,
+  type UltrathinkMode,
+} from './ultrathink.ts'
+import {
   closeMcpConnections,
   connectMcpServers,
   isMcpManagedToolName,
@@ -382,6 +388,18 @@ export {
   type EffortClampSession,
 } from './effortClamp.ts'
 export {
+  planUltrathinkTurn,
+  resolveUltrathinkMode,
+  normalizeUltrathinkMode,
+  textHasUltrathink,
+  formatUltrathinkStatus,
+  ULTRATHINK_TARGET_EFFORT,
+  type UltrathinkMode,
+  type UltrathinkTurnPlan,
+  type UltrathinkSessionLike,
+  type ResolveUltrathinkModeInput,
+} from './ultrathink.ts'
+export {
   PERMISSION_MODES,
   PERMISSION_MODE_META,
   getNextPermissionMode,
@@ -575,6 +593,10 @@ export type CreateSessionOptions = {
    */
   effortLevel?: string
   /**
+   * CX8 ultrathink 会话模式；可选。默认 off（或由 config/env 在 workspace 入口注入）。
+   */
+  ultrathinkMode?: import('./ultrathink.ts').UltrathinkMode
+  /**
    * 是否在 CLI 显示思考链（/thinking）；默认 true。
    * resume 时由快照恢复；仅影响渲染，不影响 provider 解析。
    */
@@ -719,6 +741,11 @@ export type BoloSession = {
    * `undefined` 视为 auto。
    */
   effortLevel?: string
+  /**
+   * CX8 ultrathink 模式（会话覆盖；默认 off）。
+   * 见 packages/core/src/ultrathink.ts · docs/PROVIDER_UX.md
+   */
+  ultrathinkMode?: import('./ultrathink.ts').UltrathinkMode
   /**
    * 是否在 CLI 渲染思考链（/thinking）。默认 true。
    * false 时 provider 仍解析并转发 reasoning 事件，仅打印机不渲染。
@@ -990,6 +1017,13 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
       typeof opts.effortLevel === 'string' && opts.effortLevel.trim()
         ? opts.effortLevel.trim()
         : undefined,
+    ultrathinkMode: (() => {
+      const m = normalizeUltrathinkMode(
+        typeof opts.ultrathinkMode === 'string' ? opts.ultrathinkMode : undefined,
+      )
+      // 仅会话显式传入；config/env 在 createSessionFromWorkspace 注入
+      return m
+    })(),
     showThinking: opts.showThinking === false ? false : true,
     persistReasoning: opts.persistReasoning === true,
     // 默认开 auto（对照参考全局 config）；显式 false 关闭
@@ -1167,6 +1201,10 @@ export type CreateSessionFromWorkspaceOptions = {
   /** 覆盖 workspace.config.maxPtlRetries */
   maxPtlRetries?: number
   /**
+   * CX8：覆盖 ultrathink 模式（session > env > config）。
+   */
+  ultrathinkMode?: UltrathinkMode | string
+  /**
    * 是否连接 workspace.mcpServers（stdio listTools → 注册 mcp__*）。
    * 默认 true；失败只 warn，不炸会话。
    */
@@ -1212,6 +1250,23 @@ export async function createSessionFromWorkspace(
     providerId: workspace.providerId,
     providerProfile: workspace.providerProfile,
     effortDialect: workspace.providerProfile?.effortDialect,
+    ultrathinkMode: (() => {
+      // session 显式 > env > config（resolveUltrathinkMode）
+      if (opts.ultrathinkMode != null) {
+        return (
+          normalizeUltrathinkMode(String(opts.ultrathinkMode)) ??
+          undefined
+        )
+      }
+      const m = resolveUltrathinkMode({
+        configMode:
+          typeof workspace.config.ultrathink === 'string'
+            ? workspace.config.ultrathink
+            : undefined,
+      })
+      // off 不写字段，保持默认语义
+      return m === 'off' ? undefined : m
+    })(),
     source: opts.source,
     onEvent: opts.onEvent,
     agentPolicy,
@@ -1645,6 +1700,17 @@ export async function submitPrompt(
 
   let userContent = prompt
   if (submit.injectText) userContent = `${prompt}\n\n${submit.injectText}`
+
+  // CX8：ultrathink 本轮 plan（不写 session.effortLevel；无遥测）
+  const ultraPlan = planUltrathinkTurn(session, userContent)
+  if (ultraPlan.notice) {
+    emit(session, { type: 'warning', message: ultraPlan.notice })
+  }
+  const turnEffort =
+    ultraPlan.boosted && ultraPlan.effectiveEffort
+      ? ultraPlan.effectiveEffort
+      : session.effortLevel
+
   // D2：用户 turn 边界 — fileDiffLog 打 turn 号
   session.diffTurn = (session.diffTurn ?? 0) + 1
   if (!session.fileDiffLog) session.fileDiffLog = []
@@ -1689,7 +1755,7 @@ export async function submitPrompt(
     maxPtlRetries: session.maxPtlRetries,
     usage: session.usage,
     model: session.model,
-    effortLevel: session.effortLevel,
+    effortLevel: turnEffort,
     promptCacheState: session.promptCacheState,
     persistReasoning: session.persistReasoning === true,
     midTurnAutoCompact: true,
