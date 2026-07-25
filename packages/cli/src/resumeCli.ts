@@ -10,8 +10,10 @@ import {
   listProjectSessions,
   productionDeps,
   resumeSessionFromWorkspace,
+  requestSessionControl,
   submitUserInput,
   switchSessionProvider,
+  takeNextSessionQueued,
   buildProviderPickerItems,
   activeProviderPickerIndex,
   type BoloSession,
@@ -730,10 +732,17 @@ export type QueuedReplPrompt = {
 /**
  * 只在 runner idle 时取一条 ready queue；取出即 promoted，绝不重放。
  */
-export function takeNextQueuedReplPrompt(
+export async function takeNextQueuedReplPrompt(
   session: BoloSession,
-): QueuedReplPrompt | null {
-  const control = session.coordinator.takeNextQueued(session.id)
+): Promise<QueuedReplPrompt | null> {
+  const taken = await takeNextSessionQueued(session)
+  if (taken.persistenceWarning) {
+    session.onEvent({
+      type: 'error',
+      message: taken.persistenceWarning,
+    })
+  }
+  const control = taken.control
   if (
     !control ||
     control.kind !== 'queue' ||
@@ -830,11 +839,11 @@ export async function runRepl(
     }
   }
   let activeTurn: AbortController | null = null
-  const interrupt = () => {
+  const interrupt = async () => {
     if (activeTurn && !activeTurn.signal.aborted) {
       const snapshot = session.coordinator.snapshot(session.id)
       if (snapshot.state === 'running') {
-        const result = session.coordinator.requestControl({
+        const result = await requestSessionControl(session, {
           controlId: `control_${randomUUID().replaceAll('-', '')}`,
           kind: 'interrupt',
           sessionId: session.id,
@@ -842,6 +851,9 @@ export async function runRepl(
         })
         if (result.ok) {
           writeErr(`^C turn interrupt requested (${snapshot.active.turnId})\n`)
+          if (result.persistenceWarning) {
+            writeErr(`warning: ${result.persistenceWarning}\n`)
+          }
           return
         }
       }
@@ -854,14 +866,19 @@ export async function runRepl(
     writeOut('^C\n')
     rl.close()
   }
-  rl.on('SIGINT', interrupt)
-  const onExternalAbort = () => interrupt()
+  const onSigint = () => {
+    void interrupt()
+  }
+  rl.on('SIGINT', onSigint)
+  const onExternalAbort = () => {
+    void interrupt()
+  }
   options?.signal?.addEventListener('abort', onExternalAbort, { once: true })
 
   try {
     while (!replClosed) {
       writeOut(`${formatSessionStatusLine(session)}\n`)
-      const queued = takeNextQueuedReplPrompt(session)
+      const queued = await takeNextQueuedReplPrompt(session)
       let text: string
       if (queued) {
         text = queued.prompt
@@ -915,7 +932,7 @@ export async function runRepl(
     if (activeTurn && !activeTurn.signal.aborted) {
       activeTurn.abort('repl_closed')
     }
-    rl.removeListener('SIGINT', interrupt)
+    rl.removeListener('SIGINT', onSigint)
     options?.signal?.removeEventListener('abort', onExternalAbort)
     rl.close()
     // H0：REPL 正常退出 → SessionEnd

@@ -101,11 +101,11 @@ async function main() {
     )
   assert(idleQueueRecord?.turnId, 'idle queue keeps generated turn id')
 
-  const next = takeNextQueuedReplPrompt(session)
+  const next = await takeNextQueuedReplPrompt(session)
   assert(next?.prompt === 'run this from the repl', 'CLI drains ready queue')
   assert(next.turnId === idleQueueRecord.turnId, 'CLI preserves queued turn id')
   assert(
-    takeNextQueuedReplPrompt(session) === null,
+    (await takeNextQueuedReplPrompt(session)) === null,
     'CLI never drains the same queue twice',
   )
 

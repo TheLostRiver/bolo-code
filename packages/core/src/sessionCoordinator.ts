@@ -74,6 +74,7 @@ export type SessionControlRejectCode =
   | 'no_active_turn'
   | 'expected_turn_required'
   | 'active_turn_mismatch'
+  | 'turn_releasing'
   | 'control_id_conflict'
   | 'control_not_found'
   | 'control_not_cancellable'
@@ -147,6 +148,15 @@ export type SessionRunnerLease = SessionRunnerOwner & {
    * 首次成功返回 true，重复或 stale release 返回 false。
    */
   release(): boolean
+  /**
+   * DR2C2：terminal control transitions 持久化完成前保持 ownership。
+   * barrier 失败也会在 finally 释放；可能执行的 queue 会 fail-closed cancelled。
+   */
+  releaseWithBarrier(
+    persistTransitions: (
+      controls: readonly SessionControlRecord[],
+    ) => Promise<void>,
+  ): Promise<boolean>
 }
 
 export type SessionRunnerAcquireResult =
@@ -163,6 +173,7 @@ export type SessionRunnerAcquireResult =
 type ActiveRunner = SessionRunnerOwner & {
   token: symbol
   controller: AbortController
+  releasing: boolean
 }
 
 type CanonicalControl = Omit<
@@ -327,37 +338,76 @@ export class SessionCoordinator {
         : {}),
       token,
       controller,
+      releasing: false,
     }
     this.#active.set(sessionId, active)
 
-    let released = false
+    let releaseStarted = false
+    const beginRelease = (): {
+      current: ActiveRunner
+      transitioned: InternalControl[]
+    } | null => {
+      if (releaseStarted) return null
+      releaseStarted = true
+      const current = this.#active.get(sessionId)
+      if (!current || current.token !== token) return null
+      current.releasing = true
+      const timestamp = nowIso()
+      const transitioned: InternalControl[] = []
+      for (const control of this.#controlsFor(sessionId)) {
+        if (
+          control.state !== 'pending' ||
+          control.expectedTurnId !== current.turnId
+        ) {
+          continue
+        }
+        if (control.kind === 'queue') {
+          control.state = 'ready'
+          control.updatedAt = timestamp
+          control.boundary = 'turn_terminal'
+          transitioned.push(control)
+        } else if (control.kind === 'steer') {
+          control.state = 'cancelled'
+          control.updatedAt = timestamp
+          control.boundary = 'turn_terminal'
+          transitioned.push(control)
+        }
+      }
+      return { current, transitioned }
+    }
+    const finishRelease = (current: ActiveRunner): void => {
+      const activeNow = this.#active.get(sessionId)
+      if (activeNow?.token === current.token) {
+        this.#active.delete(sessionId)
+      }
+    }
     const lease: SessionRunnerLease = {
       ...publicOwner(active),
       signal: controller.signal,
       release: () => {
-        if (released) return false
-        released = true
-        const current = this.#active.get(sessionId)
-        if (!current || current.token !== token) return false
-        const timestamp = nowIso()
-        for (const control of this.#controlsFor(sessionId)) {
-          if (
-            control.state !== 'pending' ||
-            control.expectedTurnId !== current.turnId
-          ) {
-            continue
-          }
-          if (control.kind === 'queue') {
-            control.state = 'ready'
-            control.updatedAt = timestamp
-            control.boundary = 'turn_terminal'
-          } else if (control.kind === 'steer') {
+        const begun = beginRelease()
+        if (!begun) return false
+        finishRelease(begun.current)
+        return true
+      },
+      releaseWithBarrier: async (persistTransitions) => {
+        const begun = beginRelease()
+        if (!begun) return false
+        try {
+          await persistTransitions(begun.transitioned.map(publicControl))
+        } catch (error) {
+          // 未能审计 ready 的 queue 绝不能在 ownership 释放后执行。
+          const timestamp = nowIso()
+          for (const control of begun.transitioned) {
+            if (control.kind !== 'queue' || control.state !== 'ready') continue
             control.state = 'cancelled'
             control.updatedAt = timestamp
             control.boundary = 'turn_terminal'
           }
+          throw error
+        } finally {
+          finishRelease(begun.current)
         }
-        this.#active.delete(sessionId)
         return true
       },
     }
@@ -398,6 +448,16 @@ export class SessionCoordinator {
     }
 
     const active = this.#active.get(canonical.sessionId)
+    if (active?.releasing) {
+      return {
+        ok: false,
+        code: 'turn_releasing',
+        detail:
+          `session "${canonical.sessionId}" is releasing active turn ` +
+          `"${active.turnId}"`,
+        activeTurnId: active.turnId,
+      }
+    }
     if (canonical.kind === 'steer' || canonical.kind === 'interrupt') {
       if (!active) {
         return {

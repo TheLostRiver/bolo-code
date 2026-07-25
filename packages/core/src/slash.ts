@@ -77,6 +77,11 @@ import {
   detectEffortDialectId,
   listEffortChoosable,
 } from '../../providers/src/effortDialect.ts'
+import {
+  cancelSessionControl,
+  requestSessionControl,
+  type SessionControlRuntimeSession,
+} from './sessionControlRuntime.ts'
 
 /** slash 需要的会话切片（与 BoloSession 兼容） */
 export type SlashSession = {
@@ -866,7 +871,10 @@ function shortTurnPrompt(prompt: string | undefined): string {
   return value.length > 72 ? `${value.slice(0, 71)}…` : value
 }
 
-function cmdTurn(session: SlashSession, args: string): SlashDispatchResult {
+async function cmdTurn(
+  session: SlashSession,
+  args: string,
+): Promise<SlashDispatchResult> {
   const coordinator = session.coordinator
   if (!coordinator) {
     return {
@@ -887,6 +895,7 @@ function cmdTurn(session: SlashSession, args: string): SlashDispatchResult {
   const rest =
     raw && firstSpace >= 0 ? raw.slice(firstSpace).trim() : ''
   const snapshot = coordinator.snapshot(session.id)
+  const runtimeSession = session as unknown as SessionControlRuntimeSession
 
   if (action === 'status') {
     if (rest) {
@@ -939,7 +948,7 @@ function cmdTurn(session: SlashSession, args: string): SlashDispatchResult {
     if (snapshot.state !== 'running') {
       return { ok: false, message: 'turn steer rejected: no active turn' }
     }
-    const result = coordinator.requestControl({
+    const result = await requestSessionControl(runtimeSession, {
       controlId: turnControlId('control'),
       kind: 'steer',
       sessionId: session.id,
@@ -951,7 +960,10 @@ function cmdTurn(session: SlashSession, args: string): SlashDispatchResult {
           ok: true,
           message:
             `turn steer ${result.control.state}: ${result.control.controlId}` +
-            ` (expected ${snapshot.active.turnId})`,
+            ` (expected ${snapshot.active.turnId})` +
+            (result.persistenceWarning
+              ? `\nwarning: ${result.persistenceWarning}`
+              : ''),
         }
       : {
           ok: false,
@@ -966,7 +978,7 @@ function cmdTurn(session: SlashSession, args: string): SlashDispatchResult {
     if (snapshot.state !== 'running') {
       return { ok: false, message: 'turn interrupt rejected: no active turn' }
     }
-    const result = coordinator.requestControl({
+    const result = await requestSessionControl(runtimeSession, {
       controlId: turnControlId('control'),
       kind: 'interrupt',
       sessionId: session.id,
@@ -977,7 +989,10 @@ function cmdTurn(session: SlashSession, args: string): SlashDispatchResult {
           ok: true,
           message:
             `turn interrupt ${result.control.state}: ` +
-            `${result.control.controlId} (${snapshot.active.turnId})`,
+            `${result.control.controlId} (${snapshot.active.turnId})` +
+            (result.persistenceWarning
+              ? `\nwarning: ${result.persistenceWarning}`
+              : ''),
         }
       : {
           ok: false,
@@ -989,7 +1004,7 @@ function cmdTurn(session: SlashSession, args: string): SlashDispatchResult {
     if (!rest) {
       return { ok: false, message: 'Usage: /turn queue <text>' }
     }
-    const result = coordinator.requestControl({
+    const result = await requestSessionControl(runtimeSession, {
       controlId: turnControlId('control'),
       kind: 'queue',
       sessionId: session.id,
@@ -1005,7 +1020,10 @@ function cmdTurn(session: SlashSession, args: string): SlashDispatchResult {
           ok: true,
           message:
             `turn queue ${result.control.state}: ${result.control.controlId}` +
-            ` (turn ${result.control.turnId})`,
+            ` (turn ${result.control.turnId})` +
+            (result.persistenceWarning
+              ? `\nwarning: ${result.persistenceWarning}`
+              : ''),
         }
       : {
           ok: false,
@@ -1020,14 +1038,17 @@ function cmdTurn(session: SlashSession, args: string): SlashDispatchResult {
         message: 'Usage: /turn cancel <controlId>',
       }
     }
-    const result = coordinator.cancelControl({
-      sessionId: session.id,
+    const result = await cancelSessionControl(runtimeSession, {
       controlId: rest,
     })
     return result.ok
       ? {
           ok: true,
-          message: `turn control cancelled: ${result.control.controlId}`,
+          message:
+            `turn control cancelled: ${result.control.controlId}` +
+            (result.persistenceWarning
+              ? `\nwarning: ${result.persistenceWarning}`
+              : ''),
         }
       : {
           ok: false,

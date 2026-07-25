@@ -36,14 +36,22 @@ import {
   appendSystemNote,
   appendFileDiffEntry,
   appendTurnEntry,
+  appendControlEntry,
   ensureTranscriptFile,
   metaInputFromSession,
   getTranscriptWriteState,
   normalizeSessionTitle,
   scanTranscriptLite,
+  type TranscriptControlEntry,
   type TranscriptTurnEntry,
 } from './sessionTranscript.ts'
 import type { DurableTurnRecord, DurableTurnState } from './durableTurn.ts'
+import type {
+  DurableControlBoundary,
+  DurableControlRecord,
+  DurableControlState,
+} from './durableControl.ts'
+import type { SessionControlKind } from './sessionCoordinator.ts'
 import type { SessionUsage } from './sessionUsage.ts'
 import { cloneSessionUsage } from './sessionUsage.ts'
 import {
@@ -95,6 +103,8 @@ export type PersistableSession = {
   sessionStartedAtMs?: number
   /** DR0：运行时 turn 投影；JSONL `turn` entries 是持久化真源。 */
   durableTurns?: DurableTurnRecord[]
+  /** DR2C：运行时 control 投影；JSONL `control` entries 是持久化真源。 */
+  durableControls?: DurableControlRecord[]
   onEvent?: (e: { type: 'error'; message: string }) => void
 }
 
@@ -1394,6 +1404,50 @@ export async function appendSessionTurnState(
   )
   const entry = await appendTurnEntry(transcriptPath, {
     sessionId: session.id,
+    ...opts,
+  })
+  setSessionPersistMeta(session, {
+    filePath: transcriptPath,
+  })
+  return entry
+}
+
+/**
+ * DR2C2：按 session persist meta 追加 control lifecycle。
+ * 显式 in-memory session 返回 null；启用 autoSave 时写失败必须抛出。
+ */
+export async function appendSessionControlState(
+  session: PersistableSession,
+  opts: {
+    controlId: string
+    kind: SessionControlKind
+    state: DurableControlState
+    expectedTurnId?: string
+    turnId?: string
+    prompt?: string
+    querySource?: string
+    boundary?: DurableControlBoundary
+    detail?: string
+    timestamp?: string
+  },
+): Promise<TranscriptControlEntry | null> {
+  const meta = persistMeta.get(session)
+  if (!meta?.autoSave) return null
+  const rawFilePath = meta.filePath
+    ? path.resolve(meta.filePath)
+    : resolveSessionFilePath(session.id, {
+        scope: meta.scope,
+        cwd: session.cwd,
+        sessionsDir: meta.sessionsDir,
+      })
+  const transcriptPath = resolveTranscriptPathFromJson(rawFilePath)
+  await ensureTranscriptFile(
+    transcriptPath,
+    metaInputFromSession(session, { createdAt: meta.createdAt }),
+  )
+  const entry = await appendControlEntry(transcriptPath, {
+    sessionId: session.id,
+    timestamp: opts.timestamp ?? nowIso(),
     ...opts,
   })
   setSessionPersistMeta(session, {

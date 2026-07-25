@@ -122,6 +122,7 @@ import {
   loadTranscriptFile,
   fileDiffsFromTranscriptEntries,
   projectDurableTurns,
+  projectDurableControls,
 } from './sessionTranscript.ts'
 import {
   applyDurableTurnEvent,
@@ -129,10 +130,15 @@ import {
   type DurableTurnRecord,
   type DurableTurnState,
 } from './durableTurn.ts'
+import type { DurableControlRecord } from './durableControl.ts'
 import {
   defaultSessionCoordinator,
   type SessionCoordinator,
 } from './sessionCoordinator.ts'
+import {
+  promoteSessionControls,
+  releaseSessionRunner,
+} from './sessionControlRuntime.ts'
 import type { SessionUsage } from './sessionUsage.ts'
 import {
   cloneSessionUsage,
@@ -485,6 +491,7 @@ export {
   appendSessionSystemNote,
   appendSessionFileDiff,
   appendSessionTurnState,
+  appendSessionControlState,
   hasDurableSessionPersistence,
   type SessionSnapshot,
   type SessionScope,
@@ -495,6 +502,19 @@ export {
   type PersistableSession,
   type SessionPersistMeta,
 } from './sessionPersist.ts'
+export {
+  requestSessionControl,
+  cancelSessionControl,
+  promoteSessionControls,
+  takeNextSessionQueued,
+  releaseSessionRunner,
+  type SessionControlRuntimeSession,
+  type SessionControlRuntimeRequestResult,
+  type SessionControlRuntimeCancelResult,
+  type SessionControlRuntimePromotionResult,
+  type SessionControlTakeResult,
+  type SessionRunnerReleaseResult,
+} from './sessionControlRuntime.ts'
 export {
   appendTranscriptLine,
   ensureTranscriptFile,
@@ -779,6 +799,8 @@ export type BoloSession = {
   coordinator: SessionCoordinator
   /** DR0：由 transcript `turn` entries 投影；不进入模型 messages。 */
   durableTurns: DurableTurnRecord[]
+  /** DR2C：由 transcript `control` entries 投影；不重建 coordinator queue。 */
+  durableControls: DurableControlRecord[]
   /**
    * 权威 system 段（对照 HC systemPrompt）。
    * callModel 时由 prepareModelMessages 前缀；对话历史尽量不混入 system。
@@ -1139,6 +1161,7 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
     fileDiffLog: [],
     diffTurn: 0,
     durableTurns: [],
+    durableControls: [],
     hookDiagLog: createHookDiagLog(),
     postCompactReinjection: true,
     onEvent: opts.onEvent ?? (() => {}),
@@ -1923,9 +1946,15 @@ export async function submitPrompt(
     ownedOptions,
     turnId,
     querySource,
-  ).finally(() => {
+  ).finally(async () => {
     linkedAbort.dispose()
-    runner.lease.release()
+    const released = await releaseSessionRunner(session, runner.lease)
+    if (released.persistenceWarning) {
+      emit(session, {
+        type: 'error',
+        message: released.persistenceWarning,
+      })
+    }
   })
 }
 
@@ -2074,9 +2103,8 @@ async function runOwnedPrompt(
       midTurnAutoCompact: true,
       tryMidTurnCompact: session.tryMidTurnCompact,
       signal: options?.signal,
-      onSafeBoundary: (boundary) => {
-        const promoted = session.coordinator.promoteControls({
-          sessionId: session.id,
+      onSafeBoundary: async (boundary) => {
+        const promoted = await promoteSessionControls(session, {
           turnId,
           boundary,
         })
@@ -2086,6 +2114,12 @@ async function runOwnedPrompt(
             message: `safe boundary "${boundary}" rejected: ${promoted.detail}`,
           })
           return []
+        }
+        if (promoted.persistenceWarning) {
+          emit(session, {
+            type: 'error',
+            message: promoted.persistenceWarning,
+          })
         }
         return promoted.controls
       },
@@ -2288,11 +2322,12 @@ export async function resumeSession(
     }
   }
 
-  // D6/DR1：从 transcript 恢复 file_diff 与 durable turn 投影
+  // D6/DR1/DR2C：恢复 file_diff 与 durable turn/control 诊断投影。
   try {
     const tp = resolveTranscriptPathFromJson(filePath)
     const { entries } = await loadTranscriptFile(tp)
     session.durableTurns = projectDurableTurns(entries)
+    session.durableControls = projectDurableControls(entries)
     const diffs = fileDiffsFromTranscriptEntries(entries)
     if (diffs.length) {
       session.fileDiffLog = diffs.map((d) => ({
