@@ -147,7 +147,7 @@ npx bolo --resume <id>
 npx bolo --continue
 ```
 
-REPL 中，模型或工具正在运行时按 `Ctrl-C` 会取消**当前 turn**并返回提示符；空闲提示符下按 `Ctrl-C` 才退出。若取消发生在权限问答或 diff 审批面板，默认按拒绝处理。
+REPL 中，模型或工具正在运行时按 `Ctrl-C` 会针对 coordinator 当前 active turn 请求 interrupt 并返回提示符；空闲提示符下按 `Ctrl-C` 才退出。若取消发生在权限问答或 diff 审批面板，core 默认按拒绝处理。
 
 ### 3.2 Desktop（Electron）
 
@@ -175,6 +175,9 @@ npm start
 | `/effort` · `/effort high` | 推理强度（方言 wire） |
 | `/ultrathink [off\|tip\|turn]` | CX8 糖；**默认 off** |
 | `/agents` · `/bg` | subagent 类型与后台状态 |
+| `/turn status` | 当前 active turn 与 queue/steer/interrupt control 状态 |
+| `/turn steer <text>` · `/turn interrupt` | 在安全边界修正或取消当前 active turn |
+| `/turn queue <text>` · `/turn cancel <controlId>` | FIFO 排队下一轮；执行前取消 pending/ready control |
 | `/diff` · `/diff last` · `/diff git` | 本会话文件改动 |
 | `/compact` · `/context` · `/cost` | 压缩 · 压力 · 本地 token |
 | `/permissions` · `/plan` · `/allow` · `/deny` | 权限 |
@@ -398,6 +401,7 @@ CLI：
 - `/diff` 摘要可经 transcript `file_diff` 恢复（无全文 hunk）  
 - 持久化 CLI turn 会在调用模型前写入 `admitted/running`；完成、错误或取消后写 terminal。若进程中断，resume 将未完成 turn 识别为 `interrupted`，但不会自动重放可能已有副作用的工作。
 - 同一进程若有两个调用方同时提交相同 `sessionId`，core 会立即拒绝后到者（`session runner busy`），不会把它写入消息或调用模型；不同 session 可并行。CLI REPL 本身仍按 turn 串行。
+- `/turn queue` 在 active turn 后建立 ready 输入；REPL 会在再次询问人工输入前 FIFO 执行，并沿用已分配的 durable `turnId`。controls 当前只在进程内存在，重启后的恢复投影归后续 DR2C。
 
 ```bash
 npx bolo --list

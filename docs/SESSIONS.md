@@ -66,7 +66,7 @@ tryAcquire(sessionId, turnId)
 - busy 拒绝不覆盖 active session 的 phase，也不把被拒 prompt 写入 transcript/messages。
 - normal、hook blocked、provider error、abort、admission failure 都释放 lease；release 幂等。
 - coordinator/lease 是运行时句柄，不写入 JSON/JSONL；resume 会重新注入默认或调用方指定的 coordinator。
-- DR2A 不提供跨进程文件锁，也不实现 queue/steer/interrupt；这些属于 DR2B–DR4。
+- DR2A 本身不提供跨进程文件锁或 control；进程内 queue/steer/interrupt 已在 DR2B 完成，durable recovery 属于 DR2C–DR4。
 
 #### DR2B1 control intent（进程内契约）
 
@@ -82,7 +82,7 @@ requestControl(controlId, kind, sessionId, expectedTurnId, ...)
 - 同一 `controlId` + 同 payload 重试幂等；不同 payload fail-closed。
 - queue/steer 在 promotion 前可取消；未使用 steer 在 active turn 释放时 cancelled。
 - `after_provider` / `before_tools` 等会破坏 assistant-tool pairing 的位置不 promotion steer。
-- interrupt 目前先产生 lease-local signal；DR2B2 接入 queryLoop 后才成为完整运行时动作。
+- interrupt 产生 lease-local signal，并由 DR2B2 合并到 queryLoop/provider/tool/permission abort 链。
 - controls 暂为进程内投影，不写 transcript；崩溃恢复与 compact 保留规则归 DR2C。
 
 #### DR2B2 queryLoop wiring
@@ -100,7 +100,16 @@ steer 只在以下 message-safe boundary promotion：
 
 `after_provider`、`before_tools`、`turn_terminal` 只用于观测/终态，不注入 steer。每次 promotion 发送结构化 `control` event；消息和 terminal 仍由 core 单一状态机维护。
 
-DR2B2 尚未提供 CLI 输入队列菜单，也未持久化 controls；permission/diff ask 的显式退出边界与 CLI control 入口属于 DR2B3，恢复投影属于 DR2C。
+#### DR2B3 permission/diff/CLI control
+
+- permission ask 返回或被 coordinator interrupt 取消后访问 `after_permission`；有结构化文件 preview 时再访问 `after_diff_approval`。
+- 这两个 ask boundary 只观察状态，不 promotion steer；steer 仍在完整 tool results 写回后的 `after_tools` 进入消息链。
+- core 用合并 signal 竞速自定义 `askPermission`；UI 不合作时也按 deny fail-closed，不会永久占住 runner。
+- `/turn status|steer|interrupt|queue|cancel` 直接消费同一 coordinator；CLI 不推导第二状态机。
+- REPL 在读取下一次人工输入前 FIFO drain ready queue，沿用记录中的 `turnId/prompt/querySource`，取出即 promoted 且不重放。
+- Ctrl-C 优先向 snapshot 中的 active turn 提交 interrupt control；ownership 前窗口才回退本地 AbortController。
+
+controls 仍是进程内投影，不写 transcript；崩溃恢复、compact 保留和 control 终态映射属于 DR2C。
 
 ## 2. 快照格式（version 1，只读兼容）
 

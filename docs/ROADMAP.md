@@ -12,7 +12,7 @@
 | 层 | 粗估 | 说明 |
 |----|------|------|
 | **Headless 核心** | **~80–88%** | loop/STE/权限/auto/snip/policy/OS sandbox；partial stream fail-closed |
-| 会话与 CLI | **~82–90%** | JSONL · new/resume 同构 runtime · slash · 每 turn 取消；Durable Turn DR0–DR2A ✅ |
+| 会话与 CLI | **~84–91%** | JSONL · new/resume 同构 runtime · `/turn` · coordinator Ctrl-C · Durable Turn DR0–DR2B3 ✅ |
 | **扩展面** | **~80–88%** | MCP×3 · Skills · Plugins · WebFetch · OAuth 本地 |
 | **Subagent** | **~85–92%** | Spec v0；worktree 隔离失败 fail-closed、dirty 成果保留 |
 | **Rules / Creators** | **~75–85%** | 日用齐 |
@@ -31,11 +31,11 @@
 
 **已闭环主线：** headless 日用 → Diff · Hooks · Compact · Provider · Effort · **Provider UX CX0–CX8** · **CLI/Agent 可靠性 R0–R4**。
 
-**当前主线：** **Durable Turn DR2B3**（§13：permission/diff ask 退出边界与最小 CLI control；DR2A–DR2B2 已完成）。
+**当前主线：** **Durable Turn DR2C**（§13：control/recovery durable projection；DR0–DR2B3 已完成）。
 
 **开放轨：**
 
-Durable Turn DR0–DR2B2 已落地，DR2B3–DR4 继续开放；非阻塞加深项为 Compact §8.9 · U5 · adaptive thinking · Desktop 体验打磨。
+Durable Turn DR0–DR2B3 已落地，DR2C–DR4 继续开放；其后按 §13.10 的 AR1–AR5 顺序推进 CLI/TUI、Compact、Desktop 与发布硬化。
 
 ---
 
@@ -170,7 +170,7 @@ apps/desktop       消费同一 DiffViewModel                 （U3）
 | **Effort 方言** | ✅ **E0–E9**（§10） |
 | **Provider UX** | ✅ **CX0–CX8**（§11；ultrathink 默认 off） |
 | **CLI / Agent 可靠性** | ✅ **R0–R4**（§12；流式终态 · runtime · 取消 · worktree · 门禁） |
-| **Durable Turn** | ✅ **DR0–DR2A**（§13；DR2B–DR4 待做） |
+| **Durable Turn** | ✅ **DR0–DR2B3**（§13；DR2C–DR4 待做） |
 | 无遥测 | ✅ |
 
 ---
@@ -192,13 +192,13 @@ apps/desktop       消费同一 DiffViewModel                 （U3）
 | **M-Effort（E0–E9）** | ✅ | 方言引擎 · choosable · 门控 · TTY · doctor |
 | **M-Provider-UX（CX0–CX8）** | ✅ | preset · caps · errors · resume · Desktop · ultrathink |
 | **M-Reliability（R0–R4）** | ✅ | provider fail-closed · new/resume 同构 · Ctrl-C · worktree 保全 · 默认门禁 |
-| **M-Durable-Turn（DR0–DR4）** | ✅ DR0–DR2A | admission + lifecycle + recovery + 单 session runner；safe boundary/subagent/protocol 后续 |
+| **M-Durable-Turn（DR0–DR4）** | ✅ DR0–DR2B3 | admission + lifecycle + recovery + 单 runner + safe-boundary control；durable control/subagent/protocol 后续 |
 | 官方市场 / 遥测 | 🚫 | 永不 |
 
 **一句话：**  
 主路径、Diff、Hooks、Compact、**多 Provider、Effort、Provider UX（含 CX8）、CLI/Agent 可靠性 R0–R4**日用已收口；Durable Turn 正在把“可恢复 transcript”升级为“可恢复执行”。
 
-**下一刀（当前主线）：** Durable Turn **DR2B3 ask/CLI races**；随后 DR2C recovery projection → DR3 background/subagent → DR4 protocol。
+**下一刀（当前主线）：** Durable Turn **DR2C recovery projection**；随后 DR3 background/subagent → DR4 protocol → AR1–AR5。
 
 **非阻塞加深：** Compact §8.9 · U5 · adaptive thinking · Desktop 体验打磨。
 
@@ -845,7 +845,7 @@ npx tsx scripts/test-worktree-safety.ts
 
 ---
 
-## 13. Durable Turn 轨（DR0–DR2A ✅ · DR2B–DR4 开放）
+## 13. Durable Turn 轨（DR0–DR2B3 ✅ · DR2C–DR4 开放）
 
 > **目标：** 把“turn 结束后保存 transcript”升级为“输入先 admission、执行有生命周期、崩溃后可识别未完成工作”。
 >
@@ -857,7 +857,7 @@ npx tsx scripts/test-worktree-safety.ts
 |------|------|------|
 | **DR0** | 稳定 `turnId` + `admitted/running/completed/error/aborted/interrupted` schema；append-only 投影、幂等与恢复规则 | ✅ |
 | **DR1** | UserPromptSubmit 归约后、provider 前写 admission/running；消息成功落盘后写 terminal；resume 识别未完成 turn | ✅ |
-| **DR2** | `SessionCoordinator`：同 session 单 runner、跨 session 并行、safe-boundary `queue/steer/interrupt` | DR2A–DR2B2 ✅ · DR2B3–DR2C 📋 |
+| **DR2** | `SessionCoordinator`：同 session 单 runner、跨 session 并行、safe-boundary `queue/steer/interrupt` | DR2A–DR2B3 ✅ · DR2C 📋 |
 | **DR3** | 后台 Subagent 任务/结果持久化；真正 queue；结果只在父 turn 安全边界 promotion | 📋 |
 | **DR4** | CLI 任务诊断与恢复动作；稳定 thread/turn 协议，按真实多客户端需求再接 app-server/RPC | 📋 |
 
@@ -901,7 +901,7 @@ UserPromptSubmit hook 成功并归约最终 prompt
 | 切片 | 核心交付 | 验收重点 | 预计提交 |
 |------|----------|----------|----------|
 | **DR2A · Session ownership ✅** | `packages/core` 提供 `SessionCoordinator`；同一 session 最多一个 active runner，不同 session 可并行 | 第二个同 session runner 不得进入 provider/tool；不同 session 不互相阻塞；所有 runner release 路径可证明 | core + tests；docs |
-| **DR2B · Safe-boundary control（B1–B2 ✅）** | B1 定义 `queue/steer/interrupt` intent、状态与 expected turn；B2 接 provider/tool/compact/Stop 边界；B3 接 permission/diff ask 与 CLI | 控制请求只在边界生效；取消与 ask 面板 fail-closed；queued prompt 不丢、不重放 | core + tests；CLI consumer；docs |
+| **DR2B · Safe-boundary control（B1–B3 ✅）** | B1 定义 `queue/steer/interrupt` intent、状态与 expected turn；B2 接 provider/tool/compact/Stop 边界；B3 接 permission/diff ask 与 CLI | 控制请求只在边界生效；取消与 ask 面板 fail-closed；queued prompt 不丢、不重放 | core + tests；CLI consumer；docs |
 | **DR2C · Recovery projection** | coordinator 状态与 durable turn 投影对齐；进程内 control 终态映射到 transcript | crash fixture、duplicate `turnId`、terminal write failure、runner release 组合回归 | core + tests；docs |
 | **DR3A · Durable task schema** | background/subagent task 的 `admitted/running/completed/error/aborted/interrupted` append-only 记录与投影 | task/result 可恢复；未知执行状态只投影 interrupted；结果不自动注入父消息 | core/subagent + tests；docs |
 | **DR3B · Queue + promotion** | `overflow: queue` 接入 coordinator；结果先持久化，只在父 turn safe boundary promotion | 并发上限、FIFO/取消、父 turn 结束竞态、worktree dirty 成果保全 | core/subagent + tests；CLI status；docs |
@@ -938,6 +938,15 @@ UserPromptSubmit hook 成功并归约最终 prompt
 - 所有 terminal 路径经过 `turn_terminal` boundary；maxTurns 无剩余预算时不 promotion 新 steer。
 - QueryLoop/Session 发送结构化 `control` promotion event，供后续 CLI/Desktop 消费。
 - 默认 `npm test` 已纳入 `test-session-safe-boundary`，覆盖 final steer、tool pairing 与真实 provider interrupt。
+
+#### DR2B3 已落地契约
+
+- `AskPermissionFn` 接收 core 合并后的 turn/runner signal；即使自定义 UI 不监听 signal，core 也会用 abort race 按 deny 收口，interrupt 不会把 runner 永久挂在 ask。
+- permission 决策返回或被取消后访问 `after_permission`；带结构化文件 preview 时再访问 `after_diff_approval`。两者只观察 coordinator，不 promotion steer，保证 assistant tool_calls 与 tool results 配对完整。
+- `/turn status|steer|interrupt|queue|cancel` 直接消费 core coordinator；expected active turn、幂等与状态转换仍只由 core 判断。
+- CLI REPL 在询问下一次人工输入前 FIFO 取得一条 ready queue；使用 control 中原有 `turnId/prompt/querySource` admission，取出即 promoted，绝不重放。
+- Ctrl-C 优先针对 snapshot 中的真实 active turn 提交 interrupt intent；只在 ownership 前的极短窗口或本地 slash 面板回退 AbortController。
+- 默认 `npm test` 已纳入 `test-session-permission-boundary` 与 `test-turn-cli`，覆盖 ask/interrupt、diff cancel、ask-time steer pairing、queue/cancel/drain/turnId。
 
 ### 13.5 DR2 状态机与安全边界
 
@@ -1028,9 +1037,20 @@ DR4 仍然不是以下内容：
 
 ### 13.10 Durable Runtime 之后
 
-DR0–DR4 收口后再按收益/风险选择下一轨，不并行铺大工程：
+DR0–DR4 收口后进入 Autonomous Road（AR）。一次只推进一个可独立验收的切片；顺序是可靠性与可操作性优先，再做上下文效率和 UI 密度。
 
-1. **CLI/TUI 日用诊断**：优先把 turn/task 状态、queue 与 safe actions 做成轻量文本/TTY 视图。
-2. **Compact §8.9**：partial/remote/真 tokenizer，只在 Durable Runtime 不再变化后深化。
-3. **Desktop 消费**：复用 protocol/view-model 增加 session/task 面板，不复制业务状态机。
-4. **U5 / adaptive thinking**：保持可选；不得阻塞 headless 可靠性。
+| 阶段 | 准入条件 | 交付切片 | 完成定义 |
+|------|----------|----------|----------|
+| **AR1 · CLI/TUI runtime UX** | DR4 protocol 已稳定，CLI 不再读取 coordinator 私有结构 | AR1A turn/task list + inspect；AR1B queue edit/remove + safe actions；AR1C 文本/TTY pager 与可选 `--json` 自动化输出 | new/resume/print 共用 core view-model；非 TTY 不等待输入；默认不 replay；CLI 竞态与快照测试进入 `npm test` |
+| **AR2 · Compact depth** | Durable lifecycle 不再改写 transcript 基本形状 | AR2A partial range/watermark；AR2B provider-aware tokenizer budget；AR2C remote/session-memory 仅在本地契约证明收益后评估 | 旧 transcript 可读；tool pairing/lifecycle 不被 compact 擦除；token/cost 回归可量化；失败回退现有 C0–C5 |
+| **AR3 · Desktop product shell** | DR4 view-model 至少被 CLI 稳定消费一个阶段 | AR3A protocol client/store；AR3B session/turn/task 导航；AR3C markdown/tool/diff/approval cards；AR3D composer queue/steer/interrupt；AR3E provider/effort/settings；AR3F crash/restart、键盘与性能收口 | 采用 Codex App 风格的信息架构与克制视觉；renderer 不重算权限、diff、turn/task 状态；mock + 真 core IPC 冒烟；Windows 打包主路径可复现 |
+| **AR4 · Evidence-driven depth** | AR1–AR3 暴露真实痛点或可测收益 | U5 真 Ink/IDE bridge、adaptive thinking、hook trust UI、远程模型列表分别独立立项；无证据则记录“不实施”理由关闭 | 每项有用户场景、基准或兼容需求；禁止仅为对齐 HC/Codex 代码量引入重依赖 |
+| **AR5 · Release hardening** | 所有已选择产品轨完成 | 迁移/兼容矩阵、崩溃与磁盘故障 fixture、安装/升级/卸载、跨平台 smoke、性能预算、安全审计、文档与 release checklist | clean clone 可安装；默认门禁全绿；无密钥/遥测；已知限制和恢复步骤可由人类文档独立执行 |
+
+固定选择规则：
+
+1. 每次从最前面的未完成阶段选择一个最小切片；不得同时铺 CLI、Compact、Desktop 三个大工程。
+2. 先更新 `packages/*` schema/view-model 与失败测试，再接 CLI/Desktop；renderer 不持有第二状态机。
+3. 每切片代码/测试与文档分批 commit/push；ROADMAP 水位只在验收全绿后前移。
+4. 对标 HC/Codex/OpenCode/Pi 只借鉴语义、失败模式和测试；不复制重量级目录、依赖或本机路径。
+5. AR4 属于条件触发项：若缺少真实需求，必须以书面取舍关闭，而不是留下永久“待办”。
