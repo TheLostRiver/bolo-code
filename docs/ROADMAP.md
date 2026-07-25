@@ -22,13 +22,13 @@
 | **Electron GUI** | **~55–65%** | 壳 + 流式 + 权限 + 设置 |
 | **Hooks · 日用契约** | **~96–98%** | **H0–H5 已落地**（SessionEnd · exit 语义 · updatedInput · `/hooks recent`）；trust/UI 菜单后置 |
 | **Compact · 日用管道** | **~92–95%** | **C0–C5 已落地**；后置 partial/remote/真 tokenizer（§8.9） |
-| **Provider · 多实例热切** | **~25–35%** | 现仅单 `provider` + `/model` 改名；**P 轨**规划中 |
-| **产品整体（相对 HC）** | **~70–85%** | 日用高；UI 全家桶另计 |
+| **Provider · 多实例热切** | **~92–96%** | **P0–P4.1 已落地**（`providers` · 热切 · TTY 箭头选）；P5 Desktop / resume `providerId` 后置 |
+| **产品整体（相对 HC）** | **~72–86%** | 日用高；UI 全家桶另计 |
 
-**主线已闭环：** headless 日用 → FULL → M4 → Diff · Hooks · **Compact C0–C5**。
+**主线已闭环：** headless 日用 → Diff · Hooks · Compact C0–C5 · **Provider P0–P4.1**。
 
-**开放轨（下一刀 · 当前着重）：**  
-**P 轨 · 多 Provider 并存 + 运行时热切**（§9）· Compact 后置清单（§8.9，非阻塞）· U5 可选。
+**开放轨（非阻塞）：**  
+P5 Desktop 多 provider UI · Compact §8.9 后置 · U5 可选 · resume 持久化 `providerId`。
 
 ---
 
