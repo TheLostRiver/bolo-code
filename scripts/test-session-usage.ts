@@ -21,6 +21,11 @@ import {
   submitUserInput,
   toSnapshot,
   parseSessionSnapshot,
+  createPromptCacheSessionState,
+  shouldBreakPromptCache,
+  notePromptCacheAfterModelCall,
+  hashToolNames,
+  formatPromptCacheSessionLine,
 } from '../packages/core/src/index.ts'
 import {
   parseOpenAIStreamUsage,
@@ -103,6 +108,7 @@ assert(formatCacheHitRatePercent(empty)?.endsWith('%'), 'hit percent string')
 const usd = estimateSessionUsd(empty)
 assert(usd.usd > 0, 'session usd > 0')
 assert(usd.byModel.length === 2, 'usd by model rows')
+assert(usd.cacheSavingsUsd > 0, 'cache savings from cache reads')
 const opus = estimateUsdCost(
   { inputTokens: 1_000_000, outputTokens: 0 },
   'claude-opus-4',
@@ -114,6 +120,62 @@ const mini = estimateUsdCost(
 assert(opus.usd > mini.usd, 'opus tier costlier than mini for same tokens')
 assert(formatUsd(0.001).startsWith('$'), 'format usd')
 assert(resolveModelCostRates('opus').tier.includes('opus'), 'opus tier name')
+
+// api duration
+const withDur = createEmptySessionUsage()
+accumulateSessionUsage(withDur, {
+  inputTokens: 10,
+  outputTokens: 1,
+  totalTokens: 11,
+  model: 'm',
+  apiDurationMs: 1500,
+})
+assert(withDur.apiDurationMs === 1500, 'api duration total')
+assert(withDur.lastCall?.apiDurationMs === 1500, 'last call duration')
+const fmtDur = formatSessionUsage(withDur)
+assert(fmtDur.includes('API duration:'), 'format api duration')
+assert(fmtDur.includes('1.5s') || fmtDur.includes('1500ms'), 'format duration value')
+
+// prompt cache break: tools / model / cache_read_drop
+let pcs = createPromptCacheSessionState(60_000)
+notePromptCacheAfterModelCall(pcs, {
+  stablePrefix: 'stable-a',
+  toolNames: ['Read', 'Bash'],
+  model: 'm1',
+  effort: 'medium',
+  cacheReadTokens: 1000,
+})
+assert(pcs.lastCacheAt != null, 'pcs touched')
+assert(pcs.toolsHash === hashToolNames(['Bash', 'Read']), 'tools hash sorted')
+const toolsBreak = shouldBreakPromptCache(pcs, {
+  stablePrefix: 'stable-a',
+  toolNames: ['Read', 'Write'],
+  model: 'm1',
+})
+assert(toolsBreak.reason === 'tools_changed', 'tools break')
+const modelBreak = shouldBreakPromptCache(pcs, {
+  stablePrefix: 'stable-a',
+  toolNames: ['Read', 'Bash'],
+  model: 'm2',
+})
+assert(modelBreak.reason === 'model_changed', 'model break')
+const dropBreak = shouldBreakPromptCache(pcs, {
+  stablePrefix: 'stable-a',
+  toolNames: ['Read', 'Bash'],
+  model: 'm1',
+  cacheReadTokens: 10,
+})
+assert(dropBreak.reason === 'cache_read_drop', 'cache read drop')
+notePromptCacheAfterModelCall(pcs, {
+  stablePrefix: 'stable-a',
+  toolNames: ['Read', 'Write'],
+  model: 'm1',
+  cacheReadTokens: 10,
+})
+assert((pcs.breakCount ?? 0) >= 1, 'break count increments')
+const pcLine = formatPromptCacheSessionLine(pcs)
+assert(pcLine?.includes('breaks='), 'pc line breaks')
+assert(pcLine?.includes('prevCacheRead='), 'pc line prev read')
 
 // merge child into parent
 const parentU = createEmptySessionUsage()
@@ -236,13 +298,17 @@ async function main() {
   }
 
   assert(session.promptCacheState != null, 'session has promptCacheState')
-  // mock round touches prompt cache
+  // mock round touches prompt cache + duration
   await submitUserInput(session, 'usage round')
   assert(session.usage && session.usage.calls >= 2, 'calls after mock')
   assert(session.usage!.byModel?.['mock-a'] != null, 'byModel after mock')
   assert(
     session.promptCacheState?.lastCacheAt != null,
     'prompt cache touched after model call',
+  )
+  assert(
+    (session.usage!.apiDurationMs ?? 0) >= 0,
+    'api duration field present',
   )
 
   const cost2 = await submitUserInput(session, '/cost')
@@ -252,11 +318,19 @@ async function main() {
         cost2.message.includes('promptCache'),
       'cost after touch shows cache state',
     )
+    assert(
+      cost2.message.includes('breaks=') || cost2.message.includes('lastCheck='),
+      'cost shows break telemetry local',
+    )
   }
 
   const snap = toSnapshot(session)
   const snap2 = parseSessionSnapshot(JSON.parse(JSON.stringify(snap)))
-  assert(snap2.usage?.cacheReadInputTokens === 3 || (snap2.usage?.cacheReadInputTokens ?? 0) >= 3, 'snap cache')
+  assert(
+    snap2.usage?.cacheReadInputTokens === 3 ||
+      (snap2.usage?.cacheReadInputTokens ?? 0) >= 3,
+    'snap cache',
+  )
   assert(snap2.usage?.byModel?.['mock-a'] != null, 'snap byModel')
   assert(snap2.usage?.lastCall != null, 'snap lastCall')
 

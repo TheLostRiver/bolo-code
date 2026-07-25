@@ -1097,13 +1097,23 @@ export function newSnipId(): string {
   return `snip_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
 }
 
-// ── F-C6-TTL prompt cache 可观测 ──
+// ── F-C6-TTL prompt cache 可观测（对照 HC promptCacheBreakDetection，无遥测）──
 
 export const DEFAULT_PROMPT_CACHE_TTL_MS = 60 * 60 * 1000 // 1h
+
+/**
+ * 上一轮 cache_read 明显高于本轮 → 疑似服务端 miss
+ *（对照 HC prevCacheReadTokens 下跌检测，简化版）
+ */
+export const CACHE_READ_DROP_RATIO = 0.5
 
 export type PromptCacheBreakReason =
   | 'ttl_expired'
   | 'system_prefix_changed'
+  | 'tools_changed'
+  | 'model_changed'
+  | 'effort_changed'
+  | 'cache_read_drop'
   | 'forced'
   | 'none'
 
@@ -1112,16 +1122,27 @@ export type PromptCacheSessionState = {
   lastCacheAt?: number
   /** 稳定 system 前缀指纹 */
   stablePrefixHash?: string
+  /** tools 名序列指纹（排序后 join） */
+  toolsHash?: string
+  /** 上次 call 的 model / effort（参与 break 检测） */
+  lastModel?: string
+  lastEffort?: string
+  /** 上一轮 provider 报告的 cache_read tokens */
+  prevCacheReadTokens?: number
   ttlMs: number
   /** 最近一次 break 检测结果（本地 /cost 展示） */
   lastBreakReason?: PromptCacheBreakReason
   lastCheckedAt?: number
+  /** 本会话累计 break 次数（reason≠none） */
+  breakCount?: number
+  /** 最近一次是否因 API 读数下跌判定 */
+  lastCacheReadDrop?: boolean
 }
 
 export function createPromptCacheSessionState(
   ttlMs = DEFAULT_PROMPT_CACHE_TTL_MS,
 ): PromptCacheSessionState {
-  return { ttlMs }
+  return { ttlMs, breakCount: 0 }
 }
 
 export function hashStablePrefix(text: string): string {
@@ -1134,38 +1155,112 @@ export function hashStablePrefix(text: string): string {
   return (h >>> 0).toString(16)
 }
 
+/** tools 名列表 → 稳定指纹（排序） */
+export function hashToolNames(names: readonly string[] | undefined | null): string {
+  if (!names?.length) return hashStablePrefix('(no-tools)')
+  const sorted = [...names].map((n) => n.trim()).filter(Boolean).sort()
+  return hashStablePrefix(sorted.join('\0'))
+}
+
+export type PromptCacheCallContext = {
+  stablePrefix: string
+  toolNames?: readonly string[]
+  model?: string
+  effort?: string
+  /** 本轮 provider 报告的 cache_read；用于下跌检测 */
+  cacheReadTokens?: number
+}
+
 /**
- * 是否应打断 prompt cache（1h TTL 或前缀变化）。
+ * 是否应打断 prompt cache（TTL / 前缀 / tools / model / effort / cache_read 下跌）。
+ * 不修改 state。
  */
 export function shouldBreakPromptCache(
   state: PromptCacheSessionState,
-  stablePrefix: string,
+  stablePrefixOrCtx: string | PromptCacheCallContext,
   now = Date.now(),
 ): { break: boolean; reason: PromptCacheBreakReason } {
-  const hash = hashStablePrefix(stablePrefix)
+  const ctx: PromptCacheCallContext =
+    typeof stablePrefixOrCtx === 'string'
+      ? { stablePrefix: stablePrefixOrCtx }
+      : stablePrefixOrCtx
+
+  const hash = hashStablePrefix(ctx.stablePrefix)
   if (state.stablePrefixHash && state.stablePrefixHash !== hash) {
     return { break: true, reason: 'system_prefix_changed' }
   }
+
+  if (ctx.toolNames) {
+    const th = hashToolNames(ctx.toolNames)
+    if (state.toolsHash && state.toolsHash !== th) {
+      return { break: true, reason: 'tools_changed' }
+    }
+  }
+
+  const model = ctx.model?.trim()
+  if (
+    model &&
+    state.lastModel &&
+    state.lastModel !== model
+  ) {
+    return { break: true, reason: 'model_changed' }
+  }
+
+  const effort = ctx.effort?.trim()
+  if (
+    effort &&
+    state.lastEffort &&
+    state.lastEffort !== effort
+  ) {
+    return { break: true, reason: 'effort_changed' }
+  }
+
   if (
     state.lastCacheAt != null &&
     now - state.lastCacheAt > (state.ttlMs || DEFAULT_PROMPT_CACHE_TTL_MS)
   ) {
     return { break: true, reason: 'ttl_expired' }
   }
+
+  // 服务端 miss 启发式：上一轮有明显 cache hit，本轮读数骤降
+  const prev = state.prevCacheReadTokens
+  const cur = ctx.cacheReadTokens
+  if (
+    prev != null &&
+    prev > 100 &&
+    cur != null &&
+    cur < prev * CACHE_READ_DROP_RATIO
+  ) {
+    return { break: true, reason: 'cache_read_drop' }
+  }
+
   return { break: false, reason: 'none' }
 }
 
-/** 记录一次成功的 cache 标记（返回新对象；调用方可 Object.assign 回写） */
+/** 记录一次成功的 cache 标记（返回新对象） */
 export function touchPromptCacheSession(
   state: PromptCacheSessionState,
-  stablePrefix: string,
+  stablePrefixOrCtx: string | PromptCacheCallContext,
   now = Date.now(),
 ): PromptCacheSessionState {
-  return {
+  const ctx: PromptCacheCallContext =
+    typeof stablePrefixOrCtx === 'string'
+      ? { stablePrefix: stablePrefixOrCtx }
+      : stablePrefixOrCtx
+  const next: PromptCacheSessionState = {
     ...state,
     lastCacheAt: now,
-    stablePrefixHash: hashStablePrefix(stablePrefix),
+    stablePrefixHash: hashStablePrefix(ctx.stablePrefix),
   }
+  if (ctx.toolNames) {
+    next.toolsHash = hashToolNames(ctx.toolNames)
+  }
+  if (ctx.model?.trim()) next.lastModel = ctx.model.trim()
+  if (ctx.effort?.trim()) next.lastEffort = ctx.effort.trim()
+  if (ctx.cacheReadTokens != null && Number.isFinite(ctx.cacheReadTokens)) {
+    next.prevCacheReadTokens = Math.max(0, Math.floor(ctx.cacheReadTokens))
+  }
+  return next
 }
 
 /**
@@ -1174,19 +1269,33 @@ export function touchPromptCacheSession(
  */
 export function notePromptCacheAfterModelCall(
   state: PromptCacheSessionState,
-  stablePrefix: string,
+  stablePrefixOrCtx: string | PromptCacheCallContext,
   now = Date.now(),
 ): { break: boolean; reason: PromptCacheBreakReason } {
-  const chk = shouldBreakPromptCache(state, stablePrefix, now)
+  const ctx: PromptCacheCallContext =
+    typeof stablePrefixOrCtx === 'string'
+      ? { stablePrefix: stablePrefixOrCtx }
+      : stablePrefixOrCtx
+  const chk = shouldBreakPromptCache(state, ctx, now)
   state.lastBreakReason = chk.reason
   state.lastCheckedAt = now
-  const next = touchPromptCacheSession(state, stablePrefix, now)
+  state.lastCacheReadDrop = chk.reason === 'cache_read_drop'
+  if (chk.break && chk.reason !== 'none') {
+    state.breakCount = (state.breakCount ?? 0) + 1
+  }
+  const next = touchPromptCacheSession(state, ctx, now)
   state.lastCacheAt = next.lastCacheAt
   state.stablePrefixHash = next.stablePrefixHash
+  if (next.toolsHash) state.toolsHash = next.toolsHash
+  if (next.lastModel) state.lastModel = next.lastModel
+  if (next.lastEffort) state.lastEffort = next.lastEffort
+  if (next.prevCacheReadTokens != null) {
+    state.prevCacheReadTokens = next.prevCacheReadTokens
+  }
   return chk
 }
 
-/** /cost · /context 一行 */
+/** /cost · /context 一行（可多行） */
 export function formatPromptCacheSessionLine(
   state: PromptCacheSessionState | undefined | null,
 ): string | undefined {
@@ -1197,5 +1306,16 @@ export function formatPromptCacheSessionLine(
       : 'never'
   const br = state.lastBreakReason ?? 'none'
   const ttlMin = Math.round((state.ttlMs || DEFAULT_PROMPT_CACHE_TTL_MS) / 60_000)
-  return `  promptCache:   lastTouch ${age} · lastCheck=${br} · ttl=${ttlMin}m (local layout/TTL; not vendor billing)`
+  const breaks = state.breakCount ?? 0
+  const parts = [
+    `lastTouch ${age}`,
+    `lastCheck=${br}`,
+    `breaks=${breaks}`,
+    `ttl=${ttlMin}m`,
+  ]
+  if (state.lastModel) parts.push(`model=${state.lastModel}`)
+  if (state.prevCacheReadTokens != null) {
+    parts.push(`prevCacheRead=${state.prevCacheReadTokens}`)
+  }
+  return `  promptCache:   ${parts.join(' · ')} (local layout/TTL/API-read; not vendor billing)`
 }

@@ -3,7 +3,7 @@
  * 无遥测、不上报；可选 USD 仅本地粗算、不强制。
  */
 
-import { estimateUsdCost, formatUsd } from './modelCost.ts'
+import { estimateUsdCost, formatUsd, formatDurationMs } from './modelCost.ts'
 
 export type ModelUsageBucket = {
   inputTokens: number
@@ -13,6 +13,8 @@ export type ModelUsageBucket = {
   cacheReadInputTokens?: number
   cacheCreationInputTokens?: number
   estimated?: boolean
+  /** 本桶累计 API 墙钟 ms（本地） */
+  apiDurationMs?: number
 }
 
 /** 最近一次 model call 快照（对照 HC last turn 可读性） */
@@ -25,6 +27,8 @@ export type LastCallUsage = {
   estimated?: boolean
   model?: string
   at: string
+  /** 本 call API 墙钟 ms */
+  apiDurationMs?: number
 }
 
 export type SessionUsage = {
@@ -42,6 +46,8 @@ export type SessionUsage = {
   byModel?: Record<string, ModelUsageBucket>
   /** 最近一次 call（不参与 merge 累加语义；合并时取 child 的 last） */
   lastCall?: LastCallUsage
+  /** 会话累计 callModel 墙钟 ms（本地；非厂商账单） */
+  apiDurationMs?: number
 }
 
 export type UsageDelta = {
@@ -54,6 +60,8 @@ export type UsageDelta = {
   cacheCreationInputTokens?: number
   /** 本轮使用的 model 标签；缺省不记 byModel */
   model?: string
+  /** 本 call API 墙钟 ms */
+  apiDurationMs?: number
 }
 
 export function createEmptySessionUsage(): SessionUsage {
@@ -105,12 +113,18 @@ export function cloneSessionUsage(
       ) {
         nb.cacheCreationInputTokens = b.cacheCreationInputTokens
       }
+      if (b.apiDurationMs != null && b.apiDurationMs > 0) {
+        nb.apiDurationMs = b.apiDurationMs
+      }
       by[k] = nb
     }
     out.byModel = by
   }
   if (usage.lastCall) {
     out.lastCall = { ...usage.lastCall }
+  }
+  if (usage.apiDurationMs != null && usage.apiDurationMs > 0) {
+    out.apiDurationMs = usage.apiDurationMs
   }
   return out
 }
@@ -180,6 +194,14 @@ export function accumulateSessionUsage(
       (usage.cacheCreationInputTokens ?? 0) + cacheCreate
   }
 
+  const apiMs =
+    delta.apiDurationMs !== undefined
+      ? Math.max(0, Math.floor(delta.apiDurationMs) || 0)
+      : 0
+  if (apiMs > 0) {
+    usage.apiDurationMs = (usage.apiDurationMs ?? 0) + apiMs
+  }
+
   const key = modelKey(delta.model)
   if (key) {
     const b = ensureBucket(usage, key)
@@ -195,6 +217,9 @@ export function accumulateSessionUsage(
       b.cacheCreationInputTokens =
         (b.cacheCreationInputTokens ?? 0) + cacheCreate
     }
+    if (apiMs > 0) {
+      b.apiDurationMs = (b.apiDurationMs ?? 0) + apiMs
+    }
   }
 
   const last: LastCallUsage = {
@@ -207,6 +232,7 @@ export function accumulateSessionUsage(
   if (cacheCreate > 0) last.cacheCreationInputTokens = cacheCreate
   if (delta.estimated) last.estimated = true
   if (key) last.model = key
+  if (apiMs > 0) last.apiDurationMs = apiMs
   usage.lastCall = last
 }
 
@@ -239,6 +265,11 @@ export function mergeSessionUsage(
       (parent.cacheCreationInputTokens ?? 0) + cc
   }
 
+  if (child.apiDurationMs != null && child.apiDurationMs > 0) {
+    parent.apiDurationMs =
+      (parent.apiDurationMs ?? 0) + child.apiDurationMs
+  }
+
   if (child.byModel) {
     for (const [name, bucket] of Object.entries(child.byModel)) {
       const b = ensureBucket(parent, name)
@@ -254,6 +285,9 @@ export function mergeSessionUsage(
       }
       if (bcc > 0) {
         b.cacheCreationInputTokens = (b.cacheCreationInputTokens ?? 0) + bcc
+      }
+      if (bucket.apiDurationMs != null && bucket.apiDurationMs > 0) {
+        b.apiDurationMs = (b.apiDurationMs ?? 0) + bucket.apiDurationMs
       }
     }
   }
@@ -389,20 +423,29 @@ export function estimateSessionUsd(
 ): {
   usd: number
   knownAll: boolean
-  byModel: Array<{ model: string; usd: number; tier: string; known: boolean }>
+  cacheSavingsUsd: number
+  byModel: Array<{
+    model: string
+    usd: number
+    tier: string
+    known: boolean
+    cacheSavingsUsd: number
+  }>
 } {
   if (!usage || usage.calls === 0) {
-    return { usd: 0, knownAll: true, byModel: [] }
+    return { usd: 0, knownAll: true, cacheSavingsUsd: 0, byModel: [] }
   }
   const by = usage.byModel
   if (by && Object.keys(by).length > 0) {
     let total = 0
+    let savings = 0
     let knownAll = true
     const rows: Array<{
       model: string
       usd: number
       tier: string
       known: boolean
+      cacheSavingsUsd: number
     }> = []
     for (const name of Object.keys(by).sort()) {
       const b = by[name]!
@@ -417,10 +460,17 @@ export function estimateSessionUsd(
         name,
       )
       total += r.usd
+      savings += r.cacheSavingsUsd
       if (!r.known) knownAll = false
-      rows.push({ model: name, usd: r.usd, tier: r.tier, known: r.known })
+      rows.push({
+        model: name,
+        usd: r.usd,
+        tier: r.tier,
+        known: r.known,
+        cacheSavingsUsd: r.cacheSavingsUsd,
+      })
     }
-    return { usd: total, knownAll, byModel: rows }
+    return { usd: total, knownAll, cacheSavingsUsd: savings, byModel: rows }
   }
   const r = estimateUsdCost({
     inputTokens: usage.inputTokens,
@@ -431,11 +481,12 @@ export function estimateSessionUsd(
   return {
     usd: r.usd,
     knownAll: r.known,
+    cacheSavingsUsd: r.cacheSavingsUsd,
     byModel: [],
   }
 }
 
-/** /cost · /usage 展示文案（含 cache + hit rate + last call + 本地 USD） */
+/** /cost · /usage 展示文案（含 cache + hit rate + last call + 本地 USD + API 时长） */
 export function formatSessionUsage(
   usage: SessionUsage | undefined,
   opts?: {
@@ -471,6 +522,14 @@ export function formatSessionUsage(
     `  est. USD:      ${formatUsd(usdEst.usd)}${usdEst.knownAll ? '' : ' (mixed/default tiers)'}` +
       '  — heuristic, not a bill',
   )
+  if (usdEst.cacheSavingsUsd > 0) {
+    lines.push(
+      `  cacheSaved:    ~${formatUsd(usdEst.cacheSavingsUsd)} vs full input pricing (est.)`,
+    )
+  }
+  if (usage.apiDurationMs != null && usage.apiDurationMs > 0) {
+    lines.push(`  API duration:  ${formatDurationMs(usage.apiDurationMs)} (wall, local)`)
+  }
   if (usage.estimated) {
     lines.push('  note: some/all values estimated (chars/4)')
   }
@@ -480,9 +539,13 @@ export function formatSessionUsage(
     const lcw = lc.cacheCreationInputTokens ?? 0
     const lm = lc.model ? ` model=${lc.model}` : ''
     const lest = lc.estimated ? ' est' : ''
+    const ldur =
+      lc.apiDurationMs != null && lc.apiDurationMs > 0
+        ? ` · ${formatDurationMs(lc.apiDurationMs)}`
+        : ''
     lines.push(
       `  last call:     ${formatNum(lc.inputTokens)} in / ${formatNum(lc.outputTokens)} out` +
-        ` (cache r/w ${formatNum(lcr)}/${formatNum(lcw)})${lm}${lest}`,
+        ` (cache r/w ${formatNum(lcr)}/${formatNum(lcw)})${lm}${lest}${ldur}`,
     )
   }
   if (opts?.promptCacheLine) {
@@ -511,9 +574,13 @@ export function formatSessionUsage(
       const usdPart = costPart
         ? `; ~${formatUsd(costPart.usd)} (${costPart.tier})`
         : ''
+      const durPart =
+        b.apiDurationMs != null && b.apiDurationMs > 0
+          ? `; ${formatDurationMs(b.apiDurationMs)}`
+          : ''
       lines.push(
         `    ${name}: ${formatNum(b.inputTokens)} in / ${formatNum(b.outputTokens)} out / ${formatNum(b.totalTokens)} total` +
-          ` (${b.calls} calls; cache r/w ${formatNum(cr)}/${formatNum(cw)}${hitPart}${usdPart})${est}`,
+          ` (${b.calls} calls; cache r/w ${formatNum(cr)}/${formatNum(cw)}${hitPart}${usdPart}${durPart})${est}`,
       )
     }
   }
@@ -535,5 +602,9 @@ export function formatUsageOneLiner(usage: SessionUsage | undefined): string {
       : ''
   const usd = estimateSessionUsd(usage)
   const usdPart = usd.usd > 0 ? ` ~${formatUsd(usd.usd)}` : ''
-  return `usage:           ${usage.totalTokens} tokens (${usage.calls} calls)${cachePart}${usdPart}${est}`
+  const dur =
+    usage.apiDurationMs != null && usage.apiDurationMs > 0
+      ? ` · ${formatDurationMs(usage.apiDurationMs)}`
+      : ''
+  return `usage:           ${usage.totalTokens} tokens (${usage.calls} calls)${cachePart}${usdPart}${dur}${est}`
 }

@@ -122,20 +122,19 @@ Provider 侧按 `# Environment` 再 partition 打标——**最小侵入**，无
 
 | API | 作用 |
 |-----|------|
-| `accumulateSessionUsage` | 单轮 delta（含 cache read/write、byModel、**lastCall**） |
-| `mergeSessionUsage(parent, child)` | **子 agent 回卷**进父会话（无遥测） |
-| `computeCacheHitRate` / `formatCacheHitRatePercent` | 粗算 `cacheRead / (cacheRead + cacheCreate + uncachedInput)` |
-| `estimateSessionUsd` / `estimateUsdCost` | **本地 USD 粗算**（对照 HC modelCost；启发式价表，**非账单**） |
-| `formatSessionUsage` | `/cost`：calls、tokens、cache、cacheHitRate、**est. USD**、**last call**、by model |
-| `notePromptCacheAfterModelCall` | callModel 成功后 touch 布局/TTL 观测 |
-| `formatPromptCacheSessionLine` | `/cost` · `/context` 一行 promptCache 状态 |
+| `accumulateSessionUsage` | 单轮 delta（cache r/w、byModel、**lastCall**、**apiDurationMs**） |
+| `mergeSessionUsage(parent, child)` | **子 agent 回卷**（含 duration） |
+| `computeCacheHitRate` | `cacheRead / (cacheRead + cacheCreate + uncachedInput)` |
+| `estimateSessionUsd` / `estimateUsdCost` | 本地 USD + **cacheSaved**（对照 HC modelCost；**非账单**） |
+| `formatSessionUsage` | `/cost`：tokens · hit · USD · savings · API duration · last call · by model |
+| `shouldBreakPromptCache` / `notePromptCacheAfterModelCall` | break：prefix · tools · model · effort · TTL · **cache_read_drop** |
+| `formatPromptCacheSessionLine` | `/cost` · `/context`：lastTouch · lastCheck · breaks · prevCacheRead |
 
 接线：
 
-- 主 loop：`queryLoop({ usage, model, promptCacheState })`
-- 子 agent：`runSubagent({ parentUsage, model })` → 结束 merge
-- Agent 工具经 `toolExecution` 自动注入 `parentUsage` / `model`
-- `createSession` 默认挂 `promptCacheState`
+- 主 loop：`queryLoop({ usage, model, effort, promptCacheState })` → 成功后 touch + 记 API 墙钟
+- 子 agent：`runSubagent({ parentUsage, model })` → merge
+- `createSession` 默认 `promptCacheState`
 
 ## 7. 测试
 
@@ -144,34 +143,28 @@ npx tsx scripts/test-prompt-cache.ts
 npx tsx scripts/test-provider-unit.ts
 npx tsx scripts/test-session-usage.ts
 npx tsx scripts/test-subagent.ts
+npx tsx scripts/test-full-track.ts
 ```
 
 验收：
 
-- 同一 cwd 两次组装，仅改「假时间」或 user message → `getCacheStablePrefix` **字节级相同**
-- 乱序 tools 输入 → `toolsToOpenAI` 输出 name 序列稳定且有序
-- Anthropic 请求体：`system[0].cache_control.type === 'ephemeral'`；可选 tools/messages 末断点
-- OpenAI / Responses：`prompt_cache_key` 存在且仅 user 变化时不变
-- `/cost` 有 cache 时显示 `cacheHitRate`；有 **est. USD** / **last call**；子 agent 后父 tokens 增加
-- mock 一轮后 `promptCacheState.lastCacheAt` 非空
+- 稳定前缀字节级相同；tools 排序稳定
+- API cache 标记（Anthropic / OpenAI key）
+- `/cost`：hit rate · est.USD · cacheSaved · last call · API duration · promptCache breaks
+- break 原因：`tools_changed` / `model_changed` / `cache_read_drop` / TTL / prefix
+- 子 agent 后父 tokens / duration 增加
 
-## 8. 有意不做
+## 8. 有意不做（相对 HC 5–10% 缺口）
 
 | 项 | 原因 |
 |----|------|
-| 遥测 / logEvent | 产品红线 |
-| GrowthBook 门控长段 / 1h TTL | 无订阅与远程配置 |
-| 全局 `DYNAMIC_BOUNDARY` cache scope | 过重；文档保留对照 |
-| cached microcompact / cache_edits | 后置；见 COMPACTION |
-| 完整 fork 字节级 cache 共享（HC cacheSafeParams） | 过重；fork 仅消息继承 |
-| 官方价表实时同步 | 本地启发式即可；标 not a bill |
-| 把 core system 改成结构化 blocks 贯穿 session | 当前 provider 侧 partition 足够 |
+| 遥测 / logEvent / BQ | 产品红线 |
+| 完整 per-tool schema hash + diff 文件 | 过重；Bolo 用 tools 名序列 |
+| 全局 DYNAMIC_BOUNDARY / 1h org scope | 无远程配置 |
+| 完整 fork cacheSafeParams 字节共享 | 过重 |
+| 官方价表实时同步 | 本地启发式 + not a bill |
+| web_search 等 server_tool 分项计费 | 后置 |
 
 ## 9. 相关文档
 
-- `docs/SYSTEM_PROMPT.md` — 段语义与 BOLO.md  
-- `docs/PROVIDERS.md` — 各协议 cache 字段  
-- `docs/PROMPT_CATALOG.md` — 文案查阅  
-- `docs/SUBAGENT.md` — usage 回卷  
-- `docs/TODO.md` — C1–C5  
-- `docs/ROADMAP.md` — M-Cost
+- `docs/SYSTEM_PROMPT.md` · `docs/PROVIDERS.md` · `docs/SUBAGENT.md` · `docs/ROADMAP.md`

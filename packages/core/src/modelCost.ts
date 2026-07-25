@@ -96,6 +96,8 @@ export function estimateUsdCost(
   tier: string
   known: boolean
   rates: ModelCostRates
+  /** 若 cacheRead 按普通 input 计价，会多花多少（粗算「缓存省下」） */
+  cacheSavingsUsd: number
 } {
   const model = modelHint ?? usage.model
   const { rates, tier, known } = resolveModelCostRates(model)
@@ -110,7 +112,10 @@ export function estimateUsdCost(
     (outTok / 1_000_000) * rates.outputPerMTok +
     (cr / 1_000_000) * rates.cacheReadPerMTok +
     (cw / 1_000_000) * rates.cacheWritePerMTok
-  return { usd, tier, known, rates }
+  // 省下 = cacheRead 若按 input 价 − 实际 cache read 价
+  const cacheSavingsUsd =
+    (cr / 1_000_000) * Math.max(0, rates.inputPerMTok - rates.cacheReadPerMTok)
+  return { usd, tier, known, rates, cacheSavingsUsd }
 }
 
 export function formatUsd(n: number): string {
@@ -118,4 +123,14 @@ export function formatUsd(n: number): string {
   if (n < 0.01) return `$${n.toFixed(4)}`
   if (n < 1) return `$${n.toFixed(3)}`
   return `$${n.toFixed(2)}`
+}
+
+/** 毫秒 → 人类可读（本地 /cost） */
+export function formatDurationMs(ms: number | undefined | null): string {
+  if (ms == null || !Number.isFinite(ms) || ms < 0) return '0ms'
+  if (ms < 1000) return `${Math.round(ms)}ms`
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`
+  const m = Math.floor(ms / 60_000)
+  const s = Math.round((ms % 60_000) / 1000)
+  return `${m}m${s}s`
 }

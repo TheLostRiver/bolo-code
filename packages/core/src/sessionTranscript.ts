@@ -807,6 +807,10 @@ export async function loadTranscriptFile(
                 if (bcc !== undefined && bcc > 0) {
                   bucket.cacheCreationInputTokens = bcc
                 }
+                const bad = num(b.apiDurationMs)
+                if (bad !== undefined && bad > 0) {
+                  bucket.apiDurationMs = bad
+                }
                 by[k] = bucket
               }
               if (Object.keys(by).length > 0) usage.byModel = by
@@ -843,7 +847,15 @@ export async function loadTranscriptFile(
                 if (lcc !== undefined && lcc > 0) {
                   usage.lastCall.cacheCreationInputTokens = lcc
                 }
+                const lad = num(lc.apiDurationMs)
+                if (lad !== undefined && lad > 0) {
+                  usage.lastCall.apiDurationMs = lad
+                }
               }
+            }
+            const apiDur = num(u.apiDurationMs)
+            if (apiDur !== undefined && apiDur > 0) {
+              usage.apiDurationMs = apiDur
             }
             meta.usage = usage
           }

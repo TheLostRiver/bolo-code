@@ -145,6 +145,7 @@ export {
   notePromptCacheAfterModelCall,
   formatPromptCacheSessionLine,
   hashStablePrefix,
+  hashToolNames,
   findSafeSnipCutIndex,
   TOOL_RESULT_CLEARED_MESSAGE,
   SNIP_BOUNDARY_CONTENT,
@@ -209,6 +210,7 @@ export {
   type ModelCostRates,
   type TokenUsageForCost,
 } from './modelCost.ts'
+// formatDurationMs：subagent 已 export 同名；modelCost 内仍有实现供 sessionUsage 使用
 export { runTools, partitionToolCalls } from './toolOrchestration.ts'
 export { runToolUse } from './toolExecution.ts'
 export { StreamingToolExecutor } from './streamingToolExecutor.ts'

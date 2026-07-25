@@ -306,6 +306,7 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
         cacheCreationInputTokens?: number
       } | null = null
       let toolArgsChars = 0
+      const callStartedAt = Date.now()
 
       try {
         for await (const ev of params.deps.callModel({
@@ -424,6 +425,7 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
       // 若将来做 streaming fallback 再 discard；本最小切片保留 drain。
       modelOk = true
       ptlAttemptsThisTurn = 0
+      const apiDurationMs = Math.max(0, Date.now() - callStartedAt)
 
       // 本地 usage 累计（无遥测）：provider usage 优先，否则 chars/4
       if (params.usage) {
@@ -438,6 +440,7 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
           accumulateSessionUsage(params.usage, {
             ...fromProvider,
             ...(modelTag ? { model: modelTag } : {}),
+            apiDurationMs,
           })
         } else {
           accumulateSessionUsage(params.usage, {
@@ -446,17 +449,24 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
               outputChars: assistantText.length + toolArgsChars,
             }),
             ...(modelTag ? { model: modelTag } : {}),
+            apiDurationMs,
           })
         }
       }
 
-      // 本地 prompt-cache 布局/TTL 观测（无遥测）
+      // 本地 prompt-cache 布局/TTL/tools/model/API-read 观测（无遥测）
       if (params.promptCacheState) {
         const stable =
           params.systemPromptSections?.length
             ? getCacheStablePrefix(params.systemPromptSections)
             : getCacheStablePrefix()
-        notePromptCacheAfterModelCall(params.promptCacheState, stable)
+        notePromptCacheAfterModelCall(params.promptCacheState, {
+          stablePrefix: stable,
+          toolNames: tools.map((t) => t.name),
+          model: params.model,
+          effort: params.effortLevel,
+          cacheReadTokens: streamUsage?.cacheReadInputTokens,
+        })
       }
     }
 

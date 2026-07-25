@@ -415,6 +415,8 @@ function parseUsageField(raw: unknown): SessionUsage | undefined {
       if (bcr !== undefined && bcr > 0) bucket.cacheReadInputTokens = bcr
       const bcc = num(b.cacheCreationInputTokens)
       if (bcc !== undefined && bcc > 0) bucket.cacheCreationInputTokens = bcc
+      const bad = num(b.apiDurationMs)
+      if (bad !== undefined && bad > 0) bucket.apiDurationMs = bad
       by[k] = bucket
     }
     if (Object.keys(by).length > 0) out.byModel = by
@@ -444,8 +446,12 @@ function parseUsageField(raw: unknown): SessionUsage | undefined {
       if (lcc !== undefined && lcc > 0) {
         out.lastCall.cacheCreationInputTokens = lcc
       }
+      const lad = num(lc.apiDurationMs)
+      if (lad !== undefined && lad > 0) out.lastCall.apiDurationMs = lad
     }
   }
+  const apiDur = num(o.apiDurationMs)
+  if (apiDur !== undefined && apiDur > 0) out.apiDurationMs = apiDur
   return out
 }
 
