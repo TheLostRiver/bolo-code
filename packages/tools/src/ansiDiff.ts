@@ -1,12 +1,16 @@
 /**
  * 终端 ANSI diff 摘要 — 对照 Codex create_diff_summary 级别（无遥测）
  * 仅 UI side-channel；模型 output 保持 plain。
+ * U4：着色/行号委托 diffRender。
  */
 
 import type { DiffHunk } from './textDiff.ts'
+import {
+  colorizeUnifiedTextRich,
+  renderHunksRich,
+} from './diffRender.ts'
 
 const RESET = '\x1b[0m'
-const DIM = '\x1b[2m'
 const GREEN = '\x1b[32m'
 const RED = '\x1b[31m'
 const CYAN = '\x1b[36m'
@@ -55,30 +59,16 @@ export function formatFileChangeEndLine(opts: {
 
 /**
  * 给 unified 行上色（+ / - / @@ / 上下文）。
+ * U4：委托 diffRender（主题 / 可选语法）；默认无 gutter。
  */
 export function colorizeUnifiedText(
   unified: string,
-  opts?: { maxLines?: number },
+  opts?: { maxLines?: number; filePath?: string },
 ): string {
-  const max = opts?.maxLines ?? 80
-  const lines = unified.split(/\r?\n/)
-  const out: string[] = []
-  for (let i = 0; i < lines.length && i < max; i++) {
-    const L = lines[i]!
-    if (L.startsWith('+') && !L.startsWith('+++')) {
-      out.push(`${GREEN}${L}${RESET}`)
-    } else if (L.startsWith('-') && !L.startsWith('---')) {
-      out.push(`${RED}${L}${RESET}`)
-    } else if (L.startsWith('@@')) {
-      out.push(`${CYAN}${L}${RESET}`)
-    } else if (L.startsWith('---') || L.startsWith('+++')) {
-      out.push(`${DIM}${L}${RESET}`)
-    } else {
-      out.push(`${DIM}${L}${RESET}`)
-    }
-  }
-  if (lines.length > max) out.push(`${DIM}…(truncated)${RESET}`)
-  return out.join('\n')
+  return colorizeUnifiedTextRich(unified, {
+    maxLines: opts?.maxLines,
+    filePath: opts?.filePath,
+  })
 }
 
 export function formatAnsiUnifiedFromHunks(
@@ -86,38 +76,7 @@ export function formatAnsiUnifiedFromHunks(
   hunks: readonly DiffHunk[],
   opts?: { maxLines?: number },
 ): string {
-  if (!hunks.length) return ''
-  const max = opts?.maxLines ?? 60
-  const out: string[] = [
-    `${DIM}--- a/${filePath}${RESET}`,
-    `${DIM}+++ b/${filePath}${RESET}`,
-  ]
-  let n = 2
-  for (const h of hunks) {
-    if (n >= max) {
-      out.push(`${DIM}…(truncated)${RESET}`)
-      break
-    }
-    out.push(
-      `${CYAN}@@ -${h.oldStart},${h.oldLines} +${h.newStart},${h.newLines} @@${RESET}`,
-    )
-    n++
-    for (const L of h.lines) {
-      if (n >= max) {
-        out.push(`${DIM}…(truncated)${RESET}`)
-        return out.join('\n')
-      }
-      if (L.startsWith('+') && !L.startsWith('+++')) {
-        out.push(`${GREEN}${L}${RESET}`)
-      } else if (L.startsWith('-') && !L.startsWith('---')) {
-        out.push(`${RED}${L}${RESET}`)
-      } else {
-        out.push(`${DIM}${L}${RESET}`)
-      }
-      n++
-    }
-  }
-  return out.join('\n')
+  return renderHunksRich(filePath, hunks, { maxLines: opts?.maxLines })
 }
 
 export type DiffSummaryRow = {
@@ -158,13 +117,11 @@ export function createDiffSummary(
   const sorted = [...rows].sort((a, b) => a.path.localeCompare(b.path))
   for (const r of sorted.slice(0, maxFiles)) {
     const op = opGlyph(r.op)
-    const move =
-      r.moveTo && r.op === 'move' ? ` → ${r.moveTo}` : ''
+    const move = r.moveTo && r.op === 'move' ? ` → ${r.moveTo}` : ''
     const counts = color
       ? formatCountsAnsi(r.added, r.removed)
       : formatCountsPlain(r.added, r.removed)
-    const edits =
-      r.edits != null && r.edits > 1 ? `  ×${r.edits}` : ''
+    const edits = r.edits != null && r.edits > 1 ? `  ×${r.edits}` : ''
     const opS = color ? colorOp(op) : op
     lines.push(`  ${opS} ${r.path}${move}  ${counts}${edits}`)
   }

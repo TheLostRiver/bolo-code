@@ -60,8 +60,13 @@ assert(countHunkLines(multi).added === 3, 'three adds')
 const created = diffHunksFromFullReplace('', 'hello\nworld\n')
 assert(countHunkLines(created).added >= 2, 'new file adds')
 
-// ANSI + Codex-style summary
-const ansi = colorizeUnifiedText(uni)
+// ANSI + Codex-style summary（本环境可能有 NO_COLOR；富渲染用显式 env）
+import { colorizeUnifiedTextRich } from '../packages/tools/src/diffRender.ts'
+const ansi = colorizeUnifiedTextRich(uni, {
+  filePath: 'x.ts',
+  env: {},
+  color: true,
+})
 assert(ansi.includes('\x1b['), 'ansi has escape')
 assert(
   formatFileChangeEndLine({ name: 'Edit', path: 'a.ts', added: 1, removed: 1 }).includes(

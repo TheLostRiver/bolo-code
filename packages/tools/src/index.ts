@@ -80,6 +80,22 @@ export {
 } from './ansiDiff.ts'
 
 export {
+  resolveDiffRenderTheme,
+  shouldSyntaxHighlight,
+  shouldShowLineGutter,
+  lineNumberWidth,
+  expandHunksToBodyLines,
+  highlightCodeLine,
+  renderDiffBodyLines,
+  renderHunksRich,
+  colorizeUnifiedTextRich,
+  type DiffRenderTheme,
+  type DiffRenderThemeId,
+  type DiffBodyLine,
+  type DiffBodyLineKind,
+} from './diffRender.ts'
+
+export {
   fetchSingleFileGitDiff,
   findGitRoot,
   formatGitFileDiffSlash,

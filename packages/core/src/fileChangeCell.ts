@@ -8,6 +8,8 @@ import {
   formatFileChangeEndLine,
   colorizeUnifiedText,
 } from '../../tools/src/ansiDiff.ts'
+import { renderHunksRich } from '../../tools/src/diffRender.ts'
+import type { DiffHunk } from '../../tools/src/textDiff.ts'
 
 export type FileChangeCellFile = {
   path: string
@@ -28,6 +30,15 @@ export type FileChangeCellInput = {
   unified?: string
   /** 已着色 unified；优先于 unified */
   ansiUnified?: string
+  /** U4：有 structured hunks 时用富渲染 */
+  pathForRender?: string
+  hunks?: Array<{
+    oldStart: number
+    oldLines: number
+    newStart: number
+    newLines: number
+    lines: string[]
+  }>
 }
 
 export type FormatFileChangeCellOptions = {
@@ -113,7 +124,18 @@ export function formatFileChangeHistoryCell(
 
   const maxU = opts?.maxUnifiedLines ?? 16
   if (maxU > 0) {
-    if (input.ansiUnified?.trim()) {
+    if (input.hunks?.length && input.pathForRender) {
+      try {
+        const rich = renderHunksRich(
+          input.pathForRender,
+          input.hunks as DiffHunk[],
+          { maxLines: maxU },
+        )
+        if (rich.trim()) lines.push(rich)
+      } catch {
+        /* fall through */
+      }
+    } else if (input.ansiUnified?.trim()) {
       const uLines = input.ansiUnified.trim().split(/\r?\n/)
       lines.push(
         ...uLines.slice(0, maxU),
@@ -121,7 +143,10 @@ export function formatFileChangeHistoryCell(
       )
     } else if (input.unified?.trim()) {
       const colored = color
-        ? colorizeUnifiedText(input.unified, { maxLines: maxU })
+        ? colorizeUnifiedText(input.unified, {
+            maxLines: maxU,
+            filePath: input.pathForRender ?? input.path,
+          })
         : input.unified
             .split(/\r?\n/)
             .slice(0, maxU)
@@ -158,11 +183,25 @@ export function fileChangeCellFromMeta(opts: {
     added?: number
     removed?: number
     unified?: string
+    structuredPatch?: Array<{
+      oldStart: number
+      oldLines: number
+      newStart: number
+      newLines: number
+      lines: string[]
+    }>
     files?: Array<{
       path: string
       op?: string
       added?: number
       removed?: number
+      structuredPatch?: Array<{
+        oldStart: number
+        oldLines: number
+        newStart: number
+        newLines: number
+        lines: string[]
+      }>
     }>
   }
   ansiUnified?: string
@@ -176,6 +215,11 @@ export function fileChangeCellFromMeta(opts: {
   ) {
     return null
   }
+  const hunks =
+    m.structuredPatch ??
+    m.files?.find((f) => f.structuredPatch?.length)?.structuredPatch
+  const pathForRender =
+    m.path ?? m.files?.find((f) => f.structuredPatch?.length)?.path
   return {
     toolName: opts.toolName,
     ok: opts.ok !== false,
@@ -191,5 +235,7 @@ export function fileChangeCellFromMeta(opts: {
     })),
     unified: m.unified,
     ansiUnified: opts.ansiUnified,
+    ...(pathForRender ? { pathForRender } : {}),
+    ...(hunks?.length ? { hunks } : {}),
   }
 }

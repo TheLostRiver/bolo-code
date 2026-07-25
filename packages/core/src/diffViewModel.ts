@@ -10,6 +10,7 @@ import type {
   FileDiffHunk,
 } from './fileDiffLog.ts'
 import { summarizeFileDiffLog } from './fileDiffLog.ts'
+import { renderHunksRich } from '../../tools/src/diffRender.ts'
 
 export type DiffViewSource = 'session' | 'preview' | 'git'
 
@@ -173,18 +174,29 @@ export function selectedFile(vm: DiffViewModel): DiffViewFile | undefined {
   return vm.files[i]
 }
 
-/** 详情区：把 hunks 展成可滚行 */
-export function flattenHunkLines(file: DiffViewFile): string[] {
+/** 详情区：把 hunks 展成可滚行（U4：行号/主题/可选语法） */
+export function flattenHunkLines(
+  file: DiffViewFile,
+  opts?: { rich?: boolean; maxLines?: number },
+): string[] {
   if (!file.hunks.length) {
     return [
       `(no structuredPatch retained for ${file.path})`,
       `tip: /diff git ${file.path}`,
     ]
   }
-  const lines: string[] = [
-    `--- a/${file.path}`,
-    `+++ b/${file.path}`,
-  ]
+  const rich = opts?.rich !== false
+  if (rich) {
+    try {
+      const text = renderHunksRich(file.path, file.hunks, {
+        maxLines: opts?.maxLines ?? 400,
+      })
+      return text.split(/\r?\n/)
+    } catch {
+      /* plain fallback */
+    }
+  }
+  const lines: string[] = [`--- a/${file.path}`, `+++ b/${file.path}`]
   for (const h of file.hunks) {
     lines.push(
       `@@ -${h.oldStart},${h.oldLines} +${h.newStart},${h.newLines} @@`,

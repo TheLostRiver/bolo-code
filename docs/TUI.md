@@ -50,10 +50,12 @@
 
 ```text
 packages/core/src/diffViewModel.ts   ← U0 VM · approve 键
+packages/core/src/fileChangeCell.ts  ← U3 写后 history cell
 packages/cli/src/tui/
-  diffPane.ts        ← U1 browse · U2 approve
-  askPermissionTty.ts ← U2：files preview → 审批面板
-formatSessionEvent.ts ← U3：可折叠 cell（待）
+  diffPane.ts           ← U1 browse · U2 approve
+  askPermissionTty.ts   ← U2：files preview → 审批面板
+  formatSessionEvent.ts ← U3：折叠/展开 cell
+apps/desktop/renderer   ← U3：`<details>` cell · 权限 files 列表
 ```
 
 **环境：**
@@ -62,10 +64,12 @@ formatSessionEvent.ts ← U3：可折叠 cell（待）
 |------|------|
 | `BOLO_DIFF_PANEL=0` | `/diff` 强制纯文本 |
 | `BOLO_PERM_DIFF_PANEL=0` | 权限 ask 不用审批面板（仅文本 y/a/N） |
+| `BOLO_DIFF_CELL=expand` | 写后 cell 默认展开（或 `BOLO_DIFF_VERBOSE=1`） |
+| `BOLO_DIFF_CELL=fold` | 强制折叠（默认） |
 
 **约束：**
 
-- 数据只来自 core/tools 已有契约（`fileDiffLog` / preview / git）。  
+- 数据只来自 core/tools 已有契约（`fileDiffLog` / preview / git / meta）。  
 - 非 TTY：禁止挂起面板，回落纯文本。  
 - 不引入 ratatui；真·Ink 仅 U5 评估。
 
