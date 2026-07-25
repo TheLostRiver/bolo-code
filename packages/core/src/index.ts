@@ -2919,3 +2919,9 @@ export {
   type HookDiagEntry,
   type HookDiagLog,
 } from './hookDiag.ts'
+
+export {
+  buildRuntimeSnapshot,
+  type BuildRuntimeSnapshotOptions,
+  type RuntimeSnapshotSource,
+} from './runtimeSnapshot.ts'
