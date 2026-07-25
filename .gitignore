@@ -35,9 +35,8 @@ npm-debug.log*
 .turbo/
 coverage/
 
-# Local scratch / agent temp outputs (single folder; do not litter repo root)
-.bolo-tmp/*
-!.bolo-tmp/README.md
+# Local scratch / agent temp outputs — never commit (local-only)
+.bolo-tmp/
 # legacy root patterns (keep ignored if any reappear)
 .tmp*
 _out*
