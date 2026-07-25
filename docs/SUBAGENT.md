@@ -1,10 +1,9 @@
-# Subagent 契约（已实现）· Spec v0 见 [SUBAGENT_SPEC.md](./SUBAGENT_SPEC.md)
+# Subagent 契约（已实现 · Spec v0 已接线）
 
-对照 HelsincyCode `tools/AgentTool` + Codex agents 配置优点（整合方案在 **SUBAGENT_SPEC.md**）。  
+对照 HelsincyCode `tools/AgentTool` + Codex agents 配置优点。完整目标方案见 [SUBAGENT_SPEC.md](./SUBAGENT_SPEC.md)。  
 **无遥测**、不抄 GrowthBook / swarm。
 
-> **下一步开工：** `docs/SUBAGENT_SPEC.md`（model/effort/maxSpawnDepth/config.agents）。  
-> 下文描述 **当前代码行为**（含已落地的 plan / finalize / usage 回卷等）。
+> **Spec v0 已实现：** `config.agents` · frontmatter `model`/`effort`/`maxSpawnDepth`/`sandbox` · `spawnDepth` · 条件 Agent · model/effort 解析链 · `agents.enabled`。
 
 **F-SA-WORKTREE：** `BOLO_SUBAGENT_WORKTREE=1` 时尝试 `git worktree add --detach`；失败回落父 cwd。  
 **F-SA-PAR2：** `BOLO_BACKGROUND_OVERFLOW=queue|reject`（默认 reject）。  
