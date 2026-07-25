@@ -1124,6 +1124,11 @@ export type PromptCacheSessionState = {
   stablePrefixHash?: string
   /** tools 名序列指纹（排序后 join） */
   toolsHash?: string
+  /** 上次 tools 名列表（排序；用于 break 时 diff） */
+  lastToolNames?: string[]
+  /** 最近一次 tools break 时：added / removed */
+  lastToolsAdded?: string[]
+  lastToolsRemoved?: string[]
   /** 上次 call 的 model / effort（参与 break 检测） */
   lastModel?: string
   lastEffort?: string
@@ -1137,6 +1142,11 @@ export type PromptCacheSessionState = {
   breakCount?: number
   /** 最近一次是否因 API 读数下跌判定 */
   lastCacheReadDrop?: boolean
+  /**
+   * 最近 break 人类可读说明（如 tools +Read -Write、model a→b）
+   * 无遥测，仅本地 /cost
+   */
+  lastBreakDetail?: string
 }
 
 export function createPromptCacheSessionState(
@@ -1162,6 +1172,27 @@ export function hashToolNames(names: readonly string[] | undefined | null): stri
   return hashStablePrefix(sorted.join('\0'))
 }
 
+export function normalizeToolNames(
+  names: readonly string[] | undefined | null,
+): string[] {
+  if (!names?.length) return []
+  return [...names].map((n) => n.trim()).filter(Boolean).sort()
+}
+
+/** 对照 HC addedTools/removedTools（仅名，无 schema hash） */
+export function diffToolNames(
+  prev: readonly string[] | undefined | null,
+  next: readonly string[] | undefined | null,
+): { added: string[]; removed: string[] } {
+  const a = new Set(normalizeToolNames(prev))
+  const b = new Set(normalizeToolNames(next))
+  const added: string[] = []
+  const removed: string[] = []
+  for (const n of b) if (!a.has(n)) added.push(n)
+  for (const n of a) if (!b.has(n)) removed.push(n)
+  return { added, removed }
+}
+
 export type PromptCacheCallContext = {
   stablePrefix: string
   toolNames?: readonly string[]
@@ -1169,6 +1200,14 @@ export type PromptCacheCallContext = {
   effort?: string
   /** 本轮 provider 报告的 cache_read；用于下跌检测 */
   cacheReadTokens?: number
+}
+
+export type PromptCacheBreakResult = {
+  break: boolean
+  reason: PromptCacheBreakReason
+  detail?: string
+  toolsAdded?: string[]
+  toolsRemoved?: string[]
 }
 
 /**
@@ -1179,7 +1218,7 @@ export function shouldBreakPromptCache(
   state: PromptCacheSessionState,
   stablePrefixOrCtx: string | PromptCacheCallContext,
   now = Date.now(),
-): { break: boolean; reason: PromptCacheBreakReason } {
+): PromptCacheBreakResult {
   const ctx: PromptCacheCallContext =
     typeof stablePrefixOrCtx === 'string'
       ? { stablePrefix: stablePrefixOrCtx }
@@ -1187,39 +1226,61 @@ export function shouldBreakPromptCache(
 
   const hash = hashStablePrefix(ctx.stablePrefix)
   if (state.stablePrefixHash && state.stablePrefixHash !== hash) {
-    return { break: true, reason: 'system_prefix_changed' }
+    return {
+      break: true,
+      reason: 'system_prefix_changed',
+      detail: 'stable system prefix hash changed',
+    }
   }
 
   if (ctx.toolNames) {
     const th = hashToolNames(ctx.toolNames)
     if (state.toolsHash && state.toolsHash !== th) {
-      return { break: true, reason: 'tools_changed' }
+      const { added, removed } = diffToolNames(
+        state.lastToolNames,
+        ctx.toolNames,
+      )
+      const parts: string[] = []
+      if (added.length) parts.push(`+${added.join(',')}`)
+      if (removed.length) parts.push(`-${removed.join(',')}`)
+      return {
+        break: true,
+        reason: 'tools_changed',
+        detail: parts.length ? parts.join(' ') : 'tool set hash changed',
+        toolsAdded: added,
+        toolsRemoved: removed,
+      }
     }
   }
 
   const model = ctx.model?.trim()
-  if (
-    model &&
-    state.lastModel &&
-    state.lastModel !== model
-  ) {
-    return { break: true, reason: 'model_changed' }
+  if (model && state.lastModel && state.lastModel !== model) {
+    return {
+      break: true,
+      reason: 'model_changed',
+      detail: `${state.lastModel}→${model}`,
+    }
   }
 
   const effort = ctx.effort?.trim()
-  if (
-    effort &&
-    state.lastEffort &&
-    state.lastEffort !== effort
-  ) {
-    return { break: true, reason: 'effort_changed' }
+  if (effort && state.lastEffort && state.lastEffort !== effort) {
+    return {
+      break: true,
+      reason: 'effort_changed',
+      detail: `${state.lastEffort}→${effort}`,
+    }
   }
 
   if (
     state.lastCacheAt != null &&
     now - state.lastCacheAt > (state.ttlMs || DEFAULT_PROMPT_CACHE_TTL_MS)
   ) {
-    return { break: true, reason: 'ttl_expired' }
+    const ageMin = Math.round((now - state.lastCacheAt) / 60_000)
+    return {
+      break: true,
+      reason: 'ttl_expired',
+      detail: `idle ~${ageMin}m > ttl`,
+    }
   }
 
   // 服务端 miss 启发式：上一轮有明显 cache hit，本轮读数骤降
@@ -1231,7 +1292,11 @@ export function shouldBreakPromptCache(
     cur != null &&
     cur < prev * CACHE_READ_DROP_RATIO
   ) {
-    return { break: true, reason: 'cache_read_drop' }
+    return {
+      break: true,
+      reason: 'cache_read_drop',
+      detail: `cacheRead ${prev}→${cur}`,
+    }
   }
 
   return { break: false, reason: 'none' }
@@ -1254,6 +1319,7 @@ export function touchPromptCacheSession(
   }
   if (ctx.toolNames) {
     next.toolsHash = hashToolNames(ctx.toolNames)
+    next.lastToolNames = normalizeToolNames(ctx.toolNames)
   }
   if (ctx.model?.trim()) next.lastModel = ctx.model.trim()
   if (ctx.effort?.trim()) next.lastEffort = ctx.effort.trim()
@@ -1264,14 +1330,14 @@ export function touchPromptCacheSession(
 }
 
 /**
- * 就地更新：检测 break → 写 lastBreakReason → touch。
+ * 就地更新：检测 break → 写 lastBreakReason/detail → touch。
  * 供 queryLoop 在 callModel 成功后调用（无遥测）。
  */
 export function notePromptCacheAfterModelCall(
   state: PromptCacheSessionState,
   stablePrefixOrCtx: string | PromptCacheCallContext,
   now = Date.now(),
-): { break: boolean; reason: PromptCacheBreakReason } {
+): PromptCacheBreakResult {
   const ctx: PromptCacheCallContext =
     typeof stablePrefixOrCtx === 'string'
       ? { stablePrefix: stablePrefixOrCtx }
@@ -1280,6 +1346,10 @@ export function notePromptCacheAfterModelCall(
   state.lastBreakReason = chk.reason
   state.lastCheckedAt = now
   state.lastCacheReadDrop = chk.reason === 'cache_read_drop'
+  if (chk.detail) state.lastBreakDetail = chk.detail
+  else if (chk.reason === 'none') state.lastBreakDetail = undefined
+  if (chk.toolsAdded) state.lastToolsAdded = chk.toolsAdded
+  if (chk.toolsRemoved) state.lastToolsRemoved = chk.toolsRemoved
   if (chk.break && chk.reason !== 'none') {
     state.breakCount = (state.breakCount ?? 0) + 1
   }
@@ -1287,12 +1357,101 @@ export function notePromptCacheAfterModelCall(
   state.lastCacheAt = next.lastCacheAt
   state.stablePrefixHash = next.stablePrefixHash
   if (next.toolsHash) state.toolsHash = next.toolsHash
+  if (next.lastToolNames) state.lastToolNames = next.lastToolNames
   if (next.lastModel) state.lastModel = next.lastModel
   if (next.lastEffort) state.lastEffort = next.lastEffort
   if (next.prevCacheReadTokens != null) {
     state.prevCacheReadTokens = next.prevCacheReadTokens
   }
   return chk
+}
+
+/** 可 JSON 序列化的子集（resume / 快照） */
+export function serializePromptCacheSessionState(
+  state: PromptCacheSessionState | undefined | null,
+): Record<string, unknown> | undefined {
+  if (!state) return undefined
+  const o: Record<string, unknown> = {
+    ttlMs: state.ttlMs || DEFAULT_PROMPT_CACHE_TTL_MS,
+  }
+  if (state.lastCacheAt != null) o.lastCacheAt = state.lastCacheAt
+  if (state.stablePrefixHash) o.stablePrefixHash = state.stablePrefixHash
+  if (state.toolsHash) o.toolsHash = state.toolsHash
+  if (state.lastToolNames?.length) o.lastToolNames = [...state.lastToolNames]
+  if (state.lastModel) o.lastModel = state.lastModel
+  if (state.lastEffort) o.lastEffort = state.lastEffort
+  if (state.prevCacheReadTokens != null) {
+    o.prevCacheReadTokens = state.prevCacheReadTokens
+  }
+  if (state.lastBreakReason && state.lastBreakReason !== 'none') {
+    o.lastBreakReason = state.lastBreakReason
+  }
+  if (state.lastCheckedAt != null) o.lastCheckedAt = state.lastCheckedAt
+  if (state.breakCount != null && state.breakCount > 0) {
+    o.breakCount = state.breakCount
+  }
+  if (state.lastBreakDetail) o.lastBreakDetail = state.lastBreakDetail
+  if (state.lastToolsAdded?.length) o.lastToolsAdded = [...state.lastToolsAdded]
+  if (state.lastToolsRemoved?.length) {
+    o.lastToolsRemoved = [...state.lastToolsRemoved]
+  }
+  return o
+}
+
+export function parsePromptCacheSessionState(
+  raw: unknown,
+): PromptCacheSessionState | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const o = raw as Record<string, unknown>
+  const ttl =
+    typeof o.ttlMs === 'number' && Number.isFinite(o.ttlMs) && o.ttlMs > 0
+      ? Math.floor(o.ttlMs)
+      : DEFAULT_PROMPT_CACHE_TTL_MS
+  const state = createPromptCacheSessionState(ttl)
+  if (typeof o.lastCacheAt === 'number' && Number.isFinite(o.lastCacheAt)) {
+    state.lastCacheAt = o.lastCacheAt
+  }
+  if (typeof o.stablePrefixHash === 'string') {
+    state.stablePrefixHash = o.stablePrefixHash
+  }
+  if (typeof o.toolsHash === 'string') state.toolsHash = o.toolsHash
+  if (Array.isArray(o.lastToolNames)) {
+    state.lastToolNames = o.lastToolNames
+      .filter((x): x is string => typeof x === 'string')
+      .map((s) => s.trim())
+      .filter(Boolean)
+  }
+  if (typeof o.lastModel === 'string') state.lastModel = o.lastModel.trim()
+  if (typeof o.lastEffort === 'string') state.lastEffort = o.lastEffort.trim()
+  if (
+    typeof o.prevCacheReadTokens === 'number' &&
+    Number.isFinite(o.prevCacheReadTokens)
+  ) {
+    state.prevCacheReadTokens = Math.max(0, Math.floor(o.prevCacheReadTokens))
+  }
+  if (typeof o.lastBreakReason === 'string') {
+    state.lastBreakReason = o.lastBreakReason as PromptCacheBreakReason
+  }
+  if (typeof o.lastCheckedAt === 'number' && Number.isFinite(o.lastCheckedAt)) {
+    state.lastCheckedAt = o.lastCheckedAt
+  }
+  if (typeof o.breakCount === 'number' && Number.isFinite(o.breakCount)) {
+    state.breakCount = Math.max(0, Math.floor(o.breakCount))
+  }
+  if (typeof o.lastBreakDetail === 'string') {
+    state.lastBreakDetail = o.lastBreakDetail
+  }
+  if (Array.isArray(o.lastToolsAdded)) {
+    state.lastToolsAdded = o.lastToolsAdded.filter(
+      (x): x is string => typeof x === 'string',
+    )
+  }
+  if (Array.isArray(o.lastToolsRemoved)) {
+    state.lastToolsRemoved = o.lastToolsRemoved.filter(
+      (x): x is string => typeof x === 'string',
+    )
+  }
+  return state
 }
 
 /** /cost · /context 一行（可多行） */
@@ -1316,6 +1475,9 @@ export function formatPromptCacheSessionLine(
   if (state.lastModel) parts.push(`model=${state.lastModel}`)
   if (state.prevCacheReadTokens != null) {
     parts.push(`prevCacheRead=${state.prevCacheReadTokens}`)
+  }
+  if (state.lastBreakDetail && br !== 'none') {
+    parts.push(`detail=${state.lastBreakDetail}`)
   }
   return `  promptCache:   ${parts.join(' · ')} (local layout/TTL/API-read; not vendor billing)`
 }

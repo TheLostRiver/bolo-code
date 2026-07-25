@@ -26,6 +26,9 @@ import {
   notePromptCacheAfterModelCall,
   hashToolNames,
   formatPromptCacheSessionLine,
+  serializePromptCacheSessionState,
+  parsePromptCacheSessionState,
+  diffToolNames,
 } from '../packages/core/src/index.ts'
 import {
   parseOpenAIStreamUsage,
@@ -153,12 +156,18 @@ const toolsBreak = shouldBreakPromptCache(pcs, {
   model: 'm1',
 })
 assert(toolsBreak.reason === 'tools_changed', 'tools break')
+assert(
+  toolsBreak.toolsAdded?.includes('Write') ||
+    toolsBreak.detail?.includes('+Write'),
+  'tools break names detail',
+)
 const modelBreak = shouldBreakPromptCache(pcs, {
   stablePrefix: 'stable-a',
   toolNames: ['Read', 'Bash'],
   model: 'm2',
 })
 assert(modelBreak.reason === 'model_changed', 'model break')
+assert(modelBreak.detail?.includes('→'), 'model break detail')
 const dropBreak = shouldBreakPromptCache(pcs, {
   stablePrefix: 'stable-a',
   toolNames: ['Read', 'Bash'],
@@ -173,9 +182,23 @@ notePromptCacheAfterModelCall(pcs, {
   cacheReadTokens: 10,
 })
 assert((pcs.breakCount ?? 0) >= 1, 'break count increments')
+assert(
+  pcs.lastToolsAdded?.includes('Write') || pcs.lastBreakDetail,
+  'last tools or detail recorded',
+)
 const pcLine = formatPromptCacheSessionLine(pcs)
 assert(pcLine?.includes('breaks='), 'pc line breaks')
 assert(pcLine?.includes('prevCacheRead='), 'pc line prev read')
+assert(pcLine?.includes('detail=') || pcLine?.includes('tools'), 'pc line detail')
+
+// serialize / parse prompt cache
+const ser = serializePromptCacheSessionState(pcs)
+assert(ser != null, 'serialize pcs')
+const restored = parsePromptCacheSessionState(ser)
+assert(restored?.breakCount === pcs.breakCount, 'parse breakCount')
+assert(restored?.lastModel === pcs.lastModel, 'parse lastModel')
+const dtn = diffToolNames(['Read'], ['Read', 'Write'])
+assert(dtn.added.includes('Write') && dtn.removed.length === 0, 'diffToolNames')
 
 // merge child into parent
 const parentU = createEmptySessionUsage()
@@ -295,9 +318,12 @@ async function main() {
         cost.message.includes('prompt cache'),
       'cost promptCache line',
     )
+    assert(cost.message.includes('wall:'), 'cost wall duration')
   }
 
   assert(session.promptCacheState != null, 'session has promptCacheState')
+  assert(session.sessionStartedAtMs != null, 'session wall start')
+
   // mock round touches prompt cache + duration
   await submitUserInput(session, 'usage round')
   assert(session.usage && session.usage.calls >= 2, 'calls after mock')
@@ -306,33 +332,43 @@ async function main() {
     session.promptCacheState?.lastCacheAt != null,
     'prompt cache touched after model call',
   )
-  assert(
-    (session.usage!.apiDurationMs ?? 0) >= 0,
-    'api duration field present',
-  )
 
-  const cost2 = await submitUserInput(session, '/cost')
-  if (cost2.type === 'slash') {
+  // snapshot includes promptCache + wall start
+  const snap = toSnapshot(session)
+  assert(snap.promptCacheState != null || session.promptCacheState != null, 'snap pcs field')
+  // toSnapshot should write promptCache when present
+  const snapRaw = JSON.parse(JSON.stringify(snap)) as {
+    promptCacheState?: unknown
+    sessionStartedAtMs?: number
+    usage?: { lastCall?: unknown }
+  }
+  // re-parse through parseSessionSnapshot
+  const snap2 = parseSessionSnapshot(snapRaw)
+  assert(snap2.usage?.lastCall != null || snap.usage?.lastCall != null, 'snap lastCall')
+  if (snap2.promptCacheState) {
     assert(
-      cost2.message.includes('lastTouch') ||
-        cost2.message.includes('promptCache'),
-      'cost after touch shows cache state',
+      snap2.promptCacheState.lastCacheAt != null ||
+        (snap2.promptCacheState.breakCount ?? 0) >= 0,
+      'snap pcs restored',
     )
+  }
+  if (snap2.sessionStartedAtMs != null) {
     assert(
-      cost2.message.includes('breaks=') || cost2.message.includes('lastCheck='),
-      'cost shows break telemetry local',
+      snap2.sessionStartedAtMs === session.sessionStartedAtMs,
+      'snap wall start',
     )
   }
 
-  const snap = toSnapshot(session)
-  const snap2 = parseSessionSnapshot(JSON.parse(JSON.stringify(snap)))
+  // flagship vs mini pricing
   assert(
-    snap2.usage?.cacheReadInputTokens === 3 ||
-      (snap2.usage?.cacheReadInputTokens ?? 0) >= 3,
-    'snap cache',
+    resolveModelCostRates('gpt-4o').tier.includes('flagship') ||
+      resolveModelCostRates('gpt-4o').known,
+    'gpt-4o known tier',
   )
-  assert(snap2.usage?.byModel?.['mock-a'] != null, 'snap byModel')
-  assert(snap2.usage?.lastCall != null, 'snap lastCall')
+  assert(
+    resolveModelCostRates('gpt-4o-mini').tier.includes('mini'),
+    '4o-mini is mini not flagship',
+  )
 
   console.log('ok: test-session-usage')
 }

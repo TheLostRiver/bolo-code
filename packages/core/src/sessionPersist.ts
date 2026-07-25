@@ -44,6 +44,11 @@ import {
 } from './sessionTranscript.ts'
 import type { SessionUsage } from './sessionUsage.ts'
 import { cloneSessionUsage } from './sessionUsage.ts'
+import {
+  parsePromptCacheSessionState,
+  serializePromptCacheSessionState,
+  type PromptCacheSessionState,
+} from '../../compact/src/index.ts'
 
 /** 可落盘的会话切片（避免与 index 循环依赖） */
 export type PersistableSession = {
@@ -73,6 +78,14 @@ export type PersistableSession = {
   persistReasoning?: boolean
   /** 本地 token 累计；可选落盘，无遥测 */
   usage?: SessionUsage
+  /**
+   * 本地 prompt-cache 观测；可选落盘（resume）
+   */
+  promptCacheState?: import('../../compact/src/index.ts').PromptCacheSessionState
+  /**
+   * 会话墙钟起点（ms epoch）；可选落盘
+   */
+  sessionStartedAtMs?: number
   onEvent?: (e: { type: 'error'; message: string }) => void
 }
 
@@ -109,6 +122,12 @@ export type SessionSnapshot = {
   persistReasoning?: boolean
   /** 本地 token 累计（可选；无遥测） */
   usage?: SessionUsage
+  /**
+   * 本地 prompt-cache 观测（可选；resume 恢复 break 状态）
+   */
+  promptCacheState?: import('../../compact/src/index.ts').PromptCacheSessionState
+  /** 会话墙钟起点 ms（可选） */
+  sessionStartedAtMs?: number
 }
 
 export type SaveSessionOptions = {
@@ -470,6 +489,7 @@ export function toSnapshot(
   // 仅显式 false 落盘；默认 on 不写字段，兼容旧快照
   const showThinkingOff = session.showThinking === false
   const persistReasoningOn = session.persistReasoning === true
+  const pcs = serializePromptCacheSessionState(session.promptCacheState)
   return {
     version: SESSION_SNAPSHOT_VERSION,
     id: session.id,
@@ -489,6 +509,17 @@ export function toSnapshot(
     ...(showThinkingOff ? { showThinking: false } : {}),
     ...(persistReasoningOn ? { persistReasoning: true } : {}),
     ...(usage ? { usage } : {}),
+    ...(pcs
+      ? {
+          promptCacheState: parsePromptCacheSessionState(pcs) as
+            | PromptCacheSessionState
+            | undefined,
+        }
+      : {}),
+    ...(session.sessionStartedAtMs != null &&
+    Number.isFinite(session.sessionStartedAtMs)
+      ? { sessionStartedAtMs: session.sessionStartedAtMs }
+      : {}),
   }
 }
 
@@ -544,35 +575,43 @@ export function parseSessionSnapshot(raw: unknown): SessionSnapshot {
   const showThinking =
     o.showThinking === false ? false : o.showThinking === true ? true : undefined
   const persistReasoning = o.persistReasoning === true ? true : undefined
+  const promptCacheState = parsePromptCacheSessionState(o.promptCacheState)
+  const sessionStartedAtMs =
+    typeof o.sessionStartedAtMs === 'number' &&
+    Number.isFinite(o.sessionStartedAtMs)
+      ? o.sessionStartedAtMs
+      : undefined
 
   return {
     version: SESSION_SNAPSHOT_VERSION,
-    id: o.id,
-    cwd: o.cwd,
-    permissionMode: parsePermissionMode(o.permissionMode, 'default'),
+    id: o.id as string,
+    cwd: o.cwd as string,
+    permissionMode: (typeof o.permissionMode === 'string'
+      ? o.permissionMode
+      : 'default') as PermissionMode,
     messages: o.messages as ChatMessage[],
     systemPromptSections: sections,
     model: typeof o.model === 'string' ? o.model : undefined,
     autoCompactEnabled: o.autoCompactEnabled !== false,
     contextWindowTokens:
-      typeof o.contextWindowTokens === 'number' && o.contextWindowTokens > 0
+      typeof o.contextWindowTokens === 'number' &&
+      Number.isFinite(o.contextWindowTokens)
         ? o.contextWindowTokens
         : 128_000,
     maxPtlRetries:
-      typeof o.maxPtlRetries === 'number' && o.maxPtlRetries >= 0
-        ? Math.floor(o.maxPtlRetries)
+      typeof o.maxPtlRetries === 'number' && Number.isFinite(o.maxPtlRetries)
+        ? Math.max(0, Math.floor(o.maxPtlRetries))
         : 3,
     createdAt: typeof o.createdAt === 'string' ? o.createdAt : nowIso(),
     updatedAt: typeof o.updatedAt === 'string' ? o.updatedAt : nowIso(),
-    phase:
-      typeof o.phase === 'string'
-        ? (o.phase as SessionPhase)
-        : undefined,
+    phase: typeof o.phase === 'string' ? (o.phase as SessionPhase) : undefined,
     ...(permissionRules ? { permissionRules } : {}),
     ...(effortLevel ? { effortLevel } : {}),
-    ...(showThinking === false ? { showThinking: false } : {}),
-    ...(persistReasoning ? { persistReasoning: true } : {}),
+    ...(showThinking !== undefined ? { showThinking } : {}),
+    ...(persistReasoning ? { persistReasoning } : {}),
     ...(usage ? { usage } : {}),
+    ...(promptCacheState ? { promptCacheState } : {}),
+    ...(sessionStartedAtMs != null ? { sessionStartedAtMs } : {}),
   }
 }
 
@@ -1181,6 +1220,28 @@ export function applySnapshotToSession(
   }
   if (snapshot.usage) {
     session.usage = cloneUsage(snapshot.usage)
+  }
+  if (snapshot.promptCacheState) {
+    // 浅拷贝可序列化字段（state 已是 plain object）
+    session.promptCacheState = { ...snapshot.promptCacheState }
+    if (snapshot.promptCacheState.lastToolNames) {
+      session.promptCacheState.lastToolNames = [
+        ...snapshot.promptCacheState.lastToolNames,
+      ]
+    }
+    if (snapshot.promptCacheState.lastToolsAdded) {
+      session.promptCacheState.lastToolsAdded = [
+        ...snapshot.promptCacheState.lastToolsAdded,
+      ]
+    }
+    if (snapshot.promptCacheState.lastToolsRemoved) {
+      session.promptCacheState.lastToolsRemoved = [
+        ...snapshot.promptCacheState.lastToolsRemoved,
+      ]
+    }
+  }
+  if (snapshot.sessionStartedAtMs != null) {
+    session.sessionStartedAtMs = snapshot.sessionStartedAtMs
   }
 }
 

@@ -49,6 +49,7 @@ import {
   type SessionUsage,
 } from './sessionUsage.ts'
 import { formatPromptCacheSessionLine } from '../../compact/src/index.ts'
+import { formatDurationMs } from './modelCost.ts'
 
 /** slash 需要的会话切片（与 BoloSession 兼容） */
 export type SlashSession = {
@@ -79,6 +80,8 @@ export type SlashSession = {
   usage?: SessionUsage
   /** 本地 prompt-cache 观测；/cost */
   promptCacheState?: import('../../compact/src/index.ts').PromptCacheSessionState
+  /** 会话墙钟起点 ms；/cost wall duration */
+  sessionStartedAtMs?: number
   /** 会话工具表；/doctor 计数 */
   tools?: { name: string }[]
   /** provider id；/doctor */
@@ -1555,10 +1558,25 @@ async function cmdInit(
 
 function cmdCost(session: SlashSession, _args: string): SlashDispatchResult {
   const promptCacheLine = formatPromptCacheSessionLine(session.promptCacheState)
-  return {
-    ok: true,
-    message: formatSessionUsage(session.usage, { promptCacheLine }),
+  let wallLine: string | undefined
+  if (
+    session.sessionStartedAtMs != null &&
+    Number.isFinite(session.sessionStartedAtMs)
+  ) {
+    const wall = Math.max(0, Date.now() - session.sessionStartedAtMs)
+    wallLine = `  wall:          ${formatDurationMs(wall)} (session clock, local)`
   }
+  let body = formatSessionUsage(session.usage, { promptCacheLine })
+  if (wallLine) {
+    const lines = body.split('\n')
+    if (lines.length >= 2) {
+      lines.splice(2, 0, wallLine)
+      body = lines.join('\n')
+    } else {
+      body = `${body}\n${wallLine}`
+    }
+  }
+  return { ok: true, message: body }
 }
 
 function cmdModel(session: SlashSession, args: string): SlashDispatchResult {

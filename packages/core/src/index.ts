@@ -146,6 +146,9 @@ export {
   formatPromptCacheSessionLine,
   hashStablePrefix,
   hashToolNames,
+  diffToolNames,
+  serializePromptCacheSessionState,
+  parsePromptCacheSessionState,
   findSafeSnipCutIndex,
   TOOL_RESULT_CLEARED_MESSAGE,
   SNIP_BOUNDARY_CONTENT,
@@ -207,10 +210,12 @@ export {
   COST_TIER_OPUS,
   COST_TIER_HAIKU,
   COST_TIER_MINI,
+  COST_TIER_FLAGSHIP_CHAT,
+  COST_TIER_NANO,
   type ModelCostRates,
   type TokenUsageForCost,
 } from './modelCost.ts'
-// formatDurationMs：subagent 已 export 同名；modelCost 内仍有实现供 sessionUsage 使用
+// formatDurationMs：modelCost 与 subagent 同名；index 只 re-export subagent 的 formatDurationMs
 export { runTools, partitionToolCalls } from './toolOrchestration.ts'
 export { runToolUse } from './toolExecution.ts'
 export { StreamingToolExecutor } from './streamingToolExecutor.ts'
@@ -609,6 +614,10 @@ export type BoloSession = {
    */
   promptCacheState?: import('../../compact/src/index.ts').PromptCacheSessionState
   /**
+   * 会话墙钟起点（ms epoch）；/cost 显示 wall duration。
+   */
+  sessionStartedAtMs?: number
+  /**
    * 会话工具表（内置 + Agent + 可选 MCP）。
    * 未设置时 submitPrompt 回落 createDefaultTools()。
    */
@@ -800,6 +809,7 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
       : createEmptySessionUsage(),
     promptCacheState:
       opts.promptCacheState ?? createPromptCacheSessionState(),
+    sessionStartedAtMs: Date.now(),
     onEvent: opts.onEvent ?? (() => {}),
   }
 
@@ -1411,6 +1421,8 @@ export async function resumeSession(
       opts.create?.persistReasoning ??
       snapshot.persistReasoning === true,
     usage: opts.create?.usage ?? snapshot.usage,
+    promptCacheState:
+      opts.create?.promptCacheState ?? snapshot.promptCacheState,
     provider: opts.provider ?? opts.create?.provider,
     hooks: opts.hooks ?? opts.create?.hooks,
     skills: opts.skills ?? opts.create?.skills,

@@ -127,43 +127,35 @@ Provider 侧按 `# Environment` 再 partition 打标——**最小侵入**，无
 | `computeCacheHitRate` | `cacheRead / (cacheRead + cacheCreate + uncachedInput)` |
 | `estimateSessionUsd` / `estimateUsdCost` | 本地 USD + **cacheSaved**（对照 HC modelCost；**非账单**） |
 | `formatSessionUsage` | `/cost`：tokens · hit · USD · savings · API duration · last call · by model |
-| `shouldBreakPromptCache` / `notePromptCacheAfterModelCall` | break：prefix · tools · model · effort · TTL · **cache_read_drop** |
-| `formatPromptCacheSessionLine` | `/cost` · `/context`：lastTouch · lastCheck · breaks · prevCacheRead |
+| `shouldBreakPromptCache` / `notePromptCacheAfterModelCall` | break：prefix · tools（**±名**）· model · effort · TTL · cache_read_drop |
+| `diffToolNames` / `lastBreakDetail` | 对照 HC added/removed tools（无 schema hash） |
+| `serialize/parsePromptCacheSessionState` | **resume 恢复** break 状态 |
+| `sessionStartedAtMs` + `/cost wall` | 会话墙钟（对照 HC wall duration） |
+| `formatPromptCacheSessionLine` | lastTouch · lastCheck · breaks · detail · prevCacheRead |
 
 接线：
 
-- 主 loop：`queryLoop({ usage, model, effort, promptCacheState })` → 成功后 touch + 记 API 墙钟
-- 子 agent：`runSubagent({ parentUsage, model })` → merge
-- `createSession` 默认 `promptCacheState`
+- 主 loop：`queryLoop({ usage, model, effort, promptCacheState })`
+- 快照：`toSnapshot` / `parseSessionSnapshot` / `applySnapshotToSession` 含 **usage + promptCache + wall start**
+- `resumeSession` 恢复 `promptCacheState`
 
 ## 7. 测试
 
 ```bash
-npx tsx scripts/test-prompt-cache.ts
-npx tsx scripts/test-provider-unit.ts
 npx tsx scripts/test-session-usage.ts
-npx tsx scripts/test-subagent.ts
+npx tsx scripts/test-session-persist.ts
 npx tsx scripts/test-full-track.ts
 ```
 
-验收：
-
-- 稳定前缀字节级相同；tools 排序稳定
-- API cache 标记（Anthropic / OpenAI key）
-- `/cost`：hit rate · est.USD · cacheSaved · last call · API duration · promptCache breaks
-- break 原因：`tools_changed` / `model_changed` / `cache_read_drop` / TTL / prefix
-- 子 agent 后父 tokens / duration 增加
-
-## 8. 有意不做（相对 HC 5–10% 缺口）
+## 8. 有意不做（相对 HC 终局 3–6%）
 
 | 项 | 原因 |
 |----|------|
-| 遥测 / logEvent / BQ | 产品红线 |
-| 完整 per-tool schema hash + diff 文件 | 过重；Bolo 用 tools 名序列 |
-| 全局 DYNAMIC_BOUNDARY / 1h org scope | 无远程配置 |
-| 完整 fork cacheSafeParams 字节共享 | 过重 |
-| 官方价表实时同步 | 本地启发式 + not a bill |
-| web_search 等 server_tool 分项计费 | 后置 |
+| 遥测 / logEvent | 红线 |
+| per-tool **schema** hash + temp diff 文件 | 过重 |
+| 全局 cache scope / fork cacheSafeParams | 过重 |
+| 官方价表实时同步 · web_search 分项 | 后置 |
+| 改行数 lines added/removed | 非成本核心 |
 
 ## 9. 相关文档
 

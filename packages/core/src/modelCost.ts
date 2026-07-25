@@ -43,6 +43,22 @@ export const COST_TIER_MINI: ModelCostRates = {
   cacheWritePerMTok: 0.375,
 }
 
+/** gpt-4o / 旗舰 chat 略高于 mini */
+export const COST_TIER_FLAGSHIP_CHAT: ModelCostRates = {
+  inputPerMTok: 2.5,
+  outputPerMTok: 10,
+  cacheReadPerMTok: 1.25,
+  cacheWritePerMTok: 2.5,
+}
+
+/** 更便宜的 nano / 小模型 */
+export const COST_TIER_NANO: ModelCostRates = {
+  inputPerMTok: 0.1,
+  outputPerMTok: 0.4,
+  cacheReadPerMTok: 0.025,
+  cacheWritePerMTok: 0.125,
+}
+
 /**
  * 按 model 名启发式选价表（小写匹配）。
  * 不绑死厂商；仅便于 /cost 本地粗算。
@@ -60,21 +76,34 @@ export function resolveModelCostRates(
   if (m.includes('haiku') || m.includes('flash-lite')) {
     return { rates: COST_TIER_HAIKU, tier: 'haiku-like', known: true }
   }
+  if (m.includes('nano') || m.includes('tiny')) {
+    return { rates: COST_TIER_NANO, tier: 'nano-like', known: true }
+  }
+  // 先匹配 mini/small，再 4o 旗舰（避免 gpt-4o-mini 误进 flagship）
   if (
     m.includes('mini') ||
-    m.includes('nano') ||
-    m.includes('flash') ||
-    m.includes('small')
+    m.includes('small') ||
+    (m.includes('flash') && !m.includes('flash-lite'))
   ) {
-    return { rates: COST_TIER_MINI, tier: 'mini-like', known: true }
+    // gemini-flash / gpt-4o-mini
+    if (m.includes('4o-mini') || m.includes('mini')) {
+      return { rates: COST_TIER_MINI, tier: 'mini-like', known: true }
+    }
+    return { rates: COST_TIER_MINI, tier: 'flash-like', known: true }
   }
   if (
-    m.includes('sonnet') ||
     m.includes('gpt-4o') ||
     m.includes('gpt-4.1') ||
-    m.includes('claude')
+    m.includes('gpt-4-turbo') ||
+    m.includes('chatgpt')
   ) {
+    return { rates: COST_TIER_FLAGSHIP_CHAT, tier: 'flagship-chat', known: true }
+  }
+  if (m.includes('sonnet') || m.includes('claude-3') || m.includes('claude-4')) {
     return { rates: COST_TIER_DEFAULT, tier: 'sonnet-like', known: true }
+  }
+  if (m.includes('claude')) {
+    return { rates: COST_TIER_DEFAULT, tier: 'claude-like', known: true }
   }
   return { rates: COST_TIER_DEFAULT, tier: 'default', known: false }
 }
