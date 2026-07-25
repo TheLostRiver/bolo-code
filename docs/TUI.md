@@ -41,7 +41,7 @@
 | 权限 preview 多行着色 | ✅ D7 | 回落文本路径 |
 | **可滚 Diff 面板** | ✅ U1 | TTY `/diff` · `BOLO_DIFF_PANEL=0` 关 |
 | **ask 内嵌可滚 preview** | ✅ U2 | `y/a/N` · `BOLO_PERM_DIFF_PANEL=0` 关 |
-| **写后可折叠 cell** | 📋 U3 | 轨 B |
+| **写后可折叠 cell** | ✅ U3 | 默认折叠 · `BOLO_DIFF_CELL=expand` 展开 · Desktop `<details>` |
 | 真·React Ink 依赖 | 📋 U5 可选 | 非默认 |
 
 ---

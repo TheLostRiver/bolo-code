@@ -128,6 +128,17 @@ export type ToolExecutionEvent =
       summaryLine?: string
       /** 可选 ANSI unified（仅 UI；默认不塞大段） */
       ansiUnified?: string
+      /** U3：多文件列表供 history cell / Desktop */
+      files?: Array<{
+        path: string
+        op?: string
+        added?: number
+        removed?: number
+      }>
+      /** U3：折叠态一行（无 ANSI 亦可） */
+      cellCollapsed?: string
+      /** U3：展开态多行 */
+      cellExpanded?: string
     }
 
 /** UI/CLI 权限应答：allow_always = 本会话记住该 tool 名 */
@@ -834,9 +845,14 @@ export async function runToolUse(
     content = note
   }
 
-  // D4/D7：tool_end 摘要行 + 默认短 unified（UI）；模型 content 仍为 plain
+  // D4/D7/U3：tool_end 摘要 + history cell（UI）；模型 content 仍为 plain
   let summaryLine: string | undefined
   let ansiUnified: string | undefined
+  let cellFiles:
+    | Array<{ path: string; op?: string; added?: number; removed?: number }>
+    | undefined
+  let cellCollapsed: string | undefined
+  let cellExpanded: string | undefined
   if (result.ok && result.meta?.kind) {
     try {
       const {
@@ -845,6 +861,10 @@ export async function runToolUse(
         createDiffSummary,
         inlineDiffMaxLines,
       } = await import('../../tools/src/ansiDiff.ts')
+      const {
+        formatFileChangeHistoryCell,
+        fileChangeCellFromMeta,
+      } = await import('./fileChangeCell.ts')
       const paths =
         result.meta.paths?.length
           ? result.meta.paths
@@ -858,7 +878,6 @@ export async function runToolUse(
         ok: true,
         color: true,
       })
-      // 多文件：在 summary 下再跟一行 Codex 风格列表
       if (result.meta.files && result.meta.files.length > 1) {
         const block = createDiffSummary(
           result.meta.files.map((f) => ({
@@ -875,6 +894,38 @@ export async function runToolUse(
       if (maxUni > 0 && result.meta.unified) {
         ansiUnified = colorizeUnifiedText(result.meta.unified, {
           maxLines: maxUni,
+        })
+      }
+      cellFiles = result.meta.files?.map((f) => ({
+        path: f.path,
+        op: f.op,
+        added: f.added,
+        removed: f.removed,
+      }))
+      if (!cellFiles?.length && result.meta.path) {
+        cellFiles = [
+          {
+            path: result.meta.path,
+            added: result.meta.added,
+            removed: result.meta.removed,
+          },
+        ]
+      }
+      const cellIn = fileChangeCellFromMeta({
+        toolName: name,
+        ok: true,
+        meta: result.meta,
+        ansiUnified,
+      })
+      if (cellIn) {
+        cellCollapsed = formatFileChangeHistoryCell(cellIn, {
+          expanded: false,
+          color: true,
+        })
+        cellExpanded = formatFileChangeHistoryCell(cellIn, {
+          expanded: true,
+          color: true,
+          maxUnifiedLines: maxUni > 0 ? maxUni : 16,
         })
       }
     } catch {
@@ -898,6 +949,9 @@ export async function runToolUse(
       : {}),
     ...(summaryLine ? { summaryLine } : {}),
     ...(ansiUnified ? { ansiUnified } : {}),
+    ...(cellFiles?.length ? { files: cellFiles } : {}),
+    ...(cellCollapsed ? { cellCollapsed } : {}),
+    ...(cellExpanded ? { cellExpanded } : {}),
   })
 
   // --- 会话 fileDiffLog（D2；不污染 tool_result 文本）---

@@ -247,6 +247,14 @@ export {
   type DiffViewKeyResult,
 } from './diffViewModel.ts'
 export {
+  formatFileChangeHistoryCell,
+  fileChangeCellFromMeta,
+  shouldExpandFileChangeCell,
+  type FileChangeCellInput,
+  type FileChangeCellFile,
+  type FormatFileChangeCellOptions,
+} from './fileChangeCell.ts'
+export {
   loadBoloMd,
   getSystemPrompt,
   getSystemPromptPartition,
@@ -446,7 +454,26 @@ export type SessionEvent =
       name: string
       message: string
     }
-  | { type: 'tool_end'; id: string; name: string; output: string; ok: boolean; path?: string; added?: number; removed?: number; summaryLine?: string; ansiUnified?: string }
+  | {
+      type: 'tool_end'
+      id: string
+      name: string
+      output: string
+      ok: boolean
+      path?: string
+      added?: number
+      removed?: number
+      summaryLine?: string
+      ansiUnified?: string
+      files?: Array<{
+        path: string
+        op?: string
+        added?: number
+        removed?: number
+      }>
+      cellCollapsed?: string
+      cellExpanded?: string
+    }
   | {
       type: 'permission_request'
       id: string

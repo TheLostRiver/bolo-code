@@ -85,7 +85,7 @@ tool success ──► meta ──► fileDiffLog ──► transcript file_diff
 | **U0** | `DiffViewModel`：由 `fileDiffLog` / preview 生成可渲染行 | ✅ `diffViewModel.ts` |
 | **U1** | 终端 **Diff 面板**：TTY 下 `/diff` 进入可滚 UI | ✅ `tui/diffPane.ts` · `runOnePrompt` |
 | **U2** | **权限预览面板**：ask 内嵌可滚 preview + y/a/N | ✅ `runDiffApprovePane` · `createTtyAskPermission` |
-| **U3** | **写后 cell** + Desktop 复用 VM | 📋 |
+| **U3** | **写后 cell** + Desktop `<details>` | ✅ `fileChangeCell.ts` · tool_end · renderer |
 | **U4** | 行号 · 主题 · 可选语法色 | 📋 |
 | **U5** | 可选真·Ink / IDE / merge-base | 📋 |
 

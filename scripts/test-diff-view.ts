@@ -263,6 +263,68 @@ async function main() {
     assert(parsePermissionAnswer('a') === 'allow_always', 'parse a')
   }
 
+  // U3 history cell
+  {
+    const {
+      formatFileChangeHistoryCell,
+      fileChangeCellFromMeta,
+      shouldExpandFileChangeCell,
+    } = await import('../packages/core/src/fileChangeCell.ts')
+    const cellIn = fileChangeCellFromMeta({
+      toolName: 'Edit',
+      ok: true,
+      meta: {
+        kind: 'file_edit',
+        path: 'z.ts',
+        added: 2,
+        removed: 1,
+        unified: '--- a/z.ts\n+++ b/z.ts\n@@ -1,1 +1,1 @@\n-a\n+b\n',
+        files: [{ path: 'z.ts', op: 'update', added: 2, removed: 1 }],
+      },
+    })
+    assert(cellIn, 'cell from meta')
+    const folded = formatFileChangeHistoryCell(cellIn!, { expanded: false })
+    assert(folded.includes('Edit') && folded.includes('▸'), 'folded hint')
+    const open = formatFileChangeHistoryCell(cellIn!, {
+      expanded: true,
+      maxUnifiedLines: 20,
+    })
+    assert(open.includes('@@') || open.includes('+b'), 'expanded body')
+    assert(typeof shouldExpandFileChangeCell() === 'boolean', 'env expand')
+  }
+
+  // U3 CLI formatter prefers cellCollapsed
+  {
+    const { formatToolEventLine } = await import(
+      '../packages/cli/src/tui/formatSessionEvent.ts'
+    )
+    const prev = process.env.BOLO_DIFF_CELL
+    delete process.env.BOLO_DIFF_CELL
+    delete process.env.BOLO_DIFF_VERBOSE
+    const line = formatToolEventLine({
+      type: 'tool_end',
+      id: '1',
+      name: 'Edit',
+      ok: true,
+      cellCollapsed: '✓ Edit  a.ts  (+1/-1)\n  ▸ folded',
+      cellExpanded: '✓ Edit  a.ts\n@@ full',
+      summaryLine: '✓ Edit  a.ts\nmore',
+    })
+    assert(line && line.includes('folded'), `prefer collapsed: ${line}`)
+    process.env.BOLO_DIFF_CELL = 'expand'
+    const line2 = formatToolEventLine({
+      type: 'tool_end',
+      id: '1',
+      name: 'Edit',
+      ok: true,
+      cellCollapsed: 'folded',
+      cellExpanded: '✓ expanded body',
+    })
+    assert(line2 && line2.includes('expanded'), `prefer expanded: ${line2}`)
+    if (prev === undefined) delete process.env.BOLO_DIFF_CELL
+    else process.env.BOLO_DIFF_CELL = prev
+  }
+
   console.log('PASS test-diff-view')
 }
 

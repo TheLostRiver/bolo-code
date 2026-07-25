@@ -25,6 +25,51 @@ function appendMsg(role, text) {
   return div
 }
 
+function stripAnsi(s) {
+  return String(s ?? '').replace(/\x1b\[[0-9;]*m/g, '')
+}
+
+/** U3：可折叠写后 cell（对照 CLI history cell） */
+function appendFileChangeCell(e) {
+  const collapsed = stripAnsi(e.cellCollapsed || e.summaryLine || '')
+  const expanded = stripAnsi(
+    e.cellExpanded ||
+      [e.summaryLine, e.ansiUnified].filter(Boolean).join('\n') ||
+      '',
+  )
+  const headLine =
+    (collapsed.split('\n')[0] ||
+      `✓ ${e.name}${e.path ? '  ' + e.path : ''}`) + ''
+
+  const wrap = document.createElement('div')
+  wrap.className = 'msg system file-change-cell'
+
+  if (!expanded || expanded === headLine || expanded === collapsed) {
+    wrap.textContent = collapsed || headLine
+    logEl.appendChild(wrap)
+    logEl.scrollTop = logEl.scrollHeight
+    return wrap
+  }
+
+  const details = document.createElement('details')
+  details.className = 'file-change-details'
+  const summary = document.createElement('summary')
+  summary.textContent = headLine
+  const pre = document.createElement('pre')
+  pre.className = 'file-change-body'
+  // 展开内容去掉与 summary 重复的首行
+  const bodyLines = expanded.split('\n')
+  const body =
+    bodyLines[0] === headLine ? bodyLines.slice(1).join('\n') : expanded
+  pre.textContent = body.trim() || expanded
+  details.appendChild(summary)
+  details.appendChild(pre)
+  wrap.appendChild(details)
+  logEl.appendChild(wrap)
+  logEl.scrollTop = logEl.scrollHeight
+  return wrap
+}
+
 function ensureStreamBubble() {
   if (!streamEl) {
     streamEl = appendMsg('assistant', '')
@@ -120,15 +165,14 @@ window.bolo.onEvent((e) => {
     appendMsg('system', `→ ${e.name}`)
   }
   if (e.type === 'tool_end' && e.name) {
-    if (e.summaryLine) {
-      // 多行摘要（含多文件列表）；ANSI 在 HTML 中退化显示为原文
-      appendMsg('system', String(e.summaryLine).replace(/\x1b\[[0-9;]*m/g, ''))
-      if (e.ansiUnified) {
-        appendMsg(
-          'system',
-          String(e.ansiUnified).replace(/\x1b\[[0-9;]*m/g, ''),
-        )
-      }
+    if (
+      e.cellCollapsed ||
+      e.cellExpanded ||
+      (e.summaryLine && (e.files?.length || e.ansiUnified))
+    ) {
+      appendFileChangeCell(e)
+    } else if (e.summaryLine) {
+      appendMsg('system', stripAnsi(e.summaryLine))
     } else {
       const pathPart = e.path ? `  ${e.path}` : ''
       const counts =
@@ -153,18 +197,35 @@ window.bolo.onPermissionRequest((req) => {
   if (!preview && req.toolInput) {
     preview = JSON.stringify(req.toolInput ?? {}, null, 0).slice(0, 400)
   }
-  // strip ANSI for DOM text
-  preview = String(preview).replace(/\x1b\[[0-9;]*m/g, '')
-  if (req.preview?.paths?.length > 1) {
+  preview = stripAnsi(preview)
+  // U3：有 files 时用等宽列表增强
+  if (req.preview?.files?.length) {
+    const lines = req.preview.files.map((f) => {
+      const op = f.op === 'add' ? 'A' : f.op === 'delete' ? 'D' : 'M'
+      return `  ${op} ${f.path}  +${f.added ?? 0}/-${f.removed ?? 0}`
+    })
+    preview = [
+      `Allow ${req.toolName}?  (+${req.preview.added ?? 0}/-${req.preview.removed ?? 0})`,
+      ...lines,
+      req.preview.unifiedPreview
+        ? stripAnsi(req.preview.unifiedPreview).split('\n').slice(0, 24).join('\n')
+        : '',
+    ]
+      .filter(Boolean)
+      .join('\n')
+  } else if (req.preview?.paths?.length > 1) {
     preview = `${preview}\n(${req.preview.paths.length} paths)`
   }
   permText.textContent = preview
-    ? `Allow ${req.toolName}?\n${preview}`
+    ? preview.startsWith('Allow ')
+      ? preview
+      : `Allow ${req.toolName}?\n${preview}`
     : `Allow ${req.toolName}?`
   permText.style.whiteSpace = 'pre-wrap'
-  permText.style.maxHeight = '240px'
+  permText.style.maxHeight = '280px'
   permText.style.overflow = 'auto'
-  permText.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
+  permText.style.fontFamily =
+    'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
   permText.style.fontSize = '12px'
   permEl.hidden = false
 })

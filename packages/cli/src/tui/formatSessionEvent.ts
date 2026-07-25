@@ -1,6 +1,6 @@
 /**
- * T4：SessionEvent → 可读终端行（纯函数，无 I/O）
- * 对照 HC 时间线简化：text 原样增量；thinking 弱样式与正文分离；tool 一行起止。
+ * T4/U3：SessionEvent → 可读终端行（纯函数，无 I/O）
+ * 对照 HC 时间线：text 增量；thinking dim；tool 起止；写后 history cell（可折叠）。
  */
 
 /** 与 core SessionEvent 对齐的最小形状（避免 cli↔core 环依赖过重） */
@@ -25,21 +25,34 @@ export type CliSessionEvent =
       removed?: number
       summaryLine?: string
       ansiUnified?: string
+      files?: Array<{
+        path: string
+        op?: string
+        added?: number
+        removed?: number
+      }>
+      cellCollapsed?: string
+      cellExpanded?: string
     }
   | { type: 'error'; message: string }
   | { type: 'warning'; message: string }
   | { type: string; [k: string]: unknown }
 
-/** ANSI：dim 思考链 / 进度（无 TTY 时仍写转义；多数终端可忽略或显示弱样式） */
 const DIM = '\x1b[2m'
 const RESET = '\x1b[0m'
 
+function envExpandCell(): boolean {
+  const v = (process.env.BOLO_DIFF_CELL ?? '').toLowerCase()
+  if (v === '0' || v === 'fold' || v === 'collapsed') return false
+  if (v === '1' || v === 'full' || v === 'expand' || v === 'expanded') {
+    return true
+  }
+  const verbose = process.env.BOLO_DIFF_VERBOSE
+  return verbose === '1' || verbose === 'true' || verbose === 'yes'
+}
+
 /**
- * 工具起止/进度简行；其它事件返回 null（text/reasoning 由打印机处理）。
- * - start: `→ ToolName`
- * - progress: `… ToolName message`（弱样式）
- * - end ok: `✓ ToolName`
- * - end fail: `✗ ToolName`
+ * 工具起止/进度/写后 cell；其它事件返回 null。
  */
 export function formatToolEventLine(e: CliSessionEvent): string | null {
   if (e.type === 'tool_start' && typeof e.name === 'string') {
@@ -54,14 +67,42 @@ export function formatToolEventLine(e: CliSessionEvent): string | null {
     return `${DIM}… ${body}${RESET}`
   }
   if (e.type === 'tool_end' && typeof e.name === 'string') {
-    const ok = e.ok !== false
-    if (typeof e.summaryLine === 'string' && e.summaryLine.trim()) {
-      const extra =
-        typeof e.ansiUnified === 'string' && e.ansiUnified.trim()
-          ? `\n${e.ansiUnified}`
-          : ''
-      return `${e.summaryLine}${extra}`
+    const expand = envExpandCell()
+    // U3：优先用 core 预渲染的 cell
+    if (expand && typeof e.cellExpanded === 'string' && e.cellExpanded.trim()) {
+      return e.cellExpanded.trim()
     }
+    if (
+      !expand &&
+      typeof e.cellCollapsed === 'string' &&
+      e.cellCollapsed.trim()
+    ) {
+      return e.cellCollapsed.trim()
+    }
+    // 回落：summaryLine + 可选 unified（展开时）
+    if (typeof e.summaryLine === 'string' && e.summaryLine.trim()) {
+      if (
+        expand &&
+        typeof e.ansiUnified === 'string' &&
+        e.ansiUnified.trim()
+      ) {
+        return `${e.summaryLine}\n${e.ansiUnified}`
+      }
+      if (!expand) {
+        // 折叠：只取 summary 首行 + 提示
+        const first = e.summaryLine.split(/\r?\n/)[0] ?? e.summaryLine
+        const hasMore =
+          e.summaryLine.includes('\n') ||
+          e.ansiUnified ||
+          (e.files && e.files.length > 0)
+        if (hasMore) {
+          return `${first}\n${DIM}  ▸ folded · /diff to browse${RESET}`
+        }
+        return first
+      }
+      return e.summaryLine
+    }
+    const ok = e.ok !== false
     const pathPart =
       typeof e.path === 'string' && e.path.trim() ? `  ${e.path}` : ''
     const a = e.added ?? 0
@@ -79,7 +120,6 @@ export function formatToolEventLine(e: CliSessionEvent): string | null {
 
 /**
  * 将事件格式化为应写入 stdout/stderr 的片段（可多段）。
- * text：原样 delta；reasoning：dim + 可选 thinking 前缀；tool：独立一行。
  */
 export function formatSessionEventChunks(
   e: CliSessionEvent,
@@ -92,7 +132,6 @@ export function formatSessionEventChunks(
     typeof e.text === 'string' &&
     e.text.length > 0
   ) {
-    // 纯函数不维护「首段前缀」状态；打印机负责前缀与分段
     return [{ stream: 'out', text: `${DIM}${e.text}${RESET}` }]
   }
   const toolLine = formatToolEventLine(e)
@@ -127,17 +166,11 @@ export type SessionEventPrinter = {
 }
 
 /**
- * 会话 onEvent 打印机：流式 text + thinking 弱样式 + 工具简行；不刷 phase/hook 等噪声。
- * 思考链与正文分离：thinking 用 dim；首段加 `thinking ` 前缀；切到 text 时换行。
- * showThinking=false 时仍可收到 reasoning 事件，但不写终端（对照 session.showThinking / /thinking）。
+ * 会话 onEvent 打印机：流式 text + thinking + 工具/cell 行。
  */
 export function createSessionEventPrinter(opts: {
   writeOut: (s: string) => void
   writeErr?: (s: string) => void
-  /**
-   * 是否渲染 reasoning；默认 true。
-   * 可传函数以便读取 session.showThinking 的最新值。
-   */
   showThinking?: boolean | (() => boolean)
 }): SessionEventPrinter {
   const writeOut = opts.writeOut

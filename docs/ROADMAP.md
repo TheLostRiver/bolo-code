@@ -45,7 +45,7 @@
 | | 轨 A 日用 | 轨 B UI |
 |--|-----------|---------|
 | 目标 | 工作流正确、可查、可 resume | 浏览体验接近 HC/Codex |
-| 现状 | D0–D7 ✅ | **U0–U2 ✅**（VM + `/diff` 面板 + 权限审批）；U3+ 待做 |
+| 现状 | D0–D7 ✅ | **U0–U3 ✅**；U4 渲染加深 / U5 真·Ink 可选 |
 | 对标 | HC 工具结果 + Codex patch 摘要 | HC Ink 组件 + Codex ratatui |
 | 不做 | — | 遥测 · 官方市场 · 必抄 React/Rust |
 
