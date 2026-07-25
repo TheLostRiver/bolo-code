@@ -284,6 +284,7 @@ npx tsx scripts/smoke-live.ts
 | `/provider` | **TTY**：箭头列表选后端并热切（不必记 id）；非 TTY / `BOLO_PROVIDER_PANEL=0`：文本列表 |
 | `/provider list` | 仅文本列表（不开 picker） |
 | `/provider use <id> [model]` | 精确热切；缺 key **拒绝**并保留旧后端 |
+| `/provider add <preset> [as <id>]` | **CX1**：写入 `config.providers`（仅 `apiKeyEnv`，无明文 key）；`add list` 列 preset |
 | `/model` | 显示 model + providerId + kind |
 | `/model <name>` | 仅改当前后端 model（本地 cache-break） |
 | `/model <id>/<name>` | 切后端并设 model |
@@ -303,9 +304,13 @@ npx tsx scripts/smoke-live.ts
 | 模块 | 职责 |
 |------|------|
 | `packages/config/src/providerRegistry.ts` | 归一化 `providers` / 旧 `provider` |
+| `packages/config/src/providerPresets.ts` | **CX1** 内置 preset 表 |
+| `packages/config/src/addProviderProfile.ts` | **CX1** 写入 config.json |
 | `packages/providers/src/fromEnv.ts` | `createProviderFromProfile` · `apiKeyEnv` |
-| `packages/core/src/sessionProvider.ts` | `switchSessionProvider` · picker items |
-| `packages/core/src/slash.ts` | `/provider` · `interactiveProvider` 信号 |
+| `packages/providers/src/providerErrors.ts` | **CX3** `explainProviderError` |
+| `packages/core/src/sessionProvider.ts` | `switchSessionProvider` · picker items · **effort clamp** |
+| `packages/core/src/effortClamp.ts` | **CX6** `clampEffortForSession` |
+| `packages/core/src/slash.ts` | `/provider` · add · `interactiveProvider` 信号 |
 | `packages/cli` `arrowPicker` + `resumeCli` | TTY 选择 → 热切 |
 
 **不做：** 官方市场、密钥入库、遥测、默认同 turn 自动 failover。  
@@ -331,7 +336,7 @@ npx tsx scripts/smoke-live.ts
 | **E4** | `providers.*.effort.dialect` | ✅ |
 | **E5** | anthropic-output：`output_config.effort` + beta | ✅ |
 | **E6–E9** | choosable · max 门控 · TTY · doctor | ✅ |
-| **CX** | preset · caps · resume providerId · 错误解释 | 📋 [PROVIDER_UX.md](./PROVIDER_UX.md) |
+| **CX** | preset · caps · resume providerId · 错误解释 | ✅ CX1/3/6 · 📋 CX2+ [PROVIDER_UX.md](./PROVIDER_UX.md) |
 
 ```jsonc
 {

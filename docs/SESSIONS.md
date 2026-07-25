@@ -24,7 +24,7 @@
 
 | type | 用途 |
 |------|------|
-| `meta` | 文件首行：id / cwd / permissionMode / model / createdAt + **配置切片**（systemPromptSections、autoCompact、contextWindow、maxPtlRetries、permissionRules、effortLevel、usage…） |
+| `meta` | 文件首行：id / cwd / permissionMode / model / createdAt + **配置切片**（systemPromptSections、autoCompact、contextWindow、maxPtlRetries、permissionRules、effortLevel、**providerId**、usage…） |
 | `message` | 包裹现有 `ChatMessage` |
 | `compact_boundary` | full compact 边界（`compactSession` 成功后 rewrite jsonl 写入） |
 | `title` | 会话标题（**last-wins**；**不进**模型 messages；rewrite 时保留最后一条） |
@@ -44,7 +44,7 @@
 | `messages` | `ChatMessage[]`（含 `tool_calls` / `tool_call_id`） |
 | `systemPromptSections` | system 段快照（resume 可重建或回退） |
 | `model` / `autoCompactEnabled` / `contextWindowTokens` / `maxPtlRetries` | 会话配置切片 |
-| `permissionRules` / `effortLevel` / `usage`（可选） | Always-allow + **always-deny**（工具名/前缀 + path glob + Bash 模式）；effort；本地 token 累计；resume 恢复；无遥测 |
+| `permissionRules` / `effortLevel` / **`providerId`** / `usage`（可选） | Always-allow + always-deny；effort；**命名后端 id（CX6 resume）**；本地 token 累计；resume 恢复；无遥测 |
 | `createdAt` / `updatedAt` | ISO 时间 |
 
 **不落盘**：provider、hooks 运行时、skills 全文、`onEvent`、`askPermission` 等句柄（resume 时由调用方重新注入）。

@@ -108,3 +108,7 @@ export {
   parseAnthropicStreamUsage,
   mergeProviderUsage,
 } from './sseUsage.ts'
+export {
+  explainProviderError,
+  type ProviderErrorContext,
+} from './providerErrors.ts'

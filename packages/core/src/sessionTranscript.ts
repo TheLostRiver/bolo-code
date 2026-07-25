@@ -41,6 +41,8 @@ export type TranscriptMetaEntry = TranscriptEntryBase & {
   maxPtlRetries?: number
   permissionRules?: SessionPermissionRules
   effortLevel?: string
+  /** CX6：命名 provider id */
+  providerId?: string
   /** 思考链 CLI 显示；缺省 on */
   showThinking?: boolean
   usage?: SessionUsage
@@ -115,6 +117,7 @@ export type TranscriptMetaInput = {
   maxPtlRetries?: number
   permissionRules?: SessionPermissionRules
   effortLevel?: string
+  providerId?: string
   showThinking?: boolean
   usage?: SessionUsage
   phase?: string
@@ -211,6 +214,10 @@ export function metaInputFromSession(
     typeof session.effortLevel === 'string' && session.effortLevel.trim()
       ? session.effortLevel.trim()
       : undefined
+  const providerId =
+    typeof session.providerId === 'string' && session.providerId.trim()
+      ? session.providerId.trim()
+      : undefined
   const showThinkingOff = session.showThinking === false
   return {
     sessionId: session.id,
@@ -226,6 +233,7 @@ export function metaInputFromSession(
     phase: session.phase,
     ...(permissionRules ? { permissionRules } : {}),
     ...(effort ? { effortLevel: effort } : {}),
+    ...(providerId ? { providerId } : {}),
     ...(showThinkingOff ? { showThinking: false } : {}),
     ...(usage ? { usage } : {}),
   }
@@ -238,6 +246,10 @@ export function buildMetaEntry(meta: TranscriptMetaInput): TranscriptMetaEntry {
   const effort =
     typeof meta.effortLevel === 'string' && meta.effortLevel.trim()
       ? meta.effortLevel.trim()
+      : undefined
+  const providerId =
+    typeof meta.providerId === 'string' && meta.providerId.trim()
+      ? meta.providerId.trim()
       : undefined
   const showThinkingOff = meta.showThinking === false
   return {
@@ -264,6 +276,7 @@ export function buildMetaEntry(meta: TranscriptMetaInput): TranscriptMetaEntry {
     ...(meta.phase ? { phase: meta.phase } : {}),
     ...(permissionRules ? { permissionRules } : {}),
     ...(effort ? { effortLevel: effort } : {}),
+    ...(providerId ? { providerId } : {}),
     ...(showThinkingOff ? { showThinking: false } : {}),
     ...(usage ? { usage } : {}),
   }
@@ -817,6 +830,9 @@ export async function loadTranscriptFile(
         if (typeof o.phase === 'string') meta.phase = o.phase
         if (typeof o.effortLevel === 'string' && o.effortLevel.trim()) {
           meta.effortLevel = o.effortLevel.trim()
+        }
+        if (typeof o.providerId === 'string' && o.providerId.trim()) {
+          meta.providerId = o.providerId.trim()
         }
         if (o.showThinking === false) {
           meta.showThinking = false

@@ -25,6 +25,7 @@ import {
 import type { CompactSummarizer } from '../../compact/src/index.ts'
 import type { AutoClassifyFn } from '../../permissions/src/index.ts'
 import { createAutoClassifyFromCompleteText } from '../../permissions/src/index.ts'
+import { clampEffortForSession } from './effortClamp.ts'
 
 export type SwitchableProviderSession = {
   provider: LlmProvider
@@ -33,6 +34,9 @@ export type SwitchableProviderSession = {
   providerId?: string
   providerRegistry?: ProviderRegistry
   providerProfile?: ProviderProfile
+  /** E 轨：当前方言（热切后更新） */
+  effortDialect?: string | Record<string, unknown>
+  effortLevel?: string
   compactSummarizer?: CompactSummarizer
   classifyPermission?: AutoClassifyFn
   promptCacheState?: {
@@ -182,8 +186,7 @@ export function switchSessionProvider(
   )
 
   // E 轨：方言随 profile 走（供 /effort 预览）
-  ;(session as { effortDialect?: string | Record<string, unknown> }).effortDialect =
-    profile.effortDialect
+  session.effortDialect = profile.effortDialect
 
   forcePromptCacheBreak(
     session,
@@ -196,6 +199,14 @@ export function switchSessionProvider(
     session.promptCacheState.lastModel = session.model
   }
 
+  // CX6：保留意图；不可选则 clamp → auto
+  const clamp = clampEffortForSession(session)
+
+  let message = `provider set to ${rawId} (kind=${built.kind}, model=${session.model ?? '(unset)'})`
+  if (clamp.warning) {
+    message += `\n${clamp.warning}`
+  }
+
   return {
     ok: true,
     providerId: rawId,
@@ -203,7 +214,7 @@ export function switchSessionProvider(
     model: session.model,
     baseUrl: built.baseUrl ?? profile.baseUrl,
     previousId,
-    message: `provider set to ${rawId} (kind=${built.kind}, model=${session.model ?? '(unset)'})`,
+    message,
   }
 }
 
@@ -277,7 +288,8 @@ export function formatSessionProvidersSlash(
     `active: ${session.providerId ?? '(unset)'}  kind=${session.provider?.id ?? '?'}  model=${session.model ?? '(unset)'}`,
     'providers (* = active, · = default):',
     ...list.map((p) => formatProviderProfileLine(p)),
-    'usage: /provider  (TTY picker)  ·  /provider use <id> [model]  ·  /provider list',
+    'usage: /provider  (TTY picker)  ·  /provider use <id> [model]',
+    '       /provider list  ·  /provider add <preset> [as <id>]  ·  /provider add list',
   ]
   return lines.join('\n')
 }

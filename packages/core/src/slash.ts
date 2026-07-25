@@ -1868,9 +1868,12 @@ function cmdModel(session: SlashSession, args: string): SlashDispatchResult {
 }
 
 /**
- * /provider — 无参：TTY 可 picker；list：仅文本；use <id>：热切。
+ * /provider — 无参：TTY 可 picker；list：仅文本；use <id>：热切；add：preset 写入 config。
  */
-function cmdProvider(session: SlashSession, args: string): SlashDispatchResult {
+function cmdProvider(
+  session: SlashSession,
+  args: string,
+): SlashDispatchResult | Promise<SlashDispatchResult> {
   const raw = args.trim()
   const textList = () =>
     formatSessionProvidersSlash(session as SwitchableProviderSession)
@@ -1911,6 +1914,11 @@ function cmdProvider(session: SlashSession, args: string): SlashDispatchResult {
     return { ok: true, message: sw.message }
   }
 
+  // CX1：/provider add <preset> [as <id>] [overwrite]
+  if (head === 'add' || head === 'new') {
+    return cmdProviderAdd(session, parts.slice(1).join(' '))
+  }
+
   if (head === 'help' || head === '?') {
     return {
       ok: true,
@@ -1919,6 +1927,8 @@ function cmdProvider(session: SlashSession, args: string): SlashDispatchResult {
         'usage: /provider          TTY → pick · else list',
         '       /provider list     text only',
         '       /provider use <id> [model]',
+        '       /provider add <preset> [as <id>] [overwrite]',
+        '       /provider add list',
       ].join('\n'),
     }
   }
@@ -1936,6 +1946,96 @@ function cmdProvider(session: SlashSession, args: string): SlashDispatchResult {
     }
   }
   return { ok: true, message: sw.message }
+}
+
+/**
+ * /provider add — 同步返回；写盘在 run 内 await 需改成 async 路径。
+ * SlashCommandDef.run 支持 Promise，走 async IIFE 不方便 — 用同步阻塞不可取。
+ * 改为：cmdProviderAdd 返回 Promise 兼容的 run（dispatch 已 await）。
+ */
+async function cmdProviderAdd(
+  session: SlashSession,
+  args: string,
+): Promise<SlashDispatchResult> {
+  const raw = args.trim()
+  if (!raw || raw === 'list' || raw === 'ls' || raw === 'show') {
+    const { formatProviderPresetsHelp } = await import(
+      '../../config/src/providerPresets.ts'
+    )
+    return { ok: true, message: formatProviderPresetsHelp() }
+  }
+
+  const tokens = raw.split(/\s+/).filter(Boolean)
+  let presetId = tokens[0]!
+  let asId: string | undefined
+  let overwrite = false
+  let setDefault = false
+  let scope: 'user' | 'project' = 'user'
+
+  for (let i = 1; i < tokens.length; i++) {
+    const t = tokens[i]!.toLowerCase()
+    if (t === 'as' && tokens[i + 1]) {
+      asId = tokens[++i]
+      continue
+    }
+    if (t === 'overwrite' || t === '--overwrite' || t === '-f') {
+      overwrite = true
+      continue
+    }
+    if (t === 'default' || t === '--default') {
+      setDefault = true
+      continue
+    }
+    if (t === 'project' || t === '--project') {
+      scope = 'project'
+      continue
+    }
+    if (t === 'user' || t === '--user') {
+      scope = 'user'
+      continue
+    }
+  }
+
+  const { addProviderProfileToConfigFile } = await import(
+    '../../config/src/addProviderProfile.ts'
+  )
+  const { normalizeProviderRegistry } = await import(
+    '../../config/src/providerRegistry.ts'
+  )
+  const { loadConfigJson, getUserLayout, getProjectLayout } = await import(
+    '../../config/src/index.ts'
+  )
+
+  const added = await addProviderProfileToConfigFile({
+    presetId,
+    asId,
+    overwrite,
+    setDefault,
+    scope,
+    cwd: session.cwd,
+  })
+  if (!added.ok) {
+    return { ok: false, message: added.reason }
+  }
+
+  // 热刷新 session.providerRegistry（合并 user+project 太重；至少把新 id 挂进当前 registry）
+  try {
+    const user = await loadConfigJson(getUserLayout())
+    const project = await loadConfigJson(getProjectLayout(session.cwd))
+    const { mergeConfigs } = await import('../../config/src/io.ts')
+    const merged = mergeConfigs(user, project)
+    const reg = normalizeProviderRegistry(merged)
+    if (session.providerRegistry) {
+      session.providerRegistry = reg
+    } else {
+      const { attachProviderRegistry } = await import('./sessionProvider.ts')
+      attachProviderRegistry(session as SwitchableProviderSession, reg, session.providerId)
+    }
+  } catch {
+    /* registry refresh best-effort */
+  }
+
+  return { ok: true, message: added.message }
 }
 
 function resolveSessionEffortDialect(session: SlashSession) {
@@ -2845,8 +2945,8 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
   {
     name: 'provider',
     summary:
-      'TTY pick / list / hot-switch providers (config.providers)',
-    usage: '[list | use <id> [model]]',
+      'TTY pick / list / hot-switch / add preset (config.providers)',
+    usage: '[list | use <id> [model] | add <preset> [as <id>]]',
     group: 'model',
     run: cmdProvider,
   },

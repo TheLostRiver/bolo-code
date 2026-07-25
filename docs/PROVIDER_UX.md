@@ -1,10 +1,11 @@
 # Provider UX 方案（CX 轨 · 最好用 / 最稳）
 
-> **状态：** 📋 规格已定（实现按 §6 切片开工）  
+> **状态：** ✅ **CX1 · CX3 · CX6 已实现**；CX2/4/5/7 待续；CX8 后置  
 > **目标：** 多协议日用 **便利 ~95%+**（稳健优先）；**不是**各家 API 全集 100%  
 > **前置：** [PROVIDERS.md](./PROVIDERS.md)（协议）· [EFFORT.md](./EFFORT.md) / [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md)（E0–E9）· [ROADMAP.md](./ROADMAP.md) §9–§11  
 > **对照（语义，不抄实现/遥测）：** HelsincyCode · Codex · OpenCode · Pi  
-> **原则：** 表驱动 · 无遥测 · 密钥不进 log/仓库 · **不绑 AI SDK** · 不把 Responses 伪装成 Completions
+> **原则：** 表驱动 · 无遥测 · 密钥不进 log/仓库 · **不绑 AI SDK** · 不把 Responses 伪装成 Completions  
+> **测试：** `scripts/test-provider-ux.ts`
 
 ---
 

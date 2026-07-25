@@ -69,6 +69,11 @@ export type PersistableSession = {
   /** 会话 effort 档位；可选落盘 */
   effortLevel?: string
   /**
+   * P/CX 轨：命名 provider id（config.providers key）；可选落盘。
+   * 与 provider 协议 kind 不同。
+   */
+  providerId?: string
+  /**
    * 思考链 CLI 显示开关；可选落盘。
    * undefined / true = on；false = off。
    */
@@ -118,6 +123,8 @@ export type SessionSnapshot = {
   permissionRules?: SessionPermissionRules
   /** 会话 effort 档位（可选） */
   effortLevel?: string
+  /** 命名 provider id（可选；CX6 resume） */
+  providerId?: string
   /** 思考链显示（可选；缺省视为 on） */
   showThinking?: boolean
   /** reasoning_content 回灌（可选；仅 true 落盘） */
@@ -488,6 +495,10 @@ export function toSnapshot(
     typeof session.effortLevel === 'string' && session.effortLevel.trim()
       ? session.effortLevel.trim()
       : undefined
+  const providerId =
+    typeof session.providerId === 'string' && session.providerId.trim()
+      ? session.providerId.trim()
+      : undefined
   // 仅显式 false 落盘；默认 on 不写字段，兼容旧快照
   const showThinkingOff = session.showThinking === false
   const persistReasoningOn = session.persistReasoning === true
@@ -508,6 +519,7 @@ export function toSnapshot(
     phase: session.phase,
     ...(permissionRules ? { permissionRules } : {}),
     ...(effort ? { effortLevel: effort } : {}),
+    ...(providerId ? { providerId } : {}),
     ...(showThinkingOff ? { showThinking: false } : {}),
     ...(persistReasoningOn ? { persistReasoning: true } : {}),
     ...(usage ? { usage } : {}),
@@ -574,6 +586,10 @@ export function parseSessionSnapshot(raw: unknown): SessionSnapshot {
     typeof o.effortLevel === 'string' && o.effortLevel.trim()
       ? o.effortLevel.trim()
       : undefined
+  const providerId =
+    typeof o.providerId === 'string' && o.providerId.trim()
+      ? o.providerId.trim()
+      : undefined
   const showThinking =
     o.showThinking === false ? false : o.showThinking === true ? true : undefined
   const persistReasoning = o.persistReasoning === true ? true : undefined
@@ -609,6 +625,7 @@ export function parseSessionSnapshot(raw: unknown): SessionSnapshot {
     phase: typeof o.phase === 'string' ? (o.phase as SessionPhase) : undefined,
     ...(permissionRules ? { permissionRules } : {}),
     ...(effortLevel ? { effortLevel } : {}),
+    ...(providerId ? { providerId } : {}),
     ...(showThinking !== undefined ? { showThinking } : {}),
     ...(persistReasoning ? { persistReasoning } : {}),
     ...(usage ? { usage } : {}),
@@ -1104,6 +1121,7 @@ async function snapshotFromTranscriptOnly(
     ...(meta?.phase ? { phase: meta.phase as SessionPhase } : {}),
     ...(permissionRules ? { permissionRules } : {}),
     ...(meta?.effortLevel ? { effortLevel: meta.effortLevel } : {}),
+    ...(meta?.providerId ? { providerId: meta.providerId } : {}),
     ...(meta?.showThinking === false ? { showThinking: false } : {}),
     ...(usage ? { usage } : {}),
   }
@@ -1273,6 +1291,9 @@ export function applySnapshotToSession(
   }
   if (snapshot.effortLevel !== undefined) {
     session.effortLevel = snapshot.effortLevel
+  }
+  if (snapshot.providerId !== undefined) {
+    session.providerId = snapshot.providerId
   }
   if (snapshot.showThinking !== undefined) {
     session.showThinking = snapshot.showThinking

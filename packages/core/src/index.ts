@@ -348,6 +348,7 @@ export {
   createAnthropicProvider,
   createMockProvider,
   createCompactSummarizerFromProvider,
+  explainProviderError,
 } from '../../providers/src/index.ts'
 export {
   loadWorkspace,
@@ -375,6 +376,11 @@ export {
   type SwitchSessionModelResult,
   type SwitchableProviderSession,
 } from './sessionProvider.ts'
+export {
+  clampEffortForSession,
+  type ClampEffortResult,
+  type EffortClampSession,
+} from './effortClamp.ts'
 export {
   PERMISSION_MODES,
   PERMISSION_MODE_META,
@@ -1772,6 +1778,11 @@ export async function resumeSession(
     permissionRules:
       opts.create?.permissionRules ?? snapshot.permissionRules,
     effortLevel: opts.create?.effortLevel ?? snapshot.effortLevel,
+    // CX6：快照 providerId；create 显式优先
+    providerId: opts.create?.providerId ?? snapshot.providerId,
+    providerRegistry: opts.create?.providerRegistry,
+    providerProfile: opts.create?.providerProfile,
+    effortDialect: opts.create?.effortDialect,
     showThinking:
       opts.create?.showThinking ??
       (snapshot.showThinking === false ? false : true),
@@ -1796,6 +1807,54 @@ export async function resumeSession(
   applySnapshotToSession(session, snapshot, {
     restoreSystemSections: !reassemble,
   })
+
+  // CX6：若有 registry + 快照 providerId，尝试热切到该后端（缺 key 则保留 create 默认并警告）
+  const resumePid = snapshot.providerId?.trim()
+  if (
+    resumePid &&
+    session.providerRegistry &&
+    Object.keys(session.providerRegistry.profiles).length
+  ) {
+    const { switchSessionProvider } = await import('./sessionProvider.ts')
+    const sw = switchSessionProvider(session, resumePid, {
+      model: snapshot.model,
+    })
+    if (!sw.ok) {
+      session.providerId = resumePid
+      try {
+        const { appendSessionSystemNote } = await import('./sessionPersist.ts')
+        await appendSessionSystemNote(
+          session,
+          `resume: provider "${resumePid}" unavailable — ${sw.reason}`,
+          { kind: 'resume_provider' },
+        )
+      } catch {
+        /* best-effort */
+      }
+      emit(session, {
+        type: 'error',
+        message: `resume: provider "${resumePid}" unavailable (${sw.reason}); using default backend`,
+      })
+    }
+  } else if (resumePid && !session.providerId) {
+    session.providerId = resumePid
+  }
+
+  // CX6：effort 与当前后端求交
+  {
+    const { clampEffortForSession } = await import('./effortClamp.ts')
+    const clamp = clampEffortForSession(session)
+    if (clamp.warning) {
+      try {
+        const { appendSessionSystemNote } = await import('./sessionPersist.ts')
+        await appendSessionSystemNote(session, clamp.warning, {
+          kind: 'effort_clamp',
+        })
+      } catch {
+        /* ignore */
+      }
+    }
+  }
 
   // D6：从 transcript 恢复 file_diff 摘要 → fileDiffLog
   try {

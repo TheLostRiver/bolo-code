@@ -44,6 +44,22 @@ export {
 } from './providerRegistry.ts'
 
 export {
+  BUILTIN_PROVIDER_PRESETS,
+  listProviderPresets,
+  getProviderPreset,
+  providerConfigFromPreset,
+  formatProviderPresetLine,
+  formatProviderPresetsHelp,
+  type ProviderPreset,
+} from './providerPresets.ts'
+
+export {
+  addProviderProfileToConfigFile,
+  type AddProviderProfileResult,
+  type AddProviderProfileOptions,
+} from './addProviderProfile.ts'
+
+export {
   ensureLayout,
   ensureUserLayout,
   ensureProjectLayout,
