@@ -218,6 +218,10 @@ async function main() {
     statesFor(loaded.entries, 'turn_aborted').at(-1) === 'aborted',
     'abort is durable',
   )
+  assert(
+    abortedSession.coordinator.snapshot(abortedSession.id).state === 'idle',
+    'abort releases session runner',
+  )
 
   const blockedParent = path.join(tmpRoot, 'not-a-directory')
   await fs.writeFile(blockedParent, 'file blocks mkdir', 'utf8')
@@ -254,6 +258,11 @@ async function main() {
   assert(
     admissionFailureSession.messages.length === 0,
     'admission failure does not enqueue user message',
+  )
+  assert(
+    admissionFailureSession.coordinator.snapshot(admissionFailureSession.id)
+      .state === 'idle',
+    'admission failure releases session runner',
   )
 
   const crashSession = await createSession({

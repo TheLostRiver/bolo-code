@@ -129,6 +129,10 @@ import {
   type DurableTurnRecord,
   type DurableTurnState,
 } from './durableTurn.ts'
+import {
+  defaultSessionCoordinator,
+  type SessionCoordinator,
+} from './sessionCoordinator.ts'
 import type { SessionUsage } from './sessionUsage.ts'
 import {
   cloneSessionUsage,
@@ -216,6 +220,15 @@ export {
   type ClassifiedError,
 } from './errorClassify.ts'
 export { queryLoop } from './queryLoop.ts'
+export {
+  SessionCoordinator,
+  defaultSessionCoordinator,
+  SESSION_RUNNER_BUSY_CODE,
+  type SessionRunnerAcquireResult,
+  type SessionRunnerLease,
+  type SessionRunnerOwner,
+  type SessionRunnerSnapshot,
+} from './sessionCoordinator.ts'
 export {
   createEmptySessionUsage,
   cloneSessionUsage,
@@ -610,6 +623,11 @@ export type SessionSystemPromptOptions = Omit<
 export type CreateSessionOptions = {
   cwd: string
   sessionId?: string
+  /**
+   * DR2A：session runner ownership domain。
+   * 默认使用进程级 coordinator；嵌入方/测试可显式隔离。
+   */
+  coordinator?: SessionCoordinator
   hooks?: HooksConfig
   provider?: LlmProvider
   deps?: QueryDeps
@@ -720,6 +738,8 @@ export type BoloSession = {
   cwd: string
   phase: SessionPhase
   messages: ChatMessage[]
+  /** DR2A：本 session 的唯一 runner owner。 */
+  coordinator: SessionCoordinator
   /** DR0：由 transcript `turn` entries 投影；不进入模型 messages。 */
   durableTurns: DurableTurnRecord[]
   /**
@@ -1014,6 +1034,7 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
     cwd: opts.cwd,
     phase: 'idle',
     messages: [],
+    coordinator: opts.coordinator ?? defaultSessionCoordinator,
     systemPromptSections,
     systemPromptUserConfigDir,
     refreshPathScopedRules,
@@ -1773,16 +1794,18 @@ function durableStateForTerminal(terminal: Terminal): DurableTurnState {
   return 'error'
 }
 
+export type SubmitPromptOptions = {
+  maxTurns?: number
+  querySource?: string
+  signal?: AbortSignal
+  /** DR0：调用方提供幂等键；省略时本地生成。 */
+  turnId?: string
+}
+
 export async function submitPrompt(
   session: BoloSession,
   prompt: string,
-  options?: {
-    maxTurns?: number
-    querySource?: string
-    signal?: AbortSignal
-    /** DR0：调用方提供幂等键；省略时本地生成。 */
-    turnId?: string
-  },
+  options?: SubmitPromptOptions,
 ): Promise<Terminal> {
   let turnId: string
   try {
@@ -1803,6 +1826,36 @@ export async function submitPrompt(
     return terminal
   }
 
+  const querySource = options?.querySource ?? 'repl_main_thread'
+  const runner = session.coordinator.tryAcquire({
+    sessionId: session.id,
+    turnId,
+    querySource,
+  })
+  if (!runner.ok) {
+    const detail =
+      `session runner busy for "${session.id}" ` +
+      `(active turnId="${runner.active.turnId}")`
+    const terminal: Terminal = { reason: 'error', detail }
+    emit(session, { type: 'error', message: detail })
+    emit(session, { type: 'done', terminal })
+    return terminal
+  }
+
+  return runOwnedPrompt(session, prompt, options, turnId, querySource).finally(
+    () => {
+      runner.lease.release()
+    },
+  )
+}
+
+async function runOwnedPrompt(
+  session: BoloSession,
+  prompt: string,
+  options: SubmitPromptOptions | undefined,
+  turnId: string,
+  querySource: string,
+): Promise<Terminal> {
   setPhase(session, 'running')
 
   const submit = await runHooks(
@@ -1839,7 +1892,6 @@ export async function submitPrompt(
 
   let userContent = prompt
   if (submit.injectText) userContent = `${prompt}\n\n${submit.injectText}`
-  const querySource = options?.querySource ?? 'repl_main_thread'
 
   try {
     await persistSessionTurnState(session, {
