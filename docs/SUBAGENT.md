@@ -167,15 +167,15 @@ fork 路径不走白名单表，直接 `parent.allTools` 去掉 `Agent`。
 
 侧链 transcript（可选）：`runSubagent({ writeTranscript: true })` 写入 `{cwd}/.bolo/sessions/agent-{id}.jsonl`；`SubagentStop` 可带 `agent_transcript_path`。
 
-**S12 最小 async：** Agent 工具 `run_in_background` 后台 `runSubagent`；会话 `backgroundAgents.pendingAgents` / `backgroundAgentResults`；可选 system 通知进 `session.messages`。
+**S12 / DR3A async：** Agent 工具 `run_in_background` 后台 `runSubagent`；会话 `backgroundAgents.pendingAgents` / `backgroundAgentResults`；持久化主路径先写 `task(admitted/running)`，完成时写 `task_result` 再写 terminal。background Promise **不**异步修改父 `session.messages`。
 
 **S12 最小 fork：** 见上文；无完整 cache 共享。
 
 **S8 最小权限：** `resolveSubagentPermissionMode(parent, def)` — 子 agent **不得**比父会话更宽（rank：`plan < default < acceptEdits < bypass`）。定义写 `bypass` 而父为 `default` 时实际仍用 `default`。
 
-**SA-PAR：** `/agents status` · `/bg` 展示 `total/running/done/error` 计数 + `RUNNING|DONE|ERROR` 标签 + finished 时间 + 可选 usage。
+**SA-PAR：** `/agents status` · `/bg` 展示 `total/running/done/error/aborted/interrupted` 计数与标签、finished 时间、可选 usage；resume 从 durable task 恢复诊断，但不重启 worker。
 
-**P-SA-CAP：** 后台并发上限默认 **3**（`BOLO_MAX_BACKGROUND_AGENTS` 或 `store.maxConcurrent`）；超额拒绝并提示 `/agents status`。
+**P-SA-CAP：** 后台并发上限默认 **3**（`BOLO_MAX_BACKGROUND_AGENTS` 或 `store.maxConcurrent`）；超额拒绝并提示 `/agents status`。`overflow: queue` 的真正 FIFO/取消仍属 DR3B，当前不会伪装已排队。
 
 ## 完成定义
 
@@ -184,6 +184,7 @@ fork 路径不走白名单表，直接 `parent.allTools` 去掉 `Agent`。
 - **S0–S6：** 文档 + `runSubagent` + Agent 工具 + 测试绿
 - **S7：** `.bolo/agents` 发现、覆盖内置、resolve + `/agents` + `ensure*Layout` 的 `agents/`
 - **S8 最小：** 子权限不升级（`resolveSubagentPermissionMode`）
-- **S12 partial：** 可选后台 subagent + **fork 继承父 messages**
+- **S12 / DR3A：** 后台 subagent + fork 继承父 messages + durable task/result（父消息 promotion 仍属 DR3B）
 - **SA-PAR / P-SA-CAP：** 后台可见性 + 并发上限
+- **DR3A：** 独立 task/result lifecycle、result-before-terminal、resume interrupted diagnostic、禁止异步父消息写入
 - **Usage 回卷 / maxTurns / disallowedTools / worktree cleanup：** 已接线（相对 HC 仍简化）

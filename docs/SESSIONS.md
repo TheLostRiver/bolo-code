@@ -30,6 +30,8 @@
 | `title` | 会话标题（**last-wins**；**不进**模型 messages；rewrite 时保留最后一条） |
 | `turn` | Durable Turn 生命周期（`turnId` + `state`；**不进**模型 messages；rewrite 时保留） |
 | `control` | Durable control 生命周期（`controlId` + `kind/state`；**不进**模型 messages；rewrite 时保留） |
+| `task` | Durable background/subagent 生命周期（独立 `taskId` + `parentTurnId?`；**不进**模型 messages；rewrite 时保留） |
+| `task_result` | Durable task 结果摘要/usage/worktree 路径；必须先于 completed/error/aborted terminal；**不进**模型 messages |
 
 `saveSession` **默认**只增量 append / rewrite `.jsonl`；不再默认原子写 JSON。`migrateSessionToJsonl` 可将旧 JSON 旁路写出 jsonl（默认不删 JSON）。`setSessionTitle` / `/title` 追加 `title` 行；`appendSessionSystemNote` / `/note` 追加 `system_note`（不进模型链）。list 对 jsonl 走 `scanTranscriptLite`（轻量计数字段 + 近况 preview）。详见 `docs/TODO_SESSION_JSONL.md`。
 
@@ -142,7 +144,25 @@ controlId + sessionId + kind + state + timestamp
 - 截断尾行、未知状态、冲突 controlId fail-closed 跳过；已确认 lifecycle 保留并按 interrupted 规则恢复。
 - 默认门禁组合覆盖 concurrent append、append-vs-rewrite、EIO 后续写、terminal/release failure 与 compact rewrite。
 
-DR2A–DR2C 已收口；下一阶段 DR3 为 background/subagent task 与 result 建立独立 durable lifecycle。
+### 1.4 Durable Background Task（DR3A）
+
+持久化会话的 background `Agent` 使用独立 `taskId`（当前等于 `agentId`），不得复用父 turn id。父子关系只通过 `parentTurnId` 引用：
+
+```jsonc
+{"type":"task","sessionId":"...","taskId":"agent_...","parentTurnId":"turn_...","agentType":"general","state":"admitted","prompt":"...","isolation":"none","timestamp":"..."}
+{"type":"task","sessionId":"...","taskId":"agent_...","agentType":"general","state":"running","timestamp":"..."}
+{"type":"task_result","sessionId":"...","taskId":"agent_...","summary":"...","isError":false,"timestamp":"..."}
+{"type":"task","sessionId":"...","taskId":"agent_...","agentType":"general","state":"completed","timestamp":"..."}
+```
+
+- worker 只有在 admitted/running 已顺序落盘后才启动。
+- completed/error/aborted 必须晚于 `task_result`；缺 result 的 terminal 在投影时 fail-closed 跳过。
+- result 或 terminal 写失败时不伪造成功：磁盘保留 running（可能已有 result），resume 保守投影 interrupted。
+- resume 填充 `session.durableTasks`，并恢复 `/bg` 的 done/error/aborted/interrupted 诊断；不会重启 worker 或自动 replay。
+- background completion 不异步修改父 `session.messages`。result 只保存在 transcript/store，父 turn safe-boundary promotion 属于 DR3B。
+- compact/shrink rewrite 保留完整 task/result lifecycle；旧 transcript 没有这两类 entry 时仍可读取。
+
+DR0–DR3A 已收口；当前 DR3B 将实现真正 overflow queue 与父 safe-boundary result promotion。
 
 ## 2. 快照格式（version 1，只读兼容）
 

@@ -107,9 +107,9 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | 层 | 粗估 | 状态摘要 |
 |----|------|----------|
 | Headless 核心 | ~80–88% | queryLoop · STE · 权限 · tools；partial stream fail-closed |
-| 会话 / CLI | ~87–93% | JSONL · new/resume 同构 runtime · `/turn` · durable controls · serialized transcript writes；Durable Turn DR0–DR2 |
+| 会话 / CLI | ~88–94% | JSONL · new/resume 同构 runtime · `/turn` · durable controls/tasks · serialized transcript writes；Durable Runtime DR0–DR3A |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
-| Subagent | ~85–92% | Spec v0；默认子不可再 spawn；worktree 成果保全 |
+| Subagent | ~87–93% | Spec v0；durable background task/result；默认子不可再 spawn；worktree 成果保全 |
 | 文件 Diff 日用 | ~95%+ | **D0–D7** |
 | 文件 Diff UI | ~90–95% | **U0–U4**；U5 真 Ink/IDE 可选 |
 | Hooks 日用 | ~96–98% | **H0–H5**（含 SessionEnd） |
@@ -117,13 +117,13 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | 多 Provider 热切 | ~92–96% | **P0–P4.1 + CX7 Desktop** |
 | Effort 方言 | ~92–95% | **E0–E9** |
 | Provider UX | ~95–98% | **CX0–CX8**（ultrathink 默认 off） |
-| Durable Turn | DR0–DR2 ✅ | 输入先落盘 · recovery · 单 runner · durable control · crash/concurrency closeout |
+| Durable Runtime | DR0–DR3A ✅ | 输入先落盘 · recovery · 单 runner · durable control/task · crash/concurrency closeout |
 | Electron GUI | ~65–75% | 薄壳；非 HC 级 IDE |
 | 产品相对 HC 全家桶 | ~74–88% | 日用高；UI 密度另计 |
 
-**已闭环：** Diff · Hooks · Compact · Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Turn DR0–DR2**。
+**已闭环：** Diff · Hooks · Compact · Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR3A**。
 
-**当前主线：** Durable Runtime **DR3A durable background/subagent task schema**；DR2 已完整收口，DR3B queue/promotion、DR4 protocol 后续。
+**当前主线：** Durable Runtime **DR3B queue + parent-boundary promotion**；DR3A durable background task/result 已完整收口，DR4 protocol 后续。
 
 **其它开放轨（非阻塞）：**
 
@@ -133,7 +133,7 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | U5 | 真 React Ink / IDE diff 推送（可选） |
 | adaptive thinking | 与 effort 深联动 |
 | Desktop 打磨 | effort UI · session list · markdown/tool cards 等 |
-| Durable Turn DR2–DR4 | coordinator · durable background/subagent · protocol |
+| Durable Runtime DR3B–DR4 | background queue/promotion · protocol |
 
 Durable Runtime 的长期执行顺序以 [ROADMAP.md](./ROADMAP.md) §13.4–§13.10 为准：
 
@@ -145,8 +145,8 @@ DR2A 单 session runner ✅
 → DR2C1 control schema/projection ✅
 → DR2C2 lifecycle persistence wiring ✅
 → DR2C3 crash/failure closeout ✅
-→ DR3A durable background task（当前）
-→ DR3B queue + parent-boundary promotion
+→ DR3A durable background task ✅
+→ DR3B queue + parent-boundary promotion（当前）
 → DR4A runtime protocol
 → DR4B CLI diagnostics
 → DR4C closeout
@@ -271,7 +271,7 @@ npx tsx scripts/test-file-diff.ts
 npx tsx scripts/test-config.ts
 ```
 
-`npm test` 已覆盖 R0–R4 与 Durable Turn DR0–DR2 的关键回归；其它新轨仍以对应 `test-*` 脚本为准。
+`npm test` 已覆盖 R0–R4 与 Durable Runtime DR0–DR3A 的关键回归；其它新轨仍以对应 `test-*` 脚本为准。
 
 ### 7.3 Git
 
@@ -338,6 +338,7 @@ cd apps/desktop && npm install && set BOLO_DESKTOP_MOCK=1 && npm start
 | DR2C1 | `control` transcript schema · fail-closed recovery projection · compact rewrite preservation |
 | DR2C2 | session durable wrappers · release barrier · request/promote/take fail-closed · resume durableControls |
 | DR2C3 | transcript write barrier · append/rewrite race closeout · partial-tail/duplicate/EIO recovery |
+| DR3A | `task` / `task_result` · result-before-terminal · parentTurnId · resume interrupted diagnostics · background no async parent write |
 
 最新 commit 以 `git log` 为准。
 
