@@ -35,12 +35,15 @@ import {
   appendSessionTitle,
   appendSystemNote,
   appendFileDiffEntry,
+  appendTurnEntry,
   ensureTranscriptFile,
   metaInputFromSession,
   getTranscriptWriteState,
   normalizeSessionTitle,
   scanTranscriptLite,
+  type TranscriptTurnEntry,
 } from './sessionTranscript.ts'
+import type { DurableTurnRecord, DurableTurnState } from './durableTurn.ts'
 import type { SessionUsage } from './sessionUsage.ts'
 import { cloneSessionUsage } from './sessionUsage.ts'
 import {
@@ -90,6 +93,8 @@ export type PersistableSession = {
    * 会话墙钟起点（ms epoch）；可选落盘
    */
   sessionStartedAtMs?: number
+  /** DR0：运行时 turn 投影；JSONL `turn` entries 是持久化真源。 */
+  durableTurns?: DurableTurnRecord[]
   onEvent?: (e: { type: 'error'; message: string }) => void
 }
 
@@ -1353,14 +1358,59 @@ export function getSessionPersistMeta(
   return persistMeta.get(session)
 }
 
+/** 当前会话是否启用 durable transcript 主路径。 */
+export function hasDurableSessionPersistence(session: object): boolean {
+  return persistMeta.get(session)?.autoSave === true
+}
+
+/**
+ * DR0：按 session persist meta 追加 turn lifecycle。
+ * 显式 in-memory session 返回 null；启用 autoSave 时写失败必须抛出。
+ */
+export async function appendSessionTurnState(
+  session: PersistableSession,
+  opts: {
+    turnId: string
+    state: DurableTurnState
+    prompt?: string
+    querySource?: string
+    terminalReason?: string
+    detail?: string
+  },
+): Promise<TranscriptTurnEntry | null> {
+  const meta = persistMeta.get(session)
+  if (!meta?.autoSave) return null
+  const rawFilePath = meta.filePath
+    ? path.resolve(meta.filePath)
+    : resolveSessionFilePath(session.id, {
+        scope: meta.scope,
+        cwd: session.cwd,
+        sessionsDir: meta.sessionsDir,
+      })
+  const transcriptPath = resolveTranscriptPathFromJson(rawFilePath)
+  await ensureTranscriptFile(
+    transcriptPath,
+    metaInputFromSession(session, { createdAt: meta.createdAt }),
+  )
+  const entry = await appendTurnEntry(transcriptPath, {
+    sessionId: session.id,
+    ...opts,
+  })
+  setSessionPersistMeta(session, {
+    filePath: transcriptPath,
+  })
+  return entry
+}
+
 /**
  * 若 session 开启 autoSave，则按 meta 写盘（失败只打事件，不抛）
  */
 export async function maybeAutoSaveSession(
   session: PersistableSession,
-): Promise<void> {
+  opts?: { throwOnError?: boolean },
+): Promise<boolean> {
   const meta = persistMeta.get(session)
-  if (!meta?.autoSave) return
+  if (!meta?.autoSave) return false
   try {
     const { path: p, snapshot } = await saveSession(session, {
       scope: meta.scope,
@@ -1372,9 +1422,12 @@ export async function maybeAutoSaveSession(
       createdAt: snapshot.createdAt,
       filePath: meta.filePath ?? p,
     })
+    return true
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     session.onEvent?.({ type: 'error', message: `autoSave failed: ${message}` })
+    if (opts?.throwOnError) throw err
+    return false
   }
 }
 

@@ -16,6 +16,14 @@ import type {
 import type { PersistableSession } from './sessionPersist.ts'
 import type { SessionUsage } from './sessionUsage.ts'
 import { cloneSessionUsage } from './sessionUsage.ts'
+import {
+  isDurableTurnState,
+  normalizeDurableTurnId,
+  projectDurableTurnEvents,
+  type DurableTurnEvent,
+  type DurableTurnRecord,
+  type DurableTurnState,
+} from './durableTurn.ts'
 
 /** 公共头字段（线性 transcript；可选 parentUuid 供分叉元数据） */
 export type TranscriptEntryBase = {
@@ -97,6 +105,18 @@ export type TranscriptFileDiffEntry = TranscriptEntryBase & {
   turn?: number
 }
 
+/** DR0：append-only turn 生命周期；不进模型 messages。 */
+export type TranscriptTurnEntry = TranscriptEntryBase & {
+  type: 'turn'
+  turnId: string
+  state: DurableTurnState
+  /** 仅 admitted 写最终 hook 归约后的输入。 */
+  prompt?: string
+  querySource?: string
+  terminalReason?: string
+  detail?: string
+}
+
 export type TranscriptEntry =
   | TranscriptMetaEntry
   | TranscriptMessageEntry
@@ -104,6 +124,7 @@ export type TranscriptEntry =
   | TranscriptTitleEntry
   | TranscriptSystemNoteEntry
   | TranscriptFileDiffEntry
+  | TranscriptTurnEntry
 
 export type TranscriptMetaInput = {
   sessionId: string
@@ -469,6 +490,75 @@ export async function appendFileDiffEntry(
   return entry
 }
 
+export function buildTurnEntry(opts: {
+  sessionId: string
+  turnId: string
+  state: DurableTurnState
+  prompt?: string
+  querySource?: string
+  terminalReason?: string
+  detail?: string
+  timestamp?: string
+}): TranscriptTurnEntry {
+  const turnId = normalizeDurableTurnId(opts.turnId)
+  return {
+    type: 'turn',
+    sessionId: opts.sessionId,
+    turnId,
+    state: opts.state,
+    timestamp: opts.timestamp ?? nowIso(),
+    ...(opts.prompt !== undefined ? { prompt: opts.prompt } : {}),
+    ...(opts.querySource?.trim()
+      ? { querySource: opts.querySource.trim() }
+      : {}),
+    ...(opts.terminalReason?.trim()
+      ? { terminalReason: opts.terminalReason.trim() }
+      : {}),
+    ...(opts.detail?.trim() ? { detail: opts.detail.trim() } : {}),
+  }
+}
+
+/** 追加 DR0 turn lifecycle entry（不进模型链）。 */
+export async function appendTurnEntry(
+  file: string,
+  opts: {
+    sessionId: string
+    turnId: string
+    state: DurableTurnState
+    prompt?: string
+    querySource?: string
+    terminalReason?: string
+    detail?: string
+  },
+): Promise<TranscriptTurnEntry> {
+  const entry = buildTurnEntry(opts)
+  await appendTranscriptLine(file, entry)
+  return entry
+}
+
+/** 从 transcript 投影 turn；默认把 admitted/running 识别为 interrupted。 */
+export function projectDurableTurns(
+  entries: readonly TranscriptEntry[],
+  opts?: { recoverIncomplete?: boolean },
+): DurableTurnRecord[] {
+  const events: DurableTurnEvent[] = []
+  for (const entry of entries) {
+    if (entry.type !== 'turn') continue
+    events.push({
+      turnId: entry.turnId,
+      state: entry.state,
+      timestamp: entry.timestamp,
+      ...(entry.prompt !== undefined ? { prompt: entry.prompt } : {}),
+      ...(entry.querySource ? { querySource: entry.querySource } : {}),
+      ...(entry.terminalReason
+        ? { terminalReason: entry.terminalReason }
+        : {}),
+      ...(entry.detail ? { detail: entry.detail } : {}),
+    })
+  }
+  return projectDurableTurnEvents(events, opts)
+}
+
 /** entries 中全部 file_diff（保持文件顺序） */
 export function fileDiffsFromTranscriptEntries(
   entries: TranscriptEntry[],
@@ -598,6 +688,7 @@ export async function rewriteTranscriptFromMessages(
     removed: number
     turn?: number
   }> = []
+  let preservedTurns: TranscriptTurnEntry[] = []
   if (opts && 'title' in opts && opts.title !== undefined) {
     preservedTitle = normalizeSessionTitle(opts.title)
   }
@@ -633,6 +724,19 @@ export async function rewriteTranscriptFromMessages(
         ...(d.op ? { op: d.op } : {}),
         ...(d.turn != null ? { turn: d.turn } : {}),
       }))
+      preservedTurns = entries
+        .filter((entry): entry is TranscriptTurnEntry => entry.type === 'turn')
+        .map((entry) => ({ ...entry }))
+    } catch {
+      /* 新文件或不可读 */
+    }
+  }
+  if (preservedTurns.length === 0) {
+    try {
+      const { entries } = await loadTranscriptFile(filePath)
+      preservedTurns = entries
+        .filter((entry): entry is TranscriptTurnEntry => entry.type === 'turn')
+        .map((entry) => ({ ...entry }))
     } catch {
       /* 新文件或不可读 */
     }
@@ -697,6 +801,9 @@ export async function rewriteTranscriptFromMessages(
         }),
       ),
     )
+  }
+  for (const turn of preservedTurns) {
+    lines.push(JSON.stringify(turn))
   }
   const body = lines.length ? lines.join('\n') + '\n' : ''
   const tmp = path.join(
@@ -1028,6 +1135,33 @@ export async function loadTranscriptFile(
           message: cloneMessage(o.message),
           uuid: typeof o.uuid === 'string' ? o.uuid : undefined,
         })
+        continue
+      }
+      if (o.type === 'turn') {
+        if (
+          typeof o.turnId !== 'string' ||
+          !o.turnId.trim() ||
+          !isDurableTurnState(o.state)
+        ) {
+          continue
+        }
+        entries.push(
+          buildTurnEntry({
+            sessionId: typeof o.sessionId === 'string' ? o.sessionId : '',
+            turnId: o.turnId,
+            state: o.state,
+            timestamp:
+              typeof o.timestamp === 'string' ? o.timestamp : nowIso(),
+            ...(typeof o.prompt === 'string' ? { prompt: o.prompt } : {}),
+            ...(typeof o.querySource === 'string'
+              ? { querySource: o.querySource }
+              : {}),
+            ...(typeof o.terminalReason === 'string'
+              ? { terminalReason: o.terminalReason }
+              : {}),
+            ...(typeof o.detail === 'string' ? { detail: o.detail } : {}),
+          }),
+        )
         continue
       }
       if (o.type === 'compact_boundary') {

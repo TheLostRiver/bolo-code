@@ -3211,6 +3211,7 @@ export async function submitUserInput(
     maxTurns?: number
     querySource?: string
     signal?: AbortSignal
+    turnId?: string
   },
 ): Promise<SubmitUserInputResult> {
   const parsed = parseSlashLine(text)

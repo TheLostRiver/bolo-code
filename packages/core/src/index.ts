@@ -109,6 +109,8 @@ import {
   setSessionPersistMeta,
   appendSessionFileDiff,
   appendSessionSystemNote,
+  appendSessionTurnState,
+  hasDurableSessionPersistence,
   type SaveSessionOptions,
   type SessionScope,
   type SessionSnapshot,
@@ -119,7 +121,14 @@ import {
   resolveTranscriptPathFromJson,
   loadTranscriptFile,
   fileDiffsFromTranscriptEntries,
+  projectDurableTurns,
 } from './sessionTranscript.ts'
+import {
+  applyDurableTurnEvent,
+  normalizeDurableTurnId,
+  type DurableTurnRecord,
+  type DurableTurnState,
+} from './durableTurn.ts'
 import type { SessionUsage } from './sessionUsage.ts'
 import {
   cloneSessionUsage,
@@ -451,6 +460,8 @@ export {
   setSessionTitle,
   appendSessionSystemNote,
   appendSessionFileDiff,
+  appendSessionTurnState,
+  hasDurableSessionPersistence,
   type SessionSnapshot,
   type SessionScope,
   type SessionListItem,
@@ -468,6 +479,7 @@ export {
   appendSessionTitle,
   appendSystemNote,
   appendFileDiffEntry,
+  appendTurnEntry,
   dualWriteSessionTranscript,
   writeTranscriptAfterCompact,
   resolveTranscriptPathFromJson,
@@ -481,11 +493,13 @@ export {
   titleFromTranscriptEntries,
   systemNotesFromTranscriptEntries,
   fileDiffsFromTranscriptEntries,
+  projectDurableTurns,
   normalizeSessionTitle,
   normalizeSystemNoteText,
   buildTitleEntry,
   buildSystemNoteEntry,
   buildFileDiffEntry,
+  buildTurnEntry,
   scanTranscriptLite,
   DEFAULT_LITE_SCAN_BYTES,
   getTranscriptWriteState,
@@ -499,9 +513,20 @@ export {
   type TranscriptTitleEntry,
   type TranscriptSystemNoteEntry,
   type TranscriptFileDiffEntry,
+  type TranscriptTurnEntry,
   type TranscriptMetaInput,
   type TranscriptLiteScan,
 } from './sessionTranscript.ts'
+export {
+  DURABLE_TURN_STATES,
+  applyDurableTurnEvent,
+  isDurableTurnState,
+  normalizeDurableTurnId,
+  projectDurableTurnEvents,
+  type DurableTurnEvent,
+  type DurableTurnRecord,
+  type DurableTurnState,
+} from './durableTurn.ts'
 
 export type SessionEvent =
   | { type: 'phase'; phase: SessionPhase | string }
@@ -695,6 +720,8 @@ export type BoloSession = {
   cwd: string
   phase: SessionPhase
   messages: ChatMessage[]
+  /** DR0：由 transcript `turn` entries 投影；不进入模型 messages。 */
+  durableTurns: DurableTurnRecord[]
   /**
    * 权威 system 段（对照 HC systemPrompt）。
    * callModel 时由 prepareModelMessages 前缀；对话历史尽量不混入 system。
@@ -1053,6 +1080,7 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
     sessionStartedAtMs: Date.now(),
     fileDiffLog: [],
     diffTurn: 0,
+    durableTurns: [],
     hookDiagLog: createHookDiagLog(),
     postCompactReinjection: true,
     onEvent: opts.onEvent ?? (() => {}),
@@ -1696,6 +1724,55 @@ export async function refreshSessionPathScopedRules(
 /**
  * UserPromptSubmit → queryLoop（对照：用户输入处理后进入 query）
  */
+function applySessionTurnState(
+  session: BoloSession,
+  opts: {
+    turnId: string
+    state: DurableTurnState
+    timestamp?: string
+    prompt?: string
+    querySource?: string
+    terminalReason?: string
+    detail?: string
+  },
+): void {
+  session.durableTurns = applyDurableTurnEvent(session.durableTurns, {
+    turnId: opts.turnId,
+    state: opts.state,
+    timestamp: opts.timestamp ?? nowIso(),
+    ...(opts.prompt !== undefined ? { prompt: opts.prompt } : {}),
+    ...(opts.querySource ? { querySource: opts.querySource } : {}),
+    ...(opts.terminalReason
+      ? { terminalReason: opts.terminalReason }
+      : {}),
+    ...(opts.detail ? { detail: opts.detail } : {}),
+  })
+}
+
+async function persistSessionTurnState(
+  session: BoloSession,
+  opts: {
+    turnId: string
+    state: DurableTurnState
+    prompt?: string
+    querySource?: string
+    terminalReason?: string
+    detail?: string
+  },
+): Promise<void> {
+  const entry = await appendSessionTurnState(session, opts)
+  applySessionTurnState(session, {
+    ...opts,
+    timestamp: entry?.timestamp,
+  })
+}
+
+function durableStateForTerminal(terminal: Terminal): DurableTurnState {
+  if (terminal.reason === 'completed') return 'completed'
+  if (terminal.reason === 'aborted') return 'aborted'
+  return 'error'
+}
+
 export async function submitPrompt(
   session: BoloSession,
   prompt: string,
@@ -1703,8 +1780,29 @@ export async function submitPrompt(
     maxTurns?: number
     querySource?: string
     signal?: AbortSignal
+    /** DR0：调用方提供幂等键；省略时本地生成。 */
+    turnId?: string
   },
 ): Promise<Terminal> {
+  let turnId: string
+  try {
+    turnId = normalizeDurableTurnId(options?.turnId ?? newId('turn'))
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    const terminal: Terminal = { reason: 'error', detail }
+    emit(session, { type: 'error', message: detail })
+    emit(session, { type: 'done', terminal })
+    return terminal
+  }
+  const existing = session.durableTurns.find((turn) => turn.turnId === turnId)
+  if (existing) {
+    const detail = `duplicate turnId "${turnId}" (state=${existing.state})`
+    const terminal: Terminal = { reason: 'error', detail }
+    emit(session, { type: 'error', message: detail })
+    emit(session, { type: 'done', terminal })
+    return terminal
+  }
+
   setPhase(session, 'running')
 
   const submit = await runHooks(
@@ -1741,6 +1839,46 @@ export async function submitPrompt(
 
   let userContent = prompt
   if (submit.injectText) userContent = `${prompt}\n\n${submit.injectText}`
+  const querySource = options?.querySource ?? 'repl_main_thread'
+
+  try {
+    await persistSessionTurnState(session, {
+      turnId,
+      state: 'admitted',
+      prompt: userContent,
+      querySource,
+    })
+    await persistSessionTurnState(session, {
+      turnId,
+      state: 'running',
+    })
+  } catch (error) {
+    const detail = `durable turn admission failed: ${
+      error instanceof Error ? error.message : String(error)
+    }`
+    if (session.durableTurns.some((turn) => turn.turnId === turnId)) {
+      try {
+        await persistSessionTurnState(session, {
+          turnId,
+          state: 'error',
+          terminalReason: 'error',
+          detail,
+        })
+      } catch {
+        applySessionTurnState(session, {
+          turnId,
+          state: 'error',
+          terminalReason: 'error',
+          detail,
+        })
+      }
+    }
+    emit(session, { type: 'error', message: detail })
+    setPhase(session, 'ready')
+    const terminal: Terminal = { reason: 'error', detail }
+    emit(session, { type: 'done', terminal })
+    return terminal
+  }
 
   // CX8：ultrathink 本轮 plan（不写 session.effortLevel；无遥测）
   const ultraPlan = planUltrathinkTurn(session, userContent)
@@ -1757,56 +1895,96 @@ export async function submitPrompt(
   if (!session.fileDiffLog) session.fileDiffLog = []
   session.messages.push({ role: 'user', content: userContent })
 
-  // path-scope：发模型前按对话中的 active paths 刷新 rules 段
-  await refreshSessionPathScopedRules(session, { extraText: userContent })
+  let terminal: Terminal
+  try {
+    // path-scope：发模型前按对话中的 active paths 刷新 rules 段
+    await refreshSessionPathScopedRules(session, { extraText: userContent })
 
-  const terminal = await queryLoop({
-    sessionId: session.id,
-    cwd: session.cwd,
-    hooks: session.hooks,
-    messages: session.messages,
-    systemPromptSections: session.systemPromptSections,
-    deps: session.deps,
-    permissionMode: session.permissionMode,
-    askPermission: session.askPermission,
-    permissionRules: session.permissionRules,
-    classifyPermission: session.classifyPermission,
-    autoModeState: session.autoModeState,
-    sessionRef: session,
-    onAutoClassifyAudit: async (note) => {
-      try {
-        await appendSessionSystemNote(session, note.text, { kind: note.kind })
-      } catch {
-        // 审计落盘失败不阻断主路径
-      }
-    },
-    maxToolResultChars: session.maxToolResultChars,
-    skills: session.skills,
-    tools:
-      session.tools ??
-      createDefaultTools(session.agentDefinitions, {
-        agentPolicy: session.agentPolicy,
-      }),
-    agentDefinitions: session.agentDefinitions,
-    backgroundStore: session.backgroundAgents,
-    agentPolicy: session.agentPolicy,
-    spawnDepth: 0,
-    maxTurns: options?.maxTurns ?? 8,
-    querySource: options?.querySource ?? 'repl_main_thread',
-    maxPtlRetries: session.maxPtlRetries,
-    usage: session.usage,
-    model: session.model,
-    effortLevel: turnEffort,
-    promptCacheState: session.promptCacheState,
-    persistReasoning: session.persistReasoning === true,
-    midTurnAutoCompact: true,
-    tryMidTurnCompact: session.tryMidTurnCompact,
-    signal: options?.signal,
-    onEvent: (e) => mapLoopEvent(session, e),
-  })
+    terminal = await queryLoop({
+      sessionId: session.id,
+      cwd: session.cwd,
+      hooks: session.hooks,
+      messages: session.messages,
+      systemPromptSections: session.systemPromptSections,
+      deps: session.deps,
+      permissionMode: session.permissionMode,
+      askPermission: session.askPermission,
+      permissionRules: session.permissionRules,
+      classifyPermission: session.classifyPermission,
+      autoModeState: session.autoModeState,
+      sessionRef: session,
+      onAutoClassifyAudit: async (note) => {
+        try {
+          await appendSessionSystemNote(session, note.text, { kind: note.kind })
+        } catch {
+          // 审计落盘失败不阻断主路径
+        }
+      },
+      maxToolResultChars: session.maxToolResultChars,
+      skills: session.skills,
+      tools:
+        session.tools ??
+        createDefaultTools(session.agentDefinitions, {
+          agentPolicy: session.agentPolicy,
+        }),
+      agentDefinitions: session.agentDefinitions,
+      backgroundStore: session.backgroundAgents,
+      agentPolicy: session.agentPolicy,
+      spawnDepth: 0,
+      maxTurns: options?.maxTurns ?? 8,
+      querySource,
+      maxPtlRetries: session.maxPtlRetries,
+      usage: session.usage,
+      model: session.model,
+      effortLevel: turnEffort,
+      promptCacheState: session.promptCacheState,
+      persistReasoning: session.persistReasoning === true,
+      midTurnAutoCompact: true,
+      tryMidTurnCompact: session.tryMidTurnCompact,
+      signal: options?.signal,
+      onEvent: (e) => mapLoopEvent(session, e),
+    })
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    terminal = { reason: 'error', detail }
+    emit(session, { type: 'error', message: detail })
+    emit(session, { type: 'done', terminal })
+  }
 
   if (session.phase !== 'ready') setPhase(session, 'ready')
-  await maybeAutoSaveSession(session)
+  const durable = hasDurableSessionPersistence(session)
+  let messagesSaved = !durable
+  if (durable) {
+    try {
+      messagesSaved = await maybeAutoSaveSession(session, {
+        throwOnError: true,
+      })
+    } catch {
+      messagesSaved = false
+    }
+  }
+  const turnTerminal = {
+    turnId,
+    state: durableStateForTerminal(terminal),
+    terminalReason: terminal.reason,
+    ...(terminal.detail ? { detail: terminal.detail } : {}),
+  }
+  if (messagesSaved) {
+    try {
+      await persistSessionTurnState(session, turnTerminal)
+    } catch (error) {
+      applySessionTurnState(session, turnTerminal)
+      emit(session, {
+        type: 'error',
+        message: `durable turn terminal write failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      })
+    }
+  } else {
+    // 磁盘保持 running，resume 将其识别为 interrupted；本进程仍知道真实终态。
+    applySessionTurnState(session, turnTerminal)
+  }
   return terminal
 }
 
@@ -1963,10 +2141,11 @@ export async function resumeSession(
     }
   }
 
-  // D6：从 transcript 恢复 file_diff 摘要 → fileDiffLog
+  // D6/DR1：从 transcript 恢复 file_diff 与 durable turn 投影
   try {
     const tp = resolveTranscriptPathFromJson(filePath)
     const { entries } = await loadTranscriptFile(tp)
+    session.durableTurns = projectDurableTurns(entries)
     const diffs = fileDiffsFromTranscriptEntries(entries)
     if (diffs.length) {
       session.fileDiffLog = diffs.map((d) => ({
