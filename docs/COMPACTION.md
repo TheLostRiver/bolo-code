@@ -421,7 +421,20 @@ type CompactSummarizer = (req: {
 | **已接线** | `/context` section 角色标签 + memory 预算提示（CP-OBS）；**不做** cached MC |
 | **已接线** | **F-CP-CACHED-MC** `cachedMicrocompactMessages`（content-clear + cacheFriendly 标记；无 API cache_edits） |
 | **已接线** | **F-CP-SNIP-UUID** 边界 `snip_id=` 可解析（非完整 SnipTool 回放） |
-| **OUT / 限制** | 真 tokenizer · 完整 SnipTool UUID 链 · 厂商 cache_edits API |
+| **C 轨（规划）** | 见 [ROADMAP.md §8](./ROADMAP.md)：C0 规格 · **C1 keep 轮次** · **C2 usage 阈值** · **C3 mid-turn** · **C4 再注入** · C5 UX；目标日用 **~92–95%** |
+| **OUT / 限制** | 真 tokenizer · 完整 SnipTool UUID 链 · 厂商 cache_edits API · partial/remote/session-memory（非 C 轨） |
+
+### C 轨日用缺口（相对已接线主路径）
+
+| 缺口 | 阶段 | 说明 |
+|------|------|------|
+| keep 按 **user 轮次**（非 raw 条数） | **C1** | 续作质量；tool 对不可拆 |
+| auto 计数 **优先 session usage** | **C2** | 有 usage 用 usage，否则 estimate |
+| tool 批后 **再判一次 auto** | **C3** | 每 turn ≤1；与熔断共用 |
+| post-compact **短段再注入** | **C4** | catalog/rules 提示，可关 |
+| `/context` 展示来源与策略 | **C5** | usage\|estimate · keep 配置 |
+
+**实施顺序：** C0→C1→C2→C3→C4→C5。禁止在 C 轨内用 `slice(-N)` 冒充 full。
 
 ---
 

@@ -21,12 +21,13 @@
 | **CLI TUI（壳）** | **~70–80%** | 文本框布局/picker/主题；**非**真 React Ink |
 | **Electron GUI** | **~55–65%** | 壳 + 流式 + 权限 + 设置 |
 | **Hooks · 日用契约** | **~96–98%** | **H0–H5 已落地**（SessionEnd · exit 语义 · updatedInput · `/hooks recent`）；trust/UI 菜单后置 |
+| **Compact · 日用管道** | **~82–88%** | full/auto/snip/micro/PTL/hooks 已真管道；**C 轨**打磨 keep/usage/mid-turn/再注入 → 目标 **~92–95%** |
 | **产品整体（相对 HC）** | **~70–85%** | 日用高；UI 全家桶另计 |
 
-**主线已闭环：** headless 日用 → FULL → M4 → sandbox/OAuth/settings → **Diff D0–D7** · **U0–U4**。
+**主线已闭环：** headless 日用 → FULL → M4 → sandbox/OAuth/settings → **Diff D0–D7** · **U0–U4** · **Hooks H0–H5**。
 
-**开放轨（下一刀）：**  
-U5 可选真·Ink/IDE · Hooks trust/managed（不对齐日用）· HC 扩事件。
+**开放轨（下一刀 · 当前着重）：**  
+**C 轨 · Compact 日用打磨**（§8）· U5 可选真·Ink/IDE · Hooks trust/managed（后置）。
 
 ---
 
@@ -156,6 +157,7 @@ apps/desktop       消费同一 DiffViewModel                 （U3）
 | Diff 日用契约 D0–D7 | ✅ |
 | Diff 交互 UI U0–U4 | ✅（U5 可选） |
 | Hooks 日用 11 事件 + exit 语义 | ✅ **H0–H5** |
+| Compact 日用管道打磨 | 📋 **C 轨**（§8 · 当前着重） |
 | 无遥测 | ✅ |
 
 ---
@@ -172,10 +174,11 @@ apps/desktop       消费同一 DiffViewModel                 （U3）
 | **M-Diff-A（D0–D7）** | ✅ | 日用文件 diff 契约 |
 | **M-Diff-B（U0–U4）** | ✅ U0–U4 | 交互 diff UI 主路径收口；U5 可选 |
 | **M-Hooks（H0–H5）** | ✅ H0–H5 | SessionEnd + exit + updatedInput + `/hooks recent` |
+| **M-Compact（C0–C5）** | 📋 规划 · **当前着重** | keep 轮次 · usage 阈值 · mid-turn · 再注入；见 §8 |
 | 官方市场 / 遥测 | 🚫 | 永不 |
 
 **一句话：**  
-主路径与 **Diff 日用/交互主路径** 已收口。下一刀产品横切：**Hooks H 轨**（对齐 Codex 11 事件，先补 **SessionEnd**）。
+主路径、Diff、Hooks 日用已收口。**下一刀：Compact C 轨**（日用 82–88% → **~92–95%**；不追 HC/Codex 全家桶）。
 
 ---
 
@@ -183,8 +186,9 @@ apps/desktop       消费同一 DiffViewModel                 （U3）
 
 | 文档 | 用途 |
 |------|------|
-| 本文件 | 总路线 + U 轨 + **H 轨** |
-| `HOOKS.md` | Hook 契约真源（实现前先改这里） |
+| 本文件 | 总路线 + U / H / **C 轨** |
+| `COMPACTION.md` | Compact 契约真源（实现前先改这里） |
+| `HOOKS.md` | Hook 契约 |
 | `FILE_DIFF_SPEC.md` | Diff 契约与阶段 |
 | `TUI.md` | CLI TUI 壳与 U 挂载 |
 | `ARCHITECTURE.md` | 架构 |
@@ -327,3 +331,164 @@ PostToolUse exit 2
 | [HOOKS.md](./HOOKS.md) | 事件/exit/挂载 **实现真源** |
 | [ENGINEERING_PRINCIPLES.md](./ENGINEERING_PRINCIPLES.md) | 扩事件须先改 HOOKS |
 | [AGENT_LOOP.md](./AGENT_LOOP.md) | loop 与 Stop 交叉（实现时同步） |
+
+---
+
+## 8. Compact 轨（C0–C5 · **规划 · 当前着重**）
+
+> **口径：** 日用 = 摘要真管道 + 阈值/熔断可依赖 + 续作质量（keep）+ 触发时机（usage/mid-turn）+ 压后上下文不丢关键段。  
+> **不对齐 100%：** HC partial / session-memory / cached API edits / reactive 全家 · Codex remote compact / window id / 换模触发。  
+> **对标：** HC `compactConversation` + auto/snip/micro/PTL 语义；Codex 仅借「阈值与 mid-turn 意图」，不抄 remote。
+
+### 8.1 现状水位（评估后）
+
+| 项 | 状态 |
+|----|------|
+| Full compact + Pre/Post hooks + 禁止 slice 冒充 | ✅ |
+| Auto 阈值（chars 启发）+ 熔断 + env + `/autocompact` | ✅ |
+| Snip 最小 + micro content-clear + prepare 链 | ✅ |
+| PTL 截断重试（loop + summarizer 副本） | ✅ |
+| jsonl `compact_boundary` + resume R1 | ✅ |
+| **messagesToKeep 按 user 轮次 / token** | ❌ 现 `keepRecentMessageCount` 按条 |
+| **auto 阈值接 session usage（有则用）** | ❌ 仅启发式 |
+| **工具环中途接近阈值再 full 一次** | ❌ 主要靠 PTL |
+| **post-compact 最小再注入**（技能 catalog / 关键提示） | 弱 / ❌ |
+| partial / remote / session memory / 真 tokenizer | 后置 |
+
+**粗估：** 日用 **~82–88%** → C 轨目标 **~92–95%**；vs HC 全家桶 / Codex 窗口机另计。
+
+### 8.2 目标与验收（C 轨完成定义）
+
+1. Full compact 默认 **按 user 轮次** 保留尾部（可配）；禁止无摘要只 keep  
+2. Auto 阈值：**优先**最近 API `input`/`total` usage（若 session 有），否则回落 `estimateTokens`  
+3. 主 loop 在 **tool 批之后、下一 callModel 前** 可再判一次 auto（mid-turn 最小，有预算防连打）  
+4. compact 成功后可选再注入 **短** skill catalog / path-rules 提示（不灌全文、不拆 cache-stable 前缀策略）  
+5. `/context` 展示：阈值来源（usage vs estimate）、keep 策略、上次 compact 摘要长度  
+6. 单测绿；失败不毁 messages；**无遥测**  
+7. `docs/COMPACTION.md` 为真源
+
+### 8.3 架构（职责）
+
+```text
+packages/compact     纯：keep 切分 · 阈值 · pressure · full/snip/micro/PTL
+packages/core        挂：prepare 链 · compactSession · queryLoop mid 判 · 再注入
+packages/cli         /context · /compact 文案消费 pressure + 策略说明
+apps/desktop         可选展示 compact 状态（不大改壳）
+```
+
+**禁止：** core 内 `slice(-N)` 冒充 full；无 summarizer silent truncate；把大 transcript 塞回 model message；遥测。
+
+### 8.4 阶段切片（实施顺序）
+
+| 阶段 | 交付 | 优先级 | 状态 |
+|------|------|--------|------|
+| **C0** | 规格对齐：本 § + COMPACTION 日用缺口表；验收清单 | P0 | 📋 |
+| **C1** | **messagesToKeep 按 user 轮次**（可选 token 上限）；manual/auto 默认可配 | P0 | 📋 |
+| **C2** | **usage 感知阈值**：`shouldAutoCompact` 可读 last usage；无 usage 则启发 | P0 | 📋 |
+| **C3** | **mid-turn 一次**：tool drain 后若超阈值且未本 turn compact → 试 auto full（熔断共用） | P1 | 📋 |
+| **C4** | **post-compact 再注入最小**：catalog 短段 / rules 提示；可关 | P1 | 📋 |
+| **C5** | `/context`·`/compact` 诊断加深 + 回归测 + 水位 ~92–95% | P2 | 📋 |
+| 后置 | partial · remote · session memory · 真 tokenizer · cache_edits API | — | 🚫 非本轨 |
+
+**顺序硬约束：** **C0 文档 → C1 keep → C2 usage → C3 mid-turn → C4 再注入 → C5 UX/测**。  
+不在 C1/C2 完成前做 partial/remote。
+
+### 8.5 C1 · keep 轮次（契约草案）
+
+```ts
+// packages/compact — 纯函数
+type KeepTailOptions = {
+  /** 保留最近 N 个 user 开启的 turn（含其后 assistant/tool）；默认建议 2–4 */
+  keepRecentUserTurns?: number
+  /** 可选：keep 段 token 上限，超出从 keep 头再裁 */
+  keepMaxTokens?: number
+}
+
+/** 切点须在 user 边界，不拆开 tool_use/tool_result 对 */
+function splitMessagesForCompactKeep(
+  messages: ChatMessage[],
+  opts?: KeepTailOptions,
+): { toSummarize: ChatMessage[]; messagesToKeep: ChatMessage[] }
+```
+
+- `runFullCompact` / `compactSession` 默认走轮次 keep（或显式 `keepRecentUserTurns`）  
+- 旧 `keepRecentMessageCount`：**兼容**，文档标 deprecated  
+- 安全：tool_use 与对应 tool 结果不得分到 summarize/keep 两侧
+
+### 8.6 C2 · usage 阈值
+
+```ts
+shouldAutoCompact({
+  tokenCount,           // 启发
+  usageInputTokens?,    // 最近成功 call 的 input/total（sessionUsage）
+  contextWindowTokens,
+  enabled,
+  consecutiveFailures,
+  querySource,
+  env?,
+})
+// 有效计数 = usageInputTokens ?? tokenCount
+```
+
+- 有 provider usage 时 auto 更贴真实窗  
+- `/context` 标明 `pressure source: usage | estimate`
+
+### 8.7 C3 · mid-turn（最小）
+
+```text
+queryLoop:
+  … tool drain …
+  if auto on && shouldAutoCompact && !compactedThisTurn
+    → compactSession(auto) 一次
+    → 写回 messages；标记 compactedThisTurn
+  → 下一轮 callModel
+```
+
+- 与 turn 初 prepare 的 auto **共用熔断**  
+- 每 turn 最多 **一次** mid full（防死循环）  
+- 失败：保持 messages，继续（同现 auto）
+
+### 8.8 C4 · 再注入（最小）
+
+compact 成功且非 override system 时：
+
+- 可选刷新 **短** skill catalog 段（可复用 `replaceSkillCatalogSection`）  
+- 不强制重跑全量 memory 正文  
+- 开关：`postCompactReinjection?: boolean`（与现 system 装配一致即可）
+
+### 8.9 明确不做（C 轨内）
+
+- 遥测 / GrowthBook  
+- HC partial compact / session memory compact  
+- Codex remote compaction v1/v2 / window_id 状态机  
+- 厂商 `cache_edits` API（本地 cached-MC 标记已有即可）  
+- 真 tokenizer 依赖  
+
+### 8.10 测试与提交
+
+| 测试 | 覆盖 |
+|------|------|
+| 扩 `test-compact` / 新建 `test-compact-c-track` | keep 轮次边界 + tool 对不拆 |
+| | usage 优先于 estimate 触发 |
+| | mid-turn 每 turn 最多一次 + 熔断 |
+| | 再注入不炸、可关 |
+| 回归 | `test-auto-compact` · `test-ptl-retry` · `test-snip` · `test-microcompact` |
+
+提交建议：
+
+1. `docs: plan compact C-track waterline`（本规划）  
+2. `feat: compact C1 keep by user turns`  
+3. `feat: compact C2 usage-aware auto threshold`  
+4. `feat: compact C3-C4 mid-turn and reinjection`  
+5. `docs+test: compact C5 waterline`
+
+只 stage 本轨；**勿提交 `.bolo-tmp/`**。
+
+### 8.11 文档入口
+
+| 文档 | 角色 |
+|------|------|
+| 本文件 §8 | C 轨总规划与顺序 |
+| [COMPACTION.md](./COMPACTION.md) | 管道/阈值/**实现真源** |
+| [AGENT_LOOP.md](./AGENT_LOOP.md) | prepare / mid-turn 交叉 |
+| [PROMPT_CACHE.md](./PROMPT_CACHE.md) | 稳定前缀 vs 再注入 |
