@@ -985,9 +985,71 @@ export function projectDurableTasks(
 export function projectDurableResolutions(
   entries: readonly TranscriptEntry[],
 ): DurableResolutionRecord[] {
+  const targetKey = (
+    sessionId: string,
+    entityKind: DurableResolutionEntityKind,
+    entityId: string,
+  ): string => `${sessionId}\0${entityKind}\0${entityId}`
+
+  // resolution 是外部 JSONL 输入。先以实际可投影的 lifecycle 建立引用表，
+  // 避免 orphan/cross-session/kind-mismatch 行使整个 runtime snapshot 失效。
+  const turnSessions = new Map<string, string | null>()
+  for (const entry of entries) {
+    if (entry.type !== 'turn') continue
+    if (!turnSessions.has(entry.turnId)) {
+      turnSessions.set(entry.turnId, entry.sessionId)
+      continue
+    }
+    if (turnSessions.get(entry.turnId) !== entry.sessionId) {
+      turnSessions.set(entry.turnId, null)
+    }
+  }
+
+  const targets = new Map<
+    string,
+    DurableTurnState | DurableControlState | DurableTaskState
+  >()
+  const projectedTurnKeys = new Set<string>()
+  for (const turn of projectDurableTurns(entries)) {
+    const sessionId = turnSessions.get(turn.turnId)
+    if (!sessionId) continue
+    const key = targetKey(sessionId, 'turn', turn.turnId)
+    projectedTurnKeys.add(key)
+    targets.set(key, turn.state)
+  }
+  for (const control of projectDurableControls(entries)) {
+    targets.set(
+      targetKey(control.sessionId, 'control', control.controlId),
+      control.state,
+    )
+  }
+  for (const task of projectDurableTasks(entries)) {
+    targets.set(
+      targetKey(task.sessionId, 'task', task.taskId),
+      task.state,
+    )
+  }
+
   const events: DurableResolutionEvent[] = []
   for (const entry of entries) {
     if (entry.type !== 'resolution') continue
+    if (
+      targets.get(
+        targetKey(entry.sessionId, entry.entityKind, entry.entityId),
+      ) !== 'interrupted'
+    ) {
+      continue
+    }
+    if (
+      entry.action === 'retry_safe' &&
+      (!entry.replacementId ||
+        entry.replacementId === entry.entityId ||
+        !projectedTurnKeys.has(
+          targetKey(entry.sessionId, 'turn', entry.replacementId),
+        ))
+    ) {
+      continue
+    }
     events.push({
       resolutionId: entry.resolutionId,
       sessionId: entry.sessionId,
