@@ -68,6 +68,23 @@ tryAcquire(sessionId, turnId)
 - coordinator/lease 是运行时句柄，不写入 JSON/JSONL；resume 会重新注入默认或调用方指定的 coordinator。
 - DR2A 不提供跨进程文件锁，也不实现 queue/steer/interrupt；这些属于 DR2B–DR4。
 
+#### DR2B1 control intent（进程内契约）
+
+```text
+requestControl(controlId, kind, sessionId, expectedTurnId, ...)
+  ├─ steer     → pending → safe boundary → promoted
+  ├─ interrupt → promoted(interrupt_signal)
+  └─ queue     → pending(active) | ready(idle)
+                         → turn terminal → ready → FIFO take → promoted
+```
+
+- `steer` / `interrupt` 必须命中 active `turnId`；stale caller 不能控制新 turn。
+- 同一 `controlId` + 同 payload 重试幂等；不同 payload fail-closed。
+- queue/steer 在 promotion 前可取消；未使用 steer 在 active turn 释放时 cancelled。
+- `after_provider` / `before_tools` 等会破坏 assistant-tool pairing 的位置不 promotion steer。
+- interrupt 目前先产生 lease-local signal；DR2B2 接入 queryLoop 后才成为完整运行时动作。
+- controls 暂为进程内投影，不写 transcript；崩溃恢复与 compact 保留规则归 DR2C。
+
 ## 2. 快照格式（version 1，只读兼容）
 
 单文件 JSON（旧路径 / `writeJsonSnapshot`），字段包括：
