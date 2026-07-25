@@ -29,6 +29,9 @@
 | `/turn status` | 显示当前进程 coordinator `idle/running`、active turn 与 live control 历史（pending/ready/promoted/cancelled） |
 | `/turn steer <text>` · `/turn interrupt` | 自动携带 snapshot 的 expected active turn；stale/no-active 由 core fail-closed |
 | `/turn queue <text>` · `/turn cancel <controlId>` | active 时 pending、idle 时 ready；REPL FIFO drain；pending/ready 可取消；durable 写成功后才交给执行器 |
+| `/agents` · `/agents status` | 列 subagent 类型/来源；`status` 显示后台 queued/running/done/error/aborted/interrupted 计数 |
+| `/bg` · `/bg status` | 显示后台 taskId、状态、完成时间、usage/worktree 与持久化 warning |
+| `/bg cancel <taskId>` | 只取消尚未启动的 queued task；running/terminal/未知 id 均 fail-closed |
 | `/doctor` · `/status` | 本地诊断：node/platform、cwd/id/**provider**/mode/model/effort、messages/sections、tools/skills/agent types、**plugins(+warnings)**、**memory user/project 路径**、**mcp 连接数 + 失败摘要**、usage、autoCompact/maxPtlRetries、`getBoloHomeDir()`；无遥测；`/status` 为隐藏别名 |
 | `/memory` · `/memory path` · `/memory topics` | 跨会话 **MEMORY.md**：user/project 路径、开关、预览、topic 列表（见 `docs/MEMORY.md`） |
 | `/mcp` · `/mcp status` · `/mcp tools` | 已连接 MCP：**transport / status / live / caps / 脱敏 endpoint**；`status` 含 **failures + configWarnings**；`tools` 列 `mcp__server__tool` |
@@ -76,6 +79,9 @@ REPL 额外：`/exit` `/quit` 由 CLI 处理（退出循环，不进总线）。
 - resume 与新会话的 readline 均经 `runOnePrompt` → `submitUserInput`。
 - Ctrl-C 优先向 coordinator active turn 提交 durable interrupt；REPL 在询问新输入前持久化 queue promotion，再透传原 `turnId/querySource`。
 - 持久化写失败时 queue/steer fail-closed；已触发的 interrupt 会明确提示 persistence warning。重启不会自动重放 pending/ready control。
+- `agents.overflow: "queue"` 是真实 durable FIFO：queued 先写 admitted，取得 slot 时写 running；`/bg cancel` 会先移除 executable closure，再尝试写 result→aborted。
+- queued cancel 落盘失败会保留 warning，但任务不会在本进程启动；重启后 admitted/running 只恢复为 interrupted 诊断，不重建 queue。
+- background result 只在 queryLoop 安全边界注入父消息；父 turn 已结束时延至下一 turn。同进程只 delivery 一次，resume 不自动重复注入。
 - 模块：`packages/core/src/slash.ts`；导出见 `@bolo/core`。
 
 ## 插件 slash（PL2 最小）

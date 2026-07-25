@@ -159,10 +159,19 @@ controlId + sessionId + kind + state + timestamp
 - completed/error/aborted 必须晚于 `task_result`；缺 result 的 terminal 在投影时 fail-closed 跳过。
 - result 或 terminal 写失败时不伪造成功：磁盘保留 running（可能已有 result），resume 保守投影 interrupted。
 - resume 填充 `session.durableTasks`，并恢复 `/bg` 的 done/error/aborted/interrupted 诊断；不会重启 worker 或自动 replay。
-- background completion 不异步修改父 `session.messages`。result 只保存在 transcript/store，父 turn safe-boundary promotion 属于 DR3B。
+- background completion 不异步修改父 `session.messages`。result 先保存在 transcript/store，再由 DR3B safe boundary delivery。
 - compact/shrink rewrite 保留完整 task/result lifecycle；旧 transcript 没有这两类 entry 时仍可读取。
 
-DR0–DR3A 已收口；当前 DR3B 将实现真正 overflow queue 与父 safe-boundary result promotion。
+### 1.5 Background Queue / Result Delivery（DR3B）
+
+- `overflow: "queue"` 在并发 cap 满时先写 task admitted，再进入进程内 FIFO；只有取得 slot 且 running 写成功才启动 worker。
+- queue 的可执行 closure 不落盘。重启时 queued(admitted)/running 都只投影 interrupted；不会重建 FIFO 或自动 replay。
+- `/bg cancel <taskId>` 只接受 queued task。执行 closure 先从 FIFO 删除，再写 task_result→aborted；落盘失败会显示 warning，但仍不执行该 task。
+- durable terminal 成功后，result id 进入进程内 delivery FIFO；queryLoop 只在 `before_provider | after_tools | after_compact | before_stop` 追加 `<background_task_result>`。
+- 若父 turn 已结束，result 等待下一 turn 的 `before_provider`；同一进程只 delivery 一次。resume 只恢复 `/bg` 诊断，不自动重复 delivery。
+- worktree path/保全摘要随 task_result 和 `/bg` 保留；dirty/untracked worktree 仍不得自动删除。
+
+DR0–DR3 已收口；当前 DR4A 将提炼 transport-neutral runtime protocol/view-model。
 
 ## 2. 快照格式（version 1，只读兼容）
 

@@ -173,9 +173,11 @@ fork 路径不走白名单表，直接 `parent.allTools` 去掉 `Agent`。
 
 **S8 最小权限：** `resolveSubagentPermissionMode(parent, def)` — 子 agent **不得**比父会话更宽（rank：`plan < default < acceptEdits < bypass`）。定义写 `bypass` 而父为 `default` 时实际仍用 `default`。
 
-**SA-PAR：** `/agents status` · `/bg` 展示 `total/running/done/error/aborted/interrupted` 计数与标签、finished 时间、可选 usage；resume 从 durable task 恢复诊断，但不重启 worker。
+**SA-PAR / DR3B：** `/agents status` · `/bg` 展示 `total/queued/running/done/error/aborted/interrupted` 计数与标签、finished 时间、usage/worktree；resume 从 durable task 恢复诊断，但不重启 worker。
 
-**P-SA-CAP：** 后台并发上限默认 **3**（`BOLO_MAX_BACKGROUND_AGENTS` 或 `store.maxConcurrent`）；超额拒绝并提示 `/agents status`。`overflow: queue` 的真正 FIFO/取消仍属 DR3B，当前不会伪装已排队。
+**P-SA-CAP：** 后台并发上限默认 **3**（`BOLO_MAX_BACKGROUND_AGENTS` 或 `store.maxConcurrent`）。`overflow: reject` 超额拒绝；`overflow: queue` 先 durable admitted 后 FIFO，slot 可用时自动 running。`/bg cancel <taskId>` 只取消 queued。
+
+**DR3B result delivery：** durable terminal 后只入 delivery FIFO；queryLoop 在 `before_provider / after_tools / after_compact / before_stop` 作为唯一消息 owner 注入 `<background_task_result>`。父 turn 已结束则等下一 turn；resume 只诊断，不重复 delivery。
 
 ## 完成定义
 
@@ -184,7 +186,8 @@ fork 路径不走白名单表，直接 `parent.allTools` 去掉 `Agent`。
 - **S0–S6：** 文档 + `runSubagent` + Agent 工具 + 测试绿
 - **S7：** `.bolo/agents` 发现、覆盖内置、resolve + `/agents` + `ensure*Layout` 的 `agents/`
 - **S8 最小：** 子权限不升级（`resolveSubagentPermissionMode`）
-- **S12 / DR3A：** 后台 subagent + fork 继承父 messages + durable task/result（父消息 promotion 仍属 DR3B）
+- **S12 / DR3A：** 后台 subagent + fork 继承父 messages + durable task/result
 - **SA-PAR / P-SA-CAP：** 后台可见性 + 并发上限
 - **DR3A：** 独立 task/result lifecycle、result-before-terminal、resume interrupted diagnostic、禁止异步父消息写入
+- **DR3B：** overflow FIFO/cancel、slot/cancel race closeout、safe-boundary single delivery、parent terminal race
 - **Usage 回卷 / maxTurns / disallowedTools / worktree cleanup：** 已接线（相对 HC 仍简化）

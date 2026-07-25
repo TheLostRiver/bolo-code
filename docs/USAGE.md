@@ -174,7 +174,7 @@ npm start
 | `/model` · `/model name` · `/model id/name` | 模型 |
 | `/effort` · `/effort high` | 推理强度（方言 wire） |
 | `/ultrathink [off\|tip\|turn]` | CX8 糖；**默认 off** |
-| `/agents` · `/bg` | subagent 类型与后台状态；resume 后显示 completed/error/aborted/interrupted 诊断 |
+| `/agents` · `/bg` · `/bg cancel <taskId>` | subagent 后台 FIFO/status；只取消 queued；resume 后显示 interrupted 诊断 |
 | `/turn status` | 当前 active turn 与 queue/steer/interrupt control 状态 |
 | `/turn steer <text>` · `/turn interrupt` | 在安全边界修正或取消当前 active turn |
 | `/turn queue <text>` · `/turn cancel <controlId>` | FIFO 排队下一轮；执行前取消 pending/ready control |
@@ -220,7 +220,7 @@ Bolo 里有两层「agent」概念，别混：
     "defaultModel": "inherit", // 子默认模型；inherit = 父会话 model
     "defaultEffort": "medium", // 子默认 effort
     "maxSpawnDepth": 0,        // 0 = 子不能再 spawn（默认防递归）
-    "overflow": "reject"       // 超额 reject；queue 真正排队在 DR3B
+    "overflow": "reject"       // 超额 reject；改 queue = durable FIFO
   }
 }
 ```
@@ -232,7 +232,7 @@ Bolo 里有两层「agent」概念，别混：
 | `defaultModel` | `inherit` | 也可 `BOLO_SUBAGENT_MODEL` 强制 |
 | `defaultEffort` | medium / 继承 | 也可 `BOLO_SUBAGENT_EFFORT` |
 | `maxSpawnDepth` | **`0`** | 全局：子默认不能再开 Agent |
-| `overflow` | `reject` | `BOLO_BACKGROUND_OVERFLOW`；当前 `queue` 只提示稍后重试，真正 FIFO/取消在 DR3B |
+| `overflow` | `reject` | `BOLO_BACKGROUND_OVERFLOW`；`queue` 先 admitted，slot 可用后 running；`/bg cancel` 只取消 queued |
 
 其它常用 env：
 
@@ -317,7 +317,8 @@ CLI：
 ```text
 /agents          # 活跃类型与来源
 /agents status   # 后台计数
-/bg              # 后台任务
+/bg              # queued/running/terminal 状态
+/bg cancel <id>  # 只取消尚未启动的 queued task
 ```
 
 主模型通过 **Agent 工具** 传 `prompt` + 可选 `subagent_type` / `fork` / `run_in_background` / `model` / `effort`。
@@ -406,6 +407,8 @@ CLI：
 - 重启后 pending/ready control 只恢复为 `interrupted` 诊断记录，不自动重新排队或重放；当前进程的 `/turn status` 仍只展示 live coordinator。
 - background `Agent` 使用独立 task lifecycle：worker 启动前写 admitted/running，完成时先写 result 再写 terminal；result/terminal 写失败不会伪造 completed。
 - resume 会把未完成 background task 显示为 `/bg` 的 interrupted 诊断，并恢复已完成摘要；不会重启 worker，也不会自动把 result 注入父消息或重放工具副作用。
+- `agents.overflow: "queue"` 会在 cap 满时建立 durable FIFO；queued 可用 `/bg cancel <taskId>` 取消。取消落盘失败会 warning，但任务仍从本进程 executable queue 移除。
+- background result 仅在主 queryLoop 安全边界进入 `<background_task_result>`；父 turn 已结束时等下一 turn。重启后只供 `/bg` 检查，不自动重复注入。
 
 ```bash
 npx bolo --list

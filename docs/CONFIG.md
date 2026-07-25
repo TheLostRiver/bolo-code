@@ -79,7 +79,7 @@ defaults
 - **Hooks**：数组合并（用户 + 项目 + 插件 contributes）  
 - **Skills 同 id**：bundled ← **extra**（可选）← user ← project ← plugin（见 [SKILLS.md](./SKILLS.md)）  
 - **Subagent 类型同名**（S7）：内置 ← 用户 `agents/*.md` ← 项目 `.bolo/agents/*.md`（见 [SUBAGENT.md](./SUBAGENT.md)）  
-- **Subagent 全局策略**（Spec v0）：`config.json` → `agents` 段（`enabled` / `maxConcurrent` / `defaultModel` / `defaultEffort` / `maxSpawnDepth`）；见 [SUBAGENT_SPEC.md](./SUBAGENT_SPEC.md)  
+- **Subagent 全局策略**（Spec v0）：`config.json` → `agents` 段（`enabled` / `maxConcurrent` / `defaultModel` / `defaultEffort` / `maxSpawnDepth` / `overflow`）；见 [SUBAGENT_SPEC.md](./SUBAGENT_SPEC.md)
 - **Plugins（PL1+PL2）**：扫 user/project `plugins/<id>/bolo.plugin.json`；合并 skills（默认 `skills/`）、hooks、mcp、**commands**（默认 `commands/*.md`）；会话内 `/plugins reload` 热刷新；**无**市场/远程安装
 
 ## 3. `config.json` 示例
@@ -107,6 +107,8 @@ defaults
   "foreignPluginRoots": []
 }
 ```
+
+`agents.overflow` 默认为 `"reject"`。设为 `"queue"` 后，并发 cap 满时任务会先 durable `admitted`，进入当前进程 FIFO，取得 slot 且 `running` 落盘成功后才启动。`/bg cancel <taskId>` 只取消 queued task；取消落盘失败会报告 warning，但任务仍从本进程可执行队列移除。重启不会恢复 executable queue：原 admitted/running task 只显示为 interrupted，绝不自动 replay。
 
 `extraSkillRoots`（**S-PORT-2 / IMPORT-S1**，可选）：旁路 skill 根目录列表（每根：`<id>/SKILL.md`）。**默认省略或 `[]` = 不扫描**（不静默加载 `~/.agents/skills` 等）。支持 `~` 与相对项目 cwd 的路径；user + project 数组合并去重。位次：bundled → **extra** → user → project → plugin。
 

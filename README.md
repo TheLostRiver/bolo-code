@@ -26,22 +26,22 @@
 | 层 | 粗估 | 说明 |
 |----|------|------|
 | Headless 核心 | ~80–88% | queryLoop · 权限 · tools · STE；partial stream fail-closed |
-| 会话 / CLI | ~88–94% | JSONL · new/resume 同构 runtime · `/turn` · durable controls/tasks · serialized transcript writes · Durable Runtime DR0–DR3A |
+| 会话 / CLI | ~89–95% | JSONL · new/resume 同构 runtime · `/turn` · durable controls/tasks · background FIFO/promotion · Durable Runtime DR0–DR3 |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
-| Subagent | ~87–93% | `config.agents` + `agents/*.md` · durable background result · worktree 成果保全 |
+| Subagent | ~89–95% | `config.agents` + `agents/*.md` · durable task/result · overflow FIFO/cancel · safe delivery · worktree 保全 |
 | 文件 Diff 日用 | ~95%+ | D0–D7 · U0–U4 |
 | Hooks 日用 | ~96–98% | H0–H5（含 SessionEnd） |
 | Compact 日用 | ~92–95% | C0–C5 |
 | **多 Provider 热切** | **~92–96%** | P0–P4.1 + CX7 Desktop |
 | **Effort 方言** | **~92–95%** | E0–E9 |
 | **Provider UX** | **~95–98%** | CX0–CX8（ultrathink 默认 off） |
-| Durable Runtime | DR0–DR3A ✅ | admission · recovery · 单 runner · durable control/task · crash/concurrency closeout |
+| Durable Runtime | DR0–DR3 ✅ | admission · recovery · 单 runner · durable control/task · background FIFO/promotion |
 | Electron GUI | ~65–75% | 壳 + 流式 + 权限 + Settings + 多 provider |
 | 相对 HC 全家桶 UI | 另计 | 不设 100% |
 
-**已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Runtime DR0–DR3A。
+**已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Runtime DR0–DR3。
 
-**当前主线：** Durable Runtime DR3B background queue + parent-boundary promotion；随后 DR4 protocol 与 AR1–AR5。
+**当前主线：** Durable Runtime DR4A versioned runtime protocol；随后 DR4B–C 与 AR1–AR5。
 
 **非阻塞开放轨：** Compact §8.9 · U5 真·Ink/IDE · adaptive thinking · Desktop 体验打磨。
 
@@ -106,7 +106,7 @@ npx bolo --resume <id>
 | `/help` | 命令列表 |
 | `/provider` · `/provider add` · `/provider use` | 后端热切 / preset |
 | `/model` · `/effort` · `/ultrathink` | 模型 · 推理强度 · CX8 糖 |
-| `/agents` · `/bg` | Subagent 类型与后台；resume 后含 completed/error/aborted/interrupted 诊断 |
+| `/agents` · `/bg` · `/bg cancel <taskId>` | Subagent 后台 FIFO/status；只取消 queued；resume 后含 interrupted 诊断 |
 | `/turn status` · `/turn queue` · `/turn interrupt` | turn/control 状态与安全控制 |
 | `/diff` · `/compact` · `/context` · `/cost` | Diff · 压缩 · 费用 |
 | `/permissions` · `/hooks` · `/doctor` | 权限 · Hooks · 诊断 |
@@ -141,7 +141,7 @@ npm start
   "defaultModel": "inherit",
   "defaultEffort": "medium",
   "maxSpawnDepth": 0,   // 0 = 子默认不能再 spawn
-  "overflow": "reject"
+  "overflow": "reject"  // 改为 queue：cap 满时 durable FIFO
 }
 ```
 
@@ -158,7 +158,7 @@ effort: high
 You are a careful reviewer. Do not modify files.
 ```
 
-内置：`explore` / `general` / `plan` / `fork`。CLI：`/agents`。  
+内置：`explore` / `general` / `plan` / `fork`。CLI：`/agents`、`/agents status`、`/bg`、`/bg cancel <taskId>`；cancel 只接受尚未启动的 queued task。
 
 **逐步说明与嵌套示例 → [docs/USAGE.md §5](docs/USAGE.md)** · 契约 [docs/SUBAGENT_SPEC.md](docs/SUBAGENT_SPEC.md)
 
