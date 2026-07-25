@@ -51,6 +51,23 @@
 - compact rewrite 保留 turn entries；turn entries、title、notes、file_diff 都不进入模型消息链。
 - 显式 in-memory session 可以无 transcript；CLI/workspace 的 autoSave 主路径提供上述 durable 保证。
 
+### 1.3 SessionCoordinator（DR2A）
+
+`submitPrompt` 在运行任何异步 hook/provider/tool 前，先向 `SessionCoordinator` 获取当前 `sessionId` 的 runner lease：
+
+```text
+tryAcquire(sessionId, turnId)
+  ├─ idle → running(owner=turnId) → submitPrompt → finally release
+  └─ busy → error(session runner busy); no hook/admission/message/provider/tool
+```
+
+- 默认 coordinator 在同一进程内共享；两个对象只要 `sessionId` 相同也不能并发跑 turn。
+- 不同 `sessionId` 使用独立 slot，可以并行。
+- busy 拒绝不覆盖 active session 的 phase，也不把被拒 prompt 写入 transcript/messages。
+- normal、hook blocked、provider error、abort、admission failure 都释放 lease；release 幂等。
+- coordinator/lease 是运行时句柄，不写入 JSON/JSONL；resume 会重新注入默认或调用方指定的 coordinator。
+- DR2A 不提供跨进程文件锁，也不实现 queue/steer/interrupt；这些属于 DR2B–DR4。
+
 ## 2. 快照格式（version 1，只读兼容）
 
 单文件 JSON（旧路径 / `writeJsonSnapshot`），字段包括：
