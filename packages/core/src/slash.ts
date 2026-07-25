@@ -4,6 +4,7 @@
  * 无遥测。不依赖 core/index 顶层导入（避免循环）。
  */
 
+import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { getBoloHomeDir } from '../../config/src/paths.ts'
@@ -84,6 +85,8 @@ export type SlashSession = {
   messages: ChatMessage[]
   systemPromptSections: string[]
   permissionMode: PermissionMode
+  /** DR2：/turn 只消费 core coordinator，不在 CLI 维护第二套状态。 */
+  coordinator?: import('./sessionCoordinator.ts').SessionCoordinator
   /** 会话 Always-allow；/allow 读写 */
   permissionRules?: SessionPermissionRules
   model?: string
@@ -851,6 +854,192 @@ function cmdContext(session: SlashSession, _args: string): SlashDispatchResult {
     formatUsageOneLiner(session.usage),
   )
   return { ok: true, message: lines.join('\n') }
+}
+
+function turnControlId(prefix: 'control' | 'turn'): string {
+  return `${prefix}_${randomUUID().replaceAll('-', '')}`
+}
+
+function shortTurnPrompt(prompt: string | undefined): string {
+  const value = (prompt ?? '').replace(/\s+/g, ' ').trim()
+  if (!value) return ''
+  return value.length > 72 ? `${value.slice(0, 71)}…` : value
+}
+
+function cmdTurn(session: SlashSession, args: string): SlashDispatchResult {
+  const coordinator = session.coordinator
+  if (!coordinator) {
+    return {
+      ok: false,
+      message: 'turn controls unavailable: session has no coordinator',
+    }
+  }
+
+  const raw = args.trim()
+  const firstSpace = raw.search(/\s/)
+  const action = (
+    raw
+      ? firstSpace < 0
+        ? raw
+        : raw.slice(0, firstSpace)
+      : 'status'
+  ).toLowerCase()
+  const rest =
+    raw && firstSpace >= 0 ? raw.slice(firstSpace).trim() : ''
+  const snapshot = coordinator.snapshot(session.id)
+
+  if (action === 'status') {
+    if (rest) {
+      return {
+        ok: false,
+        message:
+          'Usage: /turn status | steer <text> | interrupt | queue <text> | cancel <controlId>',
+      }
+    }
+    const lines = [
+      `Turn coordinator: ${snapshot.state}`,
+      `session: ${snapshot.sessionId}`,
+    ]
+    if (snapshot.state === 'running') {
+      lines.push(`active: ${snapshot.active.turnId}`)
+      if (snapshot.active.querySource) {
+        lines.push(`source: ${snapshot.active.querySource}`)
+      }
+    }
+    if (!snapshot.controls.length) {
+      lines.push('controls: (none)')
+    } else {
+      lines.push('controls:')
+      for (const control of snapshot.controls) {
+        lines.push(
+          [
+            `  ${control.controlId}`,
+            `${control.kind}/${control.state}`,
+            control.turnId ? `turn=${control.turnId}` : '',
+            control.expectedTurnId
+              ? `expected=${control.expectedTurnId}`
+              : '',
+            control.boundary ? `boundary=${control.boundary}` : '',
+            control.prompt
+              ? `prompt="${shortTurnPrompt(control.prompt)}"`
+              : '',
+          ]
+            .filter(Boolean)
+            .join(' · '),
+        )
+      }
+    }
+    return { ok: true, message: lines.join('\n') }
+  }
+
+  if (action === 'steer') {
+    if (!rest) {
+      return { ok: false, message: 'Usage: /turn steer <text>' }
+    }
+    if (snapshot.state !== 'running') {
+      return { ok: false, message: 'turn steer rejected: no active turn' }
+    }
+    const result = coordinator.requestControl({
+      controlId: turnControlId('control'),
+      kind: 'steer',
+      sessionId: session.id,
+      expectedTurnId: snapshot.active.turnId,
+      prompt: rest,
+    })
+    return result.ok
+      ? {
+          ok: true,
+          message:
+            `turn steer ${result.control.state}: ${result.control.controlId}` +
+            ` (expected ${snapshot.active.turnId})`,
+        }
+      : {
+          ok: false,
+          message: `turn steer rejected [${result.code}]: ${result.detail}`,
+        }
+  }
+
+  if (action === 'interrupt') {
+    if (rest) {
+      return { ok: false, message: 'Usage: /turn interrupt' }
+    }
+    if (snapshot.state !== 'running') {
+      return { ok: false, message: 'turn interrupt rejected: no active turn' }
+    }
+    const result = coordinator.requestControl({
+      controlId: turnControlId('control'),
+      kind: 'interrupt',
+      sessionId: session.id,
+      expectedTurnId: snapshot.active.turnId,
+    })
+    return result.ok
+      ? {
+          ok: true,
+          message:
+            `turn interrupt ${result.control.state}: ` +
+            `${result.control.controlId} (${snapshot.active.turnId})`,
+        }
+      : {
+          ok: false,
+          message: `turn interrupt rejected [${result.code}]: ${result.detail}`,
+        }
+  }
+
+  if (action === 'queue') {
+    if (!rest) {
+      return { ok: false, message: 'Usage: /turn queue <text>' }
+    }
+    const result = coordinator.requestControl({
+      controlId: turnControlId('control'),
+      kind: 'queue',
+      sessionId: session.id,
+      ...(snapshot.state === 'running'
+        ? { expectedTurnId: snapshot.active.turnId }
+        : {}),
+      turnId: turnControlId('turn'),
+      prompt: rest,
+      querySource: 'cli_turn_queue',
+    })
+    return result.ok
+      ? {
+          ok: true,
+          message:
+            `turn queue ${result.control.state}: ${result.control.controlId}` +
+            ` (turn ${result.control.turnId})`,
+        }
+      : {
+          ok: false,
+          message: `turn queue rejected [${result.code}]: ${result.detail}`,
+        }
+  }
+
+  if (action === 'cancel') {
+    if (!rest || /\s/.test(rest)) {
+      return {
+        ok: false,
+        message: 'Usage: /turn cancel <controlId>',
+      }
+    }
+    const result = coordinator.cancelControl({
+      sessionId: session.id,
+      controlId: rest,
+    })
+    return result.ok
+      ? {
+          ok: true,
+          message: `turn control cancelled: ${result.control.controlId}`,
+        }
+      : {
+          ok: false,
+          message: `turn cancel rejected [${result.code}]: ${result.detail}`,
+        }
+  }
+
+  return {
+    ok: false,
+    message:
+      'Usage: /turn status | steer <text> | interrupt | queue <text> | cancel <controlId>',
+  }
 }
 
 /**
@@ -2987,6 +3176,13 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     summary: 'Context stats: msgs, chars, token est, sections, cache tip, usage',
     group: 'session',
     run: cmdContext,
+  },
+  {
+    name: 'turn',
+    summary: 'Inspect/control active turn and queued prompts',
+    usage: '[status | steer <text> | interrupt | queue <text> | cancel <id>]',
+    group: 'session',
+    run: cmdTurn,
   },
   {
     name: 'cost',

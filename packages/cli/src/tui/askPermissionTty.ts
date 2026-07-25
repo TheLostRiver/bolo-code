@@ -36,6 +36,8 @@ export type AskPermissionRequest = {
   toolInput: unknown
   toolUseId: string
   preview?: PermissionPreview
+  /** core 合并后的 turn/runner signal；优先于创建 helper 时的 signal。 */
+  signal?: AbortSignal
 }
 
 export type AskPermissionFn = (
@@ -144,7 +146,10 @@ export function createTtyAskPermission(
   const usePanel =
     opts.useDiffPanel !== false && process.env.BOLO_PERM_DIFF_PANEL !== '0'
 
-  const defaultRead = async (prompt: string): Promise<string> => {
+  const defaultRead = async (
+    prompt: string,
+    signal: AbortSignal | undefined,
+  ): Promise<string> => {
     const rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout,
@@ -156,11 +161,11 @@ export function createTtyAskPermission(
         const finish = (answer: string) => {
           if (settled) return
           settled = true
-          opts.signal?.removeEventListener('abort', onAbort)
+          signal?.removeEventListener('abort', onAbort)
           resolve(answer)
         }
         const onAbort = () => finish('')
-        opts.signal?.addEventListener('abort', onAbort, { once: true })
+        signal?.addEventListener('abort', onAbort, { once: true })
         rl.question(prompt, finish)
       })
     } finally {
@@ -168,15 +173,12 @@ export function createTtyAskPermission(
     }
   }
 
-  const readAnswer = opts.readAnswer
-    ? (prompt: string) =>
-        resolveOnAbort(opts.readAnswer!(prompt), opts.signal, '')
-    : defaultRead
   const writeOut = opts.writeOut ?? ((s: string) => process.stdout.write(s))
 
   return async (req) => {
+    const signal = req.signal ?? opts.signal
     if (!isTty) return nonTty
-    if (opts.signal?.aborted) return 'deny'
+    if (signal?.aborted) return 'deny'
 
     // U2：结构化 files → 可滚审批
     if (usePanel && req.preview?.files && req.preview.files.length > 0) {
@@ -196,7 +198,7 @@ export function createTtyAskPermission(
               writeOut,
               isTty: true,
               readKey: opts.readKey,
-              signal: opts.signal,
+              signal,
               onInterrupt: opts.onInterrupt,
             })
             if (pane.ok) return pane.decision
@@ -209,9 +211,10 @@ export function createTtyAskPermission(
       }
     }
 
-    const raw = await readAnswer(
-      formatPermissionPrompt(req.toolName, req.preview),
-    )
+    const prompt = formatPermissionPrompt(req.toolName, req.preview)
+    const raw = opts.readAnswer
+      ? await resolveOnAbort(opts.readAnswer(prompt), signal, '')
+      : await defaultRead(prompt, signal)
     return parsePermissionAnswer(raw)
   }
 }

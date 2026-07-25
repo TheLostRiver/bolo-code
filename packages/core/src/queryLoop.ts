@@ -408,6 +408,9 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
           agentPolicy: params.agentPolicy,
           spawnDepth: params.spawnDepth ?? 0,
           signal: params.signal,
+          onSafeBoundary: async (boundary) => {
+            await visitSafeBoundary(params, boundary)
+          },
           onEvent: params.onEvent,
         },
       })

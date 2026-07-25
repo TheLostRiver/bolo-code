@@ -67,6 +67,7 @@ export type RunToolsParams = {
   agentPolicy?: import('./subagent.ts').AgentPolicy
   spawnDepth?: number
   signal?: AbortSignal
+  onSafeBoundary?: RunToolUseContext['onSafeBoundary']
   onEvent?: RunToolUseContext['onEvent']
 }
 
@@ -137,6 +138,7 @@ export async function runTools(params: RunToolsParams): Promise<RunToolsResult> 
     agentPolicy: params.agentPolicy,
     spawnDepth: params.spawnDepth,
     signal: params.signal,
+    onSafeBoundary: params.onSafeBoundary,
     onEvent: params.onEvent,
   }
 

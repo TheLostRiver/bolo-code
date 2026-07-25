@@ -38,6 +38,7 @@ import {
 } from '../../tools/src/index.ts'
 import type { QueryDeps } from './deps.ts'
 import type { QueryLoopEvent } from './queryLoop.ts'
+import type { SessionSafeBoundary } from './sessionCoordinator.ts'
 
 /** 单条 tool_result 写入 transcript 的字符上限（C6 类；可配置） */
 export const DEFAULT_MAX_TOOL_RESULT_CHARS = 50_000
@@ -170,6 +171,8 @@ export type AskPermissionFn = (req: {
   toolInput: unknown
   toolUseId: string
   preview?: PermissionPreviewPayload
+  /** 当前 tool/turn 的合并取消信号；自定义 UI 应按 deny 收口。 */
+  signal?: AbortSignal
 }) => Promise<AskPermissionDecision>
 
 export type RunToolUseContext = {
@@ -244,6 +247,13 @@ export type RunToolUseContext = {
     kind: typeof AUTO_CLASSIFY_NOTE_KIND
   }) => void | Promise<void>
   signal?: AbortSignal
+  /**
+   * DR2B3：permission/diff ask 完成或取消后的显式安全边界。
+   * callback 不得直接执行 tool side effect。
+   */
+  onSafeBoundary?: (
+    boundary: SessionSafeBoundary,
+  ) => void | Promise<void>
   onEvent?: (e: ToolExecutionEvent | QueryLoopEvent) => void
 }
 
@@ -289,6 +299,40 @@ export type RunToolUseResult = {
 
 function emit(ctx: RunToolUseContext, e: ToolExecutionEvent) {
   ctx.onEvent?.(e)
+}
+
+function resolvePermissionOnAbort(
+  start: () => Promise<AskPermissionDecision>,
+  signal: AbortSignal | undefined,
+): Promise<AskPermissionDecision> {
+  if (!signal) return Promise.resolve().then(start)
+  if (signal.aborted) return Promise.resolve('deny')
+  return new Promise<AskPermissionDecision>((resolve, reject) => {
+    let settled = false
+    const cleanup = () => signal.removeEventListener('abort', onAbort)
+    const finish = (decision: AskPermissionDecision) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      resolve(decision)
+    }
+    const fail = (error: unknown) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      reject(error)
+    }
+    const onAbort = () => finish('deny')
+    signal.addEventListener('abort', onAbort, { once: true })
+    Promise.resolve().then(start).then(finish, fail)
+  })
+}
+
+async function visitToolSafeBoundary(
+  ctx: RunToolUseContext,
+  boundary: SessionSafeBoundary,
+): Promise<void> {
+  await ctx.onSafeBoundary?.(boundary)
 }
 
 /** 供 auto 分类器的极简近期摘要（不进主对话） */
@@ -719,45 +763,57 @@ export async function runToolUse(
       ...(previewPayload ? { preview: previewPayload } : {}),
     })
 
-    const hookRes = await runHooks(
-      'PermissionRequest',
-      {
-        hook_event_name: 'PermissionRequest',
-        session_id: ctx.sessionId,
-        cwd: ctx.cwd,
-        timestamp: nowIso(),
-        tool_name: name,
-        tool_input: toolInput,
-        tool_use_id: toolUseId,
-      },
-      ctx.hooks,
-      { signal: ctx.signal },
-    )
-    for (const r of hookRes.results) {
-      emit(ctx, {
-        type: 'hook',
-        event: 'PermissionRequest',
-        exitCode: r.exitCode,
-      })
-    }
+    try {
+      const hookRes = await runHooks(
+        'PermissionRequest',
+        {
+          hook_event_name: 'PermissionRequest',
+          session_id: ctx.sessionId,
+          cwd: ctx.cwd,
+          timestamp: nowIso(),
+          tool_name: name,
+          tool_input: toolInput,
+          tool_use_id: toolUseId,
+        },
+        ctx.hooks,
+        { signal: ctx.signal },
+      )
+      for (const r of hookRes.results) {
+        emit(ctx, {
+          type: 'hook',
+          event: 'PermissionRequest',
+          exitCode: r.exitCode,
+        })
+      }
 
-    const fromHook = hookRes.permissionDecision
-    if (fromHook === 'allow' || fromHook === 'deny') {
-      finalBehavior = fromHook
-    } else {
-      const user = await ctx.askPermission({
-        toolName: name,
-        toolInput,
-        toolUseId,
-        ...(previewPayload ? { preview: previewPayload } : {}),
-      })
-      if (user === 'allow_always') {
-        if (ctx.permissionRules) {
-          addAlwaysAllowToolName(ctx.permissionRules, name)
-        }
-        finalBehavior = 'allow'
+      const fromHook = hookRes.permissionDecision
+      if (fromHook === 'allow' || fromHook === 'deny') {
+        finalBehavior = fromHook
       } else {
-        finalBehavior = user
+        const user = await resolvePermissionOnAbort(
+          () =>
+            ctx.askPermission({
+              toolName: name,
+              toolInput,
+              toolUseId,
+              ...(previewPayload ? { preview: previewPayload } : {}),
+              ...(ctx.signal ? { signal: ctx.signal } : {}),
+            }),
+          ctx.signal,
+        )
+        if (user === 'allow_always') {
+          if (ctx.permissionRules) {
+            addAlwaysAllowToolName(ctx.permissionRules, name)
+          }
+          finalBehavior = 'allow'
+        } else {
+          finalBehavior = user
+        }
+      }
+    } finally {
+      await visitToolSafeBoundary(ctx, 'after_permission')
+      if (previewPayload?.files?.length) {
+        await visitToolSafeBoundary(ctx, 'after_diff_approval')
       }
     }
 

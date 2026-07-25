@@ -4,6 +4,7 @@
  * T4 流式 text/tool 行；T5 TTY 权限 y/N；T6 slash 经 submitUserInput
  */
 
+import { randomUUID } from 'node:crypto'
 import * as readline from 'node:readline'
 import {
   listProjectSessions,
@@ -517,6 +518,10 @@ export async function runOnePrompt(
     resumeInput?: () => void
     /** 当前 turn 取消信号 */
     signal?: AbortSignal
+    /** queued control 已分配的 durable turn id。 */
+    turnId?: string
+    /** queued/programmatic 输入来源。 */
+    querySource?: string
   },
 ): Promise<{ terminalReason: string; assistantText: string }> {
   const writeOut = options?.writeOut ?? ((s) => process.stdout.write(s))
@@ -527,6 +532,8 @@ export async function runOnePrompt(
   try {
     const result = await submitUserInput(session, prompt, {
       signal: options?.signal,
+      turnId: options?.turnId,
+      querySource: options?.querySource,
     })
 
     if (result.type === 'empty') {
@@ -713,6 +720,36 @@ export async function runOnePrompt(
   }
 }
 
+export type QueuedReplPrompt = {
+  controlId: string
+  prompt: string
+  turnId: string
+  querySource: string
+}
+
+/**
+ * 只在 runner idle 时取一条 ready queue；取出即 promoted，绝不重放。
+ */
+export function takeNextQueuedReplPrompt(
+  session: BoloSession,
+): QueuedReplPrompt | null {
+  const control = session.coordinator.takeNextQueued(session.id)
+  if (
+    !control ||
+    control.kind !== 'queue' ||
+    !control.prompt ||
+    !control.turnId
+  ) {
+    return null
+  }
+  return {
+    controlId: control.controlId,
+    prompt: control.prompt,
+    turnId: control.turnId,
+    querySource: control.querySource ?? 'cli_turn_queue',
+  }
+}
+
 /**
  * 极简 REPL：一行输入 → submitUserInput（含 slash）→ 流式/工具行
  * 每次 prompt 前打印 T3 状态行；权限 ask 共用同一 readline。
@@ -795,6 +832,20 @@ export async function runRepl(
   let activeTurn: AbortController | null = null
   const interrupt = () => {
     if (activeTurn && !activeTurn.signal.aborted) {
+      const snapshot = session.coordinator.snapshot(session.id)
+      if (snapshot.state === 'running') {
+        const result = session.coordinator.requestControl({
+          controlId: `control_${randomUUID().replaceAll('-', '')}`,
+          kind: 'interrupt',
+          sessionId: session.id,
+          expectedTurnId: snapshot.active.turnId,
+        })
+        if (result.ok) {
+          writeErr(`^C turn interrupt requested (${snapshot.active.turnId})\n`)
+          return
+        }
+      }
+      // ownership 前的极短窗口或本地 slash 面板：回退本地 signal。
       activeTurn.abort('interrupt')
       writeErr('^C turn cancelled\n')
       return
@@ -810,10 +861,17 @@ export async function runRepl(
   try {
     while (!replClosed) {
       writeOut(`${formatSessionStatusLine(session)}\n`)
-      const line = await question('bolo> ', options?.signal)
-      if (line == null) break
-      const text = line.trim()
-      if (!text || text === '/exit' || text === '/quit') break
+      const queued = takeNextQueuedReplPrompt(session)
+      let text: string
+      if (queued) {
+        text = queued.prompt
+        writeOut(`[queued ${queued.controlId}] ${text}\n`)
+      } else {
+        const line = await question('bolo> ', options?.signal)
+        if (line == null) break
+        text = line.trim()
+        if (!text || text === '/exit' || text === '/quit') break
+      }
       const turnController = new AbortController()
       activeTurn = turnController
       const onParentAbort = () => turnController.abort('parent')
@@ -837,6 +895,12 @@ export async function runRepl(
           pauseInput: pauseRl,
           resumeInput: resumeRl,
           signal: turnController.signal,
+          ...(queued
+            ? {
+                turnId: queued.turnId,
+                querySource: queued.querySource,
+              }
+            : {}),
         })
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
