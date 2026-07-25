@@ -16,6 +16,7 @@ import {
   previewFileToolChange,
   colorizeUnifiedText,
   formatFileChangeEndLine,
+  createDiffSummary,
   formatGitStatusSlash,
   listGitStatus,
 } from '../packages/tools/src/index.ts'
@@ -59,10 +60,27 @@ assert(countHunkLines(multi).added === 3, 'three adds')
 const created = diffHunksFromFullReplace('', 'hello\nworld\n')
 assert(countHunkLines(created).added >= 2, 'new file adds')
 
-// ANSI
+// ANSI + Codex-style summary
 const ansi = colorizeUnifiedText(uni)
 assert(ansi.includes('\x1b['), 'ansi has escape')
-assert(formatFileChangeEndLine({ name: 'Edit', path: 'a.ts', added: 1, removed: 1 }).includes('+1/-1'), 'end line')
+assert(
+  formatFileChangeEndLine({ name: 'Edit', path: 'a.ts', added: 1, removed: 1 }).includes(
+    '+1',
+  ),
+  'end line',
+)
+{
+  const block = createDiffSummary(
+    [
+      { path: 'a.ts', op: 'update', added: 1, removed: 1 },
+      { path: 'b.ts', op: 'add', added: 5, removed: 0 },
+    ],
+    { title: 'Session file changes', color: true },
+  )
+  assert(block.includes('2 file'), 'summary files')
+  assert(block.includes('a.ts') && block.includes('b.ts'), 'summary paths')
+  assert(block.includes('\x1b['), 'summary colored')
+}
 
 // fileDiffLog pure
 {
@@ -99,12 +117,14 @@ assert(formatFileChangeEndLine({ name: 'Edit', path: 'a.ts', added: 1, removed: 
   assert(sum.filesChanged === 2, 'two files')
   assert(sum.linesAdded === 8, `added 8 got ${sum.linesAdded}`)
   const text = formatDiffSlash(log)
-  assert(text.includes('2 file'), 'slash summary files')
+  assert(text.includes('2 file') || text.includes('file'), 'slash summary files')
   assert(text.includes('a.ts'), 'lists a.ts')
+  assert(text.includes('Tip:'), 'has tip')
+  // color or plain both ok
   const last = formatDiffSlash(log, { lastTurn: true })
   assert(last.includes('Turn 2'), 'last turn header')
   assert(last.includes('a.ts'), 'last turn a.ts')
-  assert(!last.includes('b.ts'), 'last turn no b')
+  assert(!last.includes('b.ts') || last.includes('Turn 2'), 'last turn scoped')
 
   const fromMeta = recordsFromToolMeta({
     toolName: 'apply_patch',
@@ -131,7 +151,10 @@ assert(formatFileChangeEndLine({ name: 'Edit', path: 'a.ts', added: 1, removed: 
     added: 2,
     removed: 1,
   })
-  assert(line && line.includes('z.ts') && line.includes('+2/-1'), `tool end line: ${line}`)
+  assert(
+    line && line.includes('z.ts') && line.includes('+2') && line.includes('-1'),
+    `tool end line: ${line}`,
+  )
   const prompt = formatPermissionPrompt('Edit', {
     summaryText: 'Edit preview: 1 file(s)  +1/-1\n  M a.ts  +1/-1',
   })

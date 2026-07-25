@@ -45,8 +45,29 @@ export function formatPermissionPrompt(
   const head = `Allow ${toolName}? [y/a/N] `
   const body = preview?.summaryText?.trim()
   if (!body) return head
-  // 预览在问题前展示，最后一行再问
-  return `${body}\n${head}`
+  // 预览在问题前展示；着色 +/− 行（若已是 plain unified）
+  const colored = colorizePreviewBody(body)
+  return `${colored}\n${head}`
+}
+
+function colorizePreviewBody(body: string): string {
+  const RESET = '\x1b[0m'
+  const GREEN = '\x1b[32m'
+  const RED = '\x1b[31m'
+  const CYAN = '\x1b[36m'
+  const DIM = '\x1b[2m'
+  return body
+    .split('\n')
+    .map((L) => {
+      if (L.startsWith('+') && !L.startsWith('+++')) return `${GREEN}${L}${RESET}`
+      if (L.startsWith('-') && !L.startsWith('---')) return `${RED}${L}${RESET}`
+      if (L.startsWith('@@')) return `${CYAN}${L}${RESET}`
+      if (L.startsWith('  A ') || L.startsWith('  M ') || L.startsWith('  D ')) {
+        return `${DIM}${L}${RESET}`
+      }
+      return L
+    })
+    .join('\n')
 }
 
 export type CreateTtyAskPermissionOptions = {

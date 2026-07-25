@@ -70,7 +70,13 @@ export {
   colorizeUnifiedText,
   formatAnsiUnifiedFromHunks,
   formatFileChangeEndLine,
+  formatCountsAnsi,
+  formatCountsPlain,
+  createDiffSummary,
   shouldShowVerboseDiff,
+  shouldShowCompactDiffOnly,
+  inlineDiffMaxLines,
+  type DiffSummaryRow,
 } from './ansiDiff.ts'
 
 export {

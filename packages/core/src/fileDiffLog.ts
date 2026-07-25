@@ -1,7 +1,9 @@
 /**
- * 会话级文件改动 log — 对照 HC useTurnDiffs 最小子集（无遥测 / 无彩色 UI）
+ * 会话级文件改动 log — 对照 HC useTurnDiffs + Codex create_diff_summary 最小子集
  * 纯函数；session 侧 side-channel，不污染 ChatMessage.content。
  */
+
+import { createDiffSummary } from '../../tools/src/ansiDiff.ts'
 
 export type FileDiffHunk = {
   oldStart: number
@@ -192,26 +194,84 @@ function opLabel(op?: FileChangeOp, kind?: FileChangeRecord['kind']): string {
   return 'M'
 }
 
+function formatHunkBody(
+  hunks: readonly FileDiffHunk[],
+  maxLines: number,
+): string[] {
+  const lines: string[] = []
+  let n = 0
+  for (const h of hunks) {
+    lines.push(
+      `@@ -${h.oldStart},${h.oldLines} +${h.newStart},${h.newLines} @@`,
+    )
+    n++
+    for (const L of h.lines) {
+      if (n >= maxLines) {
+        lines.push('…(truncated)')
+        return lines
+      }
+      lines.push(L)
+      n++
+    }
+  }
+  return lines
+}
+
+function colorizeLines(text: string): string {
+  const RESET = '\x1b[0m'
+  const DIM = '\x1b[2m'
+  const GREEN = '\x1b[32m'
+  const RED = '\x1b[31m'
+  const CYAN = '\x1b[36m'
+  return text
+    .split('\n')
+    .map((L) => {
+      if (L.startsWith('+') && !L.startsWith('+++')) return `${GREEN}${L}${RESET}`
+      if (L.startsWith('-') && !L.startsWith('---')) return `${RED}${L}${RESET}`
+      if (L.startsWith('@@')) return `${CYAN}${L}${RESET}`
+      if (L.startsWith('#')) return `${DIM}${L}${RESET}`
+      return L
+    })
+    .join('\n')
+}
+
+function formatListFallback(
+  scope: string,
+  summary: FileDiffSummary,
+): string {
+  const lines: string[] = [
+    `${scope}: ${summary.filesChanged} file(s)  +${summary.linesAdded}/-${summary.linesRemoved}`,
+  ]
+  for (const f of summary.byPath) {
+    lines.push(
+      `  ${opLabel(f.op)} ${f.path}  +${f.added}/-${f.removed}${f.edits > 1 ? `  (${f.edits} edits)` : ''}`,
+    )
+  }
+  if (!summary.byPath.length) lines.push('  (none)')
+  return lines.join('\n')
+}
+
 /**
- * `/diff` 文本输出（纯文本，无彩色）。
- * - 无参：会话累计
+ * `/diff` 文本输出。
+ * - 无参：会话累计（Codex 风格多文件摘要）
  * - last：最近 turn
- * - path：该路径最近一条的 unified 风格 lines（若有 structuredPatch）
+ * - path：该路径最近一次 structured
+ * - color：ANSI 行数着色（默认 true）
  */
 export function formatDiffSlash(
   log: readonly FileChangeRecord[] | undefined,
   opts?: {
-    /** 仅某 turn */
     turn?: number
-    /** 仅最近 turn（取 log 中最大 turn） */
     lastTurn?: boolean
     pathFilter?: string
-    /** 路径详情时附 hunk lines 预算 */
     maxHunkLines?: number
+    color?: boolean
+    /** 列表模式也附带最近一条的短 hunk */
+    showSnippet?: boolean
   },
 ): string {
   if (!log?.length) {
-    return 'No file changes recorded this session (memory only; not restored on resume).'
+    return 'No file changes recorded this session (resume restores path/+N/−M summaries only).'
   }
 
   let turn = opts?.turn
@@ -224,6 +284,7 @@ export function formatDiffSlash(
     turn,
     pathFilter: opts?.pathFilter,
   })
+  const color = opts?.color !== false
 
   if (opts?.pathFilter) {
     const filtered = filterLog(log, {
@@ -234,47 +295,49 @@ export function formatDiffSlash(
       return `No file changes matching ${opts.pathFilter}`
     }
     const last = filtered[filtered.length - 1]!
-    const lines: string[] = [
-      `${opLabel(last.op, last.kind)} ${last.path}  +${last.added}/-${last.removed}  (${last.tool}${last.turn != null ? ` · turn ${last.turn}` : ''})`,
-    ]
-    if (last.structuredPatch?.length) {
-      const max = opts.maxHunkLines ?? 60
-      let n = 0
-      for (const h of last.structuredPatch) {
-        lines.push(
-          `@@ -${h.oldStart},${h.oldLines} +${h.newStart},${h.newLines} @@`,
-        )
-        n++
-        for (const L of h.lines) {
-          if (n >= max) {
-            lines.push('…(truncated)')
-            return lines.join('\n')
-          }
-          lines.push(L)
-          n++
-        }
-      }
-    } else {
-      lines.push('(no structuredPatch retained for this entry)')
+    const head = `${opLabel(last.op, last.kind)} ${last.path}  +${last.added}/-${last.removed}  (${last.tool}${last.turn != null ? ` · turn ${last.turn}` : ''})`
+    if (!last.structuredPatch?.length) {
+      return `${head}\n(no structuredPatch retained for this entry — try /diff git ${opts.pathFilter})`
     }
-    return lines.join('\n')
+    const body = formatHunkBody(
+      last.structuredPatch,
+      opts.maxHunkLines ?? 80,
+    )
+    let text = [head, ...body].join('\n')
+    if (color) text = colorizeLines(text)
+    return text
   }
 
   const scope =
-    turn !== undefined
-      ? `Turn ${turn} file changes`
-      : 'Session file changes'
-  const lines: string[] = [
-    `${scope}: ${summary.filesChanged} file(s)  +${summary.linesAdded}/-${summary.linesRemoved}`,
-  ]
-  for (const f of summary.byPath) {
-    lines.push(
-      `  ${opLabel(f.op)} ${f.path}  +${f.added}/-${f.removed}${f.edits > 1 ? `  (${f.edits} edits)` : ''}`,
+    turn !== undefined ? `Turn ${turn} file changes` : 'Session file changes'
+
+  let block = formatListFallback(scope, summary)
+  try {
+    block = createDiffSummary(
+      summary.byPath.map((f) => ({
+        path: f.path,
+        op: f.op ?? 'update',
+        added: f.added,
+        removed: f.removed,
+        edits: f.edits,
+      })),
+      { title: scope, color, maxFiles: 50 },
     )
+  } catch {
+    /* plain fallback already set */
   }
-  if (!summary.byPath.length) {
-    lines.push('  (none)')
+
+  if (opts?.showSnippet !== false) {
+    const filtered = filterLog(log, { turn })
+    const lastWithPatch = [...filtered]
+      .reverse()
+      .find((r) => r.structuredPatch && r.structuredPatch.length > 0)
+    if (lastWithPatch?.structuredPatch) {
+      const snip = formatHunkBody(lastWithPatch.structuredPatch, 12)
+      const raw = [`# latest: ${lastWithPatch.path}`, ...snip].join('\n')
+      block = `${block}\n${color ? colorizeLines(raw) : raw}`
+    }
   }
-  lines.push('Tip: /diff last · /diff <path>')
-  return lines.join('\n')
+
+  return `${block}\nTip: /diff last · /diff <path> · /diff git [path]`
 }

@@ -64,9 +64,11 @@ export function formatToolEventLine(e: CliSessionEvent): string | null {
     }
     const pathPart =
       typeof e.path === 'string' && e.path.trim() ? `  ${e.path}` : ''
+    const a = e.added ?? 0
+    const r = e.removed ?? 0
     const counts =
       e.added != null || e.removed != null
-        ? `  +${e.added ?? 0}/-${e.removed ?? 0}`
+        ? `  \x1b[32m+${a}\x1b[0m/\x1b[31m-${r}\x1b[0m`
         : ''
     return ok
       ? `✓ ${e.name}${pathPart}${counts}`

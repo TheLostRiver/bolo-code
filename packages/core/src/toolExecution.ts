@@ -828,22 +828,48 @@ export async function runToolUse(
     content = note
   }
 
-  // D4：tool_end 摘要行（UI）；模型 content 仍为 plain
+  // D4/D7：tool_end 摘要行 + 默认短 unified（UI）；模型 content 仍为 plain
   let summaryLine: string | undefined
   let ansiUnified: string | undefined
   if (result.ok && result.meta?.kind) {
     try {
-      const { formatFileChangeEndLine, colorizeUnifiedText, shouldShowVerboseDiff } =
-        await import('../../tools/src/ansiDiff.ts')
+      const {
+        formatFileChangeEndLine,
+        colorizeUnifiedText,
+        createDiffSummary,
+        inlineDiffMaxLines,
+      } = await import('../../tools/src/ansiDiff.ts')
+      const paths =
+        result.meta.paths?.length
+          ? result.meta.paths
+          : result.meta.files?.map((f) => f.path).filter(Boolean)
       summaryLine = formatFileChangeEndLine({
         name,
         path: result.meta.path,
+        paths,
         added: result.meta.added,
         removed: result.meta.removed,
         ok: true,
+        color: true,
       })
-      if (shouldShowVerboseDiff() && result.meta.unified) {
-        ansiUnified = colorizeUnifiedText(result.meta.unified, { maxLines: 40 })
+      // 多文件：在 summary 下再跟一行 Codex 风格列表
+      if (result.meta.files && result.meta.files.length > 1) {
+        const block = createDiffSummary(
+          result.meta.files.map((f) => ({
+            path: f.path,
+            op: f.op,
+            added: f.added ?? 0,
+            removed: f.removed ?? 0,
+          })),
+          { title: `${name} files`, color: true, maxFiles: 12 },
+        )
+        summaryLine = `${summaryLine}\n${block}`
+      }
+      const maxUni = inlineDiffMaxLines()
+      if (maxUni > 0 && result.meta.unified) {
+        ansiUnified = colorizeUnifiedText(result.meta.unified, {
+          maxLines: maxUni,
+        })
       }
     } catch {
       /* ignore */

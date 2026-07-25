@@ -121,7 +121,14 @@ window.bolo.onEvent((e) => {
   }
   if (e.type === 'tool_end' && e.name) {
     if (e.summaryLine) {
-      appendMsg('system', String(e.summaryLine))
+      // 多行摘要（含多文件列表）；ANSI 在 HTML 中退化显示为原文
+      appendMsg('system', String(e.summaryLine).replace(/\x1b\[[0-9;]*m/g, ''))
+      if (e.ansiUnified) {
+        appendMsg(
+          'system',
+          String(e.ansiUnified).replace(/\x1b\[[0-9;]*m/g, ''),
+        )
+      }
     } else {
       const pathPart = e.path ? `  ${e.path}` : ''
       const counts =
@@ -142,14 +149,23 @@ window.bolo.onEvent((e) => {
 let currentPermId = null
 window.bolo.onPermissionRequest((req) => {
   currentPermId = req.id
-  const preview =
-    req.preview?.summaryText ||
-    (req.toolInput
-      ? JSON.stringify(req.toolInput ?? {}, null, 0).slice(0, 200)
-      : '')
+  let preview = req.preview?.summaryText || ''
+  if (!preview && req.toolInput) {
+    preview = JSON.stringify(req.toolInput ?? {}, null, 0).slice(0, 400)
+  }
+  // strip ANSI for DOM text
+  preview = String(preview).replace(/\x1b\[[0-9;]*m/g, '')
+  if (req.preview?.paths?.length > 1) {
+    preview = `${preview}\n(${req.preview.paths.length} paths)`
+  }
   permText.textContent = preview
     ? `Allow ${req.toolName}?\n${preview}`
     : `Allow ${req.toolName}?`
+  permText.style.whiteSpace = 'pre-wrap'
+  permText.style.maxHeight = '240px'
+  permText.style.overflow = 'auto'
+  permText.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
+  permText.style.fontSize = '12px'
   permEl.hidden = false
 })
 

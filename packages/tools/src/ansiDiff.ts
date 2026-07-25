@@ -10,6 +10,15 @@ const DIM = '\x1b[2m'
 const GREEN = '\x1b[32m'
 const RED = '\x1b[31m'
 const CYAN = '\x1b[36m'
+const BOLD = '\x1b[1m'
+
+export function formatCountsAnsi(added: number, removed: number): string {
+  return `(${GREEN}+${added}${RESET} ${RED}-${removed}${RESET})`
+}
+
+export function formatCountsPlain(added: number, removed: number): string {
+  return `(+${added}/-${removed})`
+}
 
 export function formatFileChangeEndLine(opts: {
   name: string
@@ -17,15 +26,31 @@ export function formatFileChangeEndLine(opts: {
   added?: number
   removed?: number
   ok?: boolean
+  /** 多文件时 paths 摘要 */
+  paths?: string[]
+  color?: boolean
 }): string {
   const ok = opts.ok !== false
   const mark = ok ? '✓' : '✗'
-  const pathPart = opts.path ? `  ${opts.path}` : ''
-  const counts =
-    opts.added != null || opts.removed != null
-      ? `  +${opts.added ?? 0}/-${opts.removed ?? 0}`
-      : ''
-  return `${mark} ${opts.name}${pathPart}${counts}`
+  const color = opts.color !== false
+  let pathPart = ''
+  if (opts.path) pathPart = `  ${opts.path}`
+  else if (opts.paths?.length) {
+    pathPart =
+      opts.paths.length === 1
+        ? `  ${opts.paths[0]}`
+        : `  ${opts.paths.length} files`
+  }
+  let counts = ''
+  if (opts.added != null || opts.removed != null) {
+    const a = opts.added ?? 0
+    const r = opts.removed ?? 0
+    counts = color
+      ? `  ${formatCountsAnsi(a, r)}`
+      : `  ${formatCountsPlain(a, r)}`
+  }
+  const name = color && ok ? `${BOLD}${opts.name}${RESET}` : opts.name
+  return `${mark} ${name}${pathPart}${counts}`
 }
 
 /**
@@ -73,7 +98,9 @@ export function formatAnsiUnifiedFromHunks(
       out.push(`${DIM}…(truncated)${RESET}`)
       break
     }
-    out.push(`${CYAN}@@ -${h.oldStart},${h.oldLines} +${h.newStart},${h.newLines} @@${RESET}`)
+    out.push(
+      `${CYAN}@@ -${h.oldStart},${h.oldLines} +${h.newStart},${h.newLines} @@${RESET}`,
+    )
     n++
     for (const L of h.lines) {
       if (n >= max) {
@@ -93,7 +120,95 @@ export function formatAnsiUnifiedFromHunks(
   return out.join('\n')
 }
 
+export type DiffSummaryRow = {
+  path: string
+  op?: 'add' | 'update' | 'delete' | 'move' | string
+  added: number
+  removed: number
+  /** 可选 move 目标 */
+  moveTo?: string
+  edits?: number
+}
+
+/**
+ * 对照 Codex create_diff_summary：多文件路径块 + 着色行数。
+ * 纯文本/ANSI 字符串，无 ratatui。
+ */
+export function createDiffSummary(
+  rows: readonly DiffSummaryRow[],
+  opts?: {
+    title?: string
+    color?: boolean
+    maxFiles?: number
+    /** 附带首文件 unified（已着色或 plain） */
+    firstUnified?: string
+  },
+): string {
+  const color = opts?.color !== false
+  const maxFiles = opts?.maxFiles ?? 40
+  const totalA = rows.reduce((s, r) => s + r.added, 0)
+  const totalR = rows.reduce((s, r) => s + r.removed, 0)
+  const title = opts?.title ?? 'File changes'
+  const countPart = color
+    ? formatCountsAnsi(totalA, totalR)
+    : formatCountsPlain(totalA, totalR)
+  const lines: string[] = [
+    `${title}: ${rows.length} file(s)  ${countPart}`,
+  ]
+  const sorted = [...rows].sort((a, b) => a.path.localeCompare(b.path))
+  for (const r of sorted.slice(0, maxFiles)) {
+    const op = opGlyph(r.op)
+    const move =
+      r.moveTo && r.op === 'move' ? ` → ${r.moveTo}` : ''
+    const counts = color
+      ? formatCountsAnsi(r.added, r.removed)
+      : formatCountsPlain(r.added, r.removed)
+    const edits =
+      r.edits != null && r.edits > 1 ? `  ×${r.edits}` : ''
+    const opS = color ? colorOp(op) : op
+    lines.push(`  ${opS} ${r.path}${move}  ${counts}${edits}`)
+  }
+  if (sorted.length > maxFiles) {
+    lines.push(`  …(+${sorted.length - maxFiles} more)`)
+  }
+  if (opts?.firstUnified?.trim()) {
+    lines.push(opts.firstUnified.trim())
+  }
+  return lines.join('\n')
+}
+
+function opGlyph(op?: string): string {
+  if (op === 'add' || op === 'A') return 'A'
+  if (op === 'delete' || op === 'D') return 'D'
+  if (op === 'move' || op === 'R') return 'R'
+  if (op === 'file_write' || op === 'W') return 'W'
+  return 'M'
+}
+
+function colorOp(op: string): string {
+  if (op === 'A') return `${GREEN}A${RESET}`
+  if (op === 'D') return `${RED}D${RESET}`
+  if (op === 'R') return `${CYAN}R${RESET}`
+  return `${CYAN}${op}${RESET}`
+}
+
+/** BOLO_DIFF_VERBOSE=1 → 较长 unified；默认小片段；COMPACT=1 仅一行 */
 export function shouldShowVerboseDiff(): boolean {
   const v = process.env.BOLO_DIFF_VERBOSE
   return v === '1' || v === 'true' || v === 'yes'
+}
+
+export function shouldShowCompactDiffOnly(): boolean {
+  const v = process.env.BOLO_DIFF_COMPACT
+  return v === '1' || v === 'true' || v === 'yes'
+}
+
+/**
+ * 写后默认附带短 unified（除非 COMPACT）。
+ * verbose → 40 行；默认 → 16 行。
+ */
+export function inlineDiffMaxLines(): number {
+  if (shouldShowCompactDiffOnly()) return 0
+  if (shouldShowVerboseDiff()) return 40
+  return 16
 }
