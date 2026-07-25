@@ -624,6 +624,13 @@ export type SessionEvent =
       reason: string
       status?: number
     }
+  | {
+      type: 'control'
+      kind: 'steer'
+      controlId: string
+      boundary: import('./sessionCoordinator.ts').SessionSafeBoundary
+      prompt: string
+    }
   | { type: 'done'; terminal?: Terminal }
 
 export type SessionSystemPromptOptions = Omit<
@@ -1805,6 +1812,39 @@ function durableStateForTerminal(terminal: Terminal): DurableTurnState {
   return 'error'
 }
 
+function linkAbortSignals(
+  signals: readonly (AbortSignal | undefined)[],
+): { signal: AbortSignal; dispose(): void } {
+  const controller = new AbortController()
+  const listeners: Array<{
+    signal: AbortSignal
+    listener: () => void
+  }> = []
+  const forward = (source: AbortSignal) => {
+    if (!controller.signal.aborted) {
+      controller.abort(source.reason)
+    }
+  }
+  for (const signal of signals) {
+    if (!signal) continue
+    if (signal.aborted) {
+      forward(signal)
+      break
+    }
+    const listener = () => forward(signal)
+    signal.addEventListener('abort', listener, { once: true })
+    listeners.push({ signal, listener })
+  }
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      for (const row of listeners) {
+        row.signal.removeEventListener('abort', row.listener)
+      }
+    },
+  }
+}
+
 export type SubmitPromptOptions = {
   maxTurns?: number
   querySource?: string
@@ -1853,11 +1893,21 @@ export async function submitPrompt(
     return terminal
   }
 
-  return runOwnedPrompt(session, prompt, options, turnId, querySource).finally(
-    () => {
-      runner.lease.release()
-    },
-  )
+  const linkedAbort = linkAbortSignals([options?.signal, runner.lease.signal])
+  const ownedOptions: SubmitPromptOptions = {
+    ...options,
+    signal: linkedAbort.signal,
+  }
+  return runOwnedPrompt(
+    session,
+    prompt,
+    ownedOptions,
+    turnId,
+    querySource,
+  ).finally(() => {
+    linkedAbort.dispose()
+    runner.lease.release()
+  })
 }
 
 async function runOwnedPrompt(
@@ -2005,6 +2055,21 @@ async function runOwnedPrompt(
       midTurnAutoCompact: true,
       tryMidTurnCompact: session.tryMidTurnCompact,
       signal: options?.signal,
+      onSafeBoundary: (boundary) => {
+        const promoted = session.coordinator.promoteControls({
+          sessionId: session.id,
+          turnId,
+          boundary,
+        })
+        if (!promoted.ok) {
+          emit(session, {
+            type: 'error',
+            message: `safe boundary "${boundary}" rejected: ${promoted.detail}`,
+          })
+          return []
+        }
+        return promoted.controls
+      },
       onEvent: (e) => mapLoopEvent(session, e),
     })
   } catch (error) {

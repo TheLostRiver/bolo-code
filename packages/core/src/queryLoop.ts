@@ -46,6 +46,10 @@ import {
 } from './sessionUsage.ts'
 import type { PromptCacheSessionState } from '../../compact/src/index.ts'
 import { notePromptCacheAfterModelCall } from '../../compact/src/index.ts'
+import type {
+  SessionControlRecord,
+  SessionSafeBoundary,
+} from './sessionCoordinator.ts'
 
 export type TerminalReason =
   | 'completed'
@@ -84,6 +88,13 @@ export type QueryLoopEvent =
       message: string
       reason: string
       status?: number
+    }
+  | {
+      type: 'control'
+      kind: 'steer'
+      controlId: string
+      boundary: SessionSafeBoundary
+      prompt: string
     }
   | { type: 'done'; terminal: Terminal }
   | ToolExecutionEvent
@@ -192,10 +203,67 @@ export type QueryLoopParams = {
   tryMidTurnCompact?: () => Promise<boolean>
   onEvent?: (e: QueryLoopEvent) => void
   signal?: AbortSignal
+  /**
+   * DR2B2：显式 safe boundary 消费 coordinator 已 promotion 的 controls。
+   * callback 不得直接修改 messages。
+   */
+  onSafeBoundary?: (
+    boundary: SessionSafeBoundary,
+  ) =>
+    | readonly SessionControlRecord[]
+    | Promise<readonly SessionControlRecord[]>
 }
 
 function emit(params: QueryLoopParams, e: QueryLoopEvent) {
   params.onEvent?.(e)
+}
+
+async function visitSafeBoundary(
+  params: QueryLoopParams,
+  boundary: SessionSafeBoundary,
+): Promise<number> {
+  if (!params.onSafeBoundary) return 0
+  let controls: readonly SessionControlRecord[]
+  try {
+    controls = await params.onSafeBoundary(boundary)
+  } catch (error) {
+    emit(params, {
+      type: 'error',
+      message: `safe boundary "${boundary}" failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    })
+    return 0
+  }
+  let promoted = 0
+  for (const control of controls) {
+    if (
+      control.kind !== 'steer' ||
+      control.state !== 'promoted' ||
+      !control.prompt
+    ) {
+      continue
+    }
+    params.messages.push({ role: 'user', content: control.prompt })
+    promoted += 1
+    emit(params, {
+      type: 'control',
+      kind: 'steer',
+      controlId: control.controlId,
+      boundary,
+      prompt: control.prompt,
+    })
+  }
+  return promoted
+}
+
+async function finishTerminal(
+  params: QueryLoopParams,
+  terminal: Terminal,
+): Promise<Terminal> {
+  await visitSafeBoundary(params, 'turn_terminal')
+  emit(params, { type: 'done', terminal })
+  return terminal
 }
 
 function applyPreparedToSession(
@@ -257,8 +325,7 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
   while (true) {
     if (params.signal?.aborted) {
       const terminal: Terminal = { reason: 'aborted' }
-      emit(params, { type: 'done', terminal })
-      return terminal
+      return finishTerminal(params, terminal)
     }
 
     turnCount += 1
@@ -270,10 +337,14 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
       }
       emit(params, { type: 'phase', phase: 'stopping' })
       await runStopHooks(params)
-      emit(params, { type: 'done', terminal })
-      return terminal
+      return finishTerminal(params, terminal)
     }
 
+    await visitSafeBoundary(params, 'before_provider')
+    if (params.signal?.aborted) {
+      const terminal: Terminal = { reason: 'aborted' }
+      return finishTerminal(params, terminal)
+    }
     emit(params, { type: 'phase', phase: 'running' })
 
     // 同一 turn 内：callModel 失败且为 PTL 时截断后 continue，不额外消耗 maxTurns
@@ -291,8 +362,7 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
       if (params.signal?.aborted) {
         streamTools?.discard()
         const terminal: Terminal = { reason: 'aborted' }
-        emit(params, { type: 'done', terminal })
-        return terminal
+        return finishTerminal(params, terminal)
       }
 
       const prepared = await params.deps.prepareMessages({
@@ -420,8 +490,7 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
         const classified = classifyError(e, { signal: params.signal })
         if (classified.class === 'user_abort' || params.signal?.aborted) {
           const terminal: Terminal = { reason: 'aborted', detail: msg }
-          emit(params, { type: 'done', terminal })
-          return terminal
+          return finishTerminal(params, terminal)
         }
         const recovered = hadModelOutput
           ? null
@@ -437,8 +506,7 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
         }
         emit(params, { type: 'error', message: msg })
         const terminal: Terminal = { reason: 'error', detail: msg }
-        emit(params, { type: 'done', terminal })
-        return terminal
+        return finishTerminal(params, terminal)
       }
 
       if (params.signal?.aborted) {
@@ -447,8 +515,7 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
           reason: 'aborted',
           detail: modelError,
         }
-        emit(params, { type: 'done', terminal })
-        return terminal
+        return finishTerminal(params, terminal)
       }
 
       if (modelError) {
@@ -461,8 +528,7 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
             reason: 'aborted',
             detail: modelError,
           }
-          emit(params, { type: 'done', terminal })
-          return terminal
+          return finishTerminal(params, terminal)
         }
         const recovered = hadModelOutput
           ? null
@@ -478,8 +544,7 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
         }
         emit(params, { type: 'error', message: modelError })
         const terminal: Terminal = { reason: 'error', detail: modelError }
-        emit(params, { type: 'done', terminal })
-        return terminal
+        return finishTerminal(params, terminal)
       }
 
       // provider 已成功结束；此时才允许本地工具产生副作用。
@@ -559,8 +624,15 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
       params.messages.push(msg)
     }
 
+    await visitSafeBoundary(params, 'after_provider')
+
     if (toolBlocks.length === 0) {
       streamTools?.discard()
+      const promoted = await visitSafeBoundary(params, 'before_stop')
+      if (promoted > 0) {
+        emit(params, { type: 'phase', phase: 'running' })
+        continue
+      }
       emit(params, { type: 'phase', phase: 'stopping' })
       const stop = await runStopHooks(params)
       // H1：exit 2 → 注入 continuation 再入 loop（有预算）
@@ -585,10 +657,10 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
       }
       const terminal: Terminal = { reason: 'completed' }
       emit(params, { type: 'phase', phase: 'ready' })
-      emit(params, { type: 'done', terminal })
-      return terminal
+      return finishTerminal(params, terminal)
     }
 
+    await visitSafeBoundary(params, 'before_tools')
     // 流式已启动的 tool 按入队序收齐（与 runTools 分区并发语义一致）
     const toolResultMessages = streamTools
       ? await streamTools.drain()
@@ -597,6 +669,7 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
     for (const m of toolResultMessages) {
       params.messages.push(m)
     }
+    await visitSafeBoundary(params, 'after_tools')
 
     // C3：tool 批后、下一 callModel 前 — mid-turn auto compact（每 outer turn ≤1）
     if (midTurnEnabled && !midTurnCompacted) {
@@ -614,6 +687,7 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
         }
       }
     }
+    await visitSafeBoundary(params, 'after_compact')
   }
 }
 
