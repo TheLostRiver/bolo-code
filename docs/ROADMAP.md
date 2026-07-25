@@ -20,13 +20,13 @@
 | **斜杠** | **~80–88%** | 日用 + polish |
 | **CLI TUI（壳）** | **~70–80%** | 文本框布局/picker/主题；**非**真 React Ink |
 | **Electron GUI** | **~55–65%** | 壳 + 流式 + 权限 + 设置 |
-| **Hooks · 日用契约** | **~93–96%** | **H0–H3 已落地**（SessionEnd · Stop/SubagentStop 续跑 · PostToolUse→模型 · SubagentStart 注入）；H4/H5 可选 |
+| **Hooks · 日用契约** | **~96–98%** | **H0–H5 已落地**（SessionEnd · exit 语义 · updatedInput · `/hooks recent`）；trust/UI 菜单后置 |
 | **产品整体（相对 HC）** | **~70–85%** | 日用高；UI 全家桶另计 |
 
 **主线已闭环：** headless 日用 → FULL → M4 → sandbox/OAuth/settings → **Diff D0–D7** · **U0–U4**。
 
 **开放轨（下一刀）：**  
-**H4** PreToolUse updatedInput · **H5** `/hooks` 诊断 · U5 可选真·Ink/IDE。
+U5 可选真·Ink/IDE · Hooks trust/managed（不对齐日用）· HC 扩事件。
 
 ---
 
@@ -155,7 +155,7 @@ apps/desktop       消费同一 DiffViewModel                 （U3）
 | Electron 可用壳 | ✅ |
 | Diff 日用契约 D0–D7 | ✅ |
 | Diff 交互 UI U0–U4 | ✅（U5 可选） |
-| Hooks 日用 11 事件 + exit 语义 | ✅ **H0–H3**（H4/H5 可选） |
+| Hooks 日用 11 事件 + exit 语义 | ✅ **H0–H5** |
 | 无遥测 | ✅ |
 
 ---
@@ -171,7 +171,7 @@ apps/desktop       消费同一 DiffViewModel                 （U3）
 | M4 Electron | ✅ | 壳 + 流式 + 权限 + Settings |
 | **M-Diff-A（D0–D7）** | ✅ | 日用文件 diff 契约 |
 | **M-Diff-B（U0–U4）** | ✅ U0–U4 | 交互 diff UI 主路径收口；U5 可选 |
-| **M-Hooks（H0–H5）** | ✅ H0–H3 · H4/H5 📋 | SessionEnd + exit 语义主路径；updatedInput/诊断可选 |
+| **M-Hooks（H0–H5）** | ✅ H0–H5 | SessionEnd + exit + updatedInput + `/hooks recent` |
 | 官方市场 / 遥测 | 🚫 | 永不 |
 
 **一句话：**  
@@ -209,10 +209,11 @@ apps/desktop       消费同一 DiffViewModel                 （U3）
 | Stop / SubagentStop **exit 2 续跑** | ✅ **H1**（预算默认 3） |
 | PostToolUse **exit 2 → 模型** | ✅ **H2**（并入 tool_result） |
 | SubagentStart **stdout 注入子上下文** | ✅ **H3** |
-| PreToolUse **updatedInput** | ❌ H4 可选 |
+| PreToolUse **updatedInput** | ✅ **H4**（schema 校验；失败忽略改写） |
+| `/hooks recent` 诊断 | ✅ **H5**（ring · 无遥测） |
 | trust / managed / TUI browser | 后置（不对齐日用 95%） |
 
-**粗估：** 日用 **~93–96%**（11 事件 + 主 exit 语义）；H4/H5 与 Codex 产品壳另计。
+**粗估：** 日用 **~96–98%**（11 事件 + exit + rewrite + 诊断）；vs Codex 产品壳（trust/UI）另计。
 
 ### 7.2 目标与验收（H 轨完成定义）
 
@@ -244,8 +245,8 @@ apps/desktop        会话关闭时走同一 endSession（勿只杀进程跳过 
 | **H1** | **Stop / SubagentStop exit 2 续跑**：stderr→模型/子代理 + 再入 loop（有预算/防死循环） | P0 | ✅ |
 | **H2** | **PostToolUse exit 2 → 模型可见**（并进 tool_result） | P0 | ✅ |
 | **H3** | **SubagentStart injectText** 进子 `systemPromptSections` | P1 | ✅ |
-| **H4** | **PreToolUse `updatedInput`**（JSON 改写 tool_input；失败则忽略改写） | P2 | 📋 |
-| **H5** | `/hooks` 或 CLI 诊断增强（最近失败 / timeout 可见）；非 Ink 菜单 | P2 | 📋 |
+| **H4** | **PreToolUse `updatedInput`**（JSON 改写 tool_input；失败则忽略改写） | P2 | ✅ |
+| **H5** | `/hooks recent` · `/hooks failures` 诊断 ring | P2 | ✅ |
 | 后置 | SessionEnd 以外的 HC 扩事件 · http/prompt/agent · trust/managed · FileChanged | — | 🚫 非本轨 |
 
 **顺序硬约束：** **先 H0（SessionEnd）**，再 H1→H2（exit 语义），再 H3–H5。  

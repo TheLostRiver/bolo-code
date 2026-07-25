@@ -233,6 +233,8 @@ export type RunToolUseContext = {
     onFileDiffRecord?: (
       rec: import('./fileDiffLog.ts').FileChangeRecord,
     ) => void | Promise<void>
+    /** H5：hook 诊断 ring */
+    hookDiagLog?: import('./hookDiag.ts').HookDiagLog
   }
   /**
    * Y3.6：auto 分类结果审计（对照 HC decision 事件；本地 system_note，无遥测）。
@@ -443,6 +445,24 @@ export async function runToolUse(
       blocked: r.blocked,
     })
   }
+  // H5 诊断
+  try {
+    const { appendHookDiag, diagEntriesFromHookRun } = await import(
+      './hookDiag.ts'
+    )
+    if (ctx.sessionRef) {
+      const entries = diagEntriesFromHookRun({
+        event: 'PreToolUse',
+        results: pre.results,
+        blockReason: pre.blockReason,
+      })
+      for (const e of entries) {
+        ctx.sessionRef.hookDiagLog = appendHookDiag(ctx.sessionRef.hookDiagLog, e)
+      }
+    }
+  } catch {
+    /* ignore */
+  }
   if (pre.blocked) {
     return endResult(
       ctx,
@@ -457,6 +477,18 @@ export async function runToolUse(
         concurrencySafe,
       },
     )
+  }
+
+  // H4：PreToolUse updatedInput → 覆盖 tool_input（后写 wins）；再 schema 校验
+  if (pre.updatedInput !== undefined) {
+    const rewritten = validateAgainstJsonSchema(
+      tool.inputJSONSchema,
+      pre.updatedInput,
+    )
+    if (rewritten.success) {
+      toolInput = rewritten.data
+    }
+    // 校验失败：忽略改写，继续原 input（fail-open on rewrite）
   }
 
   // --- 全局 PermissionGate + tool.checkPermissions ---
@@ -1008,6 +1040,21 @@ export async function runToolUse(
       exitCode: r.exitCode,
       blocked: r.exitCode === 2,
     })
+  }
+  try {
+    const { appendHookDiag, diagEntriesFromHookRun } = await import(
+      './hookDiag.ts'
+    )
+    if (ctx.sessionRef) {
+      for (const e of diagEntriesFromHookRun({
+        event: 'PostToolUse',
+        results: post.results,
+      })) {
+        ctx.sessionRef.hookDiagLog = appendHookDiag(ctx.sessionRef.hookDiagLog, e)
+      }
+    }
+  } catch {
+    /* ignore */
   }
   // H2：exit 2 stderr → 立即并入 tool_result（模型可见）
   const postFeedback = (post.continuationText || '').trim()

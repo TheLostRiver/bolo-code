@@ -263,6 +263,138 @@ process.exit(0);
   )
   assert(subStart.injectText.includes('inject-for-child'), 'sub inject')
 
+  // --- H4: PreToolUse updatedInput ---
+  const { parseUpdatedInput } = await import('../packages/hooks/src/index.ts')
+  const ui1 = parseUpdatedInput(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        updatedInput: { command: 'echo rewritten' },
+      },
+    }),
+  )
+  assert(
+    ui1 &&
+      typeof ui1 === 'object' &&
+      (ui1 as { command?: string }).command === 'echo rewritten',
+    'parse updatedInput nested',
+  )
+  const ui2 = parseUpdatedInput(JSON.stringify({ command: 'plain-obj' }))
+  assert(
+    ui2 && (ui2 as { command?: string }).command === 'plain-obj',
+    'parse plain object rewrite',
+  )
+  assert(parseUpdatedInput('not-json') === undefined, 'bad json ignored')
+
+  const rewriteOut = await writeHelper(
+    tmp,
+    'pre-rewrite-out.mjs',
+    `process.stdout.write(JSON.stringify({hookSpecificOutput:{updatedInput:{command:'echo new'}}}));`,
+  )
+  const preRewrite = await runHooks(
+    'PreToolUse',
+    {
+      hook_event_name: 'PreToolUse',
+      session_id: 's',
+      cwd: tmp,
+      timestamp: new Date().toISOString(),
+      tool_name: 'Bash',
+      tool_input: { command: 'echo old' },
+      tool_use_id: 't2',
+    },
+    {
+      PreToolUse: [
+        {
+          matcher: 'Bash',
+          hooks: [
+            {
+              type: 'command',
+              command: `node "${rewriteOut}"`,
+              timeout: 5,
+            },
+          ],
+        },
+      ],
+    },
+  )
+  assert(
+    preRewrite.updatedInput &&
+      (preRewrite.updatedInput as { command?: string }).command === 'echo new',
+    'runHooks updatedInput',
+  )
+
+  // 端到端：改写后 tool 收到新 command
+  const rewriteHelper = await writeHelper(
+    tmp,
+    'rewrite-pre.mjs',
+    `process.stdout.write(JSON.stringify({hookSpecificOutput:{updatedInput:{command:'echo h4-ok'}}}));`,
+  )
+  const s4 = await createSession({
+    cwd: tmp,
+    hooks: {
+      PreToolUse: [
+        {
+          matcher: 'Bash',
+          hooks: [
+            {
+              type: 'command',
+              command: `node "${rewriteHelper}"`,
+              timeout: 5,
+            },
+          ],
+        },
+      ],
+    },
+    provider: createMockProvider({ bashCommand: 'echo should-be-rewritten' }),
+    systemPrompt: false,
+    permissionMode: 'bypassPermissions',
+    onEvent: () => {},
+  })
+  // mock 第一轮会调 Bash；Pre 应改写 command
+  const { submitPrompt } = await import('../packages/core/src/index.ts')
+  // 用 queryLoop 更直接
+  const msgs4: ChatMessage[] = [{ role: 'user', content: 'run' }]
+  await queryLoop({
+    sessionId: s4.id,
+    cwd: tmp,
+    hooks: s4.hooks,
+    messages: msgs4,
+    systemPromptSections: ['sys'],
+    deps: productionDeps(
+      createMockProvider({ bashCommand: 'echo should-be-rewritten' }),
+    ),
+    permissionMode: 'bypassPermissions',
+    askPermission: async () => 'allow',
+    sessionRef: s4 as never,
+    maxTurns: 4,
+    maxStopContinuations: 0,
+  })
+  const toolMsg = msgs4.find((m) => m.role === 'tool')
+  assert(toolMsg, 'tool result present')
+  // Bash 输出应含 h4-ok（改写后的 echo）
+  assert(
+    String(toolMsg!.content).includes('h4-ok') ||
+      msgs4.some(
+        (m) =>
+          typeof m.content === 'string' && m.content.includes('h4-ok'),
+      ),
+    `expected h4-ok in tool path, msgs=${JSON.stringify(msgs4.map((m) => ({ role: m.role, c: String(m.content).slice(0, 80) })))}`,
+  )
+  // H5 diag ring 应有 PreToolUse updatedInput
+  assert(
+    (s4.hookDiagLog?.entries?.length ?? 0) >= 1 ||
+      (s4 as { hookDiagLog?: { entries?: unknown[] } }).hookDiagLog,
+    'hookDiagLog exists',
+  )
+  const recent = await submitUserInput(s4, '/hooks recent')
+  assert(recent.type === 'slash', 'hooks recent slash')
+  if (recent.type === 'slash') {
+    assert(
+      recent.message.includes('hooks recent'),
+      `recent msg: ${recent.message}`,
+    )
+  }
+
   // --- /clear → SessionEnd clear ---
   const clearMarker = path.join(tmp, 'clear-end.txt')
   const clearHelper = await writeHelper(

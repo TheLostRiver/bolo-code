@@ -20,6 +20,8 @@ export type HookRunResult = {
   /** PreToolUse exit 2 等 */
   blocked: boolean
   permissionDecision?: PermissionDecision
+  /** PreToolUse exit 0 解析到的 updatedInput */
+  updatedInput?: unknown
   /** exit 124 或 aborted 时 true */
   timedOut?: boolean
   aborted?: boolean
@@ -117,13 +119,62 @@ function parsePermissionDecision(stdout: string): PermissionDecision | undefined
   if (!text) return undefined
   try {
     const json = JSON.parse(text) as {
-      hookSpecificOutput?: { decision?: string }
+      hookSpecificOutput?: { decision?: string; permissionDecision?: string }
       decision?: string
     }
-    const d = json.hookSpecificOutput?.decision ?? json.decision
+    const d =
+      json.hookSpecificOutput?.decision ??
+      json.hookSpecificOutput?.permissionDecision ??
+      json.decision
     if (d === 'allow' || d === 'deny' || d === 'ask') return d
   } catch {
     // ignore non-json
+  }
+  return undefined
+}
+
+/**
+ * PreToolUse stdout JSON → updatedInput（对照 HC / Codex）。
+ * 接受：
+ * - `{ "hookSpecificOutput": { "updatedInput": {...} } }`
+ * - `{ "updatedInput": {...} }`
+ * - 顶层即为 object（非 array）的 plain rewrite（宽松）
+ * 非法 JSON / 非 object → undefined（忽略改写）。
+ */
+export function parseUpdatedInput(stdout: string): unknown | undefined {
+  const text = stdout.trim()
+  if (!text) return undefined
+  try {
+    const json = JSON.parse(text) as unknown
+    if (json == null || typeof json !== 'object' || Array.isArray(json)) {
+      return undefined
+    }
+    const rec = json as Record<string, unknown>
+    const specific = rec.hookSpecificOutput
+    if (specific && typeof specific === 'object' && !Array.isArray(specific)) {
+      const ui = (specific as Record<string, unknown>).updatedInput
+      if (ui !== undefined && ui !== null && typeof ui === 'object') {
+        return ui
+      }
+    }
+    if (
+      rec.updatedInput !== undefined &&
+      rec.updatedInput !== null &&
+      typeof rec.updatedInput === 'object'
+    ) {
+      return rec.updatedInput
+    }
+    // 宽松：整段 stdout 就是新 input object（且无 hook 元字段）
+    if (
+      !('hookSpecificOutput' in rec) &&
+      !('decision' in rec) &&
+      !('permissionDecision' in rec) &&
+      !('hookEventName' in rec)
+    ) {
+      return rec
+    }
+  } catch {
+    // ignore
   }
   return undefined
 }
@@ -257,6 +308,10 @@ export type AggregatedHookResult = {
   blockReason: string
   permissionDecision?: PermissionDecision
   /**
+   * PreToolUse exit 0：最后一个有效 updatedInput 覆盖（对照 Codex last-wins）
+   */
+  updatedInput?: unknown
+  /**
    * exit 0 stdout 可注入（UserPromptSubmit / SessionStart / PreCompact /
    * SubagentStart）
    */
@@ -298,6 +353,7 @@ export async function runHooks(
   let blocked = false
   let blockReason = ''
   let permissionDecision: PermissionDecision | undefined
+  let updatedInput: unknown | undefined
   const injectParts: string[] = []
   const continuationParts: string[] = []
   let aborted = false
@@ -371,6 +427,14 @@ export async function runHooks(
           permissionDecision = d
         }
       }
+      // H4：PreToolUse exit 0 → updatedInput（后写覆盖）
+      if (event === 'PreToolUse' && exitCode === 0) {
+        const ui = parseUpdatedInput(stdout)
+        if (ui !== undefined) {
+          row.updatedInput = ui
+          updatedInput = ui
+        }
+      }
       if (
         (event === 'UserPromptSubmit' ||
           event === 'SessionStart' ||
@@ -390,6 +454,7 @@ export async function runHooks(
           blocked,
           blockReason,
           permissionDecision,
+          ...(updatedInput !== undefined ? { updatedInput } : {}),
           injectText: injectParts.join('\n'),
           continuationText: continuationParts.join('\n'),
           aborted,
@@ -403,6 +468,7 @@ export async function runHooks(
     blocked,
     blockReason,
     permissionDecision,
+    ...(updatedInput !== undefined ? { updatedInput } : {}),
     injectText: injectParts.join('\n'),
     continuationText: continuationParts.join('\n'),
     aborted,

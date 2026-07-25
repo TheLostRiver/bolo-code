@@ -60,6 +60,11 @@ import {
 import { queryLoop, type QueryLoopEvent, type Terminal } from './queryLoop.ts'
 import type { AskPermissionFn } from './toolExecution.ts'
 import {
+  appendHookDiag,
+  createHookDiagLog,
+  diagEntriesFromHookRun,
+} from './hookDiag.ts'
+import {
   createBackgroundAgentStore,
   createDefaultTools,
   loadAgentsDir,
@@ -701,6 +706,11 @@ export type BoloSession = {
     rec: import('./fileDiffLog.ts').FileChangeRecord,
   ) => void | Promise<void>
   /**
+   * H5：最近 hook 运行诊断（失败/timeout/block/updatedInput）。
+   * /hooks recent 读取；无遥测。
+   */
+  hookDiagLog?: import('./hookDiag.ts').HookDiagLog
+  /**
    * 会话工具表（内置 + Agent + 可选 MCP）。
    * 未设置时 submitPrompt 回落 createDefaultTools()。
    */
@@ -773,6 +783,34 @@ function isSessionPhase(p: string): p is SessionPhase {
 
 function setPhase(session: BoloSession, phase: SessionPhase) {
   emit(session, { type: 'phase', phase })
+}
+
+function recordSessionHookDiag(
+  session: BoloSession,
+  event: string,
+  agg: {
+    results: Array<{
+      exitCode: number
+      stderr?: string
+      blocked?: boolean
+      timedOut?: boolean
+      aborted?: boolean
+      updatedInput?: unknown
+    }>
+    blockReason?: string
+  },
+) {
+  try {
+    for (const e of diagEntriesFromHookRun({
+      event,
+      results: agg.results,
+      blockReason: agg.blockReason,
+    })) {
+      session.hookDiagLog = appendHookDiag(session.hookDiagLog, e)
+    }
+  } catch {
+    /* ignore */
+  }
 }
 
 function mapLoopEvent(session: BoloSession, e: QueryLoopEvent) {
@@ -895,6 +933,7 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
     sessionStartedAtMs: Date.now(),
     fileDiffLog: [],
     diffTurn: 0,
+    hookDiagLog: createHookDiagLog(),
     onEvent: opts.onEvent ?? (() => {}),
   }
 
@@ -984,6 +1023,7 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
   for (const r of start.results) {
     emit(session, { type: 'hook', event: 'SessionStart', exitCode: r.exitCode })
   }
+  recordSessionHookDiag(session, 'SessionStart', start)
   // SessionStart 注入作为额外 system 段（不混进对话 user/assistant）
   if (start.injectText?.trim()) {
     session.systemPromptSections = [
@@ -1370,6 +1410,7 @@ export async function runSessionEndHooks(
         })
       }
     }
+    recordSessionHookDiag(session, 'SessionEnd', end)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     emit(session, {
@@ -1469,6 +1510,7 @@ export async function submitPrompt(
       blocked: r.blocked,
     })
   }
+  recordSessionHookDiag(session, 'UserPromptSubmit', submit)
   if (submit.blocked) {
     emit(session, { type: 'error', message: submit.blockReason })
     setPhase(session, 'ready')
@@ -1807,6 +1849,7 @@ export async function compactSession(
       blocked: r.blocked,
     })
   }
+  recordSessionHookDiag(session, 'PreCompact', pre)
   if (pre.blocked) {
     session.messages.length = 0
     session.messages.push(...snapshot)
@@ -1856,6 +1899,7 @@ export async function compactSession(
   for (const r of post.results) {
     emit(session, { type: 'hook', event: 'PostCompact', exitCode: r.exitCode })
   }
+  recordSessionHookDiag(session, 'PostCompact', post)
 
   // 旁路 jsonl：rewrite 并写入 compact_boundary（不改 JSON 快照）
   try {
@@ -2016,3 +2060,12 @@ export {
   type SlashCommandGroup,
   type EffortLevel,
 } from './slash.ts'
+
+export {
+  createHookDiagLog,
+  appendHookDiag,
+  formatHookDiagRecent,
+  diagEntriesFromHookRun,
+  type HookDiagEntry,
+  type HookDiagLog,
+} from './hookDiag.ts'

@@ -1473,12 +1473,33 @@ function invokePluginCommand(
 }
 
 /**
- * 列出会话 hooks 配置（只读）。
- * 无参：各事件 matcher 组数 / command 数；有参：该事件详情。
+ * 列出会话 hooks 配置（只读）+ 可选 recent 诊断。
+ * 无参：各事件 matcher 组数 / command 数；
+ * `recent` / `diag` / `failures`：最近失败/timeout/block；
+ * 事件名：该事件配置详情。
  */
 function cmdHooks(session: SlashSession, args: string): SlashDispatchResult {
   const hooks: HooksConfig = session.hooks ?? {}
   const want = args.trim()
+  const wantLower = want.toLowerCase()
+
+  if (
+    wantLower === 'recent' ||
+    wantLower === 'diag' ||
+    wantLower === 'failures' ||
+    wantLower === 'log'
+  ) {
+    const onlyProblems = wantLower === 'failures'
+    const log = (session as { hookDiagLog?: unknown }).hookDiagLog
+    return {
+      ok: true,
+      message: formatHookDiagRecentFromSession(log, {
+        max: 16,
+        onlyProblems,
+      }),
+    }
+  }
+
   if (want) {
     const event = HOOK_EVENTS.find(
       (e) => e.toLowerCase() === want.toLowerCase(),
@@ -1486,7 +1507,7 @@ function cmdHooks(session: SlashSession, args: string): SlashDispatchResult {
     if (!event) {
       return {
         ok: false,
-        message: `Unknown hook event "${want}". Known: ${HOOK_EVENTS.join(', ')}`,
+        message: `Unknown hook event "${want}". Known: ${HOOK_EVENTS.join(', ')}. Or: /hooks recent`,
       }
     }
     const groups = hooks[event] ?? []
@@ -1520,12 +1541,55 @@ function cmdHooks(session: SlashSession, args: string): SlashDispatchResult {
     return {
       ok: true,
       message:
-        'hooks: (none configured)\nConfigure ~/.bolo/hooks.json or .bolo/hooks.json. Use /hooks <EventName> for details.',
+        'hooks: (none configured)\nConfigure ~/.bolo/hooks.json or .bolo/hooks.json. Use /hooks <EventName> or /hooks recent.',
     }
   }
   lines.push(`total commands: ${totalCmds}`)
-  lines.push('Use /hooks <EventName> for matchers and commands.')
+  const diagLen =
+    (session as { hookDiagLog?: { entries?: unknown[] } }).hookDiagLog?.entries
+      ?.length ?? 0
+  if (diagLen > 0) {
+    lines.push(`recent diag entries: ${diagLen} (see /hooks recent)`)
+  }
+  lines.push('Use /hooks <EventName> · /hooks recent · /hooks failures')
   return { ok: true, message: lines.join('\n') }
+}
+
+function formatHookDiagRecentFromSession(
+  log: unknown,
+  opts?: { max?: number; onlyProblems?: boolean },
+): string {
+  const entries =
+    (log as { entries?: Array<Record<string, unknown>> } | undefined)?.entries ??
+    []
+  const max = opts?.max ?? 12
+  const onlyProblems = opts?.onlyProblems === true
+  let rows = onlyProblems
+    ? entries.filter(
+        (e) =>
+          e.exitCode !== 0 || e.blocked || e.timedOut || e.aborted,
+      )
+    : entries
+  if (!rows.length) {
+    return onlyProblems
+      ? 'hooks recent: (no failures/timeouts in ring)'
+      : 'hooks recent: (empty — run tools or prompts with hooks configured)'
+  }
+  rows = rows.slice(-max)
+  const lines = [
+    `hooks recent (last ${rows.length}${onlyProblems ? ', problems' : ''}):`,
+  ]
+  for (const e of rows) {
+    const flags: string[] = []
+    if (e.blocked) flags.push('blocked')
+    if (e.timedOut) flags.push('timeout')
+    if (e.aborted) flags.push('aborted')
+    if (e.updatedInput) flags.push('updatedInput')
+    const flag = flags.length ? ` [${flags.join(',')}]` : ''
+    const det = e.detail ? ` — ${e.detail}` : ''
+    lines.push(`  ${e.at}  ${e.event}  exit=${e.exitCode}${flag}${det}`)
+  }
+  return lines.join('\n')
 }
 
 /**
@@ -2470,8 +2534,8 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
   },
   {
     name: 'hooks',
-    summary: 'List configured hooks or details for one event',
-    usage: '[EventName]',
+    summary: 'List hooks; /hooks recent|failures for diag; /hooks <Event>',
+    usage: '[EventName|recent|failures]',
     group: 'extensions',
     run: cmdHooks,
   },

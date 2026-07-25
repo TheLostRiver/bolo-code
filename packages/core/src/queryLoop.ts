@@ -112,6 +112,7 @@ export type QueryLoopParams = {
     onFileDiffRecord?: (
       rec: import('./fileDiffLog.ts').FileChangeRecord,
     ) => void | Promise<void>
+    hookDiagLog?: import('./hookDiag.ts').HookDiagLog
   }
   /** Y3.6 auto 分类审计 → system_note */
   onAutoClassifyAudit?: (note: {
@@ -606,6 +607,25 @@ async function runStopHooks(params: QueryLoopParams): Promise<{
       exitCode: r.exitCode,
       blocked: r.blocked,
     })
+  }
+  try {
+    const { appendHookDiag, diagEntriesFromHookRun } = await import(
+      './hookDiag.ts'
+    )
+    if (params.sessionRef) {
+      for (const e of diagEntriesFromHookRun({
+        event: 'Stop',
+        results: stop.results,
+        blockReason: stop.blockReason,
+      })) {
+        params.sessionRef.hookDiagLog = appendHookDiag(
+          params.sessionRef.hookDiagLog,
+          e,
+        )
+      }
+    }
+  } catch {
+    /* ignore */
   }
   const continuationText = (stop.continuationText || stop.blockReason || '').trim()
   return {

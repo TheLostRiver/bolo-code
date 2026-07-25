@@ -280,6 +280,12 @@ async function main() {
   )
   const hooksBad = await submitUserInput(session, '/hooks NotAnEvent')
   assert(hooksBad.type === 'slash' && hooksBad.message.includes('Unknown'), 'hooks unknown')
+  const hooksRecent = await submitUserInput(session, '/hooks recent')
+  assert(
+    hooksRecent.type === 'slash' &&
+      hooksRecent.message.toLowerCase().includes('recent'),
+    'hooks recent',
+  )
   session.hooks = {}
 
   // /init project (temp dir)

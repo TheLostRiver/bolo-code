@@ -111,7 +111,21 @@ type PreToolUseInput = HookBaseInput & {
 - exit 2：**阻止** tool，stderr 给模型  
 - 其他：stderr 给用户，仍执行 tool  
 
-可选：stdout 修改 `tool_input`（v1 可后置）。
+可选 stdout JSON 改写 `tool_input`（**H4**，对照 HC/Codex `updatedInput`）：
+
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
+    "updatedInput": { "command": "echo rewritten" }
+  }
+}
+```
+
+- 亦接受顶层 `{ "updatedInput": { ... } }`  
+- 多 hook：**后写覆盖**（last-wins）  
+- 改写后须通过 tool `inputJSONSchema`；失败则**忽略改写**、用原 input（fail-open on rewrite）  
+- 与 exit 2 block 互斥：block 时不应用 updatedInput  
 
 ### 3.3 PostToolUse
 
@@ -317,8 +331,8 @@ PreToolUse → (PermissionRequest?) → tool body → PostToolUse
 | **H1** | Stop / SubagentStop exit 2 续跑 | ✅ |
 | **H2** | PostToolUse exit 2 → 模型 | ✅ |
 | **H3** | SubagentStart stdout 注入 | ✅ |
-| **H4** | PreToolUse `updatedInput` | 📋 |
-| **H5** | `/hooks` 诊断增强 | 📋 |
+| **H4** | PreToolUse `updatedInput` | ✅ |
+| **H5** | `/hooks recent` · `/hooks failures` 诊断 | ✅ |
 
 ## 8. 后续可扩展事件（非 H 轨必做）
 
