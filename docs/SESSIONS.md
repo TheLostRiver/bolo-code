@@ -28,8 +28,28 @@
 | `message` | 包裹现有 `ChatMessage` |
 | `compact_boundary` | full compact 边界（`compactSession` 成功后 rewrite jsonl 写入） |
 | `title` | 会话标题（**last-wins**；**不进**模型 messages；rewrite 时保留最后一条） |
+| `turn` | Durable Turn 生命周期（`turnId` + `state`；**不进**模型 messages；rewrite 时保留） |
 
 `saveSession` **默认**只增量 append / rewrite `.jsonl`；不再默认原子写 JSON。`migrateSessionToJsonl` 可将旧 JSON 旁路写出 jsonl（默认不删 JSON）。`setSessionTitle` / `/title` 追加 `title` 行；`appendSessionSystemNote` / `/note` 追加 `system_note`（不进模型链）。list 对 jsonl 走 `scanTranscriptLite`（轻量计数字段 + 近况 preview）。详见 `docs/TODO_SESSION_JSONL.md`。
+
+### 1.2 Durable Turn v1（DR0–DR1）
+
+持久化 CLI/workspace 会话在调用 provider 前追加 turn 生命周期：
+
+```jsonc
+{"type":"turn","sessionId":"...","turnId":"turn_...","state":"admitted","prompt":"最终 hook 归约后的输入","timestamp":"..."}
+{"type":"turn","sessionId":"...","turnId":"turn_...","state":"running","timestamp":"..."}
+{"type":"turn","sessionId":"...","turnId":"turn_...","state":"completed","terminalReason":"completed","timestamp":"..."}
+```
+
+状态集合：`admitted | running | completed | error | aborted | interrupted`。
+
+- `admitted` 必须先于 user message 入内存和 provider 调用；只在这一行保存 prompt。
+- `running` 表示本进程已领取执行；同一 `turnId` 重复提交不得再次调用 provider/tool。
+- terminal 行必须晚于 messages 成功落盘。保存失败时保留 running，恢复按 interrupted 展示。
+- resume 将最后状态仍为 admitted/running 的 turn 投影为 interrupted；默认不自动重放。
+- compact rewrite 保留 turn entries；turn entries、title、notes、file_diff 都不进入模型消息链。
+- 显式 in-memory session 可以无 transcript；CLI/workspace 的 autoSave 主路径提供上述 durable 保证。
 
 ## 2. 快照格式（version 1，只读兼容）
 

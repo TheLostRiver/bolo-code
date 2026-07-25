@@ -12,7 +12,7 @@
 | 层 | 粗估 | 说明 |
 |----|------|------|
 | **Headless 核心** | **~80–88%** | loop/STE/权限/auto/snip/policy/OS sandbox；partial stream fail-closed |
-| 会话与 CLI | **~80–88%** | JSONL · new/resume 同构 runtime · slash · 每 turn 取消 |
+| 会话与 CLI | **~80–88%** | JSONL · new/resume 同构 runtime · slash · 每 turn 取消；Durable Turn DR0–DR1 ✅ |
 | **扩展面** | **~80–88%** | MCP×3 · Skills · Plugins · WebFetch · OAuth 本地 |
 | **Subagent** | **~85–92%** | Spec v0；worktree 隔离失败 fail-closed、dirty 成果保留 |
 | **Rules / Creators** | **~75–85%** | 日用齐 |
@@ -29,10 +29,13 @@
 | **Provider UX · 便利层** | **~95–98%** | **CX0–CX8 已落地**（含 ultrathink 默认 off）· [PROVIDER_UX.md](./PROVIDER_UX.md) |
 | **产品整体（相对 HC）** | **~74–88%** | 日用高；UI 全家桶另计 |
 
-**主线已闭环：** headless 日用 → Diff · Hooks · Compact · Provider · Effort · **Provider UX CX0–CX8** · **CLI/Agent 可靠性 R0–R4**。
+**已闭环主线：** headless 日用 → Diff · Hooks · Compact · Provider · Effort · **Provider UX CX0–CX8** · **CLI/Agent 可靠性 R0–R4**。
 
-**开放轨（非阻塞）：**  
-Compact §8.9 · U5 · adaptive thinking。
+**当前主线：** **Durable Turn DR2**（§13：同 session 单 runner · safe-boundary queue/steer/interrupt）。
+
+**开放轨：**
+
+Durable Turn DR0–DR1 已落地，DR2–DR4 继续开放；非阻塞加深项为 Compact §8.9 · U5 · adaptive thinking · Desktop 体验打磨。
 
 ---
 
@@ -167,6 +170,7 @@ apps/desktop       消费同一 DiffViewModel                 （U3）
 | **Effort 方言** | ✅ **E0–E9**（§10） |
 | **Provider UX** | ✅ **CX0–CX8**（§11；ultrathink 默认 off） |
 | **CLI / Agent 可靠性** | ✅ **R0–R4**（§12；流式终态 · runtime · 取消 · worktree · 门禁） |
+| **Durable Turn** | ✅ **DR0–DR1**（§13；DR2–DR4 待做） |
 | 无遥测 | ✅ |
 
 ---
@@ -188,12 +192,15 @@ apps/desktop       消费同一 DiffViewModel                 （U3）
 | **M-Effort（E0–E9）** | ✅ | 方言引擎 · choosable · 门控 · TTY · doctor |
 | **M-Provider-UX（CX0–CX8）** | ✅ | preset · caps · errors · resume · Desktop · ultrathink |
 | **M-Reliability（R0–R4）** | ✅ | provider fail-closed · new/resume 同构 · Ctrl-C · worktree 保全 · 默认门禁 |
+| **M-Durable-Turn（DR0–DR4）** | ✅ DR0–DR1 | admission + lifecycle + recovery；coordinator/subagent/protocol 后续 |
 | 官方市场 / 遥测 | 🚫 | 永不 |
 
 **一句话：**  
-主路径、Diff、Hooks、Compact、**多 Provider、Effort、Provider UX（含 CX8）、CLI/Agent 可靠性 R0–R4**日用已收口。
+主路径、Diff、Hooks、Compact、**多 Provider、Effort、Provider UX（含 CX8）、CLI/Agent 可靠性 R0–R4**日用已收口；Durable Turn 正在把“可恢复 transcript”升级为“可恢复执行”。
 
-**下一刀（开放 · 非阻塞）：** Compact §8.9 · U5 · adaptive thinking · Desktop 体验打磨。
+**下一刀（当前主线）：** Durable Turn **DR2 coordinator**；随后 DR3 background/subagent → DR4 protocol。
+
+**非阻塞加深：** Compact §8.9 · U5 · adaptive thinking · Desktop 体验打磨。
 
 ---
 
@@ -835,3 +842,165 @@ npx tsx scripts/test-cli-events.ts
 npx tsx scripts/test-cli-resume.ts
 npx tsx scripts/test-worktree-safety.ts
 ```
+
+---
+
+## 13. Durable Turn 轨（DR0–DR1 ✅ · DR2–DR4 开放）
+
+> **目标：** 把“turn 结束后保存 transcript”升级为“输入先 admission、执行有生命周期、崩溃后可识别未完成工作”。
+>
+> **边界：** 首批复用 append-only JSONL；不上 SQLite，不先建 daemon/app-server；未知工具副作用绝不自动重放。
+>
+> **依赖方向：** 先改 `packages/*` 契约，再让 CLI/Desktop 消费；前端不得维护第二套 turn 状态。
+
+| 阶段 | 交付 | 状态 |
+|------|------|------|
+| **DR0** | 稳定 `turnId` + `admitted/running/completed/error/aborted/interrupted` schema；append-only 投影、幂等与恢复规则 | ✅ |
+| **DR1** | UserPromptSubmit 归约后、provider 前写 admission/running；消息成功落盘后写 terminal；resume 识别未完成 turn | ✅ |
+| **DR2** | `SessionCoordinator`：同 session 单 runner、跨 session 并行、safe-boundary `queue/steer/interrupt` | 📋 |
+| **DR3** | 后台 Subagent 任务/结果持久化；真正 queue；结果只在父 turn 安全边界 promotion | 📋 |
+| **DR4** | CLI 任务诊断与恢复动作；稳定 thread/turn 协议，按真实多客户端需求再接 app-server/RPC | 📋 |
+
+### 13.1 DR0–DR1 契约
+
+```text
+UserPromptSubmit hook 成功并归约最终 prompt
+  → append turn(admitted, turnId, prompt)
+  → append turn(running, turnId)
+  → messages.push(user)
+  → queryLoop
+  → save messages
+  → append turn(completed | error | aborted, terminalReason)
+```
+
+- hook blocked：不 admission；沿用 `user_prompt_blocked`
+- 同一 `turnId` 已存在：不得再次调用 provider/tool，返回明确 error
+- transcript 中最后状态为 admitted/running：resume 投影为 `interrupted`
+- terminal 必须晚于消息成功落盘；若 terminal 写入失败，恢复时宁可显示 interrupted
+- `max_turns` 等非成功终态映射为 error，并保留原 `terminalReason`
+- in-memory embedding 可显式不落盘；CLI/workspace 持久化主路径必须满足上述顺序
+
+### 13.2 DR0–DR1 验收
+
+- provider 在被调用时，磁盘已经存在同一 `turnId` 的 admitted + running
+- completed/error/aborted 均有最后状态，prompt 只在 admitted 保存一次
+- 相同 `turnId` 重复 submit 的 provider 调用次数为 0
+- 只有 admitted/running 的崩溃 fixture 在 resume 后显示 interrupted，且不自动执行
+- compact rewrite 不擦除 turn lifecycle
+- `npm test` 默认包含 durable turn 回归；`npm run typecheck` 绿色
+
+### 13.3 DR2–DR4 顺序约束
+
+1. DR2 先统一同 session runner 与 safe boundary，再暴露真正 queue/steer
+2. DR3 后台 agent 只能通过 coordinator 回写，禁止异步直接 `messages.push`
+3. DR4 的 app-server/RPC 是协议消费者，不反向侵入 core
+4. 在 DR2 前不宣称崩溃后自动继续；在工具幂等契约完善前不自动重放 interrupted turn
+
+### 13.4 实施切片（按顺序）
+
+| 切片 | 核心交付 | 验收重点 | 预计提交 |
+|------|----------|----------|----------|
+| **DR2A · Session ownership** | `packages/core` 提供 `SessionCoordinator`；同一 session 最多一个 active runner，不同 session 可并行 | 第二个同 session runner 不得进入 provider/tool；不同 session 不互相阻塞；所有 runner release 路径可证明 | core + tests；docs |
+| **DR2B · Safe-boundary control** | 定义 `queue/steer/interrupt` 请求、状态与 promotion；边界先覆盖 provider call 前后、tool call 前后、permission/diff ask 退出点 | 控制请求只在边界生效；取消与 ask 面板 fail-closed；queued prompt 不丢、不重放 | core + tests；CLI consumer；docs |
+| **DR2C · Recovery projection** | coordinator 状态与 durable turn 投影对齐；进程内 control 终态映射到 transcript | crash fixture、duplicate `turnId`、terminal write failure、runner release 组合回归 | core + tests；docs |
+| **DR3A · Durable task schema** | background/subagent task 的 `admitted/running/completed/error/aborted/interrupted` append-only 记录与投影 | task/result 可恢复；未知执行状态只投影 interrupted；结果不自动注入父消息 | core/subagent + tests；docs |
+| **DR3B · Queue + promotion** | `overflow: queue` 接入 coordinator；结果先持久化，只在父 turn safe boundary promotion | 并发上限、FIFO/取消、父 turn 结束竞态、worktree dirty 成果保全 | core/subagent + tests；CLI status；docs |
+| **DR4A · Runtime protocol** | transport-neutral 的 session/turn/task snapshot 与 command/result schema；版本与 feature negotiation | 序列化 round-trip、未知字段兼容、非法状态迁移 fail-closed | shared/core + tests；docs |
+| **DR4B · CLI diagnostics** | list/inspect/interrupt/discard/retry-safe；明确区分“查看”“丢弃”“显式重试” | 默认永不 replay；危险动作有明确目标与结果；new/resume 共用协议投影 | core contract；CLI + tests；docs |
+| **DR4C · Protocol closeout** | 用真实 CLI/Desktop 消费反馈收紧协议；只在已有第二客户端需求时评估 app-server/RPC | core 不依赖传输层；兼容旧 transcript；端到端 crash/restart 回归 | protocol + consumers；docs |
+
+### 13.5 DR2 状态机与安全边界
+
+```text
+idle
+  └─ submit(turnId) ─→ admitted ─→ running
+                                  ├─ boundary: promote queued control
+                                  ├─ boundary: provider/tool/ask handoff
+                                  └─ terminal ─→ completed | error | aborted
+
+同 session:
+  active runner = 0..1
+  queued controls = ordered append-only intent
+
+跨 session:
+  各自 coordinator slot 独立；仅共享显式全局并发限制
+```
+
+第一版 safe boundary 只承诺以下位置：
+
+1. provider 调用开始前与完整响应归约后
+2. 每个 tool call 的 `PreToolUse` 前与 `PostToolUse` 后
+3. permission ask / diff approval 返回或被取消后
+4. compact 完成、失败或决定跳过后
+5. turn terminal 落盘前
+
+不得把 token chunk、半个 tool call、正在写文件、正在改 worktree 当成 safe boundary。`steer` 第一版是“在下一安全边界追加归约后的用户意图”，不是修改已发出的 HTTP 请求或篡改当前 assistant message。
+
+### 13.6 DR3 持久化与 promotion 规则
+
+- background task 与 turn 使用不同 id/type，不能复用 `turnId` 冒充父 turn。
+- task admission 必须包含父 session/turn、agent type、isolation 与最小恢复元数据；不得保存密钥。
+- task result 先写 durable record，再进入 completed；写结果失败时不得向父 turn 宣称成功。
+- 子任务、定时器、事件回调均不得直接修改 `session.messages`；只能提交 coordinator intent。
+- 父 turn 不存在、已 terminal 或无安全边界时，结果保持 pending/persisted，由 CLI 显示，绝不静默丢弃。
+- worktree cleanup 继续遵循 R3：只有确认 clean 才自动删除，dirty/reused/cleanup failure 都保留绝对路径。
+
+### 13.7 DR4 协议边界与非目标
+
+协议先服务本地 CLI 与 Desktop，共享最小稳定字段：
+
+```text
+SessionRef  = sessionId + revision
+TurnRef     = sessionId + turnId
+TaskRef     = sessionId + taskId (+ parentTurnId)
+Snapshot    = current state + timestamps + safe actions
+Command     = target ref + expected revision + action + idempotency key
+Result      = accepted/rejected + resulting revision + diagnostic
+```
+
+DR4 仍然不是以下内容：
+
+- 不承诺网络 daemon、远程多租户、云同步或官方市场。
+- 不为“以后也许需要”引入 SQLite、消息队列或 RPC 框架。
+- 不允许客户端自己推导第二套状态机；CLI/Desktop 只消费 core 投影。
+- 不提供“自动继续所有 interrupted work”；只有被证明幂等且用户显式请求的 retry-safe 动作才可重试。
+
+### 13.8 固定质量门禁与自治规则
+
+每个切片都必须满足：
+
+1. 先提交失败测试与 `packages/*` 契约，再接 CLI/Desktop。
+2. 定向回归、`npm run typecheck`、完整 `npm test` 全绿。
+3. crash、duplicate、abort、持久化失败至少覆盖与本切片相关的组合。
+4. 运行 scoped `git diff --check`，只 stage 本切片路径。
+5. 代码/测试与文档分批 commit；push 后确认远端 commit。
+6. ROADMAP、专题文档、AGENT_HANDOFF 与人类可见行为保持同一水位。
+
+自主迭代时遇到以下情况必须停止扩张并保留可接手状态：
+
+- 同一根因连续三种方案仍失败。
+- 需要引入 SQLite、daemon、app-server/RPC 或外部服务。
+- 必须覆盖、清理或提交无法确认归属的既有脏文件。
+- 发现数据丢失、权限放宽、自动副作用重放或 worktree 成果丢失风险。
+- push 遇到认证、保护规则或无法安全解决的非快进冲突。
+
+### 13.9 DR0–DR4 总体验收
+
+- 任意时刻同一 session 至多一个 provider/tool runner。
+- 跨 session 并行不共享可变 messages，也不串错 turn/task 事件。
+- queue/steer/interrupt 只在文档化 safe boundary promotion。
+- crash 后能区分 completed、明确失败、明确取消与未知 interrupted。
+- duplicate idempotency key 的 provider/tool 调用次数为 0。
+- background 结果可恢复、可诊断、不会越过父 turn 边界写消息。
+- CLI 能列出安全动作；默认动作不自动 replay。
+- 旧 JSON/JSONL 会话仍可读取，compact rewrite 不擦除 lifecycle/task 记录。
+- `npm test` 与 `npm run typecheck` 为默认绿色门禁。
+
+### 13.10 Durable Runtime 之后
+
+DR0–DR4 收口后再按收益/风险选择下一轨，不并行铺大工程：
+
+1. **CLI/TUI 日用诊断**：优先把 turn/task 状态、queue 与 safe actions 做成轻量文本/TTY 视图。
+2. **Compact §8.9**：partial/remote/真 tokenizer，只在 Durable Runtime 不再变化后深化。
+3. **Desktop 消费**：复用 protocol/view-model 增加 session/task 面板，不复制业务状态机。
+4. **U5 / adaptive thinking**：保持可选；不得阻塞 headless 可靠性。

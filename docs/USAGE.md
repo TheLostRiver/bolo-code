@@ -396,6 +396,7 @@ CLI：
 - 落盘：`~/.bolo/sessions/` 或项目 sessions（见 [SESSIONS.md](./SESSIONS.md)）  
 - resume 会尝试恢复 **`providerId` + model + effort**，并与新会话共用当前 workspace 的 hooks / skills / plugins / agent / MCP 装配（缺 key 降级 + 警告）
 - `/diff` 摘要可经 transcript `file_diff` 恢复（无全文 hunk）  
+- 持久化 CLI turn 会在调用模型前写入 `admitted/running`；完成、错误或取消后写 terminal。若进程中断，resume 将未完成 turn 识别为 `interrupted`，但不会自动重放可能已有副作用的工作。
 
 ```bash
 npx bolo --list

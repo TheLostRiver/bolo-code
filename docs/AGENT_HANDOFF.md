@@ -107,7 +107,7 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | 层 | 粗估 | 状态摘要 |
 |----|------|----------|
 | Headless 核心 | ~80–88% | queryLoop · STE · 权限 · tools；partial stream fail-closed |
-| 会话 / CLI | ~80–88% | JSONL · new/resume 同构 runtime · slash · 每 turn 取消 |
+| 会话 / CLI | ~80–88% | JSONL · new/resume 同构 runtime · turn 取消；Durable Turn DR0–DR1 |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
 | Subagent | ~85–92% | Spec v0；默认子不可再 spawn；worktree 成果保全 |
 | 文件 Diff 日用 | ~95%+ | **D0–D7** |
@@ -117,12 +117,15 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | 多 Provider 热切 | ~92–96% | **P0–P4.1 + CX7 Desktop** |
 | Effort 方言 | ~92–95% | **E0–E9** |
 | Provider UX | ~95–98% | **CX0–CX8**（ultrathink 默认 off） |
+| Durable Turn | DR0–DR1 ✅ | 输入先落盘 · lifecycle · duplicate fail-closed · incomplete→interrupted |
 | Electron GUI | ~65–75% | 薄壳；非 HC 级 IDE |
 | 产品相对 HC 全家桶 | ~74–88% | 日用高；UI 密度另计 |
 
-**主线已闭环：** Diff · Hooks · Compact · Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4**。
+**已闭环：** Diff · Hooks · Compact · Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Turn DR0–DR1**。
 
-**开放轨（非阻塞）：**
+**当前主线：** Durable Turn **DR2 coordinator**；DR3 background/subagent、DR4 protocol 后续。
+
+**其它开放轨（非阻塞）：**
 
 | 项 | 说明 |
 |----|------|
@@ -130,6 +133,22 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | U5 | 真 React Ink / IDE diff 推送（可选） |
 | adaptive thinking | 与 effort 深联动 |
 | Desktop 打磨 | effort UI · session list · markdown/tool cards 等 |
+| Durable Turn DR2–DR4 | coordinator · durable background/subagent · protocol |
+
+Durable Runtime 的长期执行顺序以 [ROADMAP.md](./ROADMAP.md) §13.4–§13.10 为准：
+
+```text
+DR2A 单 session runner
+→ DR2B safe-boundary queue/steer/interrupt
+→ DR2C recovery projection
+→ DR3A durable background task
+→ DR3B queue + parent-boundary promotion
+→ DR4A runtime protocol
+→ DR4B CLI diagnostics
+→ DR4C closeout
+```
+
+每刀都必须先改 `packages/*` 契约和失败测试，再接 CLI/Desktop；定向测试、typecheck、完整 `npm test`、scoped `diff --check` 全绿后，代码与文档分批 commit/push。遇到需要数据库/daemon/RPC、用户脏文件冲突、数据丢失或副作用自动重放风险时停止扩张。
 
 **永不：** 遥测 · 官方市场 API。
 
@@ -151,6 +170,7 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | §10 | Effort |
 | §11 | Provider UX（CX） |
 | §12 | CLI / Agent 可靠性（R0–R4） |
+| §13 | Durable Turn（DR0–DR4） |
 
 历史切片命名（实现时仍会在 commit/message 出现）：
 
@@ -242,7 +262,7 @@ npx tsx scripts/test-file-diff.ts
 npx tsx scripts/test-config.ts
 ```
 
-`npm test` 已覆盖 R0–R4 的关键回归；其它新轨仍以对应 `test-*` 脚本为准。
+`npm test` 已覆盖 R0–R4 与 Durable Turn DR0–DR1 的关键回归；其它新轨仍以对应 `test-*` 脚本为准。
 
 ### 7.3 Git
 
@@ -301,6 +321,7 @@ cd apps/desktop && npm install && set BOLO_DESKTOP_MOCK=1 && npm start
 | H0–H5 / C0–C5 | Hooks · Compact 日用 |
 | Desktop repoRoot fix | `apps/desktop` 正确加载 `packages/*` |
 | R0–R4 | provider partial-error fail-closed · new/resume 同构 · Ctrl-C 取消链 · worktree 保全 · 默认门禁 |
+| DR0–DR1 | 输入先 admission · turn lifecycle · duplicate fail-closed · crash recovery projection |
 
 最新 commit 以 `git log` 为准。
 
