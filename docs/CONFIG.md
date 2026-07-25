@@ -9,17 +9,18 @@
 
 ```
 ~/.bolo/                    # 或 $BOLO_CONFIG_DIR
-  config.json               # provider / permissionMode / autoCompact …
-  mcp.json                  # MCP servers
-  hooks.json                # Runtime hooks（10 事件契约）
+  config.json               # JSONC（可用 // 注释）；provider / agents / permissionMode …
+  mcp.json
+  hooks.json
   skills/
     <id>/SKILL.md
   plugins/
     <plugin-id>/bolo.plugin.json
-  sessions/                 # 会话 JSON 快照（见 docs/SESSIONS.md）
-  rules/                    # 可选用户级 rules
-  agents/                   # 可选用户级 subagent 定义（*.md）
-  memory/                   # 跨会话长期记忆（MEMORY.md 索引；见 docs/MEMORY.md）
+  sessions/
+  rules/
+  agents/                   # subagent 类型 *.md + README.md（字段说明）
+    README.md
+  memory/
     MEMORY.md
 ```
 
@@ -29,16 +30,16 @@
 
 ```
 <repo>/.bolo/
-  config.json               # 覆盖全局同名字段
+  config.json               # JSONC；覆盖全局同名字段（含 agents）
   mcp.json
   hooks.json
   skills/
-    <id>/SKILL.md           # 项目 skill（同 id 覆盖 ~/.bolo/skills）
+    <id>/SKILL.md
   plugins/
-    <plugin-id>/bolo.plugin.json
-  sessions/                 # 默认 scope=project 落盘处
-  rules/                    # 项目 rules（见 RULES.md）
-  agents/                   # 项目 subagent 定义（*.md；覆盖同名内置，见 SUBAGENT.md）
+  sessions/
+  rules/
+  agents/                   # 项目 subagent；见 agents/README.md · SUBAGENT_SPEC.md
+    README.md
 ```
 
 对照 Claude Code：项目级常落在仓库的 `.claude/`；Bolo 固定用 **`.bolo/`**。
@@ -49,6 +50,20 @@
 npx tsx scripts/bolo-init.ts
 # 或在代码里 ensureProjectLayout(cwd)
 ```
+
+会写入**带注释**的默认 `config.json`（JSONC）与 `agents/README.md`（不覆盖已有文件）。
+
+## 1.1 `config.json` 支持注释（JSONC）
+
+标准 JSON 不能写注释；Bolo **加载时**会剥掉：
+
+- `//` 行注释
+- `/* … */` 块注释
+- 尾逗号（可选）
+
+因此初始化模板把 **subagent / provider 用法写在文件内注释**里，打开即看，不必先翻文档。
+
+编辑器用 JSONC 高亮即可；严格 JSON 校验器可能报错——以 Bolo 加载为准。
 
 ## 2. 合并优先级
 

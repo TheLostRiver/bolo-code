@@ -9,10 +9,12 @@ import {
   type BoloLayoutPaths,
 } from './paths.ts'
 import {
-  DEFAULT_CONFIG,
+  DEFAULT_AGENTS_README,
+  DEFAULT_CONFIG_JSONC,
   DEFAULT_HOOKS_FILE,
   DEFAULT_MCP_FILE,
 } from './types.ts'
+import { writeTextIfMissing } from './io.ts'
 
 async function ensureDir(dir: string): Promise<void> {
   await fs.mkdir(dir, { recursive: true })
@@ -52,7 +54,8 @@ export async function ensureLayout(
   await ensureDir(layout.memoryDir)
 
   if (writeDefaults) {
-    if (await writeJsonIfMissing(layout.configJson, DEFAULT_CONFIG)) {
+    // config.json：带注释的 JSONC 模板（用法写在文件里）
+    if (await writeTextIfMissing(layout.configJson, DEFAULT_CONFIG_JSONC)) {
       created.push(layout.configJson)
     }
     if (await writeJsonIfMissing(layout.mcpJson, DEFAULT_MCP_FILE)) {
@@ -60,6 +63,11 @@ export async function ensureLayout(
     }
     if (await writeJsonIfMissing(layout.hooksJson, DEFAULT_HOOKS_FILE)) {
       created.push(layout.hooksJson)
+    }
+    // agents/README.md：frontmatter 字段说明
+    const agentsReadme = `${layout.agentsDir.replace(/[/\\]+$/, '')}/README.md`
+    if (await writeTextIfMissing(agentsReadme, DEFAULT_AGENTS_README)) {
+      created.push(agentsReadme)
     }
   }
 

@@ -9,10 +9,14 @@ import {
   ensureAllLayouts,
   getBoloHomeDir,
   getProjectBoloDir,
+  getProjectLayout,
   loadWorkspace,
+  loadConfigJson,
   mergeConfigs,
   resolveProviderFromConfig,
   writeJsonFile,
+  stripJsonc,
+  parseJsonc,
   type BoloConfigJson,
 } from '../packages/config/src/index.ts'
 
@@ -176,6 +180,48 @@ async function main() {
   )
   assert(merged.provider?.model === 'b', 'merge model')
   assert(merged.provider?.baseUrl === 'x', 'merge base')
+
+  // JSONC：config.json 内注释可加载
+  const stripped = stripJsonc(`{
+    // comment
+    "version": 1,
+    "agents": {
+      "maxSpawnDepth": 1, // nest one level
+    },
+  }`)
+  const parsed = parseJsonc<{ agents?: { maxSpawnDepth?: number } }>(stripped)
+  assert(parsed.agents?.maxSpawnDepth === 1, 'jsonc parse agents')
+
+  const jsoncPath = path.join(getProjectBoloDir(projectCwd), 'config.json')
+  await fs.writeFile(
+    jsoncPath,
+    `{
+  // project override
+  "agents": {
+    "enabled": true,
+    "maxSpawnDepth": 2
+  },
+  "provider": { "model": "from-jsonc" }
+}
+`,
+    'utf8',
+  )
+  const loaded = await loadConfigJson(getProjectLayout(projectCwd))
+  assert(loaded.agents?.maxSpawnDepth === 2, 'loadConfigJson jsonc depth')
+  assert(loaded.provider?.model === 'from-jsonc', 'loadConfigJson jsonc model')
+
+  // ensure 写入带注释模板
+  const fresh = await fs.mkdtemp(path.join(os.tmpdir(), 'bolo-jsonc-'))
+  process.env.BOLO_CONFIG_DIR = path.join(fresh, 'u')
+  const ens = await ensureAllLayouts(path.join(fresh, 'p'), {
+    writeDefaults: true,
+  })
+  const rawCfg = await fs.readFile(ens.user.layout.configJson, 'utf8')
+  assert(rawCfg.includes('maxSpawnDepth'), 'default config mentions depth')
+  assert(rawCfg.includes('//'), 'default config has comments')
+  const agentsReadme = path.join(ens.user.layout.agentsDir, 'README.md')
+  const ar = await fs.readFile(agentsReadme, 'utf8')
+  assert(ar.includes('Frontmatter'), 'agents README written')
 
   console.log('CONFIG TESTS PASS')
   console.log('  home', getBoloHomeDir())

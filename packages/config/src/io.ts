@@ -1,5 +1,5 @@
 /**
- * 读写 JSON 配置文件
+ * 读写 JSON / JSONC 配置文件
  */
 
 import { promises as fs } from 'node:fs'
@@ -7,12 +7,72 @@ import type { BoloConfigJson, HooksFileJson, McpFileJson } from './types.ts'
 import { DEFAULT_CONFIG } from './types.ts'
 import type { BoloLayoutPaths } from './paths.ts'
 
+/**
+ * 去掉 JSONC 注释与尾逗号，便于 config.json 写说明。
+ * 字符串内的内容按 JSON 规则保留。
+ */
+export function stripJsonc(raw: string): string {
+  let out = ''
+  let i = 0
+  const s = raw
+  let inString = false
+  let escape = false
+  while (i < s.length) {
+    const c = s[i]!
+    const n = s[i + 1]
+
+    if (inString) {
+      out += c
+      if (escape) {
+        escape = false
+      } else if (c === '\\') {
+        escape = true
+      } else if (c === '"') {
+        inString = false
+      }
+      i++
+      continue
+    }
+
+    if (c === '"') {
+      inString = true
+      out += c
+      i++
+      continue
+    }
+
+    // // line comment
+    if (c === '/' && n === '/') {
+      i += 2
+      while (i < s.length && s[i] !== '\n') i++
+      continue
+    }
+    // /* block comment */
+    if (c === '/' && n === '*') {
+      i += 2
+      while (i < s.length && !(s[i] === '*' && s[i + 1] === '/')) i++
+      i += 2
+      continue
+    }
+
+    out += c
+    i++
+  }
+
+  // trailing commas before } or ]
+  return out.replace(/,(\s*[}\]])/g, '$1')
+}
+
+export function parseJsonc<T>(raw: string): T {
+  return JSON.parse(stripJsonc(raw)) as T
+}
+
 export async function readJsonFile<T>(
   filePath: string,
 ): Promise<T | null> {
   try {
     const raw = await fs.readFile(filePath, 'utf8')
-    return JSON.parse(raw) as T
+    return parseJsonc<T>(raw)
   } catch {
     return null
   }
@@ -25,12 +85,25 @@ export async function writeJsonFile(
   await fs.writeFile(filePath, JSON.stringify(value, null, 2) + '\n', 'utf8')
 }
 
+export async function writeTextIfMissing(
+  filePath: string,
+  text: string,
+): Promise<boolean> {
+  try {
+    await fs.access(filePath)
+    return false
+  } catch {
+    await fs.writeFile(filePath, text, 'utf8')
+    return true
+  }
+}
+
 export async function loadConfigJson(
   layout: BoloLayoutPaths,
 ): Promise<BoloConfigJson> {
   const file = await readJsonFile<BoloConfigJson>(layout.configJson)
   if (!file) return { ...DEFAULT_CONFIG }
-  return { ...DEFAULT_CONFIG, ...file, provider: { ...DEFAULT_CONFIG.provider, ...file.provider } }
+  return mergeConfigJson({ ...DEFAULT_CONFIG }, file)
 }
 
 export async function loadMcpJson(

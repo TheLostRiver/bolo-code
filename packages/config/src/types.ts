@@ -129,7 +129,144 @@ export const DEFAULT_CONFIG: BoloConfigJson = {
   contextWindowTokens: 128_000,
   microcompactEnabled: true,
   maxPtlRetries: 3,
+  agents: {
+    enabled: true,
+    maxConcurrent: 3,
+    defaultModel: 'inherit',
+    defaultEffort: 'medium',
+    maxSpawnDepth: 0,
+    overflow: 'reject',
+  },
 }
+
+/**
+ * 初始化写入的 config.json 文本（JSONC：允许 // 注释）。
+ * 加载端 stripJsonc；见 packages/config/src/io.ts。
+ */
+export const DEFAULT_CONFIG_JSONC = `{
+  // Bolo config.json（JSONC：可用 // 与 /* */ 注释；勿提交 API Key）
+  // 合并：defaults < ~/.bolo/config.json < .bolo/config.json < 环境变量
+  // 详见 docs/CONFIG.md · docs/SUBAGENT_SPEC.md
+
+  "version": 1,
+
+  "provider": {
+    // kind: mock | openai-compatible | openai-responses | anthropic
+    "kind": "openai-compatible",
+    // "baseUrl": "https://api.openai.com/v1",
+    "model": "gpt-4o-mini"
+    // apiKey 优先用环境变量 BOLO_API_KEY / OPENAI_API_KEY，不要写进仓库
+  },
+
+  // default | acceptEdits | plan | auto | bypassPermissions
+  "permissionMode": "default",
+
+  "autoCompactEnabled": true,
+  "contextWindowTokens": 128000,
+  "microcompactEnabled": true,
+  "maxPtlRetries": 3,
+
+  // ── Subagent 全局策略（docs/SUBAGENT_SPEC.md）──
+  "agents": {
+    // false = 主会话不挂 Agent 工具
+    "enabled": true,
+
+    // 后台 subagent 并发上限（也可用环境变量 BOLO_MAX_BACKGROUND_AGENTS）
+    "maxConcurrent": 3,
+
+    // 子 agent 默认 model：inherit = 跟父会话；或具体 model id
+    // 解析优先级：BOLO_SUBAGENT_MODEL > Agent 工具 model 参数 > agents/*.md >
+    //   本字段 > 父会话 model
+    "defaultModel": "inherit",
+
+    // 子默认 effort：low | medium | high | max | inherit
+    // 环境变量 BOLO_SUBAGENT_EFFORT 可强制覆盖
+    "defaultEffort": "medium",
+
+    // 嵌套深度：主会话 spawnDepth=0 始终可 spawn（若 enabled）
+    // 0 = 默认「只有主能分发」；子 depth≥1 不能再挂 Agent
+    // 1 = 子还可再 spawn 一层孙；上限 clamp 到 3
+    // 单类型可用 agents/*.md frontmatter maxSpawnDepth 覆盖
+    // 环境变量：BOLO_SUBAGENT_MAX_SPAWN_DEPTH
+    "maxSpawnDepth": 0,
+
+    // 后台满时：reject | queue
+    "overflow": "reject"
+  }
+
+  // "extraSkillRoots": [],
+  // "foreignPluginRoots": []
+}
+`
+
+/** 写入 agents/ 目录的说明（Markdown，非 frontmatter 定义） */
+export const DEFAULT_AGENTS_README = `# Bolo agents/ — 自定义 subagent 类型
+
+每个 \`*.md\` 一个类型。合并顺序（后者覆盖同名）：
+
+\`\`\`text
+builtin (explore / general / plan / fork)
+  ← ~/.bolo/agents/*.md
+  ← .bolo/agents/*.md
+\`\`\`
+
+## Frontmatter 字段
+
+\`\`\`markdown
+---
+# 类型 id（也可用 name / agentType / id；缺省=文件名）
+name: reviewer
+
+# 何时选用（给主模型 / /agents 列表）
+description: PR risk review — correctness, security, tests
+
+# 可选：inherit 或具体 model
+model: inherit
+
+# 可选：low | medium | high | max | inherit（也认 Codex 的 model_reasoning_effort）
+effort: high
+
+# 可选：本类型作为「父」时允许的最大 spawnDepth（0=不能再 spawn）
+maxSpawnDepth: 0
+
+# 可选：最大 agentic turns
+maxTurns: 12
+
+# 可选：default | acceptEdits | plan | auto | bypassPermissions（不得比父更宽）
+# permissionMode: default
+
+# 可选：工具白名单 * 或列表；disallowedTools 二次剔除
+# tools: Read, Glob, Grep
+# disallowedTools: Write, Edit, Bash, Agent
+
+# 可选：none | worktree；background: true 默认后台
+# isolation: none
+# background: false
+
+# 可选语法糖：read-only → 只读工具集
+# sandbox: read-only
+---
+
+这里是 system 正文（developer_instructions）。
+\`\`\`
+
+## 嵌套示例（允许再开一层 explore）
+
+\`\`\`markdown
+---
+name: lead_research
+description: Coordinates read-only explores
+tools: "*"
+maxSpawnDepth: 1
+model: inherit
+effort: medium
+---
+
+You may spawn explore subagents. Wait for summaries; do not edit files.
+\`\`\`
+
+全局默认见上级 \`config.json\` 的 \`"agents"\` 段。契约：\`docs/SUBAGENT_SPEC.md\`。
+`
 
 export const DEFAULT_MCP_FILE: McpFileJson = {
   mcpServers: {},

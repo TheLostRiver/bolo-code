@@ -16,7 +16,9 @@ export {
 
 export {
   DEFAULT_CONFIG,
+  DEFAULT_CONFIG_JSONC,
   DEFAULT_AGENTS_CONFIG,
+  DEFAULT_AGENTS_README,
   DEFAULT_MCP_FILE,
   DEFAULT_HOOKS_FILE,
   type BoloConfigJson,
@@ -37,11 +39,14 @@ export {
 export {
   readJsonFile,
   writeJsonFile,
+  writeTextIfMissing,
   loadConfigJson,
   loadMcpJson,
   loadHooksJson,
   mergeConfigJson,
   mergeConfigs,
+  stripJsonc,
+  parseJsonc,
 } from './io.ts'
 
 export {
