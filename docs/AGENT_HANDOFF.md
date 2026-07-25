@@ -123,7 +123,7 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 
 **已闭环：** Diff · Hooks · Compact · Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Turn DR0–DR2B3**。
 
-**当前主线：** Durable Turn **DR2C recovery projection**；DR3 background/subagent、DR4 protocol 后续。
+**当前主线：** Durable Turn **DR2C2 control persistence wiring**；DR2C1 schema/projection 已完成，DR3 background/subagent、DR4 protocol 后续。
 
 **其它开放轨（非阻塞）：**
 
@@ -142,7 +142,9 @@ DR2A 单 session runner ✅
 → DR2B1 control intent ✅
 → DR2B2 queryLoop safe-boundary wiring ✅
 → DR2B3 permission/diff ask + CLI races ✅
-→ DR2C recovery projection（当前）
+→ DR2C1 control schema/projection ✅
+→ DR2C2 lifecycle persistence wiring（当前）
+→ DR2C3 crash/failure closeout
 → DR3A durable background task
 → DR3B queue + parent-boundary promotion
 → DR4A runtime protocol
@@ -333,6 +335,7 @@ cd apps/desktop && npm install && set BOLO_DESKTOP_MOCK=1 && npm start
 | DR2B1 | control intent · expected active turn · 幂等 id · FIFO queue · steer promotion whitelist · interrupt signal |
 | DR2B2 | linked AbortSignal · queryLoop safe-boundary callback · final/tool steer · structured control event |
 | DR2B3 | ask abort race · permission/diff exit boundary · `/turn` control · queued REPL drain · coordinator Ctrl-C |
+| DR2C1 | `control` transcript schema · fail-closed recovery projection · compact rewrite preservation |
 
 最新 commit 以 `git log` 为准。
 

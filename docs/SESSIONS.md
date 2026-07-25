@@ -109,7 +109,21 @@ steer 只在以下 message-safe boundary promotion：
 - REPL 在读取下一次人工输入前 FIFO drain ready queue，沿用记录中的 `turnId/prompt/querySource`，取出即 promoted 且不重放。
 - Ctrl-C 优先向 snapshot 中的 active turn 提交 interrupt control；ownership 前窗口才回退本地 AbortController。
 
-controls 仍是进程内投影，不写 transcript；崩溃恢复、compact 保留和 control 终态映射属于 DR2C。
+#### DR2C1 durable control schema
+
+JSONL 已支持 append-only `control` entry：
+
+```text
+controlId + sessionId + kind + state + timestamp
+  + expectedTurnId?/turnId?/prompt?/querySource?/boundary?/detail?
+```
+
+- 不保存 AbortSignal/AbortController 或 coordinator 私有 token。
+- 同一 controlId 按文件顺序 last-wins，并保留首次 requestedAt 与 admission payload。
+- 重启时 pending/ready 只投影为 diagnostic interrupted，不自动重新入队；promoted/cancelled 保持事实状态。
+- compact/shrink rewrite 保留 control entries；坏行与未知状态跳过；旧 transcript 无 control 仍可读。
+
+DR2C1 只完成 schema/projection；产品 request/cancel/promote/take/release 的持久化 wiring 属于 DR2C2。
 
 ## 2. 快照格式（version 1，只读兼容）
 

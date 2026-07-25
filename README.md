@@ -41,7 +41,7 @@
 
 **已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Turn DR0–DR2B3。
 
-**当前主线：** Durable Turn DR2C recovery projection；DR3 background/subagent、DR4 protocol 后续。
+**当前主线：** Durable Turn DR2C2 control persistence wiring；DR2C1 schema/projection 已完成，DR3 background/subagent、DR4 protocol 后续。
 
 **非阻塞开放轨：** Compact §8.9 · U5 真·Ink/IDE · adaptive thinking · Desktop 体验打磨。
 

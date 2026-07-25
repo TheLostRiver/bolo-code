@@ -31,7 +31,7 @@
 
 **已闭环主线：** headless 日用 → Diff · Hooks · Compact · Provider · Effort · **Provider UX CX0–CX8** · **CLI/Agent 可靠性 R0–R4**。
 
-**当前主线：** **Durable Turn DR2C**（§13：control/recovery durable projection；DR0–DR2B3 已完成）。
+**当前主线：** **Durable Turn DR2C2**（§13：control lifecycle 持久化 wiring；DR2C1 schema/projection 已完成）。
 
 **开放轨：**
 
@@ -857,7 +857,7 @@ npx tsx scripts/test-worktree-safety.ts
 |------|------|------|
 | **DR0** | 稳定 `turnId` + `admitted/running/completed/error/aborted/interrupted` schema；append-only 投影、幂等与恢复规则 | ✅ |
 | **DR1** | UserPromptSubmit 归约后、provider 前写 admission/running；消息成功落盘后写 terminal；resume 识别未完成 turn | ✅ |
-| **DR2** | `SessionCoordinator`：同 session 单 runner、跨 session 并行、safe-boundary `queue/steer/interrupt` | DR2A–DR2B3 ✅ · DR2C 📋 |
+| **DR2** | `SessionCoordinator`：同 session 单 runner、跨 session 并行、safe-boundary `queue/steer/interrupt` | DR2A–DR2B3 + DR2C1 ✅ · DR2C2–C3 📋 |
 | **DR3** | 后台 Subagent 任务/结果持久化；真正 queue；结果只在父 turn 安全边界 promotion | 📋 |
 | **DR4** | CLI 任务诊断与恢复动作；稳定 thread/turn 协议，按真实多客户端需求再接 app-server/RPC | 📋 |
 
@@ -902,7 +902,7 @@ UserPromptSubmit hook 成功并归约最终 prompt
 |------|----------|----------|----------|
 | **DR2A · Session ownership ✅** | `packages/core` 提供 `SessionCoordinator`；同一 session 最多一个 active runner，不同 session 可并行 | 第二个同 session runner 不得进入 provider/tool；不同 session 不互相阻塞；所有 runner release 路径可证明 | core + tests；docs |
 | **DR2B · Safe-boundary control（B1–B3 ✅）** | B1 定义 `queue/steer/interrupt` intent、状态与 expected turn；B2 接 provider/tool/compact/Stop 边界；B3 接 permission/diff ask 与 CLI | 控制请求只在边界生效；取消与 ask 面板 fail-closed；queued prompt 不丢、不重放 | core + tests；CLI consumer；docs |
-| **DR2C · Recovery projection** | coordinator 状态与 durable turn 投影对齐；进程内 control 终态映射到 transcript | crash fixture、duplicate `turnId`、terminal write failure、runner release 组合回归 | core + tests；docs |
+| **DR2C · Recovery projection（C1 ✅）** | C1 定义 control append-only schema/projection；C2 接 session/coordinator lifecycle 持久化；C3 收口 crash/rewrite/failure 竞态 | crash fixture、duplicate control/turn id、terminal write failure、runner release、compact rewrite 组合回归 | core + tests；docs |
 | **DR3A · Durable task schema** | background/subagent task 的 `admitted/running/completed/error/aborted/interrupted` append-only 记录与投影 | task/result 可恢复；未知执行状态只投影 interrupted；结果不自动注入父消息 | core/subagent + tests；docs |
 | **DR3B · Queue + promotion** | `overflow: queue` 接入 coordinator；结果先持久化，只在父 turn safe boundary promotion | 并发上限、FIFO/取消、父 turn 结束竞态、worktree dirty 成果保全 | core/subagent + tests；CLI status；docs |
 | **DR4A · Runtime protocol** | transport-neutral 的 session/turn/task snapshot 与 command/result schema；版本与 feature negotiation | 序列化 round-trip、未知字段兼容、非法状态迁移 fail-closed | shared/core + tests；docs |
@@ -947,6 +947,14 @@ UserPromptSubmit hook 成功并归约最终 prompt
 - CLI REPL 在询问下一次人工输入前 FIFO 取得一条 ready queue；使用 control 中原有 `turnId/prompt/querySource` admission，取出即 promoted，绝不重放。
 - Ctrl-C 优先针对 snapshot 中的真实 active turn 提交 interrupt intent；只在 ownership 前的极短窗口或本地 slash 面板回退 AbortController。
 - 默认 `npm test` 已纳入 `test-session-permission-boundary` 与 `test-turn-cli`，覆盖 ask/interrupt、diff cancel、ask-time steer pairing、queue/cancel/drain/turnId。
+
+#### DR2C1 已落地契约
+
+- transcript 新增并列 `control` entry，记录 control/session/turn refs、kind/state、prompt/querySource、boundary、timestamp/detail；不保存 signal、controller 或其它进程句柄。
+- `projectDurableControls` 按 controlId last-wins：重启时 `pending/ready` 只投影为带 `interruptedFrom` 的 diagnostic `interrupted`，不会自动重新入队；`promoted/cancelled` 保留为已发生事实。
+- parser 对坏行/未知状态 fail-closed；旧 transcript 无 control 时保持可读。
+- compact/shrink rewrite 保留完整 control lifecycle，与 turn/title/note/file_diff 一样不进入模型 messages。
+- 默认 `npm test` 已纳入 `test-session-control-recovery`；DR2C2 才把产品 request/cancel/promote/take/release 路径接到该 schema。
 
 ### 13.5 DR2 状态机与安全边界
 
