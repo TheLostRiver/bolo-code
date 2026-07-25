@@ -35,9 +35,19 @@ npm-debug.log*
 .turbo/
 coverage/
 
-# Local temp outputs
+# Local scratch / agent temp outputs (single folder; do not litter repo root)
+.bolo-tmp/*
+!.bolo-tmp/README.md
+# legacy root patterns (keep ignored if any reappear)
 .tmp*
-_out_*.txt
+_out*
+tmp-*
+tmp_*.out
+*.tmp
+
+# scripts local scratch outputs (not product code)
+scripts/_notes.out
+scripts/*.out
 
 # Local planning scratch (root task_plan/findings/progress 默认纳入版本，便于恢复)
 *.local.md
