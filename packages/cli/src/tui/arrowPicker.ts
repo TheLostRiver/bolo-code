@@ -69,6 +69,10 @@ export async function runArrowPicker(opts: {
   writeOut?: (s: string) => void
   readKey?: () => Promise<string>
   isTty?: boolean
+  /** 标题行；缺省 Select session… */
+  title?: string
+  /** 初始选中下标（夹到合法范围） */
+  initialIndex?: number
 }): Promise<ArrowPickResult> {
   const items = opts.items
   if (!items.length) {
@@ -85,10 +89,18 @@ export async function runArrowPicker(opts: {
     }
   }
 
-  let index = 0
+  const max = items.length - 1
+  let index =
+    opts.initialIndex != null && Number.isFinite(opts.initialIndex)
+      ? Math.max(0, Math.min(max, Math.floor(opts.initialIndex)))
+      : 0
   const paint = () => {
     writeOut('\x1b[2J\x1b[H') // clear
-    writeOut(formatArrowPickerScreen(items, index) + '\n')
+    writeOut(
+      formatArrowPickerScreen(items, index, {
+        title: opts.title,
+      }) + '\n',
+    )
   }
 
   const readKey =

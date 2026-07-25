@@ -9,6 +9,9 @@ import {
   listProjectSessions,
   resumeSession,
   submitUserInput,
+  switchSessionProvider,
+  buildProviderPickerItems,
+  activeProviderPickerIndex,
   type BoloSession,
   type SessionEvent,
   type SessionListItem,
@@ -549,6 +552,47 @@ export async function runOnePrompt(
           /* fall through to text dump */
         }
       }
+
+      // P 轨 UX：TTY 且 /provider 无参 → 箭头选后端并热切
+      if (
+        result.interactiveProvider?.mode === 'pick' &&
+        (options?.isTty ?? process.stdin.isTTY === true) &&
+        process.env.BOLO_PROVIDER_PANEL !== '0' &&
+        process.env.BOLO_ARROW_PICKER !== '0'
+      ) {
+        try {
+          const items = buildProviderPickerItems(session)
+          if (items.length) {
+            options?.pauseInput?.()
+            try {
+              const ar = await runArrowPicker({
+                items,
+                writeOut,
+                isTty: true,
+                title: 'Select provider (↑/↓ · Enter · q cancel)',
+                initialIndex: activeProviderPickerIndex(session),
+              })
+              if (ar.ok) {
+                const sw = switchSessionProvider(session, ar.id)
+                const out = sw.ok ? sw.message : sw.reason
+                writeOut(out.endsWith('\n') ? out : `${out}\n`)
+                return { terminalReason: 'slash', assistantText: out }
+              }
+              if (ar.reason === 'cancel') {
+                const msg = 'provider pick cancelled'
+                writeOut(`${msg}\n`)
+                return { terminalReason: 'slash', assistantText: msg }
+              }
+              // unsupported → fall through to text list
+            } finally {
+              options?.resumeInput?.()
+            }
+          }
+        } catch {
+          /* fall through to text dump */
+        }
+      }
+
       const msg = result.message
       writeOut(msg.endsWith('\n') ? msg : `${msg}\n`)
       return { terminalReason: 'slash', assistantText: msg }

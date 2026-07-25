@@ -21,7 +21,14 @@ import {
   attachProviderRegistry,
   dispatchSlashCommand,
   listSessionProviders,
+  buildProviderPickerItems,
+  activeProviderPickerIndex,
 } from '../packages/core/src/index.ts'
+import {
+  applyArrowPickerKey,
+  formatArrowPickerScreen,
+  runArrowPicker,
+} from '../packages/cli/src/tui/arrowPicker.ts'
 
 function assert(c: unknown, m: string) {
   if (!c) {
@@ -194,11 +201,56 @@ async function main() {
   assert(listed.length === 3, 'list 3')
   assert(listed.some((p) => p.id === 'work' && p.isActive), 'work active')
 
-  // slash /provider
+  // slash /provider 无参：文本 + interactiveProvider 信号（CLI TTY 开 picker）
   const listSlash = await dispatchSlashCommand(session, 'provider', '')
   assert(listSlash.ok, 'slash provider list ok')
   assert(listSlash.message?.includes('deepseek'), 'slash lists deepseek')
   assert(listSlash.message?.includes('work'), 'slash lists work')
+  assert(
+    listSlash.interactiveProvider?.mode === 'pick',
+    'bare /provider signals picker',
+  )
+
+  const listOnly = await dispatchSlashCommand(session, 'provider', 'list')
+  assert(listOnly.ok, 'provider list ok')
+  assert(
+    listOnly.interactiveProvider == null,
+    'list subcommand no picker signal',
+  )
+
+  // picker items / active index（纯数据，供 CLI）
+  const pickItems = buildProviderPickerItems(session)
+  assert(pickItems.length === 3, 'picker items 3')
+  assert(
+    pickItems.every((it) => it.id && it.label),
+    'picker labels',
+  )
+  const aidx = activeProviderPickerIndex(session)
+  assert(aidx >= 0 && aidx < pickItems.length, 'active index in range')
+  assert(pickItems[aidx]!.id === session.providerId, 'active index matches')
+
+  // arrow picker 纯逻辑 + 注入 readKey（不占真 TTY）
+  const keys = ['down', 'enter']
+  let ki = 0
+  const ar = await runArrowPicker({
+    items: pickItems,
+    writeOut: () => {},
+    readKey: async () => keys[ki++] ?? 'q',
+    isTty: false,
+    title: 'Select provider',
+    initialIndex: aidx,
+  })
+  assert(ar.ok === true, 'arrow pick ok')
+  if (ar.ok) {
+    // aidx 起向下一项
+    const expectId = pickItems[(aidx + 1) % pickItems.length]!.id
+    assert(ar.id === expectId, `picked ${expectId}`)
+  }
+  const screen = formatArrowPickerScreen(pickItems, 0, {
+    title: 'Select provider',
+  })
+  assert(screen.includes('Select provider'), 'picker title')
+  assert(applyArrowPickerKey(0, 3, 'down').index === 1, 'arrow down')
 
   process.env.DEEPSEEK_API_KEY = 'sk-test-deepseek-not-real'
   const useSlash = await dispatchSlashCommand(
@@ -208,6 +260,7 @@ async function main() {
   )
   assert(useSlash.ok, `slash use: ${useSlash.message}`)
   assert(session.providerId === 'deepseek', 'slash switched')
+  assert(useSlash.interactiveProvider == null, 'use has no picker signal')
 
   // /model provider/model 糖
   const modelSlash = await dispatchSlashCommand(
@@ -241,7 +294,7 @@ async function main() {
     else process.env[k] = v
   }
 
-  console.log('ok: multi-provider P1–P3')
+  console.log('ok: multi-provider P1–P4 + picker')
 }
 
 main().catch((e) => {

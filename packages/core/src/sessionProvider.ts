@@ -273,9 +273,43 @@ export function formatSessionProvidersSlash(
     `active: ${session.providerId ?? '(unset)'}  kind=${session.provider?.id ?? '?'}  model=${session.model ?? '(unset)'}`,
     'providers (* = active, · = default):',
     ...list.map((p) => formatProviderProfileLine(p)),
-    'usage: /provider use <id> [model]',
+    'usage: /provider  (TTY picker)  ·  /provider use <id> [model]  ·  /provider list',
   ]
   return lines.join('\n')
+}
+
+/** CLI arrowPicker 用：一行摘要（无密钥） */
+export function formatProviderPickerLabel(p: {
+  id: string
+  kind?: string
+  model?: string
+  label?: string
+  isActive?: boolean
+  isDefault?: boolean
+}): string {
+  const mark = p.isActive ? '*' : p.isDefault ? '·' : ' '
+  const name = p.label?.trim() ? `${p.id} "${p.label.trim()}"` : p.id
+  const kind = p.kind ?? '?'
+  const model = p.model ?? '(no model)'
+  return `${mark} ${name}  ${kind}  ${model}`
+}
+
+export function buildProviderPickerItems(
+  session: SwitchableProviderSession,
+): Array<{ id: string; label: string }> {
+  return listSessionProviders(session).map((p) => ({
+    id: p.id,
+    label: formatProviderPickerLabel(p),
+  }))
+}
+
+/** 当前 active 在列表中的下标；无则 0 */
+export function activeProviderPickerIndex(
+  session: SwitchableProviderSession,
+): number {
+  const list = listSessionProviders(session)
+  const i = list.findIndex((p) => p.isActive)
+  return i >= 0 ? i : 0
 }
 
 /** 把 registry 挂到已有 session（workspace 装配 / 测试） */

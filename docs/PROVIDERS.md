@@ -249,6 +249,7 @@ npx tsx scripts/smoke-live.ts
 | **P2** | `switchSessionProvider` + `/provider` list/use | ✅ |
 | **P3** | `/model` 增强 · cache-break · `/doctor` | ✅ |
 | **P4** | 单测 · CLI 摘要 · 缺 key 错误 | ✅ |
+| **P4.1** | TTY `/provider` 箭头选择器热切（不必记 id） | ✅ |
 | **P5** | Desktop 选 active（可选） | 📋 |
 
 配置示例：
@@ -277,11 +278,19 @@ npx tsx scripts/smoke-live.ts
 
 | 命令 | 行为 |
 |------|------|
-| `/provider` | 列出 id · kind · model（`*` active） |
-| `/provider use <id> [model]` | 热切；缺 key **拒绝**并保留旧后端 |
+| `/provider` | **TTY**：箭头列表选后端并热切（不必记 id）；非 TTY / `BOLO_PROVIDER_PANEL=0`：文本列表 |
+| `/provider list` | 仅文本列表（不开 picker） |
+| `/provider use <id> [model]` | 精确热切；缺 key **拒绝**并保留旧后端 |
 | `/model` | 显示 model + providerId + kind |
 | `/model <name>` | 仅改当前后端 model（本地 cache-break） |
 | `/model <id>/<name>` | 切后端并设 model |
+
+**CLI 环境：**
+
+| 变量 | 说明 |
+|------|------|
+| `BOLO_PROVIDER_PANEL=0` | 禁用 `/provider` 交互选择器 |
+| `BOLO_ARROW_PICKER=0` | 禁用全部箭头 picker（含 resume / provider） |
 
 **实现入口：**
 
@@ -289,8 +298,9 @@ npx tsx scripts/smoke-live.ts
 |------|------|
 | `packages/config/src/providerRegistry.ts` | 归一化 `providers` / 旧 `provider` |
 | `packages/providers/src/fromEnv.ts` | `createProviderFromProfile` · `apiKeyEnv` |
-| `packages/core/src/sessionProvider.ts` | `switchSessionProvider` · rebind deps/summarizer |
-| `packages/core/src/slash.ts` | `/provider` · `/model` |
+| `packages/core/src/sessionProvider.ts` | `switchSessionProvider` · picker items |
+| `packages/core/src/slash.ts` | `/provider` · `interactiveProvider` 信号 |
+| `packages/cli` `arrowPicker` + `resumeCli` | TTY 选择 → 热切 |
 
 **不做：** 官方市场、密钥入库、遥测、默认同 turn 自动 failover。  
 **测试：** `scripts/test-multi-provider.ts`。

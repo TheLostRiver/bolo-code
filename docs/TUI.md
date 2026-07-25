@@ -40,6 +40,7 @@
 | 文本 dump `/diff` · tool_end ANSI | ✅ D7 | 轨 A |
 | 权限 preview 多行着色 | ✅ D7 | 回落文本路径 |
 | **可滚 Diff 面板** | ✅ U1 | TTY `/diff` · `BOLO_DIFF_PANEL=0` 关 |
+| **Provider 箭头选择** | ✅ P4.1 | TTY `/provider` · `BOLO_PROVIDER_PANEL=0` 关 |
 | **ask 内嵌可滚 preview** | ✅ U2 | `y/a/N` · `BOLO_PERM_DIFF_PANEL=0` 关 |
 | **写后可折叠 cell** | ✅ U3 | 默认折叠 · `BOLO_DIFF_CELL=expand` 展开 · Desktop `<details>` |
 | **行号 / 主题 / 轻量语法** | ✅ U4 | `diffRender.ts` · `BOLO_DIFF_GUTTER` · `BOLO_DIFF_SYNTAX` · `BOLO_DIFF_THEME` |
@@ -64,6 +65,8 @@ apps/desktop/renderer   ← U3：`<details>` cell · 权限 files 列表
 | 变量 | 作用 |
 |------|------|
 | `BOLO_DIFF_PANEL=0` | `/diff` 强制纯文本 |
+| `BOLO_PROVIDER_PANEL=0` | `/provider` 强制纯文本（不开箭头选） |
+| `BOLO_ARROW_PICKER=0` | 禁用全部箭头 picker |
 | `BOLO_PERM_DIFF_PANEL=0` | 权限 ask 不用审批面板（仅文本 y/a/N） |
 | `BOLO_DIFF_CELL=expand` | 写后 cell 默认展开（或 `BOLO_DIFF_VERBOSE=1`） |
 | `BOLO_DIFF_CELL=fold` | 强制折叠（默认） |

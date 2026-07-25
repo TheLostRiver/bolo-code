@@ -56,6 +56,13 @@ import {
   switchSessionProvider,
   switchSessionModel,
   formatSessionProvidersSlash,
+  listSessionProviders,
+  buildProviderPickerItems,
+  formatProviderPickerLabel,
+  activeProviderPickerIndex,
+  attachProviderRegistry,
+  type SwitchSessionProviderResult,
+  type SwitchSessionModelResult,
   type SwitchableProviderSession,
 } from './sessionProvider.ts'
 
@@ -199,6 +206,13 @@ export type SlashDispatchResult = {
     mode: 'session' | 'last'
     pathFilter?: string
   }
+  /**
+   * P 轨 UX：TTY 下 CLI 打开 provider 箭头选择器（core 不依赖 cli）。
+   * 非 TTY / BOLO_PROVIDER_PANEL=0 时仅展示 message 文本列表。
+   */
+  interactiveProvider?: {
+    mode: 'pick'
+  }
 }
 
 export type SubmitUserInputResult =
@@ -208,6 +222,9 @@ export type SubmitUserInputResult =
       interactiveDiff?: {
         mode: 'session' | 'last'
         pathFilter?: string
+      }
+      interactiveProvider?: {
+        mode: 'pick'
       }
     }
   | { type: 'prompt'; terminal: Terminal }
@@ -1810,14 +1827,28 @@ function cmdModel(session: SlashSession, args: string): SlashDispatchResult {
 }
 
 /**
- * /provider — 列出命名后端；/provider use <id> [model] 热切。
+ * /provider — 无参：TTY 可 picker；list：仅文本；use <id>：热切。
  */
 function cmdProvider(session: SlashSession, args: string): SlashDispatchResult {
   const raw = args.trim()
-  if (!raw || raw === 'list' || raw === 'show' || raw === 'ls') {
+  const textList = () =>
+    formatSessionProvidersSlash(session as SwitchableProviderSession)
+
+  // 强制文本（脚本 / 非交互）
+  if (raw === 'list' || raw === 'show' || raw === 'ls') {
+    return { ok: true, message: textList() }
+  }
+
+  // 无参：带 interactiveProvider，CLI TTY 开箭头选；非 TTY 只看 message
+  if (!raw) {
+    const list = listSessionProviders(session as SwitchableProviderSession)
+    if (!list.length) {
+      return { ok: true, message: textList() }
+    }
     return {
       ok: true,
-      message: formatSessionProvidersSlash(session as SwitchableProviderSession),
+      message: textList(),
+      interactiveProvider: { mode: 'pick' },
     }
   }
 
@@ -1828,7 +1859,7 @@ function cmdProvider(session: SlashSession, args: string): SlashDispatchResult {
     if (!id) {
       return {
         ok: false,
-        message: 'Usage: /provider use <id> [model]',
+        message: 'Usage: /provider use <id> [model]  ·  or bare /provider for TTY picker',
       }
     }
     const model = parts.slice(2).join(' ').trim() || undefined
@@ -1839,29 +1870,31 @@ function cmdProvider(session: SlashSession, args: string): SlashDispatchResult {
     return { ok: true, message: sw.message }
   }
 
-  // 无子命令：把第一词当 id（/provider deepseek）
-  if (parts.length >= 1 && !['help', '?'].includes(head)) {
-    const id = parts[0]!
-    const model = parts.slice(1).join(' ').trim() || undefined
-    const sw = switchSessionProvider(session as SwitchableProviderSession, id, {
-      model,
-    })
-    if (!sw.ok) {
-      return {
-        ok: false,
-        message: `${sw.reason}\n${formatSessionProvidersSlash(session as SwitchableProviderSession)}`,
-      }
+  if (head === 'help' || head === '?') {
+    return {
+      ok: true,
+      message: [
+        textList(),
+        'usage: /provider          TTY → pick · else list',
+        '       /provider list     text only',
+        '       /provider use <id> [model]',
+      ].join('\n'),
     }
-    return { ok: true, message: sw.message }
   }
 
-  return {
-    ok: true,
-    message: [
-      formatSessionProvidersSlash(session as SwitchableProviderSession),
-      'usage: /provider | /provider use <id> [model]',
-    ].join('\n'),
+  // 无子命令：第一词当 id（/provider deepseek）
+  const id = parts[0]!
+  const model = parts.slice(1).join(' ').trim() || undefined
+  const sw = switchSessionProvider(session as SwitchableProviderSession, id, {
+    model,
+  })
+  if (!sw.ok) {
+    return {
+      ok: false,
+      message: `${sw.reason}\n${textList()}`,
+    }
   }
+  return { ok: true, message: sw.message }
 }
 
 function cmdEffort(session: SlashSession, args: string): SlashDispatchResult {
@@ -2676,7 +2709,8 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
   },
   {
     name: 'provider',
-    summary: 'List or hot-switch named providers (config.providers)',
+    summary:
+      'TTY pick / list / hot-switch providers (config.providers)',
     usage: '[list | use <id> [model]]',
     group: 'model',
     run: cmdProvider,
@@ -2809,6 +2843,9 @@ export async function submitUserInput(
       type: 'slash',
       message: r.message,
       ...(r.interactiveDiff ? { interactiveDiff: r.interactiveDiff } : {}),
+      ...(r.interactiveProvider
+        ? { interactiveProvider: r.interactiveProvider }
+        : {}),
     }
   }
 

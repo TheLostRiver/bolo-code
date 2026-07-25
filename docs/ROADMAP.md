@@ -645,7 +645,8 @@ function switchSessionModel(session, model: string): { ok, reason? }
 
 | 命令 | 行为 |
 |------|------|
-| `/provider` | 列出已配置 id · kind · model · 当前 * |
+| `/provider` | **TTY**：箭头选后端并热切；非 TTY：文本列表 |
+| `/provider list` | 仅文本列表 |
 | `/provider use <id>` | 热切到该后端（保留对话 messages） |
 | `/provider use <id> <model>` | 切后端并指定模型 |
 | `/model` | 显示 `providerId` + model |
@@ -661,12 +662,13 @@ function switchSessionModel(session, model: string): { ok, reason? }
 | **P2** | `switchSessionProvider` + 重挂 deps；`/provider` list/use | P0 | ✅ |
 | **P3** | `/model` 增强 + cache break + `/doctor` 显示 active | P1 | ✅ |
 | **P4** | CLI 启动摘要 · 错误信息（缺 key）· 单测 | P1 | ✅ |
+| **P4.1** | TTY `/provider` 箭头选择器（不必记 id） | P1 | ✅ |
 | **P5** | Desktop 设置选 provider（最小下拉）；可选 | P2 | 📋 |
 | 后置 | 远程拉模型列表 · 官方市场 · 按 turn 自动 failover 路由 | — | 🚫 非本轨默认 |
 
-**顺序硬约束：** **P0 文档 → P1 配置 → P2 热切 → P3 model/doctor → P4 测 → P5 Desktop**。
+**顺序硬约束：** **P0 文档 → P1 配置 → P2 热切 → P3 model/doctor → P4 测 → P4.1 picker → P5 Desktop**。
 
-**日用水位（P0–P4）：** 多后端热切体验 **~90–95%**（Desktop 选 active / resume 持久化 providerId 仍后置）。
+**日用水位（P0–P4.1）：** 多后端热切体验 **~92–96%**（Desktop 选 active / resume 持久化 providerId 仍后置）。
 
 ### 9.7 与 Compact / 会话交叉
 
