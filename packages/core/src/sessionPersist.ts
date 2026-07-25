@@ -419,6 +419,33 @@ function parseUsageField(raw: unknown): SessionUsage | undefined {
     }
     if (Object.keys(by).length > 0) out.byModel = by
   }
+  if (o.lastCall && typeof o.lastCall === 'object') {
+    const lc = o.lastCall as Record<string, unknown>
+    const li = num(lc.inputTokens)
+    const lo = num(lc.outputTokens)
+    const lt = num(lc.totalTokens)
+    if (li !== undefined || lo !== undefined || lt !== undefined) {
+      out.lastCall = {
+        inputTokens: li ?? 0,
+        outputTokens: lo ?? 0,
+        totalTokens: lt ?? (li ?? 0) + (lo ?? 0),
+        at:
+          typeof lc.at === 'string' && lc.at.trim()
+            ? lc.at
+            : new Date().toISOString(),
+      }
+      if (lc.estimated === true) out.lastCall.estimated = true
+      if (typeof lc.model === 'string' && lc.model.trim()) {
+        out.lastCall.model = lc.model.trim()
+      }
+      const lcr = num(lc.cacheReadInputTokens)
+      if (lcr !== undefined && lcr > 0) out.lastCall.cacheReadInputTokens = lcr
+      const lcc = num(lc.cacheCreationInputTokens)
+      if (lcc !== undefined && lcc > 0) {
+        out.lastCall.cacheCreationInputTokens = lcc
+      }
+    }
+  }
   return out
 }
 

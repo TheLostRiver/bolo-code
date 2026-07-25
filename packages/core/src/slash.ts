@@ -48,6 +48,7 @@ import {
   formatUsageOneLiner,
   type SessionUsage,
 } from './sessionUsage.ts'
+import { formatPromptCacheSessionLine } from '../../compact/src/index.ts'
 
 /** slash 需要的会话切片（与 BoloSession 兼容） */
 export type SlashSession = {
@@ -76,6 +77,8 @@ export type SlashSession = {
   backgroundAgents?: import('./subagent.ts').BackgroundAgentStore
   /** 本地 usage 累计；/cost · /context · /doctor */
   usage?: SessionUsage
+  /** 本地 prompt-cache 观测；/cost */
+  promptCacheState?: import('../../compact/src/index.ts').PromptCacheSessionState
   /** 会话工具表；/doctor 计数 */
   tools?: { name: string }[]
   /** provider id；/doctor */
@@ -706,6 +709,13 @@ function cmdContext(session: SlashSession, _args: string): SlashDispatchResult {
   )
   lines.push(
     'cache:           stable system prefix first; providers may send cache_control / prompt_cache_key (see docs/PROMPT_CACHE.md)',
+  )
+  const pcLine = formatPromptCacheSessionLine(session.promptCacheState)
+  if (pcLine) {
+    // formatPromptCacheSessionLine 自带两空格缩进标题；/context 对齐其它键
+    lines.push(pcLine.replace(/^\s*promptCache:\s*/, 'promptCache:     '))
+  }
+  lines.push(
     'prepare order:   snip → microcompact → auto full compact → callModel (PTL truncate is fallback)',
     'toggle:          /autocompact [on|off]',
     formatUsageOneLiner(session.usage),
@@ -1544,7 +1554,11 @@ async function cmdInit(
 }
 
 function cmdCost(session: SlashSession, _args: string): SlashDispatchResult {
-  return { ok: true, message: formatSessionUsage(session.usage) }
+  const promptCacheLine = formatPromptCacheSessionLine(session.promptCacheState)
+  return {
+    ok: true,
+    message: formatSessionUsage(session.usage, { promptCacheLine }),
+  }
 }
 
 function cmdModel(session: SlashSession, args: string): SlashDispatchResult {

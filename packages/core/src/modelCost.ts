@@ -1,0 +1,121 @@
+/**
+ * 本地粗算 USD（对照 HC modelCost / calculateUSDCost）。
+ * 无遥测；表为启发式，**非账单**；未知模型用 default tier。
+ */
+
+export type ModelCostRates = {
+  /** USD per 1M input tokens */
+  inputPerMTok: number
+  /** USD per 1M output tokens */
+  outputPerMTok: number
+  /** USD per 1M cache read tokens */
+  cacheReadPerMTok: number
+  /** USD per 1M cache write / creation tokens */
+  cacheWritePerMTok: number
+}
+
+/** Sonnet-ish default（与 HC COST_TIER_3_15 同量级） */
+export const COST_TIER_DEFAULT: ModelCostRates = {
+  inputPerMTok: 3,
+  outputPerMTok: 15,
+  cacheReadPerMTok: 0.3,
+  cacheWritePerMTok: 3.75,
+}
+
+export const COST_TIER_OPUS: ModelCostRates = {
+  inputPerMTok: 15,
+  outputPerMTok: 75,
+  cacheReadPerMTok: 1.5,
+  cacheWritePerMTok: 18.75,
+}
+
+export const COST_TIER_HAIKU: ModelCostRates = {
+  inputPerMTok: 1,
+  outputPerMTok: 5,
+  cacheReadPerMTok: 0.1,
+  cacheWritePerMTok: 1.25,
+}
+
+export const COST_TIER_MINI: ModelCostRates = {
+  inputPerMTok: 0.15,
+  outputPerMTok: 0.6,
+  cacheReadPerMTok: 0.075,
+  cacheWritePerMTok: 0.375,
+}
+
+/**
+ * 按 model 名启发式选价表（小写匹配）。
+ * 不绑死厂商；仅便于 /cost 本地粗算。
+ */
+export function resolveModelCostRates(
+  model: string | undefined | null,
+): { rates: ModelCostRates; tier: string; known: boolean } {
+  const m = (model ?? '').trim().toLowerCase()
+  if (!m) {
+    return { rates: COST_TIER_DEFAULT, tier: 'default', known: false }
+  }
+  if (m.includes('opus')) {
+    return { rates: COST_TIER_OPUS, tier: 'opus-like', known: true }
+  }
+  if (m.includes('haiku') || m.includes('flash-lite')) {
+    return { rates: COST_TIER_HAIKU, tier: 'haiku-like', known: true }
+  }
+  if (
+    m.includes('mini') ||
+    m.includes('nano') ||
+    m.includes('flash') ||
+    m.includes('small')
+  ) {
+    return { rates: COST_TIER_MINI, tier: 'mini-like', known: true }
+  }
+  if (
+    m.includes('sonnet') ||
+    m.includes('gpt-4o') ||
+    m.includes('gpt-4.1') ||
+    m.includes('claude')
+  ) {
+    return { rates: COST_TIER_DEFAULT, tier: 'sonnet-like', known: true }
+  }
+  return { rates: COST_TIER_DEFAULT, tier: 'default', known: false }
+}
+
+export type TokenUsageForCost = {
+  inputTokens: number
+  outputTokens: number
+  cacheReadInputTokens?: number
+  cacheCreationInputTokens?: number
+  model?: string
+}
+
+/** 单桶 / 全会话 USD 粗算 */
+export function estimateUsdCost(
+  usage: TokenUsageForCost,
+  modelHint?: string,
+): {
+  usd: number
+  tier: string
+  known: boolean
+  rates: ModelCostRates
+} {
+  const model = modelHint ?? usage.model
+  const { rates, tier, known } = resolveModelCostRates(model)
+  const inTok = Math.max(0, usage.inputTokens || 0)
+  const outTok = Math.max(0, usage.outputTokens || 0)
+  const cr = Math.max(0, usage.cacheReadInputTokens ?? 0)
+  const cw = Math.max(0, usage.cacheCreationInputTokens ?? 0)
+  // 计费语义近似：cache read 按 read 价；非缓存 input ≈ max(0, input - cacheRead)
+  const uncachedIn = Math.max(0, inTok - cr)
+  const usd =
+    (uncachedIn / 1_000_000) * rates.inputPerMTok +
+    (outTok / 1_000_000) * rates.outputPerMTok +
+    (cr / 1_000_000) * rates.cacheReadPerMTok +
+    (cw / 1_000_000) * rates.cacheWritePerMTok
+  return { usd, tier, known, rates }
+}
+
+export function formatUsd(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return '$0.00'
+  if (n < 0.01) return `$${n.toFixed(4)}`
+  if (n < 1) return `$${n.toFixed(3)}`
+  return `$${n.toFixed(2)}`
+}

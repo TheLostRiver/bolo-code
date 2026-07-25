@@ -3,6 +3,8 @@
  * 无遥测、不上报；可选 USD 仅本地粗算、不强制。
  */
 
+import { estimateUsdCost, formatUsd } from './modelCost.ts'
+
 export type ModelUsageBucket = {
   inputTokens: number
   outputTokens: number
@@ -11,6 +13,18 @@ export type ModelUsageBucket = {
   cacheReadInputTokens?: number
   cacheCreationInputTokens?: number
   estimated?: boolean
+}
+
+/** 最近一次 model call 快照（对照 HC last turn 可读性） */
+export type LastCallUsage = {
+  inputTokens: number
+  outputTokens: number
+  totalTokens: number
+  cacheReadInputTokens?: number
+  cacheCreationInputTokens?: number
+  estimated?: boolean
+  model?: string
+  at: string
 }
 
 export type SessionUsage = {
@@ -26,6 +40,8 @@ export type SessionUsage = {
   cacheCreationInputTokens?: number
   /** 按 model 名分桶（session.model 或 "(unknown)"） */
   byModel?: Record<string, ModelUsageBucket>
+  /** 最近一次 call（不参与 merge 累加语义；合并时取 child 的 last） */
+  lastCall?: LastCallUsage
 }
 
 export type UsageDelta = {
@@ -92,6 +108,9 @@ export function cloneSessionUsage(
       by[k] = nb
     }
     out.byModel = by
+  }
+  if (usage.lastCall) {
+    out.lastCall = { ...usage.lastCall }
   }
   return out
 }
@@ -177,12 +196,25 @@ export function accumulateSessionUsage(
         (b.cacheCreationInputTokens ?? 0) + cacheCreate
     }
   }
+
+  const last: LastCallUsage = {
+    inputTokens: input,
+    outputTokens: output,
+    totalTokens: total,
+    at: new Date().toISOString(),
+  }
+  if (cacheRead > 0) last.cacheReadInputTokens = cacheRead
+  if (cacheCreate > 0) last.cacheCreationInputTokens = cacheCreate
+  if (delta.estimated) last.estimated = true
+  if (key) last.model = key
+  usage.lastCall = last
 }
 
 /**
  * 将子 agent usage 合并进父会话（对照 HC fork/subagent totalUsage 回卷）。
  * - 父 totals / cache 累加
- * - byModel 按子桶名合并；可选 `labelPrefix`（如 `sub:`）仅用于展示时由调用方先改 key
+ * - byModel 按子桶名合并
+ * - lastCall：若 child 有则覆盖
  * - 不修改 child
  */
 export function mergeSessionUsage(
@@ -225,6 +257,10 @@ export function mergeSessionUsage(
       }
     }
   }
+
+  if (child.lastCall) {
+    parent.lastCall = { ...child.lastCall }
+  }
 }
 
 /**
@@ -239,7 +275,6 @@ export function computeCacheHitRate(
   const cacheRead = usage.cacheReadInputTokens ?? 0
   const cacheCreate = usage.cacheCreationInputTokens ?? 0
   if (cacheRead <= 0 && cacheCreate <= 0) return null
-  // 分母：cache 相关 + 未命中的 prompt 部分
   const uncachedInput = Math.max(0, usage.inputTokens - cacheRead)
   const denom = cacheRead + cacheCreate + uncachedInput
   if (denom <= 0) return null
@@ -282,7 +317,6 @@ export function normalizeProviderUsage(u: {
   let total = hasTotal ? Math.max(0, Math.floor(u.totalTokens!)) : input + output
 
   if (hasTotal && !hasIn && !hasOut) {
-    // 仅 total：全部记入 input（无法拆分）
     input = total
     output = 0
   } else if (hasTotal && hasIn && !hasOut) {
@@ -349,17 +383,78 @@ function formatNum(n: number): string {
   return String(n)
 }
 
-/** /cost · /usage 展示文案（含 cache + hit rate + by-model breakdown） */
-export function formatSessionUsage(usage: SessionUsage | undefined): string {
+/** 会话级本地 USD 粗算（byModel 分 tier 再加总） */
+export function estimateSessionUsd(
+  usage: SessionUsage | undefined | null,
+): {
+  usd: number
+  knownAll: boolean
+  byModel: Array<{ model: string; usd: number; tier: string; known: boolean }>
+} {
   if (!usage || usage.calls === 0) {
-    return [
+    return { usd: 0, knownAll: true, byModel: [] }
+  }
+  const by = usage.byModel
+  if (by && Object.keys(by).length > 0) {
+    let total = 0
+    let knownAll = true
+    const rows: Array<{
+      model: string
+      usd: number
+      tier: string
+      known: boolean
+    }> = []
+    for (const name of Object.keys(by).sort()) {
+      const b = by[name]!
+      const r = estimateUsdCost(
+        {
+          inputTokens: b.inputTokens,
+          outputTokens: b.outputTokens,
+          cacheReadInputTokens: b.cacheReadInputTokens,
+          cacheCreationInputTokens: b.cacheCreationInputTokens,
+          model: name,
+        },
+        name,
+      )
+      total += r.usd
+      if (!r.known) knownAll = false
+      rows.push({ model: name, usd: r.usd, tier: r.tier, known: r.known })
+    }
+    return { usd: total, knownAll, byModel: rows }
+  }
+  const r = estimateUsdCost({
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    cacheReadInputTokens: usage.cacheReadInputTokens,
+    cacheCreationInputTokens: usage.cacheCreationInputTokens,
+  })
+  return {
+    usd: r.usd,
+    knownAll: r.known,
+    byModel: [],
+  }
+}
+
+/** /cost · /usage 展示文案（含 cache + hit rate + last call + 本地 USD） */
+export function formatSessionUsage(
+  usage: SessionUsage | undefined,
+  opts?: {
+    /** prompt-cache 会话观测一行（可选） */
+    promptCacheLine?: string
+  },
+): string {
+  if (!usage || usage.calls === 0) {
+    const lines = [
       'Session usage (local only, no telemetry):',
       '  (none yet — no model calls this session)',
-    ].join('\n')
+    ]
+    if (opts?.promptCacheLine) lines.push(opts.promptCacheLine)
+    return lines.join('\n')
   }
   const cacheRead = usage.cacheReadInputTokens ?? 0
   const cacheCreate = usage.cacheCreationInputTokens ?? 0
   const hitPct = formatCacheHitRatePercent(usage)
+  const usdEst = estimateSessionUsd(usage)
   const lines = [
     'Session usage (local only, no telemetry):',
     `  calls:         ${usage.calls}`,
@@ -372,8 +467,26 @@ export function formatSessionUsage(usage: SessionUsage | undefined): string {
   if (hitPct != null) {
     lines.push(`  cacheHitRate:  ${hitPct}`)
   }
+  lines.push(
+    `  est. USD:      ${formatUsd(usdEst.usd)}${usdEst.knownAll ? '' : ' (mixed/default tiers)'}` +
+      '  — heuristic, not a bill',
+  )
   if (usage.estimated) {
     lines.push('  note: some/all values estimated (chars/4)')
+  }
+  if (usage.lastCall) {
+    const lc = usage.lastCall
+    const lcr = lc.cacheReadInputTokens ?? 0
+    const lcw = lc.cacheCreationInputTokens ?? 0
+    const lm = lc.model ? ` model=${lc.model}` : ''
+    const lest = lc.estimated ? ' est' : ''
+    lines.push(
+      `  last call:     ${formatNum(lc.inputTokens)} in / ${formatNum(lc.outputTokens)} out` +
+        ` (cache r/w ${formatNum(lcr)}/${formatNum(lcw)})${lm}${lest}`,
+    )
+  }
+  if (opts?.promptCacheLine) {
+    lines.push(opts.promptCacheLine)
   }
   const by = usage.byModel
   if (by && Object.keys(by).length > 0) {
@@ -394,9 +507,13 @@ export function formatSessionUsage(usage: SessionUsage | undefined): string {
         estimated: b.estimated,
       })
       const hitPart = bucketHit != null ? `; hit ${bucketHit}` : ''
+      const costPart = usdEst.byModel.find((x) => x.model === name)
+      const usdPart = costPart
+        ? `; ~${formatUsd(costPart.usd)} (${costPart.tier})`
+        : ''
       lines.push(
         `    ${name}: ${formatNum(b.inputTokens)} in / ${formatNum(b.outputTokens)} out / ${formatNum(b.totalTokens)} total` +
-          ` (${b.calls} calls; cache r/w ${formatNum(cr)}/${formatNum(cw)}${hitPart})${est}`,
+          ` (${b.calls} calls; cache r/w ${formatNum(cr)}/${formatNum(cw)}${hitPart}${usdPart})${est}`,
       )
     }
   }
@@ -416,5 +533,7 @@ export function formatUsageOneLiner(usage: SessionUsage | undefined): string {
     cr > 0 || cw > 0
       ? ` cache r/w ${cr}/${cw}${hitPct != null ? ` hit ${hitPct}` : ''}`
       : ''
-  return `usage:           ${usage.totalTokens} tokens (${usage.calls} calls)${cachePart}${est}`
+  const usd = estimateSessionUsd(usage)
+  const usdPart = usd.usd > 0 ? ` ~${formatUsd(usd.usd)}` : ''
+  return `usage:           ${usage.totalTokens} tokens (${usage.calls} calls)${cachePart}${usdPart}${est}`
 }

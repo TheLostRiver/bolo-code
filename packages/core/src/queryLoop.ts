@@ -36,7 +36,7 @@ import type {
   ToolUseBlock,
 } from './toolExecution.ts'
 import { StreamingToolExecutor } from './streamingToolExecutor.ts'
-import { prepareModelMessages } from './systemPrompt.ts'
+import { prepareModelMessages, getCacheStablePrefix } from './systemPrompt.ts'
 import {
   accumulateSessionUsage,
   estimateUsageFromCharCounts,
@@ -44,6 +44,8 @@ import {
   normalizeProviderUsage,
   type SessionUsage,
 } from './sessionUsage.ts'
+import type { PromptCacheSessionState } from '../../compact/src/index.ts'
+import { notePromptCacheAfterModelCall } from '../../compact/src/index.ts'
 
 export type TerminalReason =
   | 'completed'
@@ -148,6 +150,10 @@ export type QueryLoopParams = {
    * 会话 effort 档位（/effort）；透传 callModel → provider max_tokens 映射。
    */
   effortLevel?: string
+  /**
+   * 本地 prompt-cache 布局/TTL 观测（F-C6）；callModel 成功后 touch。
+   */
+  promptCacheState?: PromptCacheSessionState
   /**
    * 是否把本轮 reasoning 写入 assistant.reasoning_content（openai-compatible 回灌）。
    * 默认 false。
@@ -442,6 +448,15 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
             ...(modelTag ? { model: modelTag } : {}),
           })
         }
+      }
+
+      // 本地 prompt-cache 布局/TTL 观测（无遥测）
+      if (params.promptCacheState) {
+        const stable =
+          params.systemPromptSections?.length
+            ? getCacheStablePrefix(params.systemPromptSections)
+            : getCacheStablePrefix()
+        notePromptCacheAfterModelCall(params.promptCacheState, stable)
       }
     }
 

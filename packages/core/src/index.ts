@@ -106,6 +106,7 @@ import {
   cloneSessionUsage,
   createEmptySessionUsage,
 } from './sessionUsage.ts'
+import { createPromptCacheSessionState } from '../../compact/src/index.ts'
 
 export type { AskPermissionFn, Terminal }
 export type {
@@ -141,6 +142,8 @@ export {
   createPromptCacheSessionState,
   shouldBreakPromptCache,
   touchPromptCacheSession,
+  notePromptCacheAfterModelCall,
+  formatPromptCacheSessionLine,
   hashStablePrefix,
   findSafeSnipCutIndex,
   TOOL_RESULT_CLEARED_MESSAGE,
@@ -189,10 +192,23 @@ export {
   normalizeProviderUsage,
   formatSessionUsage,
   formatUsageOneLiner,
+  estimateSessionUsd,
   type SessionUsage,
   type ModelUsageBucket,
   type UsageDelta,
+  type LastCallUsage,
 } from './sessionUsage.ts'
+export {
+  estimateUsdCost,
+  formatUsd,
+  resolveModelCostRates,
+  COST_TIER_DEFAULT,
+  COST_TIER_OPUS,
+  COST_TIER_HAIKU,
+  COST_TIER_MINI,
+  type ModelCostRates,
+  type TokenUsageForCost,
+} from './modelCost.ts'
 export { runTools, partitionToolCalls } from './toolOrchestration.ts'
 export { runToolUse } from './toolExecution.ts'
 export { StreamingToolExecutor } from './streamingToolExecutor.ts'
@@ -497,6 +513,10 @@ export type CreateSessionOptions = {
   source?: SessionStartSource
   onEvent?: (e: SessionEvent) => void
   /**
+   * 预创建 prompt-cache 观测状态；默认 createPromptCacheSessionState()。
+   */
+  promptCacheState?: import('../../compact/src/index.ts').PromptCacheSessionState
+  /**
    * 预加载的 active agent 定义（内置 + 目录）。
    * 未传时 createSession 会按 cwd 调 loadAgentsDir。
    */
@@ -582,6 +602,10 @@ export type BoloSession = {
    * 有 provider usage 事件则累加，否则 chars/4 估算。
    */
   usage?: SessionUsage
+  /**
+   * 本地 prompt-cache 布局/TTL 观测（F-C6）；非厂商账单。
+   */
+  promptCacheState?: import('../../compact/src/index.ts').PromptCacheSessionState
   /**
    * 会话工具表（内置 + Agent + 可选 MCP）。
    * 未设置时 submitPrompt 回落 createDefaultTools()。
@@ -772,6 +796,8 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
     usage: opts.usage
       ? cloneSessionUsage(opts.usage)
       : createEmptySessionUsage(),
+    promptCacheState:
+      opts.promptCacheState ?? createPromptCacheSessionState(),
     onEvent: opts.onEvent ?? (() => {}),
   }
 
@@ -1290,6 +1316,7 @@ export async function submitPrompt(
     usage: session.usage,
     model: session.model,
     effortLevel: session.effortLevel,
+    promptCacheState: session.promptCacheState,
     persistReasoning: session.persistReasoning === true,
     signal: options?.signal,
     onEvent: (e) => mapLoopEvent(session, e),

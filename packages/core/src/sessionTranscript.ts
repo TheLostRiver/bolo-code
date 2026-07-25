@@ -811,6 +811,40 @@ export async function loadTranscriptFile(
               }
               if (Object.keys(by).length > 0) usage.byModel = by
             }
+            // lastCall 可选恢复
+            if (u.lastCall && typeof u.lastCall === 'object') {
+              const lc = u.lastCall as Record<string, unknown>
+              const li = num(lc.inputTokens)
+              const lo = num(lc.outputTokens)
+              const lt = num(lc.totalTokens)
+              if (
+                li !== undefined ||
+                lo !== undefined ||
+                lt !== undefined
+              ) {
+                usage.lastCall = {
+                  inputTokens: li ?? 0,
+                  outputTokens: lo ?? 0,
+                  totalTokens: lt ?? (li ?? 0) + (lo ?? 0),
+                  at:
+                    typeof lc.at === 'string' && lc.at.trim()
+                      ? lc.at
+                      : nowIso(),
+                }
+                if (lc.estimated === true) usage.lastCall.estimated = true
+                if (typeof lc.model === 'string' && lc.model.trim()) {
+                  usage.lastCall.model = lc.model.trim()
+                }
+                const lcr = num(lc.cacheReadInputTokens)
+                if (lcr !== undefined && lcr > 0) {
+                  usage.lastCall.cacheReadInputTokens = lcr
+                }
+                const lcc = num(lc.cacheCreationInputTokens)
+                if (lcc !== undefined && lcc > 0) {
+                  usage.lastCall.cacheCreationInputTokens = lcc
+                }
+              }
+            }
             meta.usage = usage
           }
         }

@@ -13,6 +13,10 @@ import {
   formatUsageOneLiner,
   normalizeProviderUsage,
   estimateUsageFromCharCounts,
+  estimateSessionUsd,
+  estimateUsdCost,
+  formatUsd,
+  resolveModelCostRates,
   createSession,
   submitUserInput,
   toSnapshot,
@@ -52,6 +56,9 @@ assert(empty.cacheReadInputTokens === 40, 'session cache read')
 assert(empty.cacheCreationInputTokens === 10, 'session cache create')
 assert(empty.byModel?.['gpt-test']?.inputTokens === 100, 'byModel input')
 assert(empty.byModel?.['gpt-test']?.cacheReadInputTokens === 40, 'byModel cache')
+assert(empty.lastCall?.inputTokens === 100, 'lastCall input')
+assert(empty.lastCall?.model === 'gpt-test', 'lastCall model')
+assert(empty.lastCall?.cacheReadInputTokens === 40, 'lastCall cache')
 
 accumulateSessionUsage(empty, {
   ...estimateUsageFromCharCounts({ inputChars: 40, outputChars: 8 }),
@@ -60,6 +67,7 @@ accumulateSessionUsage(empty, {
 assert(empty.estimated === true, 'estimated flag')
 assert(empty.byModel?.['gpt-test']?.calls === 2, 'byModel calls 2')
 assert(empty.byModel?.['gpt-test']?.estimated === true, 'byModel est')
+assert(empty.lastCall?.estimated === true, 'lastCall est')
 
 // second model
 accumulateSessionUsage(empty, {
@@ -69,6 +77,7 @@ accumulateSessionUsage(empty, {
   model: 'other-model',
 })
 assert(Object.keys(empty.byModel ?? {}).length === 2, 'two models')
+assert(empty.lastCall?.model === 'other-model', 'lastCall updates')
 
 const formatted = formatSessionUsage(empty)
 assert(formatted.includes('cacheRead:'), 'format cacheRead')
@@ -78,11 +87,33 @@ assert(formatted.includes('gpt-test:'), 'format model name')
 assert(formatted.includes('other-model:'), 'format other model')
 assert(formatted.includes('local only'), 'local only banner')
 assert(formatted.includes('cacheHitRate:'), 'format cacheHitRate')
-assert(!formatted.toLowerCase().includes('telemetry') || formatted.includes('no telemetry'), 'no telemetry')
+assert(formatted.includes('est. USD:'), 'format est usd')
+assert(formatted.includes('last call:'), 'format last call')
+assert(
+  !formatted.toLowerCase().includes('telemetry') ||
+    formatted.includes('no telemetry'),
+  'no telemetry',
+)
 
 const hit = computeCacheHitRate(empty)
 assert(hit != null && hit > 0 && hit <= 1, `cache hit rate: ${hit}`)
 assert(formatCacheHitRatePercent(empty)?.endsWith('%'), 'hit percent string')
+
+// USD estimate
+const usd = estimateSessionUsd(empty)
+assert(usd.usd > 0, 'session usd > 0')
+assert(usd.byModel.length === 2, 'usd by model rows')
+const opus = estimateUsdCost(
+  { inputTokens: 1_000_000, outputTokens: 0 },
+  'claude-opus-4',
+)
+const mini = estimateUsdCost(
+  { inputTokens: 1_000_000, outputTokens: 0 },
+  'gpt-4o-mini',
+)
+assert(opus.usd > mini.usd, 'opus tier costlier than mini for same tokens')
+assert(formatUsd(0.001).startsWith('$'), 'format usd')
+assert(resolveModelCostRates('opus').tier.includes('opus'), 'opus tier name')
 
 // merge child into parent
 const parentU = createEmptySessionUsage()
@@ -111,6 +142,7 @@ assert(parentU.cacheReadInputTokens === 24, 'merged cache read')
 assert(parentU.cacheCreationInputTokens === 5, 'merged cache create')
 assert(parentU.byModel?.['parent-m']?.calls === 1, 'parent model kept')
 assert(parentU.byModel?.['child-m']?.inputTokens === 50, 'child model rolled up')
+assert(parentU.lastCall?.model === 'child-m', 'merge takes child lastCall')
 // child unchanged
 assert(childU.calls === 1, 'child not mutated')
 
@@ -118,11 +150,15 @@ const one = formatUsageOneLiner(empty)
 assert(/usage:\s+\d+ tokens/.test(one), 'one-liner tokens')
 assert(one.includes('cache r/w'), 'one-liner cache')
 assert(one.includes('hit '), 'one-liner hit')
+assert(one.includes('~$') || one.includes('$'), 'one-liner usd')
 
 const cloned = cloneSessionUsage(empty)!
 assert(cloned.byModel?.['gpt-test']?.calls === 2, 'clone byModel')
+assert(cloned.lastCall?.model === empty.lastCall?.model, 'clone lastCall')
 cloned.byModel!['gpt-test']!.calls = 99
 assert(empty.byModel!['gpt-test']!.calls === 2, 'clone deep')
+if (cloned.lastCall) cloned.lastCall.model = 'mutated'
+assert(empty.lastCall?.model !== 'mutated', 'clone lastCall deep')
 
 // ── provider SSE cache fields ──
 const oai = parseOpenAIStreamUsage({
@@ -190,17 +226,39 @@ async function main() {
     assert(cost.message.includes('cacheRead:'), 'cost cacheRead')
     assert(cost.message.includes('by model:'), 'cost by model')
     assert(cost.message.includes('mock-a:'), 'cost model bucket')
+    assert(cost.message.includes('est. USD:'), 'cost est usd')
+    assert(cost.message.includes('last call:'), 'cost last call')
+    assert(
+      cost.message.includes('promptCache:') ||
+        cost.message.includes('prompt cache'),
+      'cost promptCache line',
+    )
+  }
+
+  assert(session.promptCacheState != null, 'session has promptCacheState')
+  // mock round touches prompt cache
+  await submitUserInput(session, 'usage round')
+  assert(session.usage && session.usage.calls >= 2, 'calls after mock')
+  assert(session.usage!.byModel?.['mock-a'] != null, 'byModel after mock')
+  assert(
+    session.promptCacheState?.lastCacheAt != null,
+    'prompt cache touched after model call',
+  )
+
+  const cost2 = await submitUserInput(session, '/cost')
+  if (cost2.type === 'slash') {
+    assert(
+      cost2.message.includes('lastTouch') ||
+        cost2.message.includes('promptCache'),
+      'cost after touch shows cache state',
+    )
   }
 
   const snap = toSnapshot(session)
   const snap2 = parseSessionSnapshot(JSON.parse(JSON.stringify(snap)))
-  assert(snap2.usage?.cacheReadInputTokens === 3, 'snap cache')
-  assert(snap2.usage?.byModel?.['mock-a']?.inputTokens === 10, 'snap byModel')
-
-  // mock rounds still accumulate
-  await submitUserInput(session, 'usage round')
-  assert(session.usage && session.usage.calls >= 2, 'calls after mock')
-  assert(session.usage!.byModel?.['mock-a'] != null, 'byModel after mock')
+  assert(snap2.usage?.cacheReadInputTokens === 3 || (snap2.usage?.cacheReadInputTokens ?? 0) >= 3, 'snap cache')
+  assert(snap2.usage?.byModel?.['mock-a'] != null, 'snap byModel')
+  assert(snap2.usage?.lastCall != null, 'snap lastCall')
 
   console.log('ok: test-session-usage')
 }

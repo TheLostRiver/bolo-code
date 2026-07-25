@@ -1113,6 +1113,9 @@ export type PromptCacheSessionState = {
   /** 稳定 system 前缀指纹 */
   stablePrefixHash?: string
   ttlMs: number
+  /** 最近一次 break 检测结果（本地 /cost 展示） */
+  lastBreakReason?: PromptCacheBreakReason
+  lastCheckedAt?: number
 }
 
 export function createPromptCacheSessionState(
@@ -1152,7 +1155,7 @@ export function shouldBreakPromptCache(
   return { break: false, reason: 'none' }
 }
 
-/** 记录一次成功的 cache 标记 */
+/** 记录一次成功的 cache 标记（返回新对象；调用方可 Object.assign 回写） */
 export function touchPromptCacheSession(
   state: PromptCacheSessionState,
   stablePrefix: string,
@@ -1163,4 +1166,36 @@ export function touchPromptCacheSession(
     lastCacheAt: now,
     stablePrefixHash: hashStablePrefix(stablePrefix),
   }
+}
+
+/**
+ * 就地更新：检测 break → 写 lastBreakReason → touch。
+ * 供 queryLoop 在 callModel 成功后调用（无遥测）。
+ */
+export function notePromptCacheAfterModelCall(
+  state: PromptCacheSessionState,
+  stablePrefix: string,
+  now = Date.now(),
+): { break: boolean; reason: PromptCacheBreakReason } {
+  const chk = shouldBreakPromptCache(state, stablePrefix, now)
+  state.lastBreakReason = chk.reason
+  state.lastCheckedAt = now
+  const next = touchPromptCacheSession(state, stablePrefix, now)
+  state.lastCacheAt = next.lastCacheAt
+  state.stablePrefixHash = next.stablePrefixHash
+  return chk
+}
+
+/** /cost · /context 一行 */
+export function formatPromptCacheSessionLine(
+  state: PromptCacheSessionState | undefined | null,
+): string | undefined {
+  if (!state) return undefined
+  const age =
+    state.lastCacheAt != null
+      ? `${Math.max(0, Math.round((Date.now() - state.lastCacheAt) / 1000))}s ago`
+      : 'never'
+  const br = state.lastBreakReason ?? 'none'
+  const ttlMin = Math.round((state.ttlMs || DEFAULT_PROMPT_CACHE_TTL_MS) / 60_000)
+  return `  promptCache:   lastTouch ${age} · lastCheck=${br} · ttl=${ttlMin}m (local layout/TTL; not vendor billing)`
 }
