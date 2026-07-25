@@ -112,6 +112,38 @@ defaults
 `foreignPluginRoots`（**IMPORT-P1**，可选）：外来插件目录列表（只读映射 **skills**）。识别 `.claude-plugin/plugin.json` / `.codex-plugin/plugin.json` 等；**不**加载 hooks/commands；**不**接官方市场。失败与 unsupported contributes 记入 workspace `pluginMerge.errors` 警告。见 [PLUGINS.md](./PLUGINS.md)。
 
 `provider.kind` 还可为：`openai-responses`（原生 Responses `/responses`）、`anthropic`、`mock`。详见 [PROVIDERS.md](./PROVIDERS.md)。
+
+### 多 Provider（**P 轨 · 规划**）
+
+日用目标：配置里同时登记多个后端，**运行中** `/provider use` 热切，无需改文件重启。完整契约见 [ROADMAP.md §9](./ROADMAP.md)。
+
+| 字段 | 说明 |
+|------|------|
+| `providers` | `Record<id, { kind, baseUrl?, model?, apiKeyEnv?, … }>` |
+| `defaultProvider` | 启动 active id |
+| `provider`（旧） | 单后端；无 `providers` 时仍可用，合成 id=`default` |
+
+```jsonc
+{
+  "defaultProvider": "work",
+  "providers": {
+    "work": {
+      "kind": "openai-compatible",
+      "baseUrl": "https://api.openai.com/v1",
+      "model": "gpt-4o-mini",
+      "apiKeyEnv": "OPENAI_API_KEY"
+    },
+    "claude": {
+      "kind": "anthropic",
+      "model": "claude-sonnet-4-20250514",
+      "apiKeyEnv": "ANTHROPIC_API_KEY"
+    }
+  }
+}
+```
+
+**Key：** 优先 `apiKeyEnv` / 环境变量；不要把密钥提交进项目配置。
+
 | 字段 | 默认 | 说明 |
 |------|------|------|
 | `autoCompactEnabled` | `true` | 为 true 且会话有 `compactSummarizer` 时，queryLoop 的 `prepareMessages` 达 token 阈值会走 full compact（对照参考 autoCompactIfNeeded）。会话内 `/autocompact on\|off` 可改；环境变量 `BOLO_DISABLE_AUTO_COMPACT` / `BOLO_DISABLE_COMPACT` 熔断 auto（manual `/compact` 仍可用） |

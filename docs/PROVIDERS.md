@@ -225,7 +225,7 @@ npx tsx scripts/smoke-live.ts
 - **把 Responses 伪装成 Chat Completions 再请求**（原生 Responses 供应商应走直连适配器）  
 - 为兼容 Responses **通读** Codex 全仓库  
 
-## 路线：OpenAI Responses 直连（P1 协议）
+## 路线：OpenAI Responses 直连（协议 · 已收口）
 
 | ID | 切片 | 状态 |
 |----|------|------|
@@ -236,3 +236,42 @@ npx tsx scripts/smoke-live.ts
 | OR4 | `fromEnv` / config `kind: openai-responses` | ✅ |
 | OR5 | 单测（fixture SSE，无真 key） | ✅ |
 | OR6 | Responses WebSocket | ⬜ 后置 |
+
+## 路线：多 Provider 并存 + 运行时热切（**P 轨 · 当前着重**）
+
+> 总规划见 [ROADMAP.md §9](./ROADMAP.md)。**痛点：** 现仅单 `provider`；`/model` 只改模型名，不换 baseUrl/key/kind。  
+> **目标：** `providers` 表 + `/provider use` 热切，无需关 agent。
+
+| ID | 切片 | 状态 |
+|----|------|------|
+| **P0** | 规格（ROADMAP §9 + 本文） | 📋 |
+| **P1** | `providers` + `defaultProvider` 加载；旧 `provider` 兼容 | 📋 |
+| **P2** | `switchSessionProvider` + `/provider` list/use | 📋 |
+| **P3** | `/model` 增强 · cache-break · `/doctor` | 📋 |
+| **P4** | 单测 · CLI 摘要 · 缺 key 错误 | 📋 |
+| **P5** | Desktop 选 active（可选） | 📋 |
+
+配置草案（实现真源以 ROADMAP §9.4 为准）：
+
+```jsonc
+{
+  "defaultProvider": "work",
+  "providers": {
+    "work": {
+      "kind": "openai-compatible",
+      "baseUrl": "https://api.openai.com/v1",
+      "model": "gpt-4o-mini",
+      "apiKeyEnv": "OPENAI_API_KEY"
+    },
+    "deepseek": {
+      "kind": "openai-compatible",
+      "baseUrl": "https://api.deepseek.com",
+      "model": "deepseek-chat",
+      "apiKeyEnv": "DEEPSEEK_API_KEY"
+    }
+  }
+}
+```
+
+Slash 目标：`/provider` · `/provider use <id>` · `/model`（可带 `id/model`）。  
+**不做：** 官方市场、密钥入库、遥测、默认同 turn 自动 failover。
