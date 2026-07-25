@@ -21,13 +21,14 @@
 | **CLI TUI（壳）** | **~70–80%** | 文本框布局/picker/主题；**非**真 React Ink |
 | **Electron GUI** | **~55–65%** | 壳 + 流式 + 权限 + 设置 |
 | **Hooks · 日用契约** | **~96–98%** | **H0–H5 已落地**（SessionEnd · exit 语义 · updatedInput · `/hooks recent`）；trust/UI 菜单后置 |
-| **Compact · 日用管道** | **~92–95%** | **C0–C5 已落地**（keep 轮次 · usage 阈值 · mid-turn · 再注入 · /context 诊断） |
+| **Compact · 日用管道** | **~92–95%** | **C0–C5 已落地**；后置 partial/remote/真 tokenizer（§8.9） |
+| **Provider · 多实例热切** | **~25–35%** | 现仅单 `provider` + `/model` 改名；**P 轨**规划中 |
 | **产品整体（相对 HC）** | **~70–85%** | 日用高；UI 全家桶另计 |
 
-**主线已闭环：** headless 日用 → FULL → M4 → sandbox/OAuth/settings → **Diff D0–D7** · **U0–U4** · **Hooks H0–H5**。
+**主线已闭环：** headless 日用 → FULL → M4 → Diff · Hooks · **Compact C0–C5**。
 
-**开放轨（下一刀）：**  
-U5 可选真·Ink/IDE · Hooks trust/managed · Compact partial/remote（后置，见 §8.9）。
+**开放轨（下一刀 · 当前着重）：**  
+**P 轨 · 多 Provider 并存 + 运行时热切**（§9）· Compact 后置清单（§8.9，非阻塞）· U5 可选。
 
 ---
 
@@ -157,7 +158,8 @@ apps/desktop       消费同一 DiffViewModel                 （U3）
 | Diff 日用契约 D0–D7 | ✅ |
 | Diff 交互 UI U0–U4 | ✅（U5 可选） |
 | Hooks 日用 11 事件 + exit 语义 | ✅ **H0–H5** |
-| Compact 日用管道打磨 | ✅ **C0–C5** |
+| Compact 日用管道打磨 | ✅ **C0–C5**（后置见 §8.9） |
+| **多 Provider 热切** | 📋 **P 轨**（§9 · **当前着重**） |
 | 无遥测 | ✅ |
 
 ---
@@ -174,11 +176,12 @@ apps/desktop       消费同一 DiffViewModel                 （U3）
 | **M-Diff-A（D0–D7）** | ✅ | 日用文件 diff 契约 |
 | **M-Diff-B（U0–U4）** | ✅ U0–U4 | 交互 diff UI 主路径收口；U5 可选 |
 | **M-Hooks（H0–H5）** | ✅ H0–H5 | SessionEnd + exit + updatedInput + `/hooks recent` |
-| **M-Compact（C0–C5）** | ✅ C0–C5 | keep · usage · mid-turn · reinject · /context；见 §8 |
+| **M-Compact（C0–C5）** | ✅ C0–C5 | keep · usage · mid-turn · reinject · /context；后置 §8.9 |
+| **M-Provider（P0–P5）** | 📋 规划 · **当前着重** | 多 provider 配置 + 运行时 `/provider`/`/model` 热切；见 §9 |
 | 官方市场 / 遥测 | 🚫 | 永不 |
 
 **一句话：**  
-主路径、Diff、Hooks、**Compact C 轨**日用已收口（compact ~**92–95%**）。不追 HC/Codex 全家桶。
+主路径、Diff、Hooks、**Compact 日用**已收口。**下一刀：P 轨多 Provider 热切**（会话内换 baseUrl/key/协议/模型，无需关 agent 改配置）。
 
 ---
 
@@ -186,11 +189,13 @@ apps/desktop       消费同一 DiffViewModel                 （U3）
 
 | 文档 | 用途 |
 |------|------|
-| 本文件 | 总路线 + U / H / **C 轨** |
-| `COMPACTION.md` | Compact 契约真源（实现前先改这里） |
+| 本文件 | 总路线 + U / H / C / **P 轨** |
+| `PROVIDERS.md` | Provider 协议与 **多实例配置真源**（P 轨实现时扩写） |
+| `COMPACTION.md` | Compact 契约；§8 后置清单 |
 | `HOOKS.md` | Hook 契约 |
 | `FILE_DIFF_SPEC.md` | Diff 契约与阶段 |
 | `TUI.md` | CLI TUI 壳与 U 挂载 |
+| `CONFIG.md` | 配置布局（含 providers 段） |
 | `ARCHITECTURE.md` | 架构 |
 | `apps/desktop/README.md` | 桌面 |
 | `TODO*.md` | 历史轨（只读） |
@@ -334,11 +339,12 @@ PostToolUse exit 2
 
 ---
 
-## 8. Compact 轨（C0–C5 · **规划 · 当前着重**）
+## 8. Compact 轨（C0–C5 · **日用已收口**）
 
 > **口径：** 日用 = 摘要真管道 + 阈值/熔断可依赖 + 续作质量（keep）+ 触发时机（usage/mid-turn）+ 压后上下文不丢关键段。  
 > **不对齐 100%：** HC partial / session-memory / cached API edits / reactive 全家 · Codex remote compact / window id / 换模触发。  
-> **对标：** HC `compactConversation` + auto/snip/micro/PTL 语义；Codex 仅借「阈值与 mid-turn 意图」，不抄 remote。
+> **对标：** HC `compactConversation` + auto/snip/micro/PTL 语义；Codex 仅借「阈值与 mid-turn 意图」，不抄 remote。  
+> **状态：** **C0–C5 ✅ 已落地**（~92–95% 日用）。下文保留为契约与**后置清单**；**不阻塞 P 轨**。
 
 ### 8.1 现状水位（评估后）
 
@@ -457,31 +463,32 @@ compact 成功且非 override system 时：
 - 不强制重跑全量 memory 正文  
 - 开关：`postCompactReinjection?: boolean`（与现 system 装配一致即可）
 
-### 8.9 明确不做（C 轨内）
+### 8.9 明确不做 / 后置（C 轨日用外 · **未完成清单**）
 
-- 遥测 / GrowthBook  
-- HC partial compact / session memory compact  
-- Codex remote compaction v1/v2 / window_id 状态机  
-- 厂商 `cache_edits` API（本地 cached-MC 标记已有即可）  
-- 真 tokenizer 依赖  
+> 以下**不是** C0–C5 欠债，而是对照 HC/Codex 的可选加深；**默认不排进当前主线**（主线转 §9 P 轨）。若单独开刀再立 C6+ 或独立轨。
+
+| 项 | 来源 | 说明 | 建议 |
+|----|------|------|------|
+| **partial compact** | HC | 按索引 up_to/from 只摘要一段 | 后置；长会话成本优化 |
+| **session memory compact** | HC 实验 | 用会话记忆代替再调 LLM | 后置；依赖 memory 轨成熟度 |
+| **remote compaction** | Codex | 服务端 compact / v2 | 🚫 不追；Bolo 本地管道 |
+| **window_id / auto_compact_window 记账** | Codex | 多窗状态机 | 后置；日用非必须 |
+| **真 tokenizer** | 两边 | 替换 chars/4 启发 | 后置；C2 usage 已缓解 |
+| **cache_edits API** | HC cached MC | 厂商缓存编辑 | 🚫；本地 content-clear 即可 |
+| **path-rules 再注入** | C4 验收曾写 | 现仅 skill catalog | 可选小步；不阻塞 |
+| **mid-turn 与 prepare 共享 consecutiveFailures** | 健壮性 | 现 mid 阈值用 failures=0 | 可选 polish |
+| **`/compact` 显式 `--keep-turns N`** | UX | 契约字段已有，slash 可透传 | 可选小步 |
+
+**禁止误判：** 不要把上表当成「C 轨没做完」；日用验收见 §8.2（已满足）。
 
 ### 8.10 测试与提交
 
 | 测试 | 覆盖 |
 |------|------|
-| 扩 `test-compact` / 新建 `test-compact-c-track` | keep 轮次边界 + tool 对不拆 |
-| | usage 优先于 estimate 触发 |
-| | mid-turn 每 turn 最多一次 + 熔断 |
-| | 再注入不炸、可关 |
-| 回归 | `test-auto-compact` · `test-ptl-retry` · `test-snip` · `test-microcompact` |
+| `test-compact` / `test-compact-c-track` | keep · usage · mid · reinject · /context |
+| 回归 | `test-auto-compact` · `test-ptl-retry` · `test-snip` · `test-microcompact` · `test-context-slash` |
 
-提交建议：
-
-1. `docs: plan compact C-track waterline`（本规划）  
-2. `feat: compact C1 keep by user turns`  
-3. `feat: compact C2 usage-aware auto threshold`  
-4. `feat: compact C3-C4 mid-turn and reinjection`  
-5. `docs+test: compact C5 waterline`
+已提交切片（历史）：C0 docs → C1 keep → C2 usage → C3–C5 mid/reinject/context。
 
 只 stage 本轨；**勿提交 `.bolo-tmp/`**。
 
@@ -489,7 +496,219 @@ compact 成功且非 override system 时：
 
 | 文档 | 角色 |
 |------|------|
-| 本文件 §8 | C 轨总规划与顺序 |
+| 本文件 §8 | C 轨总规划与**后置清单** |
 | [COMPACTION.md](./COMPACTION.md) | 管道/阈值/**实现真源** |
 | [AGENT_LOOP.md](./AGENT_LOOP.md) | prepare / mid-turn 交叉 |
 | [PROMPT_CACHE.md](./PROMPT_CACHE.md) | 稳定前缀 vs 再注入 |
+
+---
+
+## 9. Provider 轨（P0–P5 · **规划 · 当前着重 · 多实例热切**）
+
+> **用户痛点：** 现在只有**单个** `config.provider`；`/model` 只改 `session.model` 字符串，**不换** baseUrl / apiKey / 协议 kind。换 DeepSeek ↔ OpenAI ↔ Anthropic 必须改配置或环境变量并重启。  
+> **目标：** 配置里**同时登记多个 provider**；agent **运行中** `/provider` / `/model` 热切，**无需关闭进程**。  
+> **对标（语义，不抄实现/遥测）：**  
+> - Codex：`model_providers` 表 + `model_provider` id + `/model` 换模；线程可记 provider  
+> - HC：运行时 model 选择 / 迁移提示；多后端凭 env+settings  
+> **Bolo 原则：** key 仍优先环境变量；**不**写遥测；**不**接官方市场。
+
+### 9.1 现状水位
+
+| 项 | 状态 |
+|----|------|
+| 单 `provider.kind` + env 推断 | ✅ `resolveProviderFromConfig` / `createProviderFromEnv` |
+| 协议：openai-compatible / openai-responses / anthropic / mock | ✅ |
+| `/model <name>` 仅改 session.model | ✅ 弱（不换 endpoint） |
+| `/effort` · `/thinking` | ✅ |
+| **多 provider 配置表** | ❌ |
+| **运行时切换 provider（baseUrl/key/kind）** | ❌ |
+| **按 provider 列模型 / 校验** | ❌ |
+| Desktop 设置里多后端 | ❌ 轻量/后置 |
+
+**粗估：** 日用单后端 **~85%+**；**多后端热切体验 ~25–35%** → P 轨目标日用 **~90–95%**。
+
+### 9.2 目标与验收（P 轨完成定义）
+
+1. `config.json` 可声明 **`providers` 映射**（≥2 个命名后端），并指定 **`defaultProvider`**（或 `activeProvider`）  
+2. **兼容**：仅写旧字段 `provider: { kind, ... }` 仍可用（视为隐式 id=`default`）  
+3. 会话启动时装载**全部**（或 lazy）provider 描述；**当前**只绑定一个 `LlmProvider` 实例  
+4. **运行中** `/provider` 列出 id/kind/model；`/provider use <id>` **热切**：换 `session.provider` + 重挂 `deps.callModel`，**不重启**  
+5. `/model`：无参显示当前；有参可 `model` 或 `provider/model`；切模可触发 **prompt-cache break**（本地）  
+6. Key：**不**强制写入项目配置；支持 `apiKeyEnv: "DEEPSEEK_API_KEY"` 或沿用全局 env 回落  
+7. 切换失败（缺 key / 非法 kind）→ **明确错误**，保持旧 provider  
+8. 单测 + `/doctor` 可见当前 provider；**无遥测**  
+9. 文档：`PROVIDERS.md` + `CONFIG.md` 为真源  
+
+### 9.3 架构（职责）
+
+```text
+packages/config     providers[] 解析 · 与旧 provider 兼容 · 不实例化网络
+packages/providers  工厂：id → LlmProvider；createFromProfile(profile)
+packages/core       session.providerId · switchProvider · /provider /model
+packages/cli        启动打印当前；REPL 热切
+apps/desktop        设置里选 active（P4+，可后置）
+```
+
+```mermaid
+flowchart LR
+  CFG["config.providers + defaultProvider"] --> REG[ProviderRegistry]
+  REG --> ACTIVE[session.provider + deps.callModel]
+  SLASH["/provider use · /model"] --> SWITCH[switchSessionProvider]
+  SWITCH --> ACTIVE
+  SWITCH --> PCB[promptCache break 可选]
+```
+
+**禁止：** 把多个 apiKey 打进 transcript/日志；切换时静默吞错；为热切引入遥测。
+
+### 9.4 配置形状（草案）
+
+```jsonc
+// ~/.bolo/config.json 或项目 .bolo/config.json（后写覆盖）
+{
+  "version": 1,
+  // —— 新：多实例 ——
+  "defaultProvider": "work",
+  "providers": {
+    "work": {
+      "kind": "openai-compatible",
+      "baseUrl": "https://api.openai.com/v1",
+      "model": "gpt-4o-mini",
+      "apiKeyEnv": "OPENAI_API_KEY"   // 推荐：只写 env 名
+    },
+    "deepseek": {
+      "kind": "openai-compatible",
+      "baseUrl": "https://api.deepseek.com",
+      "model": "deepseek-chat",
+      "apiKeyEnv": "DEEPSEEK_API_KEY"
+    },
+    "claude": {
+      "kind": "anthropic",
+      "model": "claude-sonnet-4-20250514",
+      "apiKeyEnv": "ANTHROPIC_API_KEY",
+      "maxTokens": 8192
+    }
+  },
+  // —— 旧：单 provider 仍支持（无 providers 时）——
+  // "provider": { "kind": "openai-compatible", "model": "..." }
+}
+```
+
+```ts
+type ProviderProfileJson = {
+  kind: 'mock' | 'openai-compatible' | 'openai-responses' | 'anthropic'
+  /** 显示名；缺省用 map key */
+  label?: string
+  baseUrl?: string
+  model?: string
+  /** 不推荐明文；优先 apiKeyEnv */
+  apiKey?: string
+  apiKeyEnv?: string
+  timeoutMs?: number
+  maxTokens?: number
+}
+
+type BoloConfigJson = {
+  // …
+  /** @deprecated 单后端；与 providers 共存时：作为 providers.default 的浅合并源或忽略 */
+  provider?: ProviderProfileJson
+  /** 命名后端表 */
+  providers?: Record<string, ProviderProfileJson>
+  /** 启动默认 id；缺省：providers 第一项或 "default" */
+  defaultProvider?: string
+}
+```
+
+**合并规则（建议）：**
+
+1. 若仅有 `provider` → 合成 `providers = { default: provider }`，`defaultProvider = default`  
+2. 若仅有 `providers` → 用 `defaultProvider` 或 Object.keys[0]  
+3. 两者都有 → `providers` 为主；可选把旧 `provider` 填进缺 id 的 `default`  
+4. env `BOLO_PROVIDER` / keys：**覆盖 active 的 kind/key**（启动时）；热切后以会话选择为准，除非 `/provider reset-env`（可选后置）
+
+### 9.5 运行时 API（草案）
+
+```ts
+// packages/core
+type ProviderRegistry = {
+  profiles: Record<string, ProviderProfileJson>
+  activeId: string
+}
+
+function listSessionProviders(session): Array<{ id, kind, model, label, isActive }>
+function switchSessionProvider(session, id: string, opts?: { model?: string }): { ok, reason? }
+function switchSessionModel(session, model: string): { ok, reason? }
+// 内部：createProviderFromProfile → session.provider = … → session.deps = productionDeps(…)
+//       session.model = profile.model；notePromptCache break
+```
+
+**Slash：**
+
+| 命令 | 行为 |
+|------|------|
+| `/provider` | 列出已配置 id · kind · model · 当前 * |
+| `/provider use <id>` | 热切到该后端（保留对话 messages） |
+| `/provider use <id> <model>` | 切后端并指定模型 |
+| `/model` | 显示 `providerId` + model |
+| `/model <name>` | 仅改当前后端 model |
+| `/model <id>/<name>` | 可选糖：等价 use + model（P2） |
+
+### 9.6 阶段切片（实施顺序）
+
+| 阶段 | 交付 | 优先级 | 状态 |
+|------|------|--------|------|
+| **P0** | 规格：本 § + PROVIDERS/CONFIG 草案；兼容矩阵 | P0 | 📋 |
+| **P1** | `providers` + `defaultProvider` 加载；旧 `provider` 兼容；Registry 类型 | P0 | 📋 |
+| **P2** | `switchSessionProvider` + 重挂 deps；`/provider` list/use | P0 | 📋 |
+| **P3** | `/model` 增强 + cache break + `/doctor` 显示 active | P1 | 📋 |
+| **P4** | CLI 启动摘要 · 错误信息（缺 key）· 单测 | P1 | 📋 |
+| **P5** | Desktop 设置选 provider（最小下拉）；可选 | P2 | 📋 |
+| 后置 | 远程拉模型列表 · 官方市场 · 按 turn 自动 failover 路由 | — | 🚫 非本轨默认 |
+
+**顺序硬约束：** **P0 文档 → P1 配置 → P2 热切 → P3 model/doctor → P4 测 → P5 Desktop**。
+
+### 9.7 与 Compact / 会话交叉
+
+| 交叉 | 行为 |
+|------|------|
+| 热切 provider | **不**自动 compact；可提示「上下文仍在，仅换后端」 |
+| prompt cache | 切换 kind/base/model → **cache-break**（已有 promptCache 观测） |
+| subagent | 默认 **继承** 父 active provider；agent 定义 `model:` 仍可覆盖**模型名**（P2 不强制子换后端） |
+| compact summarizer | 随 `session.provider` 重绑（`createCompactSummarizerFromProvider`） |
+| resume | 快照可存 `providerId`（P3+）；缺省用 defaultProvider |
+
+### 9.8 明确不做（P 轨内）
+
+- 遥测 / 用量上报到第三方  
+- Claude/Codex **官方市场**拉模型  
+- 无配置的「扫描全网 key」  
+- 自动在 provider 间 **failover 重试同一 turn**（可后置）  
+- 把 apiKey 写入 jsonl transcript  
+
+### 9.9 测试与提交
+
+| 测试 | 覆盖 |
+|------|------|
+| `test-provider-unit` 扩 / `test-multi-provider` | 双 profile 加载 · 兼容旧 provider |
+| | switch 后 callModel 走新 base（mock 双 id） |
+| | 缺 key 失败且不破坏旧实例 |
+| | `/provider` `/model` slash |
+| 回归 | 现有 fromEnv · smoke-turn |
+
+提交建议：
+
+1. `docs: plan multi-provider P-track`（本规划）  
+2. `feat: config providers map and defaultProvider`  
+3. `feat: runtime switchSessionProvider and /provider`  
+4. `feat: /model provider-aware and doctor`  
+5. `test+docs: multi-provider waterline`
+
+只 stage 本轨；**勿提交 `.bolo-tmp/`**；**勿把真实 apiKey 写进仓库**。
+
+### 9.10 文档入口
+
+| 文档 | 角色 |
+|------|------|
+| 本文件 §9 | P 轨总规划 |
+| [PROVIDERS.md](./PROVIDERS.md) | 协议 + **多实例配置真源** |
+| [CONFIG.md](./CONFIG.md) | 文件布局与合并 |
+| [PROMPT_CACHE.md](./PROMPT_CACHE.md) | 切换时 cache-break |
