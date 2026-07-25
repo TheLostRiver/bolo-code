@@ -42,6 +42,7 @@
 | **可滚 Diff 面板** | ✅ U1 | TTY `/diff` · `BOLO_DIFF_PANEL=0` 关 |
 | **ask 内嵌可滚 preview** | ✅ U2 | `y/a/N` · `BOLO_PERM_DIFF_PANEL=0` 关 |
 | **写后可折叠 cell** | ✅ U3 | 默认折叠 · `BOLO_DIFF_CELL=expand` 展开 · Desktop `<details>` |
+| **行号 / 主题 / 轻量语法** | ✅ U4 | `diffRender.ts` · `BOLO_DIFF_GUTTER` · `BOLO_DIFF_SYNTAX` · `BOLO_DIFF_THEME` |
 | 真·React Ink 依赖 | 📋 U5 可选 | 非默认 |
 
 ---
@@ -66,12 +67,15 @@ apps/desktop/renderer   ← U3：`<details>` cell · 权限 files 列表
 | `BOLO_PERM_DIFF_PANEL=0` | 权限 ask 不用审批面板（仅文本 y/a/N） |
 | `BOLO_DIFF_CELL=expand` | 写后 cell 默认展开（或 `BOLO_DIFF_VERBOSE=1`） |
 | `BOLO_DIFF_CELL=fold` | 强制折叠（默认） |
+| `BOLO_DIFF_GUTTER=0` | 关闭旧/新行号 gutter（默认开） |
+| `BOLO_DIFF_SYNTAX=0` | 关闭轻量关键字/字符串高亮（默认开，plain 主题关） |
+| `BOLO_DIFF_THEME` / `BOLO_THEME` | `default` · `dim` · `plain`（兼听 `NO_COLOR`） |
 
 **约束：**
 
 - 数据只来自 core/tools 已有契约（`fileDiffLog` / preview / git / meta）。  
 - 非 TTY：禁止挂起面板，回落纯文本。  
-- 不引入 ratatui；真·Ink 仅 U5 评估。
+- 不引入 ratatui / tree-sitter；真·Ink 仅 U5 评估。
 
 **键位：**
 
@@ -84,6 +88,7 @@ apps/desktop/renderer   ← U3：`<details>` cell · 权限 files 列表
 
 ```bash
 npx tsx scripts/test-diff-view.ts
+npx tsx scripts/test-diff-render.ts
 npx tsx scripts/test-file-diff.ts
 ```
 

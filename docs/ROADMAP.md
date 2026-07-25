@@ -16,7 +16,7 @@
 | **Rules / Creators** | **~75–85%** | 日用齐 |
 | **成本与缓存** | **~94–97%** | /cost 日用近满 |
 | **文件 Diff · 日用契约** | **~95%+** | **D0–D7 已收口**；见 [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) |
-| **文件 Diff · 交互 UI** | **~85–90%** | **U0–U3 已落地**（VM · `/diff` 面板 · 权限审批 · 写后 cell + Desktop）；U4+ 规划中 |
+| **文件 Diff · 交互 UI** | **~90–95%** | **U0–U4 已落地**（VM · 面板 · 审批 · cell · 行号/主题/轻量语法）；U5 真·Ink/IDE 可选 |
 | **斜杠** | **~80–88%** | 日用 + polish |
 | **CLI TUI（壳）** | **~70–80%** | 文本框布局/picker/主题；**非**真 React Ink |
 | **Electron GUI** | **~55–65%** | 壳 + 流式 + 权限 + 设置 |
@@ -99,7 +99,7 @@ apps/desktop       消费同一 DiffViewModel                 （U3）
 | **U1** | **终端 Diff 面板**：`/diff` 可滚列表；j/k；Enter 展开；q 退出 | ~60–70% | ✅ |
 | **U2** | **权限预览面板**：ask 多文件 + hunk 可滚；y/a/N | ~75–85% | ✅ |
 | **U3** | **写后 History cell**；Desktop `<details>` 复用 | ~85–90% | ✅ |
-| **U4** | 行号 · 主题色 · 可选语法高亮 | ~90–95% | 📋 |
+| **U4** | 行号 · 主题色 · 轻量语法高亮（无 tree-sitter） | ~90–95% | ✅ |
 | **U5** | 可选真·Ink / IDE / merge-base | 全家桶尾声 | 📋 |
 
 ### 3.4 U1/U2 行为（验收）
@@ -168,7 +168,7 @@ apps/desktop       消费同一 DiffViewModel                 （U3）
 | M-TUI（文本壳） | ✅ | 布局/picker/主题；非真 Ink |
 | M4 Electron | ✅ | 壳 + 流式 + 权限 + Settings |
 | **M-Diff-A（D0–D7）** | ✅ | 日用文件 diff 契约 |
-| **M-Diff-B（U0–U4）** | 📋 U0–U3 ✅ | 交互 diff UI；U4 渲染加深待做 |
+| **M-Diff-B（U0–U4）** | ✅ U0–U4 | 交互 diff UI 主路径收口；U5 可选 |
 | 官方市场 / 遥测 | 🚫 | 永不 |
 
 **一句话：**  
