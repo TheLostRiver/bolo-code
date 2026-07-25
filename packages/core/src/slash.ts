@@ -170,10 +170,25 @@ export type ParseSlashResult =
 export type SlashDispatchResult = {
   message: string
   ok: boolean
+  /**
+   * U1：TTY 下 CLI 可打开 Diff 交互面板（core 不依赖 cli）。
+   * 非 TTY / 无处理器时仅展示 message。
+   */
+  interactiveDiff?: {
+    mode: 'session' | 'last'
+    pathFilter?: string
+  }
 }
 
 export type SubmitUserInputResult =
-  | { type: 'slash'; message: string }
+  | {
+      type: 'slash'
+      message: string
+      interactiveDiff?: {
+        mode: 'session' | 'last'
+        pathFilter?: string
+      }
+    }
   | { type: 'prompt'; terminal: Terminal }
   | { type: 'empty' }
 
@@ -1598,10 +1613,18 @@ async function cmdDiff(
   const raw = args.trim()
   const log = session.fileDiffLog
   if (!raw) {
-    return { ok: true, message: formatDiffSlash(log) }
+    return {
+      ok: true,
+      message: formatDiffSlash(log),
+      interactiveDiff: { mode: 'session' },
+    }
   }
   if (raw === 'last' || raw === 'turn') {
-    return { ok: true, message: formatDiffSlash(log, { lastTurn: true }) }
+    return {
+      ok: true,
+      message: formatDiffSlash(log, { lastTurn: true }),
+      interactiveDiff: { mode: 'last' },
+    }
   }
   const gitMatch = raw.match(/^git(?:\s+(.+))?$/i)
   if (gitMatch) {
@@ -1626,7 +1649,12 @@ async function cmdDiff(
       }
     }
   }
-  return { ok: true, message: formatDiffSlash(log, { pathFilter: raw }) }
+  // 单 path：仍给文本；TTY 面板可后接 pathFilter
+  return {
+    ok: true,
+    message: formatDiffSlash(log, { pathFilter: raw }),
+    interactiveDiff: { mode: 'session', pathFilter: raw },
+  }
 }
 
 function cmdModel(session: SlashSession, args: string): SlashDispatchResult {
@@ -2372,10 +2400,10 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     group: 'session',
     run: cmdCost,
   },
-  {
+    {
     name: 'diff',
     summary:
-      'Session file changes; /diff last · /diff git [path] · /diff <path>',
+      'File changes; TTY opens panel (U1). /diff last · git [path] · <path>',
     usage: '[last | git [path] | <path>]',
     group: 'session',
     run: cmdDiff,
@@ -2575,7 +2603,11 @@ export async function submitUserInput(
 
   if (parsed.kind === 'command') {
     const r = await dispatchSlashCommand(session, parsed.name, parsed.args)
-    return { type: 'slash', message: r.message }
+    return {
+      type: 'slash',
+      message: r.message,
+      ...(r.interactiveDiff ? { interactiveDiff: r.interactiveDiff } : {}),
+    }
   }
 
   const { submitPrompt } = await import('./index.ts')

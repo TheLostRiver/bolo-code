@@ -701,8 +701,6 @@ export async function runToolUse(
         toolUseId,
         ...(previewPayload ? { preview: previewPayload } : {}),
       })
-        toolUseId,
-      })
       if (user === 'allow_always') {
         if (ctx.permissionRules) {
           addAlwaysAllowToolName(ctx.permissionRules, name)

@@ -38,7 +38,7 @@
 |----|------|------|
 | 文本 dump `/diff` · tool_end ANSI | ✅ D7 | 轨 A |
 | 权限 preview 多行着色 | ✅ D7 | 仍一次性打印 |
-| **可滚 Diff 面板** | 📋 U1 | 轨 B |
+| **可滚 Diff 面板** | ✅ U1 | TTY `/diff` · `BOLO_DIFF_PANEL=0` 关 |
 | **ask 内嵌可滚 preview** | 📋 U2 | 轨 B |
 | **写后可折叠 cell** | 📋 U3 | 轨 B |
 | 真·React Ink 依赖 | 📋 U5 可选 | 非默认 |

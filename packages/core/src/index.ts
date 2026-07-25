@@ -235,6 +235,18 @@ export {
   type FileChangeOp,
 } from './fileDiffLog.ts'
 export {
+  buildDiffViewModelFromLog,
+  buildDiffViewModelFromPreview,
+  applyDiffViewKey,
+  formatDiffViewScreen,
+  flattenHunkLines,
+  selectedFile,
+  type DiffViewModel,
+  type DiffViewFile,
+  type DiffViewSource,
+  type DiffViewKeyResult,
+} from './diffViewModel.ts'
+export {
   loadBoloMd,
   getSystemPrompt,
   getSystemPromptPartition,

@@ -163,7 +163,7 @@ apps/desktop       消费同一 DiffViewModel                 （U3）
 | M-TUI（文本壳） | ✅ | 布局/picker/主题；非真 Ink |
 | M4 Electron | ✅ | 壳 + 流式 + 权限 + Settings |
 | **M-Diff-A（D0–D7）** | ✅ | 日用文件 diff 契约 |
-| **M-Diff-B（U0–U4）** | 📋 | 交互 diff UI（规划） |
+| **M-Diff-B（U0–U4）** | 📋 U0–U1 ✅ | 交互 diff UI；U2+ 待做 |
 | 官方市场 / 遥测 | 🚫 | 永不 |
 
 **一句话：**  

@@ -492,6 +492,10 @@ export async function runOnePrompt(
   options?: {
     writeOut?: (s: string) => void
     writeErr?: (s: string) => void
+    isTty?: boolean
+    /** REPL：打开 raw 面板前暂停 readline */
+    pauseInput?: () => void
+    resumeInput?: () => void
   },
 ): Promise<{ terminalReason: string; assistantText: string }> {
   const writeOut = options?.writeOut ?? ((s) => process.stdout.write(s))
@@ -507,6 +511,43 @@ export async function runOnePrompt(
     }
 
     if (result.type === 'slash') {
+      // U1：TTY 且 /diff 请求面板 → 交互 diffPane；失败回落文本
+      if (
+        result.interactiveDiff &&
+        (options?.isTty ?? process.stdin.isTTY === true) &&
+        process.env.BOLO_DIFF_PANEL !== '0'
+      ) {
+        try {
+          const { buildDiffViewModelFromLog } = await import(
+            '../../core/src/diffViewModel.ts'
+          )
+          const { runDiffPane } = await import('./tui/diffPane.ts')
+          const vm = buildDiffViewModelFromLog(session.fileDiffLog, {
+            lastTurn: result.interactiveDiff.mode === 'last',
+            pathFilter: result.interactiveDiff.pathFilter,
+          })
+          if (vm.files.length) {
+            options?.pauseInput?.()
+            try {
+              const pane = await runDiffPane({
+                model: vm,
+                writeOut,
+                isTty: true,
+              })
+              if (pane.ok) {
+                return {
+                  terminalReason: 'slash',
+                  assistantText: '(diff panel closed)',
+                }
+              }
+            } finally {
+              options?.resumeInput?.()
+            }
+          }
+        } catch {
+          /* fall through to text dump */
+        }
+      }
       const msg = result.message
       writeOut(msg.endsWith('\n') ? msg : `${msg}\n`)
       return { terminalReason: 'slash', assistantText: msg }
@@ -574,7 +615,25 @@ export async function runRepl(
       const text = line.trim()
       if (!text || text === '/exit' || text === '/quit') break
       try {
-        await runOnePrompt(session, text, { writeOut, writeErr })
+        await runOnePrompt(session, text, {
+          writeOut,
+          writeErr,
+          isTty,
+          pauseInput: () => {
+            try {
+              rl.pause()
+            } catch {
+              /* ignore */
+            }
+          },
+          resumeInput: () => {
+            try {
+              rl.resume()
+            } catch {
+              /* ignore */
+            }
+          },
+        })
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
         writeErr(`error: ${msg}\n`)

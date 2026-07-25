@@ -58,6 +58,10 @@ export {
   type ArrowPickItem,
 } from './tui/arrowPicker.ts'
 export {
+  runDiffPane,
+  type DiffPaneResult,
+} from './tui/diffPane.ts'
+export {
   formatToolEventLine,
   formatSessionEventChunks,
   createSessionEventPrinter,
