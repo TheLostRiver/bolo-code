@@ -40,8 +40,9 @@
 
 | `subagent_type` | 工具 | system 要点 |
 |-----------------|------|-------------|
-| `explore` | `Read` / `Glob` / `Grep` | 只调研，不改文件 |
-| `general` | 与主会话默认可写集相同，**排除 `Agent`** | 执行子任务并回报摘要 |
+| `explore` | `Read` / `Glob` / `Grep`（禁 Write/Edit/Bash/Agent） | 只调研，不改文件；可写 thoroughness |
+| `general` | 默认可写集，**排除 `Agent`** | 执行子任务并回报摘要 |
+| `plan` | 同 explore 只读 + `permissionMode=plan` | 出实现计划 + Critical Files 列表 |
 | `fork` | 与父相同工具，**排除 `Agent`** | 短提示「你是 fork 工作者」；或父 `systemPromptSections` |
 
 ## Fork（S12 最小 · HC forkSubagent 语义极简）
@@ -114,15 +115,25 @@ fork 路径不走白名单表，直接 `parent.allTools` 去掉 `Agent`。
 
 - **name:** `Agent`
 - **input:**
-  - `prompt`（必填）
+  - `prompt`（必填）— 完整任务说明
+  - `description`（可选，3–5 词）— 仅 UI / trailer / 后台表标签
   - `subagent_type`（可选：省略/`fork`=继承父会话，其它=独立子 agent）
   - `fork`（可选布尔）
   - `run_in_background` / `async`（可选布尔；或定义 `background: true`）
   - `max_turns`（可选；覆盖定义级 maxTurns）
   - `isolation`（可选：`none` \| `worktree`）
 - **`isConcurrencySafe`:** 恒 `false`（同轮多个 Agent 串行）
-- **结果：** 同步成功为摘要 + 可选 `usage:` 行；`run_in_background=true` 时立即返回 `started agent <id>…`，结果写入 `session.backgroundAgents`，用 `/agents status` 或 `/bg` 轮询
+- **结果：** 同步成功为 `formatSubagentToolOutput`（header + task + summary + **stats**: duration · tools · tokens）；后台立即返回 `started agent <id>…`
 - **失败：** `isError` + 错误说明
+
+## finalize 统计（对照 HC finalizeAgentTool，无遥测）
+
+| 字段 | 来源 |
+|------|------|
+| `totalDurationMs` | 墙钟 start→end |
+| `totalToolUseCount` | `countToolUses(messages)`（assistant.tool_calls） |
+| `usage` | 子 loop 本地 SessionUsage |
+| SubagentStop hook | 可带 `total_duration_ms` / `total_tool_use_count` / `total_tokens` / `description` |
 
 ## Usage 回卷（成本）
 

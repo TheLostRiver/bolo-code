@@ -63,23 +63,74 @@ export const EXPLORE_AGENT: AgentDefinition = {
   agentType: 'explore',
   description:
     'Read-only explorer: find files and search code. Use for codebase questions without edits.',
+  whenToUse:
+    'Fast codebase exploration. Prefer when you need file patterns, keyword search, or architecture questions without edits. Specify thoroughness in the prompt: quick | medium | very thorough.',
   tools: ['Read', 'Glob', 'Grep'],
-  systemPrompt: `You are a read-only explore subagent for Bolo.
-Use only Read, Glob, and Grep. Do not modify files or run shell writes.
-Search efficiently and reply with a concise findings report for the parent agent.`,
+  disallowedTools: ['Write', 'Edit', 'ApplyPatch', 'Bash', 'Agent'],
+  systemPrompt: `You are a file-search specialist for Bolo (read-only).
+
+=== CRITICAL: READ-ONLY — NO FILE MODIFICATIONS ===
+STRICTLY PROHIBITED: Write / Edit / ApplyPatch / Bash / creating or deleting files.
+Use only Read, Glob, and Grep. Prefer parallel tool calls when searching.
+
+Guidelines:
+- Glob for broad file patterns; Grep for content; Read when you know the path
+- Adapt thoroughness to the caller (quick / medium / very thorough)
+- Reply with a concise findings report for the parent agent — do not create files`,
   permissionMode: 'default',
   source: 'builtin',
+  maxTurns: 12,
 }
 
 export const GENERAL_AGENT: AgentDefinition = {
   agentType: 'general',
   description:
     'General-purpose subagent for multi-step tasks. Cannot spawn further agents.',
+  whenToUse:
+    'Multi-step implementation or investigation that should not pollute the parent context. Full tools except nested Agent.',
   tools: '*',
+  disallowedTools: ['Agent'],
   systemPrompt: `You are a general-purpose subagent for Bolo.
 Complete the task with the tools you have. Do not spawn nested agents.
 When done, reply with a concise report of what you did and key findings.`,
   source: 'builtin',
+}
+
+/**
+ * 只读规划子 agent（对照 HC Plan agent）。
+ * 探索 + 出实现计划；禁止写文件。
+ */
+export const PLAN_AGENT: AgentDefinition = {
+  agentType: 'plan',
+  description:
+    'Read-only software architect: explore the repo and design an implementation plan.',
+  whenToUse:
+    'When you need a step-by-step implementation strategy, critical files list, and trade-offs — without making edits yet.',
+  tools: ['Read', 'Glob', 'Grep'],
+  disallowedTools: ['Write', 'Edit', 'ApplyPatch', 'Bash', 'Agent'],
+  permissionMode: 'plan',
+  source: 'builtin',
+  maxTurns: 16,
+  systemPrompt: `You are a software architect and planning specialist for Bolo.
+
+=== CRITICAL: READ-ONLY — NO FILE MODIFICATIONS ===
+You may only use Read, Glob, and Grep. No Write / Edit / Bash / Agent.
+
+Process:
+1. Understand the requirements and any perspective given by the parent
+2. Explore existing patterns, architecture, and similar features
+3. Design an approach with trade-offs
+4. Detail a step-by-step plan with dependencies and risks
+
+End your response with:
+
+### Critical Files for Implementation
+List 3–5 paths most important for this plan:
+- path/to/file1
+- path/to/file2
+- path/to/file3
+
+REMEMBER: explore and plan only — never modify the tree.`,
 }
 
 /** S12 最小 fork：继承父 messages；工具=父集去掉 Agent；无 worktree / 无完整 cache 共享 */
@@ -87,14 +138,19 @@ export const FORK_AGENT: AgentDefinition = {
   agentType: 'fork',
   description:
     'Fork of the current conversation: inherits parent messages, same tools minus Agent. Use for context-heavy subtasks.',
+  whenToUse:
+    'Omit subagent_type or set fork when intermediate tool noise should stay out of parent context but full history is needed.',
   tools: '*',
+  disallowedTools: ['Agent'],
   systemPrompt: `你是 fork 工作者。继承父会话上下文，完成指派任务后给出简洁报告。不要再 spawn 子 agent。`,
   source: 'builtin',
+  maxTurns: 32,
 }
 
 const BUILTIN_AGENTS: Record<string, AgentDefinition> = {
   explore: EXPLORE_AGENT,
   general: GENERAL_AGENT,
+  plan: PLAN_AGENT,
   fork: FORK_AGENT,
 }
 
@@ -471,6 +527,86 @@ function lastAssistantText(messages: ChatMessage[]): string {
   return ''
 }
 
+/** 对照 HC countToolUses：统计 assistant.tool_calls 条数 */
+export function countToolUses(messages: readonly ChatMessage[]): number {
+  let n = 0
+  for (const m of messages) {
+    if (m.role !== 'assistant') continue
+    const calls = m.tool_calls
+    if (Array.isArray(calls)) n += calls.length
+  }
+  return n
+}
+
+/** 格式化耗时（本地展示；无遥测） */
+export function formatDurationMs(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return '0ms'
+  if (ms < 1000) return `${Math.round(ms)}ms`
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`
+  const m = Math.floor(ms / 60_000)
+  const s = Math.round((ms % 60_000) / 1000)
+  return `${m}m${s}s`
+}
+
+/**
+ * 对照 HC finalizeAgentTool：汇总子 agent 结果 trailer（无遥测）。
+ */
+export function finalizeSubagentStats(opts: {
+  messages: readonly ChatMessage[]
+  startTimeMs: number
+  usage?: import('./sessionUsage.ts').SessionUsage
+  endTimeMs?: number
+}): {
+  totalDurationMs: number
+  totalToolUseCount: number
+  totalTokens: number
+} {
+  const end = opts.endTimeMs ?? Date.now()
+  const totalDurationMs = Math.max(0, end - opts.startTimeMs)
+  const totalToolUseCount = countToolUses(opts.messages)
+  const totalTokens = opts.usage?.totalTokens ?? 0
+  return { totalDurationMs, totalToolUseCount, totalTokens }
+}
+
+/** 同步 Agent tool_result 正文（header + summary + stats） */
+export function formatSubagentToolOutput(opts: {
+  agentType: string
+  agentId: string
+  summary: string
+  agentTranscriptPath?: string
+  usage?: import('./sessionUsage.ts').SessionUsage
+  totalDurationMs?: number
+  totalToolUseCount?: number
+  description?: string
+}): string {
+  const header = `[subagent ${opts.agentType} ${opts.agentId}]`
+  const desc =
+    opts.description?.trim()
+      ? `\ntask: ${opts.description.trim()}`
+      : ''
+  const body = opts.summary
+  const pathNote = opts.agentTranscriptPath
+    ? `\ntranscript: ${opts.agentTranscriptPath}`
+    : ''
+  const statsParts: string[] = []
+  if (opts.totalDurationMs != null) {
+    statsParts.push(`duration ${formatDurationMs(opts.totalDurationMs)}`)
+  }
+  if (opts.totalToolUseCount != null) {
+    statsParts.push(`tools ${opts.totalToolUseCount}`)
+  }
+  if (opts.usage && opts.usage.calls > 0) {
+    statsParts.push(
+      `${opts.usage.totalTokens} tokens (${opts.usage.calls} calls)`,
+    )
+    const cr = opts.usage.cacheReadInputTokens ?? 0
+    const cw = opts.usage.cacheCreationInputTokens ?? 0
+    if (cr > 0 || cw > 0) statsParts.push(`cache r/w ${cr}/${cw}`)
+  }
+  const statsNote = statsParts.length ? `\nstats: ${statsParts.join(' · ')}` : ''
+  return `${header}${desc}\n${body}${pathNote}${statsNote}`
+}
+
 export type RunSubagentParams = {
   def: AgentDefinition
   prompt: string
@@ -526,6 +662,11 @@ export type RunSubagentParams = {
    * 设 false 保留 worktree 目录便于调试。
    */
   cleanupWorktree?: boolean
+  /**
+   * 短任务标签（对照 HC AgentTool description，3–5 词）。
+   * 写入后台表与 tool_result trailer；不进子模型 prompt（prompt 已是完整任务）。
+   */
+  description?: string
 }
 
 export type RunSubagentResult = {
@@ -542,6 +683,12 @@ export type RunSubagentResult = {
   /** 实际工作目录（可能为 worktree） */
   cwd?: string
   isolation?: 'none' | 'worktree'
+  /** 墙钟耗时 ms（对照 HC totalDurationMs） */
+  totalDurationMs?: number
+  /** 子消息中 tool_calls 总数 */
+  totalToolUseCount?: number
+  /** 入参 description 回传 */
+  description?: string
 }
 
 /** 后台 subagent 状态（S12 最小 async） */
@@ -559,6 +706,9 @@ export type BackgroundAgentEntry = {
   agentTranscriptPath?: string
   /** 完成后的子 usage 快照（calls>0 时） */
   usage?: import('./sessionUsage.ts').SessionUsage
+  description?: string
+  totalDurationMs?: number
+  totalToolUseCount?: number
 }
 
 /**
@@ -663,6 +813,7 @@ export function markBackgroundAgentRunning(
   store: BackgroundAgentStore,
   entry: Pick<BackgroundAgentEntry, 'agentId' | 'agentType' | 'prompt'> & {
     startedAt?: string
+    description?: string
   },
 ): BackgroundAgentEntry {
   const row: BackgroundAgentEntry = {
@@ -671,6 +822,9 @@ export function markBackgroundAgentRunning(
     prompt: entry.prompt,
     status: 'running',
     startedAt: entry.startedAt ?? nowIso(),
+    ...(entry.description?.trim()
+      ? { description: entry.description.trim() }
+      : {}),
   }
   store.pendingAgents[entry.agentId] = row
   return row
@@ -680,7 +834,15 @@ export function markBackgroundAgentFinished(
   store: BackgroundAgentStore,
   result: Pick<
     RunSubagentResult,
-    'agentId' | 'agentType' | 'summary' | 'isError' | 'agentTranscriptPath' | 'usage'
+    | 'agentId'
+    | 'agentType'
+    | 'summary'
+    | 'isError'
+    | 'agentTranscriptPath'
+    | 'usage'
+    | 'totalDurationMs'
+    | 'totalToolUseCount'
+    | 'description'
   > & { prompt?: string; startedAt?: string },
 ): BackgroundAgentEntry {
   const prev = store.pendingAgents[result.agentId]
@@ -697,6 +859,17 @@ export function markBackgroundAgentFinished(
       ? { agentTranscriptPath: result.agentTranscriptPath }
       : {}),
     ...(result.usage && result.usage.calls > 0 ? { usage: result.usage } : {}),
+    ...(result.description?.trim() || prev?.description
+      ? {
+          description: (result.description ?? prev?.description ?? '').trim(),
+        }
+      : {}),
+    ...(result.totalDurationMs != null
+      ? { totalDurationMs: result.totalDurationMs }
+      : {}),
+    ...(result.totalToolUseCount != null
+      ? { totalToolUseCount: result.totalToolUseCount }
+      : {}),
   }
   store.pendingAgents[result.agentId] = row
   store.backgroundAgentResults[result.agentId] = row
@@ -741,7 +914,8 @@ export function formatBackgroundAgentsStatus(
         : r.status === 'error'
           ? 'ERROR'
           : 'DONE'
-    lines.push(`  ${r.agentId}  [${tag}]  type=${r.agentType}`)
+    const desc = r.description?.trim() ? `  · ${r.description.trim()}` : ''
+    lines.push(`  ${r.agentId}  [${tag}]  type=${r.agentType}${desc}`)
     if (r.status === 'running') {
       lines.push(`    prompt:  ${truncateOneLine(r.prompt, 80)}`)
       lines.push(`    started: ${r.startedAt}`)
@@ -752,14 +926,22 @@ export function formatBackgroundAgentsStatus(
       if (r.agentTranscriptPath) {
         lines.push(`    transcript: ${r.agentTranscriptPath}`)
       }
+      const meta: string[] = []
+      if (r.totalDurationMs != null) {
+        meta.push(formatDurationMs(r.totalDurationMs))
+      }
+      if (r.totalToolUseCount != null) {
+        meta.push(`${r.totalToolUseCount} tools`)
+      }
       if (r.usage && r.usage.calls > 0) {
-        lines.push(
-          `    usage: ${r.usage.totalTokens} tokens (${r.usage.calls} calls)` +
+        meta.push(
+          `${r.usage.totalTokens} tokens (${r.usage.calls} calls)` +
             (r.usage.cacheReadInputTokens || r.usage.cacheCreationInputTokens
               ? ` cache r/w ${r.usage.cacheReadInputTokens ?? 0}/${r.usage.cacheCreationInputTokens ?? 0}`
               : ''),
         )
       }
+      if (meta.length) lines.push(`    stats: ${meta.join(' · ')}`)
     }
   }
   lines.push('')
@@ -817,6 +999,8 @@ export async function runSubagent(
   const agentId = params.agentId?.trim() || newId('agent')
   const agentType = params.def.agentType
   const isFork = params.fork === true || agentType === 'fork'
+  const taskDescription = params.description?.trim() || undefined
+  const startTimeMs = Date.now()
   const allTools = params.allTools ?? createDefaultTools()
   const { resolvedTools } = isFork
     ? {
@@ -883,6 +1067,7 @@ export async function runSubagent(
       timestamp: nowIso(),
       agent_id: agentId,
       agent_type: agentType,
+      ...(taskDescription ? { description: taskDescription } : {}),
     },
     params.hooks,
     { signal: params.signal },
@@ -915,6 +1100,12 @@ export async function runSubagent(
     const detail = e instanceof Error ? e.message : String(e)
     terminal = { reason: 'error', detail }
   }
+
+  const stats = finalizeSubagentStats({
+    messages,
+    startTimeMs,
+    usage: childUsage,
+  })
 
   const summaryText = lastAssistantText(messages)
   const failed =
@@ -985,6 +1176,10 @@ export async function runSubagent(
       ...(agentTranscriptPath
         ? { agent_transcript_path: agentTranscriptPath }
         : {}),
+      ...(taskDescription ? { description: taskDescription } : {}),
+      total_duration_ms: stats.totalDurationMs,
+      total_tool_use_count: stats.totalToolUseCount,
+      total_tokens: stats.totalTokens,
     },
     params.hooks,
     { signal: params.signal },
@@ -1001,6 +1196,9 @@ export async function runSubagent(
     usage: childUsage,
     cwd,
     isolation: isolationUsed,
+    totalDurationMs: stats.totalDurationMs,
+    totalToolUseCount: stats.totalToolUseCount,
+    ...(taskDescription ? { description: taskDescription } : {}),
   }
 }
 
@@ -1068,6 +1266,28 @@ export function isForkAgentRequest(input: {
 }
 
 /**
+ * 主会话 Agent 工具描述（对照 HC getPrompt 极简版；类型列表动态）。
+ */
+export function buildAgentToolDescription(
+  active?: ActiveAgentDefinitions | null,
+): string {
+  const agents = listActiveAgents(active)
+  const typeLines = agents
+    .map((a) => {
+      const when = a.whenToUse?.trim() || a.description
+      return `- ${a.agentType}: ${when}`
+    })
+    .join('\n')
+  return [
+    'Spawn a specialized subagent for a focused task. The child starts with its own context unless you fork.',
+    'Omit subagent_type (or use fork / fork:true) to inherit parent messages. Prefer a complete briefing in prompt — file paths, constraints, done criteria.',
+    'Optional: description (3–5 words for status UI), run_in_background, max_turns, isolation=worktree|none.',
+    'Poll background runs with /agents status or /bg. Nested Agent is disabled in children.',
+    typeLines ? `Available types:\n${typeLines}` : 'Types: explore|general|plan|fork',
+  ].join(' ')
+}
+
+/**
  * 主会话 Agent 工具。须在 tool.call 的 extras.subagentParent 注入父上下文。
  */
 export function createAgentTool(
@@ -1076,7 +1296,7 @@ export function createAgentTool(
   const hint = agentTypesHint(activeAgents)
   return buildTool({
     name: AGENT_TOOL_NAME,
-    description: `Spawn a subagent. Omit subagent_type or use fork / fork:true to inherit parent messages. Types: ${hint}. Optional run_in_background.`,
+    description: buildAgentToolDescription(activeAgents),
     requiresPermission: false,
     isConcurrencySafe: () => false,
     isReadOnly: () => false,
@@ -1085,7 +1305,13 @@ export function createAgentTool(
       properties: {
         prompt: {
           type: 'string',
-          description: 'Task for the subagent to perform',
+          description:
+            'Full task briefing for the subagent (context, constraints, done criteria)',
+        },
+        description: {
+          type: 'string',
+          description:
+            'Short 3–5 word label for /agents status and tool_result trailer (not the full task)',
         },
         subagent_type: {
           type: 'string',
@@ -1126,6 +1352,11 @@ export function createAgentTool(
           errorCode: 'empty_prompt',
         }
       }
+
+      const taskDescription =
+        input.description != null && String(input.description).trim()
+          ? String(input.description).trim()
+          : undefined
 
       const parent = ctx.extras?.subagentParent as
         | SubagentParentContext
@@ -1201,6 +1432,7 @@ export function createAgentTool(
         writeTranscript,
         model: parent.model,
         parentUsage: parent.parentUsage,
+        ...(taskDescription ? { description: taskDescription } : {}),
         ...(maxTurnsOverride !== undefined ? { maxTurns: maxTurnsOverride } : {}),
         ...(isolationOverride ? { isolation: isolationOverride } : {}),
         ...(useFork
@@ -1241,6 +1473,7 @@ export function createAgentTool(
           agentId,
           agentType: def.agentType,
           prompt,
+          ...(taskDescription ? { description: taskDescription } : {}),
         })
         void runSubagent({ ...runParams, agentId })
           .then((result) => {
@@ -1251,6 +1484,9 @@ export function createAgentTool(
               isError: result.isError,
               agentTranscriptPath: result.agentTranscriptPath,
               usage: result.usage,
+              totalDurationMs: result.totalDurationMs,
+              totalToolUseCount: result.totalToolUseCount,
+              description: result.description ?? taskDescription,
               prompt,
             })
             if (parent.parentMessages) {
@@ -1259,9 +1495,12 @@ export function createAgentTool(
                 result.usage && result.usage.calls > 0
                   ? ` · ${result.usage.totalTokens} tok`
                   : ''
+              const d = result.description?.trim()
+                ? ` (${result.description.trim()})`
+                : ''
               parent.parentMessages.push({
                 role: 'system',
-                content: `[background agent ${result.agentId} ${tag}] ${result.summary}${u}`,
+                content: `[background agent ${result.agentId} ${tag}]${d} ${result.summary}${u}`,
               })
             }
           })
@@ -1272,6 +1511,7 @@ export function createAgentTool(
               agentType: def.agentType,
               summary: `Background subagent failed: ${detail}`,
               isError: true,
+              description: taskDescription,
               prompt,
             })
             if (parent.parentMessages) {
@@ -1282,27 +1522,28 @@ export function createAgentTool(
             }
           })
 
+        const label = taskDescription ? ` (${taskDescription})` : ''
         return {
           ok: true,
-          output: `started agent ${agentId} in background; poll with /agents status or /bg`,
+          output: `started agent ${agentId}${label} in background; poll with /agents status or /bg`,
         }
       }
 
       const result = await runSubagent(runParams)
 
-      const header = `[subagent ${result.agentType} ${result.agentId}]`
-      const body = result.summary
-      const pathNote = result.agentTranscriptPath
-        ? `\ntranscript: ${result.agentTranscriptPath}`
-        : ''
-      const usageNote =
-        result.usage && result.usage.calls > 0
-          ? `\nusage: ${result.usage.totalTokens} tokens (${result.usage.calls} calls)`
-          : ''
       return {
         ok: !result.isError,
         isError: result.isError,
-        output: `${header}\n${body}${pathNote}${usageNote}`,
+        output: formatSubagentToolOutput({
+          agentType: result.agentType,
+          agentId: result.agentId,
+          summary: result.summary,
+          agentTranscriptPath: result.agentTranscriptPath,
+          usage: result.usage,
+          totalDurationMs: result.totalDurationMs,
+          totalToolUseCount: result.totalToolUseCount,
+          description: result.description ?? taskDescription,
+        }),
         errorCode: result.isError ? 'subagent_failed' : undefined,
       }
     },

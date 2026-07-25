@@ -18,12 +18,17 @@ import {
   AGENT_TOOL_NAME,
   EXPLORE_AGENT,
   GENERAL_AGENT,
+  PLAN_AGENT,
   runSubagent,
   identityPrepareMessages,
   loadAgentsDir,
   mergeAgentDefinitions,
   listActiveAgents,
   createEmptySessionUsage,
+  countToolUses,
+  finalizeSubagentStats,
+  formatSubagentToolOutput,
+  buildAgentToolDescription,
   type QueryDeps,
 } from '../packages/core/src/index.ts'
 import { createBuiltinTools, findToolByName } from '../packages/tools/src/index.ts'
@@ -416,6 +421,9 @@ async function main() {
   // --- polish: maxTurns / disallowedTools / parent usage rollup ---
   await testSubagentUsageAndLimits()
 
+  // --- polish: plan builtin + finalize stats + description ---
+  await testPlanAndFinalize()
+
   // --- S7 project agents ---
   await testProjectAgentsDir()
   assert(
@@ -423,6 +431,10 @@ async function main() {
       (a) => a.agentType === 'general',
     ),
     'merge keeps builtins',
+  )
+  assert(
+    listActiveAgents().some((a) => a.agentType === 'plan'),
+    'builtin plan agent present',
   )
 
   console.log('PASS test-subagent')
@@ -577,13 +589,155 @@ async function testSubagentUsageAndLimits(): Promise<void> {
   )
   assert(tr.ok, `usage tool ok: ${tr.output}`)
   assert(tr.output.includes('USAGE_CHILD_OK'), 'usage summary')
-  assert(/usage:\s+\d+ tokens/.test(tr.output), `tool output usage line: ${tr.output}`)
+  assert(
+    /stats:.*40 tokens/.test(tr.output) || /40 tokens/.test(tr.output),
+    `tool output usage/stats line: ${tr.output}`,
+  )
   assert(parentU2.calls >= 1, 'tool path parentUsage rollup')
   assert((parentU2.cacheReadInputTokens ?? 0) >= 12, 'cache read rolled up')
   assert(
     parentU2.byModel?.['mock-parent-model'] != null,
     'parent model tag on child usage',
   )
+}
+
+async function testPlanAndFinalize(): Promise<void> {
+  // plan builtin resolve
+  const plan = getAgentDefinition('plan')
+  assert(plan.agentType === 'plan', 'plan type')
+  assert(plan.permissionMode === 'plan', 'plan mode')
+  const planTools = resolveAgentTools(plan, createDefaultTools())
+  assert(
+    planTools.resolvedTools.every((t) =>
+      ['Read', 'Glob', 'Grep'].includes(t.name),
+    ),
+    'plan only read tools',
+  )
+  assert(
+    !planTools.resolvedTools.some((t) =>
+      ['Write', 'Edit', 'Bash', AGENT_TOOL_NAME].includes(t.name),
+    ),
+    'plan bans write/bash/agent',
+  )
+
+  // explore disallowed strips bash even if tools were *
+  const exploreTools = resolveAgentTools(EXPLORE_AGENT, createDefaultTools())
+  assert(
+    !exploreTools.resolvedTools.some((t) => t.name === 'Bash'),
+    'explore no Bash via disallowed',
+  )
+
+  // countToolUses + finalize
+  const msgs: ChatMessage[] = [
+    { role: 'user', content: 'x' },
+    {
+      role: 'assistant',
+      content: '',
+      tool_calls: [
+        { id: '1', name: 'Read', arguments: '{}' },
+        { id: '2', name: 'Grep', arguments: '{}' },
+      ],
+    },
+    { role: 'tool', content: 'ok' },
+    { role: 'assistant', content: 'done' },
+  ]
+  assert(countToolUses(msgs) === 2, 'countToolUses 2')
+  const st = finalizeSubagentStats({
+    messages: msgs,
+    startTimeMs: Date.now() - 1500,
+    usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15, calls: 1 },
+  })
+  assert(st.totalToolUseCount === 2, 'finalize tools')
+  assert(st.totalTokens === 15, 'finalize tokens')
+  assert(st.totalDurationMs >= 1000, 'finalize duration')
+
+  const out = formatSubagentToolOutput({
+    agentType: 'plan',
+    agentId: 'agent_x',
+    summary: 'PLAN_OK',
+    description: 'ship plan',
+    totalDurationMs: 1500,
+    totalToolUseCount: 2,
+    usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15, calls: 1 },
+  })
+  assert(out.includes('[subagent plan agent_x]'), 'format header')
+  assert(out.includes('task: ship plan'), 'format task')
+  assert(out.includes('stats:'), 'format stats')
+  assert(out.includes('tools 2'), 'format tools count')
+
+  const desc = buildAgentToolDescription()
+  assert(desc.includes('plan:'), 'tool desc lists plan')
+  assert(desc.includes('explore:'), 'tool desc lists explore')
+
+  // run plan subagent
+  const planProvider: LlmProvider = {
+    id: 'mock',
+    async *completeStream(): AsyncIterable<ProviderStreamEvent> {
+      yield { type: 'text_delta', text: '### Critical Files\n- a.ts\nPLAN_DONE' }
+      yield { type: 'done' }
+    },
+    async completeText() {
+      return 'n/a'
+    },
+  }
+  const planDeps: QueryDeps = {
+    callModel: async function* ({ messages, signal, tools }) {
+      yield* planProvider.completeStream(messages, {
+        signal,
+        tools: tools as CompleteStreamOptions['tools'],
+      })
+    },
+    prepareMessages: identityPrepareMessages,
+    uuid: () => 'uuid_plan_1',
+  }
+  const ran = await runSubagent({
+    def: PLAN_AGENT,
+    prompt: 'plan a feature',
+    description: 'feature plan',
+    parentSessionId: 'sess_plan',
+    cwd: process.cwd(),
+    hooks: {},
+    deps: planDeps,
+    permissionMode: 'default',
+    askPermission: async () => 'allow',
+    allTools: createBuiltinTools(),
+    writeTranscript: false,
+  })
+  assert(!ran.isError, `plan run ok: ${ran.summary}`)
+  assert(ran.summary.includes('PLAN_DONE'), 'plan summary')
+  assert(ran.description === 'feature plan', 'description echoed')
+  assert(ran.totalDurationMs != null && ran.totalDurationMs >= 0, 'duration set')
+  assert(ran.totalToolUseCount === 0, 'no tools in text-only plan')
+
+  // Agent tool description + description field
+  const tool = createAgentTool()
+  assert(tool.description.includes('Available types'), 'rich tool description')
+  const tr = await tool.call(
+    {
+      prompt: 'quick plan',
+      subagent_type: 'plan',
+      description: 'quick plan',
+    },
+    {
+      cwd: process.cwd(),
+      sessionId: 'sess_plan_tool',
+      extras: {
+        writeTranscript: false,
+        subagentParent: {
+          parentSessionId: 'sess_plan_tool',
+          cwd: process.cwd(),
+          hooks: {},
+          deps: planDeps,
+          permissionMode: 'default' as const,
+          askPermission: async () => 'allow' as const,
+          allTools: createBuiltinTools(),
+        },
+      },
+    },
+  )
+  assert(tr.ok, `plan tool: ${tr.output}`)
+  assert(tr.output.includes('task: quick plan'), `task line: ${tr.output}`)
+  assert(tr.output.includes('stats:'), `stats line: ${tr.output}`)
 }
 
 async function flushMicrotasks(times = 20): Promise<void> {

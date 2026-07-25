@@ -2069,11 +2069,19 @@ async function cmdAgents(
             ? a.tools.join(', ')
             : String(a.tools)
       const mode = a.permissionMode ? ` mode=${a.permissionMode}` : ''
-      return `  ${a.agentType}  [${src}]${mode}\n    ${a.description}\n    tools: ${tools}`
+      const ban =
+        a.disallowedTools?.length
+          ? ` ban=${a.disallowedTools.join(',')}`
+          : ''
+      const mt = a.maxTurns != null ? ` maxTurns=${a.maxTurns}` : ''
+      const when = a.whenToUse?.trim()
+        ? `\n    when: ${a.whenToUse.trim()}`
+        : ''
+      return `  ${a.agentType}  [${src}]${mode}${mt}${ban}\n    ${a.description}${when}\n    tools: ${tools}`
     }),
     '',
     'Dirs: .bolo/agents/*.md  ·  ~/.bolo/agents/*.md  ·  project overrides builtin',
-    'Agent tool: subagent_type=<name> · run_in_background=true',
+    'Agent tool: subagent_type=<name> · description · run_in_background · max_turns · isolation',
     'Background: /agents status  ·  /bg',
   ]
   return { ok: true, message: lines.join('\n') }
