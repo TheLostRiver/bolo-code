@@ -219,6 +219,28 @@ async function main() {
       `low clamped on ds dialect, got ${session.effortLevel}`,
     )
     assert(sw.message.includes('auto') || true, 'switch message ok')
+    assert(
+      /dialect=/i.test(sw.message) || /choosable/i.test(sw.message),
+      'CX4 tip on switch',
+    )
+  }
+
+  // CX5：/model bare suggested
+  {
+    const session = await createSession({
+      cwd: process.cwd(),
+      provider: createMockProvider(),
+      deps: productionDeps(createMockProvider()),
+      systemPrompt: false,
+      model: 'deepseek-chat',
+      providerId: 'deepseek',
+    })
+    const show = await dispatchSlashCommand(session, 'model', '')
+    assert(show.ok, 'model bare ok')
+    assert(
+      show.message.includes('suggested:') || show.message.includes('usage:'),
+      'model bare suggestions',
+    )
   }
 
   // save/load providerId via json path
@@ -245,7 +267,24 @@ async function main() {
     void sp
   })
 
-  console.log('ok: provider-ux CX1/CX3/CX6')
+  // CX2 unit via filterChoosable
+  {
+    const { filterChoosableByModelCaps, listEffortChoosable } = await import(
+      '../packages/providers/src/index.ts'
+    )
+    const base = listEffortChoosable('openai-responses', {
+      model: 'gpt-4o-mini',
+    })
+    assert(!base.includes('xhigh'), 'CX2 gpt-4o no xhigh')
+    const filtered = filterChoosableByModelCaps(
+      ['auto', 'high', 'xhigh', 'max'],
+      'gpt-4o',
+    )
+    assert(!filtered.includes('xhigh'), 'filter deny xhigh')
+    assert(filtered.includes('high'), 'filter keeps high')
+  }
+
+  console.log('ok: provider-ux CX1–CX6')
 }
 
 main().catch((e) => {

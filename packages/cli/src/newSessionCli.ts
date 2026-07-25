@@ -121,6 +121,8 @@ export async function runNewSessionCli(
           model: session.model,
           effortLevel: session.effortLevel,
           messages: session.messages,
+          providerId: session.providerId,
+          providerKind: session.provider?.id,
         },
         hint: 'bolo> type a message or /help · /provider',
       })

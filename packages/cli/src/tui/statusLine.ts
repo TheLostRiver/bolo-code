@@ -1,6 +1,7 @@
 /**
- * T3 轻量状态行：mode · model · effort · messages
+ * T3 轻量状态行：mode · model · effort · messages · provider
  * P-T9-NARROW：窄终端缩短字段。
+ * CX4：可选 providerId / kind。
  */
 
 import {
@@ -14,6 +15,12 @@ export type StatusLineSession = {
   model?: string
   effortLevel?: string
   messages: { length: number }
+  /** CX4：命名 provider id */
+  providerId?: string
+  /** 协议 kind（LlmProvider.id） */
+  providerKind?: string
+  /** 兼容 live session.provider.id */
+  provider?: { id?: string }
 }
 
 export type StatusLineOptions = {
@@ -38,6 +45,13 @@ export function formatSessionStatusLine(
   const model = session.model?.trim() || '(unset)'
   const effort = session.effortLevel?.trim() || 'auto'
   const n = session.messages.length
+  const pid = session.providerId?.trim()
+  const kind =
+    session.providerKind?.trim() || session.provider?.id?.trim() || ''
+  const prov =
+    pid && kind
+      ? `${pid}/${kind}`
+      : pid || kind || ''
   const narrow =
     opts?.compact === true ||
     isNarrowTerminal({
@@ -46,7 +60,9 @@ export function formatSessionStatusLine(
       threshold: NARROW_TERMINAL_COLUMNS,
     })
   if (narrow) {
-    return `m=${clip(mode, 10)} · ${clip(model, 18)} · e=${clip(effort, 6)} · n=${n}`
+    const p = prov ? ` · ${clip(prov, 14)}` : ''
+    return `m=${clip(mode, 10)} · ${clip(model, 16)} · e=${clip(effort, 6)}${p} · n=${n}`
   }
-  return `mode=${mode} · model=${model} · effort=${effort} · messages=${n}`
+  const p = prov ? ` · provider=${prov}` : ''
+  return `mode=${mode} · model=${model} · effort=${effort}${p} · messages=${n}`
 }

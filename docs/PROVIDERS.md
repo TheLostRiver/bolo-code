@@ -336,7 +336,7 @@ npx tsx scripts/smoke-live.ts
 | **E4** | `providers.*.effort.dialect` | ✅ |
 | **E5** | anthropic-output：`output_config.effort` + beta | ✅ |
 | **E6–E9** | choosable · max 门控 · TTY · doctor | ✅ |
-| **CX** | preset · caps · resume providerId · 错误解释 | ✅ CX1/3/6 · 📋 CX2+ [PROVIDER_UX.md](./PROVIDER_UX.md) |
+| **CX** | preset · caps · resume · 错误 · tip · model 建议 | ✅ CX1–6 · 📋 CX7 [PROVIDER_UX.md](./PROVIDER_UX.md) |
 
 ```jsonc
 {

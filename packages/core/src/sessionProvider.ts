@@ -9,6 +9,8 @@
 import {
   createCompactSummarizerFromProvider,
   createProviderFromProfile,
+  detectEffortDialectId,
+  listEffortChoosable,
   type LlmProvider,
 } from '../../providers/src/index.ts'
 import {
@@ -202,7 +204,30 @@ export function switchSessionProvider(
   // CX6：保留意图；不可选则 clamp → auto
   const clamp = clampEffortForSession(session)
 
-  let message = `provider set to ${rawId} (kind=${built.kind}, model=${session.model ?? '(unset)'})`
+  // CX4：热切后 tip — dialect + choosable 摘要
+  const dialect =
+    session.effortDialect ??
+    profile.effortDialect ??
+    detectEffortDialectId({
+      kind: built.kind,
+      baseUrl: profile.baseUrl,
+      model: session.model ?? profile.model,
+    })
+  const choosable = listEffortChoosable(dialect as string | undefined, {
+    isAgent: true,
+    model: session.model ?? profile.model,
+  })
+  const dialectId =
+    typeof dialect === 'string'
+      ? dialect
+      : dialect && typeof dialect === 'object' && 'id' in dialect
+        ? String((dialect as { id?: string }).id ?? 'custom')
+        : String(dialect ?? 'max-tokens')
+
+  let message =
+    `provider set to ${rawId} (kind=${built.kind}, model=${session.model ?? '(unset)'})` +
+    `\n  dialect=${dialectId}` +
+    (choosable.length ? ` · choosable: ${choosable.join(', ')}` : '')
   if (clamp.warning) {
     message += `\n${clamp.warning}`
   }
@@ -245,14 +270,18 @@ export function switchSessionModel(
       { model: name },
     )
   }
+  // CX2/CX6：换 model 后重新 clamp effort
+  const clamp = clampEffortForSession(session)
+  let message = session.providerId
+    ? `model set to ${name} (provider ${session.providerId})`
+    : `model set to ${name}`
+  if (clamp.warning) message += `\n${clamp.warning}`
   return {
     ok: true,
     model: name,
     providerId: session.providerId,
     cacheBreak,
-    message: session.providerId
-      ? `model set to ${name} (provider ${session.providerId})`
-      : `model set to ${name}`,
+    message,
   }
 }
 

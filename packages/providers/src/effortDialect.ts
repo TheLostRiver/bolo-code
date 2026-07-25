@@ -5,6 +5,10 @@
  */
 
 import { mapEffort, DEFAULT_EFFORT_BASE_MAX_TOKENS } from './effort.ts'
+import {
+  filterChoosableByModelCaps,
+  modelCapMaxAllowed,
+} from './modelCapability.ts'
 
 /** 产品层常用意图（超集；不要求每家都实现） */
 export const CANONICAL_EFFORT_LEVELS = [
@@ -85,6 +89,10 @@ export type EffortResolveContext = {
   isAgent?: boolean
   model?: string
   baseMaxTokens?: number
+  /**
+   * CX2：额外 model cap 规则（profile/全局）；与 BUILTIN 合并后过滤 choosable。
+   */
+  modelCapRules?: import('./modelCapability.ts').ModelCapRule[]
 }
 
 /** E6：当前方言+模型下的可选档视图 */
@@ -711,9 +719,16 @@ export function isEffortLooseMode(): boolean {
 /**
  * Anthropic max 是否允许（对照 HC modelSupportsMaxEffort，缩小版）。
  * BOLO_EFFORT_ALLOW_MAX=1 强制放开。
+ * CX2：modelCapRules / 内置 caps 的 maxAllowed 可覆盖正则。
  */
-export function anthropicMaxAllowed(model?: string | null): boolean {
+export function anthropicMaxAllowed(
+  model?: string | null,
+  extraRules?: import('./modelCapability.ts').ModelCapRule[] | null,
+): boolean {
   if (envTruthy('BOLO_EFFORT_ALLOW_MAX')) return true
+  const cap = modelCapMaxAllowed(model, extraRules)
+  if (cap === true) return true
+  if (cap === false) return false
   const m = (model ?? '').toLowerCase()
   if (!m) return false
   // Opus 4.6+ 公网常支持 max；可 env 扩展
@@ -785,11 +800,11 @@ export function listEffortChoosable(
     })
     if (!plan.ok) continue
 
-    // E7：anthropic max 门控
+    // E7 / CX2：anthropic max 门控（含 model caps）
     if (
       (dialect.id === 'anthropic-output' || dialect.id === 'anthropic') &&
       intentResolvesToMax(dialect, intent, ctx) &&
-      !anthropicMaxAllowed(ctx?.model)
+      !anthropicMaxAllowed(ctx?.model, ctx?.modelCapRules)
     ) {
       continue
     }
@@ -819,7 +834,9 @@ export function listEffortChoosable(
     if (rb != null) return 1
     return a.localeCompare(b)
   })
-  return out
+
+  // CX2：按模型轻表再裁一刀
+  return filterChoosableByModelCaps(out, ctx?.model, ctx?.modelCapRules)
 }
 
 export function describeEffortCapability(opts: {
@@ -845,7 +862,7 @@ export function describeEffortCapability(opts: {
     warnings.push('BOLO_EFFORT_LOOSE=1: accepting foldable intents beyond choosable')
   }
 
-  const maxOk = anthropicMaxAllowed(opts.model)
+  const maxOk = anthropicMaxAllowed(opts.model, ctx.modelCapRules)
   if (dialect.id === 'anthropic-output' || dialect.id === 'anthropic') {
     if (!maxOk) {
       warnings.push(
@@ -925,7 +942,7 @@ export function assertEffortChoosable(
   if (
     (dialect.id === 'anthropic-output' || dialect.id === 'anthropic') &&
     plan.resolvedWire === 'max' &&
-    !anthropicMaxAllowed(ctx?.model)
+    !anthropicMaxAllowed(ctx?.model, ctx?.modelCapRules)
   ) {
     return {
       ok: false,

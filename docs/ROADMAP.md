@@ -24,7 +24,7 @@
 | **Compact · 日用管道** | **~92–95%** | **C0–C5 已落地**；后置 partial/remote/真 tokenizer（§8.9） |
 | **Provider · 多实例热切** | **~92–96%** | **P0–P4.1 已落地**；**CX1/3/6** preset · 错误解释 · resume `providerId`（见 §11） |
 | **Effort · 推理强度方言** | **~92–95%** | **E0–E9** 已落地；按模型轻表裁档归 **CX2**；adaptive thinking 后置 |
-| **Provider UX · 便利层** | **~80–88%** | **CX0–1/3/6 已落地**；CX2 caps · CX4–5 · Desktop 待续 · [PROVIDER_UX.md](./PROVIDER_UX.md) |
+| **Provider UX · 便利层** | **~90–94%** | **CX0–CX6 已落地**；CX7 Desktop · CX8 ultrathink 后置 · [PROVIDER_UX.md](./PROVIDER_UX.md) |
 | **产品整体（相对 HC）** | **~72–86%** | 日用高；UI 全家桶另计 |
 
 **主线已闭环：** headless 日用 → Diff · Hooks · Compact · Provider P · **Effort E0–E9**。
@@ -777,10 +777,10 @@ function switchSessionModel(session, model: string): { ok, reason? }
 | **CX1** | `/provider add` preset 表 | ✅ |
 | **CX6** | resume `providerId` + 统一 effort clamp | ✅ |
 | **CX3** | `explainProviderError` | ✅ |
-| **CX2** | ModelCapability 轻表 ∩ dialect | 📋 |
-| **CX4** | 状态行 / 热切 tip | 📋 |
-| **CX5** | `/model` 建议列表 | 📋 |
+| **CX2** | ModelCapability 轻表 ∩ dialect | ✅ |
+| **CX4** | 状态行 / 热切 tip | ✅ |
+| **CX5** | `/model` 建议列表 | ✅ |
 | **CX7** | Desktop 对齐（P5） | 📋 |
 | **CX8** | ultrathink tip/turn（默认 off） | 🚫 后置 |
 
-**顺序：** `CX0 → CX1 → CX6 → CX3` 已落地 → 下刀 `CX2 → CX4 → CX5 → CX7`（CX8 可选）。
+**顺序：** `CX0–CX6` 主路径已落地 → 下刀 `CX7 Desktop`（CX8 可选）。

@@ -261,6 +261,12 @@ async function main() {
   assert(useSlash.ok, `slash use: ${useSlash.message}`)
   assert(session.providerId === 'deepseek', 'slash switched')
   assert(useSlash.interactiveProvider == null, 'use has no picker signal')
+  // CX4：热切 tip 含 dialect / choosable
+  assert(
+    /dialect=/i.test(useSlash.message ?? '') ||
+      /choosable/i.test(useSlash.message ?? ''),
+    'switch tip has dialect or choosable',
+  )
 
   // /model provider/model 糖
   const modelSlash = await dispatchSlashCommand(
@@ -275,6 +281,11 @@ async function main() {
   const showModel = await dispatchSlashCommand(session, 'model', '')
   assert(showModel.message?.includes('special-m'), 'show model')
   assert(showModel.message?.includes('work'), 'show provider id')
+  // CX5：建议列表或 usage
+  assert(
+    /suggested:|usage:/i.test(showModel.message ?? ''),
+    'model bare shows suggested or usage',
+  )
 
   const doctor = await dispatchSlashCommand(session, 'doctor', '')
   assert(doctor.ok, 'doctor ok')

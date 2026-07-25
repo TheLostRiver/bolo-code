@@ -112,3 +112,12 @@ export {
   explainProviderError,
   type ProviderErrorContext,
 } from './providerErrors.ts'
+export {
+  BUILTIN_MODEL_CAPS,
+  filterChoosableByModelCaps,
+  matchingModelCapRules,
+  mergeModelCapRules,
+  modelCapMaxAllowed,
+  parseModelCapRules,
+  type ModelCapRule,
+} from './modelCapability.ts'

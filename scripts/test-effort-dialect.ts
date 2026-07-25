@@ -243,6 +243,13 @@ assert(status.includes('deepseek-chat'), 'status dialect')
   assert(!cap.choosable.includes('max'), 'cap hides max on sonnet')
   assert(cap.warnings.some((w) => w.includes('max')), 'cap warns max')
 
+  // CX2：gpt-4o 裁 xhigh（openai-responses 方言含 xhigh）
+  const oai = listEffortChoosable('openai-responses', {
+    model: 'gpt-4o-2024-08-06',
+  })
+  assert(oai.includes('high'), 'oai has high')
+  assert(!oai.includes('xhigh'), 'oai gpt-4o hides xhigh')
+
   const status = formatEffortCapabilityStatus({
     effortLevel: 'auto',
     dialect: 'deepseek-chat',
