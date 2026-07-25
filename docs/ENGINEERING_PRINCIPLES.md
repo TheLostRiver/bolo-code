@@ -62,17 +62,19 @@ Bolo **必须**保持同一顺序。
 
 Bolo v1：**全部串行即可**；并发是性能优化，不是架构正确性前提。
 
-### 2.4 Hook 事件：用户 10 个优先
+### 2.4 Hook 事件：最低 11 个（含 SessionEnd）
 
-参考 SDK 有更多事件（Notification、SessionEnd、Elicitation…）。  
-**产品契约仍以用户指定的 10 个为最低完备集**；扩事件必须先补 `docs/HOOKS.md` 再写代码。
+原用户 10 事件 + **SessionEnd 必做**（对齐 Codex 11 / HC 生命周期）。  
+参考 SDK 仍有更多（Notification、Elicitation、FileChanged…）——**不进当前 H 轨**。  
+**产品契约以 `docs/HOOKS.md` 11 事件为最低完备集**；扩事件必须先补 HOOKS 再写代码。  
+阶段与顺序见 [ROADMAP.md §7](./ROADMAP.md)（H0 SessionEnd → H1/H2 exit 语义 → …）。
 
 ## 3. 对照：我们已写代码的健康度
 
 | 已有切片 | 是否像参考 | 处理 |
 |----------|------------|------|
-| 10 Hook 事件名 + matcher 规则 | 对齐 | 保留，作契约真源 |
-| HookBus command + exit 2 block | 对齐语义 | 保留；继续对照 hook 输入字段 |
+| 11 Hook 事件名（+SessionEnd）+ matcher | 对齐 Codex 核心 | 真源 HOOKS；H0 接线 SessionEnd |
+| HookBus command + exit 2 block | 对齐语义 | 保留；H1/H2 补 Stop/Post 续跑与回灌 |
 | Session 状态 + turn 循环 + mock provider | 方向对，偏薄 | 按 query/tool 管道收紧，少造新概念 |
 | Bash/Read/Write | 必要最小集 | 保留；接口逐步贴近 Tool 契约 |
 | MCP 无 stdio 的 mock invoke | **偏瞎写** | 标为 placeholder；真做时对照 mcp client 连接/listTools/callTool |
@@ -99,7 +101,7 @@ Bolo v1：**全部串行即可**；并发是性能优化，不是架构正确性
 ## 5. 推荐实现顺序（对齐参考，而非拍脑袋）
 
 1. **Tool 契约 + 执行管道**（对照 Tool + toolExecution 语义）  
-2. **Hook 挂载点齐全且顺序固定**（10 事件）  
+2. **Hook 挂载点齐全且顺序固定**（11 事件，含 SessionEnd）  
 3. **PermissionRequest 与 UI/回调**（对照 canUseTool / PermissionRequest hook）  
 4. **Skills 目录加载**（对照 skills 加载，不做实验搜索）  
 5. **MCP：配置 → 连接 → listTools → 注册名 `mcp__*` → callTool**（对照 mcp client，禁止长期 mock 冒充完成）  

@@ -1,9 +1,12 @@
 # Bolo Code Hook 规范
 
-对齐 Claude Code / HelsincyCode 的事件语义，作为 Bolo 的**最低契约**。  
+对齐 Claude Code / HelsincyCode / Codex 的事件语义，作为 Bolo 的**最低契约**。  
 实现可简化，**事件名与 matcher 语义不可随意改名**。
 
-## 1. 最低 10 个事件
+> **水位与阶段：** 见 [ROADMAP.md §7 Hooks 轨](./ROADMAP.md)（H0–H5）。  
+> **最低完备集 = 11 事件**（原 10 + **SessionEnd 必做**，对齐 Codex `HOOK_EVENT_NAMES`）。
+
+## 1. 最低 11 个事件
 
 | Event | Matcher 字段 | Matcher 取值 / 说明 |
 |-------|--------------|---------------------|
@@ -13,6 +16,7 @@
 | **PreCompact** | `trigger` | `manual` \| `auto` |
 | **PreToolUse** | `tool_name` | 见 Tool coverage |
 | **SessionStart** | `source` | `startup` \| `resume` \| `clear` \| `compact` |
+| **SessionEnd** | `reason` | `clear` \| `logout` \| `prompt_input_exit` \| `other`（可扩展；**必做**） |
 | **SubagentStart** | `subagent_type` / `agent_type` | 取决于启动的子代理类型 |
 | **SubagentStop** | `subagent_type` / `agent_type` | 取决于结束的子代理类型 |
 | **UserPromptSubmit** | *not supported* | 任意 matcher **忽略**，始终触发已配置 hooks |
@@ -159,6 +163,29 @@ type SessionStartInput = HookBaseInput & {
 - blocking error 可忽略（与 CC 一致：启动不被 hook 轻易打死）  
 - 其他：stderr 用户可见  
 
+### 3.5b SessionEnd（**必做** · H0）
+
+```ts
+type SessionEndReason =
+  | 'clear'
+  | 'logout'
+  | 'prompt_input_exit'
+  | 'other'
+
+type SessionEndInput = HookBaseInput & {
+  hook_event_name: 'SessionEnd'
+  reason: SessionEndReason | string
+  /** 若会话有 jsonl，可提供只读路径供审计 hook */
+  transcript_path?: string
+}
+```
+
+- **matcher：** `reason`（精确或 `*` 后缀，与其它事件同一套）  
+- exit 0：成功；stdout 默认可不展示  
+- 其他 exit：stderr **仅用户**；**不得**因 hook 失败阻止进程/会话 teardown  
+- 超时：建议 **短于** 普通 hook（teardown headroom；对照 Codex ~1–3s 量级，实现写进 H0）  
+- 挂载：`/clear`、正常退出、登出、resume 替换旧会话前等（见 ROADMAP §7.5）；**禁止**只杀进程跳过  
+
 ### 3.6 SubagentStart / SubagentStop
 
 ```ts
@@ -231,7 +258,8 @@ PermissionRequest 文档要求：**Bash、apply_patch\*、MCP 名**必须可匹�
 // packages/hooks — 纯调度，无 UI
 type HookEvent =
   | 'PermissionRequest' | 'PostToolUse' | 'PostCompact' | 'PreCompact'
-  | 'PreToolUse' | 'SessionStart' | 'SubagentStart' | 'SubagentStop'
+  | 'PreToolUse' | 'SessionStart' | 'SessionEnd'
+  | 'SubagentStart' | 'SubagentStop'
   | 'UserPromptSubmit' | 'Stop'
 
 const NO_MATCHER: ReadonlySet<HookEvent> = new Set([
@@ -254,6 +282,7 @@ async function runHooks(event: HookEvent, input: HookBaseInput, cfg: HooksConfig
 | 时机 | 调用 |
 |------|------|
 | 会话创建 / resume / clear / compact 后新开 | `SessionStart` |
+| 会话结束（clear / 退出 / logout / 被 resume 替换前等） | `SessionEnd`（**必做**） |
 | 用户提交输入 | `UserPromptSubmit` |
 | 工具执行前 | `PreToolUse` → 若需权限 `PermissionRequest` |
 | 工具执行后 | `PostToolUse` |
@@ -280,7 +309,19 @@ PreToolUse → (PermissionRequest?) → tool body → PostToolUse
 
 对照 HC：hook timeout + parent abort；Bolo **无** async hook 注册表 / 遥测。
 
-## 7. 后续可扩展事件（非 v0 必做）
+## 7. 实现阶段（H 轨摘要）
 
-参考 HelsincyCode：`PostToolUseFailure`、`SessionEnd`、`Notification`、`Elicitation` 等。  
-**在 10 事件稳定前不扩散。**
+| 阶段 | 内容 | 状态 |
+|------|------|------|
+| **H0** | **SessionEnd** 类型 + 挂载 + 短超时 | 📋 必做 · 见 ROADMAP §7 |
+| **H1** | Stop / SubagentStop exit 2 续跑 | 📋 |
+| **H2** | PostToolUse exit 2 → 模型 | 📋 |
+| **H3** | SubagentStart stdout 注入 | 📋 |
+| **H4** | PreToolUse `updatedInput` | 📋 |
+| **H5** | `/hooks` 诊断增强 | 📋 |
+
+## 8. 后续可扩展事件（非 H 轨必做）
+
+参考 HelsincyCode：`PostToolUseFailure`、`Notification`、`Elicitation`、`FileChanged` 等。  
+**SessionEnd 已升格为最低 11 事件之一，不再列后置。**  
+其余扩事件须先改本文件再写代码；**在 11 事件 + H1/H2 exit 语义稳定前不扩散。**

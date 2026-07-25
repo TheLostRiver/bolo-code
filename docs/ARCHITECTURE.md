@@ -141,9 +141,9 @@ idle
 - PermissionRequest / PreToolUse matcher 可匹配 `mcp__*`
 - 错误隔离：单 server 失败只 warn，不拖垮其它 server / 会话
 
-### 6.3 Hooks（详见 [HOOKS.md](./HOOKS.md)）
+### 6.3 Hooks（详见 [HOOKS.md](./HOOKS.md)；阶段 [ROADMAP §7](./ROADMAP.md)）
 
-最低 10 事件：
+最低 **11** 事件（对齐 Codex 核心集）：
 
 1. PermissionRequest  
 2. PostToolUse  
@@ -151,10 +151,11 @@ idle
 4. PreCompact  
 5. PreToolUse  
 6. SessionStart  
-7. SubagentStart  
-8. SubagentStop  
-9. UserPromptSubmit  
-10. Stop  
+7. **SessionEnd**（必做；会话 teardown）  
+8. SubagentStart  
+9. SubagentStop  
+10. UserPromptSubmit  
+11. Stop  
 
 执行类型（v1）：`command`（shell）→ 后续 `http` / `prompt`。
 
