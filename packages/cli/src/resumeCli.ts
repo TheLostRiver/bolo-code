@@ -7,7 +7,8 @@
 import * as readline from 'node:readline'
 import {
   listProjectSessions,
-  resumeSession,
+  productionDeps,
+  resumeSessionFromWorkspace,
   submitUserInput,
   switchSessionProvider,
   buildProviderPickerItems,
@@ -71,6 +72,8 @@ export type ResumeCliOptions = {
    * 非 TTY 权限决策；默认 deny
    */
   nonTtyPermission?: 'allow' | 'deny'
+  /** 单轮或 REPL 的外部取消信号 */
+  signal?: AbortSignal
 }
 
 export type ResumeCliResult = {
@@ -439,9 +442,6 @@ export function createCliOnEvent(opts: {
 export async function resumeFromIdOrPath(
   opts: ResumeCliOptions & { idOrPath: string },
 ): Promise<ResumeCliResult> {
-  const { provider, missingKey, kind, model } = createCliProvider({
-    forceMock: opts.forceMock,
-  })
   const writeOut = opts.writeOut ?? ((s) => process.stdout.write(s))
   const writeErr = opts.writeErr ?? ((s) => process.stderr.write(s))
   const isTty = opts.isTty ?? process.stdin.isTTY === true
@@ -461,16 +461,25 @@ export async function resumeFromIdOrPath(
     readAnswer: opts.readPermissionAnswer,
     nonTtyDecision: opts.nonTtyPermission ?? 'deny',
     writeOut,
+    signal: opts.signal,
   })
 
-  const { session, snapshot, path: filePath } = await resumeSession({
+  const forced = opts.forceMock
+    ? createCliProvider({ forceMock: true })
+    : undefined
+  const {
+    session,
+    snapshot,
+    path: filePath,
+    workspace,
+  } = await resumeSessionFromWorkspace({
     idOrPath: opts.idOrPath,
     cwd: opts.cwd,
     sessionsDir: opts.sessionsDir,
-    provider,
+    ...(forced ? { provider: forced.provider } : {}),
     reassembleSystem: opts.reassembleSystem,
     systemPrompt: opts.systemPrompt,
-    create: model ? { model } : undefined,
+    create: forced?.model ? { model: forced.model } : undefined,
     autoSave: true,
     onEvent,
     askPermission,
@@ -479,10 +488,16 @@ export async function resumeFromIdOrPath(
   thinkingGate.session = session
   attachSessionEventPrinter(session, printer)
 
-  // 快照加载成功后再提示无 key（callModel 时才会失败）
-  if (missingKey) {
+  // 快照加载成功后再提示无 key；判定以 workspace active profile 为准。
+  if (!forced && workspace.providerMissingKey) {
+    const delayedFailure = createCliProvider()
+    session.provider = delayedFailure.provider
+    session.deps = productionDeps(delayedFailure.provider)
+    const keyHint =
+      workspace.providerProfile?.apiKeyEnv ??
+      'BOLO_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY'
     writeErr(
-      `warn: no API key (provider=${kind}); snapshot loaded OK, callModel will fail until keys are set.\n`,
+      `warn: no API key (provider=${workspace.providerId}; set ${keyHint}); snapshot loaded OK, callModel will fail until keys are set.\n`,
     )
   }
 
@@ -500,6 +515,8 @@ export async function runOnePrompt(
     /** REPL：打开 raw 面板前暂停 readline */
     pauseInput?: () => void
     resumeInput?: () => void
+    /** 当前 turn 取消信号 */
+    signal?: AbortSignal
   },
 ): Promise<{ terminalReason: string; assistantText: string }> {
   const writeOut = options?.writeOut ?? ((s) => process.stdout.write(s))
@@ -508,7 +525,9 @@ export async function runOnePrompt(
   printer?.beginTurn()
   const before = session.messages.length
   try {
-    const result = await submitUserInput(session, prompt)
+    const result = await submitUserInput(session, prompt, {
+      signal: options?.signal,
+    })
 
     if (result.type === 'empty') {
       return { terminalReason: 'empty', assistantText: '' }
@@ -537,6 +556,7 @@ export async function runOnePrompt(
                 model: vm,
                 writeOut,
                 isTty: true,
+                signal: options?.signal,
               })
               if (pane.ok) {
                 return {
@@ -703,6 +723,8 @@ export async function runRepl(
     writeOut?: (s: string) => void
     writeErr?: (s: string) => void
     isTty?: boolean
+    /** 外部关闭信号；active turn 时取消，idle 时退出 REPL */
+    signal?: AbortSignal
   },
 ): Promise<void> {
   const writeOut = options?.writeOut ?? ((s) => process.stdout.write(s))
@@ -717,10 +739,42 @@ export async function runRepl(
     terminal: true,
   })
 
-  const question = (q: string) =>
-    new Promise<string>((resolve) => {
-      rl.question(q, resolve)
+  let replClosed = false
+  const question = (
+    q: string,
+    signal?: AbortSignal,
+  ): Promise<string | null> => {
+    if (replClosed || signal?.aborted) return Promise.resolve(null)
+    return new Promise<string | null>((resolve, reject) => {
+      let settled = false
+      const finish = (answer: string | null) => {
+        if (settled) return
+        settled = true
+        rl.removeListener('close', onClose)
+        signal?.removeEventListener('abort', onAbort)
+        resolve(answer)
+      }
+      const onClose = () => finish(null)
+      const onAbort = () => finish(null)
+      rl.once('close', onClose)
+      signal?.addEventListener('abort', onAbort, { once: true })
+      try {
+        if (signal) {
+          rl.question(q, { signal }, (answer) => finish(answer))
+        } else {
+          rl.question(q, (answer) => finish(answer))
+        }
+      } catch (error) {
+        rl.removeListener('close', onClose)
+        signal?.removeEventListener('abort', onAbort)
+        if (signal?.aborted || replClosed) {
+          finish(null)
+        } else {
+          reject(error)
+        }
+      }
     })
+  }
 
   // T5/U2：REPL 内权限与输入共用 readline；有 files 时开审批面板并 pause rl
   const isTty = options?.isTty ?? process.stdin.isTTY === true
@@ -738,21 +792,43 @@ export async function runRepl(
       /* ignore */
     }
   }
-  session.askPermission = createTtyAskPermission({
-    isTty,
-    readAnswer: question,
-    nonTtyDecision: 'deny',
-    writeOut,
-    pauseInput: pauseRl,
-    resumeInput: resumeRl,
-  })
+  let activeTurn: AbortController | null = null
+  const interrupt = () => {
+    if (activeTurn && !activeTurn.signal.aborted) {
+      activeTurn.abort('interrupt')
+      writeErr('^C turn cancelled\n')
+      return
+    }
+    replClosed = true
+    writeOut('^C\n')
+    rl.close()
+  }
+  rl.on('SIGINT', interrupt)
+  const onExternalAbort = () => interrupt()
+  options?.signal?.addEventListener('abort', onExternalAbort, { once: true })
 
   try {
-    for (;;) {
+    while (!replClosed) {
       writeOut(`${formatSessionStatusLine(session)}\n`)
-      const line = await question('bolo> ')
+      const line = await question('bolo> ', options?.signal)
+      if (line == null) break
       const text = line.trim()
       if (!text || text === '/exit' || text === '/quit') break
+      const turnController = new AbortController()
+      activeTurn = turnController
+      const onParentAbort = () => turnController.abort('parent')
+      options?.signal?.addEventListener('abort', onParentAbort, { once: true })
+      session.askPermission = createTtyAskPermission({
+        isTty,
+        readAnswer: async (prompt) =>
+          (await question(prompt, turnController.signal)) ?? '',
+        nonTtyDecision: 'deny',
+        writeOut,
+        pauseInput: pauseRl,
+        resumeInput: resumeRl,
+        signal: turnController.signal,
+        onInterrupt: () => turnController.abort('interrupt'),
+      })
       try {
         await runOnePrompt(session, text, {
           writeOut,
@@ -760,13 +836,23 @@ export async function runRepl(
           isTty,
           pauseInput: pauseRl,
           resumeInput: resumeRl,
+          signal: turnController.signal,
         })
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
         writeErr(`error: ${msg}\n`)
+      } finally {
+        options?.signal?.removeEventListener('abort', onParentAbort)
+        if (activeTurn === turnController) activeTurn = null
       }
     }
   } finally {
+    replClosed = true
+    if (activeTurn && !activeTurn.signal.aborted) {
+      activeTurn.abort('repl_closed')
+    }
+    rl.removeListener('SIGINT', interrupt)
+    options?.signal?.removeEventListener('abort', onExternalAbort)
     rl.close()
     // H0：REPL 正常退出 → SessionEnd
     try {
@@ -830,6 +916,7 @@ export async function runResumeCli(
     const turn = await runOnePrompt(result.session, prompt, {
       writeOut,
       writeErr,
+      signal: opts.signal,
     })
     result.terminalReason = turn.terminalReason
     try {
@@ -842,7 +929,11 @@ export async function runResumeCli(
   }
 
   if (interactive) {
-    await runRepl(result.session, { writeOut, writeErr })
+    await runRepl(result.session, {
+      writeOut,
+      writeErr,
+      signal: opts.signal,
+    })
     return result
   }
 

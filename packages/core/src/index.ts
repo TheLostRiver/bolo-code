@@ -4,7 +4,6 @@
  * 禁止：Electron / DOM / 遥测
  */
 
-import path from 'node:path'
 import {
   runFullCompact,
   isAutoCompactEnvDisabled,
@@ -17,8 +16,6 @@ import {
 import { runHooks } from '../../hooks/src/index.ts'
 import {
   createMockProvider,
-  createProviderFromEnv,
-  createOpenAICompatibleProvider,
   createCompactSummarizerFromProvider,
   type LlmProvider,
 } from '../../providers/src/index.ts'
@@ -108,9 +105,10 @@ import {
   getSessionPersistMeta,
   loadSession,
   maybeAutoSaveSession,
-  resolveSessionFilePath,
   saveSession,
   setSessionPersistMeta,
+  appendSessionFileDiff,
+  appendSessionSystemNote,
   type SaveSessionOptions,
   type SessionScope,
   type SessionSnapshot,
@@ -118,6 +116,9 @@ import {
 import {
   writeTranscriptAfterCompact,
   getTranscriptWriteState,
+  resolveTranscriptPathFromJson,
+  loadTranscriptFile,
+  fileDiffsFromTranscriptEntries,
 } from './sessionTranscript.ts'
 import type { SessionUsage } from './sessionUsage.ts'
 import {
@@ -576,6 +577,11 @@ export type SessionEvent =
     }
   | { type: 'done'; terminal?: Terminal }
 
+export type SessionSystemPromptOptions = Omit<
+  AssembleSessionSystemPromptOptions,
+  'cwd'
+>
+
 export type CreateSessionOptions = {
   cwd: string
   sessionId?: string
@@ -621,7 +627,7 @@ export type CreateSessionOptions = {
    * 是否组装默认 system（身份/环境/BOLO.md/skill catalog）。
    * 默认 true。smoke 可关以保持最短 mock 路径。
    */
-  systemPrompt?: boolean | AssembleSessionSystemPromptOptions
+  systemPrompt?: boolean | SessionSystemPromptOptions
   /**
    * 是否在 queryLoop 的 prepareMessages 挂 auto compact（对照参考 autoCompactIfNeeded）。
    * 需同时注入 compactSummarizer；默认 **true**（与 DEFAULT_CONFIG 一致）。
@@ -935,7 +941,7 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
   let systemPromptUserConfigDir: string | undefined
   let refreshPathScopedRules = false
   if (opts.systemPrompt !== false) {
-    const extra =
+    const extra: SessionSystemPromptOptions =
       typeof opts.systemPrompt === 'object' && opts.systemPrompt
         ? opts.systemPrompt
         : {}
@@ -1213,112 +1219,125 @@ export type CreateSessionFromWorkspaceOptions = {
   mcpTimeoutMs?: number
 }
 
-/**
- * 从 ~/.bolo + 项目 .bolo 装配 Session
- * system 由 assembleSessionSystemPrompt 统一组装（含 BOLO.md + skill catalog）
- * 可选连接 MCP stdio（失败 warn 不炸会话）
- */
-export async function createSessionFromWorkspace(
-  opts: CreateSessionFromWorkspaceOptions,
-): Promise<{
-  session: BoloSession
-  workspace: ResolvedWorkspace
-  mcp?: ConnectMcpResult
-}> {
-  const workspace = await loadWorkspace({
-    cwd: opts.cwd,
-    ensureDefaults: opts.ensureDefaults,
+type WorkspaceSessionMode = 'create' | 'resume'
+
+function resolveWorkspaceUltrathinkMode(
+  workspace: ResolvedWorkspace,
+  explicit?: UltrathinkMode | string,
+): UltrathinkMode | undefined {
+  if (explicit != null) {
+    return normalizeUltrathinkMode(String(explicit)) ?? undefined
+  }
+  const mode = resolveUltrathinkMode({
+    configMode:
+      typeof workspace.config.ultrathink === 'string'
+        ? workspace.config.ultrathink
+        : undefined,
   })
+  return mode === 'off' ? undefined : mode
+}
 
-  const compactSummarizer =
-    opts.wireCompactSummarizer === false
-      ? undefined
-      : createCompactSummarizerFromProvider(workspace.provider)
-
+/**
+ * new/resume 共用的 workspace → createSession 契约。
+ * resume 保留快照内的 model/auto-compact/context/PTL 值，除非调用方显式覆盖；
+ * provider、hooks、skills、agent policy、compact summarizer 始终来自当前 workspace。
+ */
+function buildWorkspaceSessionOptions(
+  workspace: ResolvedWorkspace,
+  opts: CreateSessionFromWorkspaceOptions,
+  mode: WorkspaceSessionMode,
+): CreateSessionOptions {
   const injectSkills = opts.injectSkills !== false
-  const agentPolicy = resolveAgentPolicy(workspace.config.agents)
-  const session = await createSession({
+  const autoCompactEnabled =
+    opts.autoCompactEnabled ??
+    (mode === 'create'
+      ? workspace.config.autoCompactEnabled !== false
+      : undefined)
+  const contextWindowTokens =
+    opts.contextWindowTokens ??
+    (mode === 'create'
+      ? workspace.config.contextWindowTokens ?? 128_000
+      : undefined)
+  const maxPtlRetries =
+    opts.maxPtlRetries ??
+    (mode === 'create' ? workspace.config.maxPtlRetries : undefined)
+
+  return {
     cwd: opts.cwd,
     provider: workspace.provider,
     hooks: workspace.hooks,
     permissionMode: workspace.permissionMode,
     askPermission: opts.askPermission,
-    compactSummarizer,
+    compactSummarizer:
+      opts.wireCompactSummarizer === false
+        ? undefined
+        : createCompactSummarizerFromProvider(workspace.provider),
     skills: workspace.skills,
-    model: workspace.providerModel,
+    ...(mode === 'create' && workspace.providerModel
+      ? { model: workspace.providerModel }
+      : {}),
     providerRegistry: workspace.providerRegistry,
     providerId: workspace.providerId,
     providerProfile: workspace.providerProfile,
     effortDialect: workspace.providerProfile?.effortDialect,
-    ultrathinkMode: (() => {
-      // session 显式 > env > config（resolveUltrathinkMode）
-      if (opts.ultrathinkMode != null) {
-        return (
-          normalizeUltrathinkMode(String(opts.ultrathinkMode)) ??
-          undefined
-        )
-      }
-      const m = resolveUltrathinkMode({
-        configMode:
-          typeof workspace.config.ultrathink === 'string'
-            ? workspace.config.ultrathink
-            : undefined,
-      })
-      // off 不写字段，保持默认语义
-      return m === 'off' ? undefined : m
-    })(),
+    ultrathinkMode: resolveWorkspaceUltrathinkMode(
+      workspace,
+      opts.ultrathinkMode,
+    ),
     source: opts.source,
     onEvent: opts.onEvent,
-    agentPolicy,
-    autoCompactEnabled:
-      opts.autoCompactEnabled ??
-      workspace.config.autoCompactEnabled !== false,
-    contextWindowTokens:
-      opts.contextWindowTokens ??
-      workspace.config.contextWindowTokens ??
-      128_000,
+    agentPolicy: resolveAgentPolicy(workspace.config.agents),
+    ...(autoCompactEnabled !== undefined ? { autoCompactEnabled } : {}),
+    ...(contextWindowTokens !== undefined ? { contextWindowTokens } : {}),
     microcompact:
       opts.microcompact !== undefined
         ? opts.microcompact
         : workspace.config.microcompactEnabled === false
           ? false
           : undefined,
-    maxPtlRetries:
-      opts.maxPtlRetries ?? workspace.config.maxPtlRetries,
+    ...(maxPtlRetries !== undefined ? { maxPtlRetries } : {}),
     systemPrompt:
       opts.systemPrompt === false
         ? false
         : {
             skills: injectSkills ? workspace.skills : [],
-            model: workspace.providerModel,
+            ...(mode === 'create' && workspace.providerModel
+              ? { model: workspace.providerModel }
+              : {}),
             permissionMode: workspace.permissionMode,
           },
-  })
+  }
+}
 
-  // 全文注册表给 Skill 工具（catalog 已在 systemPromptSections）
+async function attachWorkspaceRuntime(
+  session: BoloSession,
+  workspace: ResolvedWorkspace,
+  opts: Pick<
+    CreateSessionFromWorkspaceOptions,
+    'connectMcp' | 'mcpTimeoutMs'
+  >,
+): Promise<ConnectMcpResult | undefined> {
   session.skills = workspace.skills
+  session.hooks = workspace.hooks
   session.plugins = workspace.plugins
   session.pluginCommands = workspace.pluginMerge?.commands ?? []
   session.pluginMergeErrors = workspace.pluginMerge?.errors?.length
     ? [...workspace.pluginMerge.errors]
     : undefined
-  // P 轨：确保 registry 已挂（createSession 已写；双保险）
-  if (workspace.providerRegistry) {
+  if (workspace.providerRegistry && !session.providerRegistry) {
     attachProviderRegistry(
       session,
       workspace.providerRegistry,
-      workspace.providerId,
+      session.providerId ?? workspace.providerId,
     )
   }
-  // tools 已在 createSession 按 agentDefinitions 装配；MCP 再追加
 
   let mcp: ConnectMcpResult | undefined
-  // M-GEN-1：配置层 warnings（坏 JSON / 无效 server）先于连接
   if (workspace.mcpConfigWarnings?.length) {
-    for (const w of workspace.mcpConfigWarnings) {
-      emit(session, { type: 'warning', message: w })
+    for (const warning of workspace.mcpConfigWarnings) {
+      emit(session, { type: 'warning', message: warning })
       // eslint-disable-next-line no-console
-      console.warn(`[bolo mcp] ${w}`)
+      console.warn(`[bolo mcp] ${warning}`)
     }
     session.mcpDiagnostics = {
       configWarnings: [...workspace.mcpConfigWarnings],
@@ -1327,10 +1346,9 @@ export async function createSessionFromWorkspace(
   if (opts.connectMcp !== false && workspace.mcpServers.length > 0) {
     mcp = await connectMcpServers({
       servers: workspace.mcpServers,
-      cwd: opts.cwd,
+      cwd: session.cwd,
       timeoutMs: opts.mcpTimeoutMs,
       onListChanged: async (event: McpListChangedEvent) => {
-        // 对照 HC list_changed：再 list 后同步会话工具表 + 事件（无遥测）
         if (session.mcpConnections?.length) {
           session.tools = mergeSessionToolsWithMcp(
             session.tools,
@@ -1347,12 +1365,11 @@ export async function createSessionFromWorkspace(
         })
       },
     })
-    for (const w of mcp.warnings) {
-      emit(session, { type: 'warning', message: w })
+    for (const warning of mcp.warnings) {
+      emit(session, { type: 'warning', message: warning })
       // eslint-disable-next-line no-console
-      console.warn(`[bolo mcp] ${w}`)
+      console.warn(`[bolo mcp] ${warning}`)
     }
-    // M-GEN-2：诊断切片挂会话（失败项 + 配置 warnings）
     session.mcpDiagnostics = {
       ...(session.mcpDiagnostics?.configWarnings?.length
         ? { configWarnings: session.mcpDiagnostics.configWarnings }
@@ -1374,6 +1391,30 @@ export async function createSessionFromWorkspace(
       ]
     }
   }
+  return mcp
+}
+
+/**
+ * 从 ~/.bolo + 项目 .bolo 装配 Session
+ * system 由 assembleSessionSystemPrompt 统一组装（含 BOLO.md + skill catalog）
+ * 可选连接 MCP stdio（失败 warn 不炸会话）
+ */
+export async function createSessionFromWorkspace(
+  opts: CreateSessionFromWorkspaceOptions,
+): Promise<{
+  session: BoloSession
+  workspace: ResolvedWorkspace
+  mcp?: ConnectMcpResult
+}> {
+  const workspace = await loadWorkspace({
+    cwd: opts.cwd,
+    ensureDefaults: opts.ensureDefaults,
+  })
+
+  const session = await createSession(
+    buildWorkspaceSessionOptions(workspace, opts, 'create'),
+  )
+  const mcp = await attachWorkspaceRuntime(session, workspace, opts)
 
   return { session, workspace, mcp }
 }
@@ -1791,7 +1832,7 @@ export type ResumeSessionOptions = {
   provider?: LlmProvider
   hooks?: HooksConfig
   skills?: LoadedSkill[]
-  systemPrompt?: boolean | AssembleSessionSystemPromptOptions
+  systemPrompt?: boolean | SessionSystemPromptOptions
   source?: SessionStartSource
 }
 
@@ -1961,6 +2002,98 @@ export async function resumeSession(
   })
 
   return { session, snapshot, path: filePath }
+}
+
+export type ResumeSessionFromWorkspaceOptions = ResumeSessionOptions & {
+  ensureDefaults?: boolean
+  wireCompactSummarizer?: boolean
+  injectSkills?: boolean
+  autoCompactEnabled?: boolean
+  contextWindowTokens?: number
+  microcompact?: MicrocompactOptions | false
+  maxPtlRetries?: number
+  ultrathinkMode?: UltrathinkMode | string
+  connectMcp?: boolean
+  mcpTimeoutMs?: number
+}
+
+/**
+ * 从当前 workspace 恢复会话。
+ * 与 createSessionFromWorkspace 共用 provider/hooks/skills/plugins/agent/MCP 装配，
+ * 快照仍负责 messages、model、权限规则及其它会话态。
+ */
+export async function resumeSessionFromWorkspace(
+  opts: ResumeSessionFromWorkspaceOptions,
+): Promise<{
+  session: BoloSession
+  snapshot: SessionSnapshot
+  path: string
+  workspace: ResolvedWorkspace
+  mcp?: ConnectMcpResult
+}> {
+  let workspaceCwd = opts.cwd
+  if (!workspaceCwd) {
+    const preloaded = await loadSessionOrTranscript(opts.idOrPath, {
+      scope: opts.scope,
+      sessionsDir: opts.sessionsDir,
+      filePath: opts.filePath,
+    })
+    workspaceCwd = preloaded.snapshot.cwd
+  }
+  const workspace = await loadWorkspace({
+    cwd: workspaceCwd,
+    ensureDefaults: opts.ensureDefaults,
+  })
+  const workspaceOptions: CreateSessionFromWorkspaceOptions = {
+    cwd: workspaceCwd,
+    ensureDefaults: opts.ensureDefaults,
+    askPermission: opts.askPermission,
+    onEvent: opts.onEvent,
+    source: opts.source,
+    wireCompactSummarizer: opts.wireCompactSummarizer,
+    injectSkills: opts.injectSkills,
+    systemPrompt: opts.systemPrompt === false ? false : true,
+    autoCompactEnabled: opts.autoCompactEnabled,
+    contextWindowTokens: opts.contextWindowTokens,
+    microcompact: opts.microcompact,
+    maxPtlRetries: opts.maxPtlRetries,
+    ultrathinkMode: opts.ultrathinkMode,
+    connectMcp: opts.connectMcp,
+    mcpTimeoutMs: opts.mcpTimeoutMs,
+  }
+  const built = buildWorkspaceSessionOptions(
+    workspace,
+    workspaceOptions,
+    'resume',
+  )
+  const {
+    cwd: _workspaceCwd,
+    source: _workspaceSource,
+    permissionMode: _workspacePermissionMode,
+    ...workspaceCreate
+  } = built
+
+  const resumed = await resumeSession({
+    ...opts,
+    cwd: workspaceCwd,
+    provider: opts.provider ?? workspace.provider,
+    hooks: opts.hooks ?? workspace.hooks,
+    skills: opts.skills ?? workspace.skills,
+    askPermission: opts.askPermission ?? workspaceCreate.askPermission,
+    onEvent: opts.onEvent ?? workspaceCreate.onEvent,
+    systemPrompt: opts.systemPrompt ?? workspaceCreate.systemPrompt,
+    source: opts.source ?? 'resume',
+    create: {
+      ...workspaceCreate,
+      ...opts.create,
+    },
+  })
+  const mcp = await attachWorkspaceRuntime(
+    resumed.session,
+    workspace,
+    workspaceOptions,
+  )
+  return { ...resumed, workspace, mcp }
 }
 
 /** 显式保存当前会话（同 saveSession，便于从 core 入口发现） */

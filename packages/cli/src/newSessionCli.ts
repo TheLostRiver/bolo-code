@@ -35,6 +35,8 @@ export type NewSessionCliOptions = {
   onSessionEvent?: (e: SessionEvent) => void
   readPermissionAnswer?: (prompt: string) => Promise<string>
   nonTtyPermission?: 'allow' | 'deny'
+  /** 单轮或 REPL 的外部取消信号 */
+  signal?: AbortSignal
 }
 
 export type NewSessionCliResult = {
@@ -53,16 +55,6 @@ export async function runNewSessionCli(
   const cwd = opts.cwd ?? process.cwd()
   const isTty = opts.isTty ?? process.stdin.isTTY === true
 
-  const { provider, missingKey, kind, model } = createCliProvider({
-    forceMock: opts.forceMock,
-  })
-
-  if (missingKey) {
-    writeErr(
-      `warn: no API key (provider=${kind}); session starts, callModel will fail until keys are set.\n`,
-    )
-  }
-
   const thinkingGate: { session: BoloSession | null } = { session: null }
   const { printer, onEvent } = createCliOnEvent({
     writeOut,
@@ -76,9 +68,10 @@ export async function runNewSessionCli(
     readAnswer: opts.readPermissionAnswer,
     nonTtyDecision: opts.nonTtyPermission ?? 'deny',
     writeOut,
+    signal: opts.signal,
   })
 
-  const { session } = await createSessionFromWorkspace({
+  const { session, workspace } = await createSessionFromWorkspace({
     cwd,
     ensureDefaults: true,
     askPermission,
@@ -88,12 +81,23 @@ export async function runNewSessionCli(
   thinkingGate.session = session
   attachSessionEventPrinter(session, printer)
 
-  // CLI 控制 provider：forceMock / 无 key 时覆盖 workspace 装配结果
-  if (opts.forceMock || missingKey) {
-    session.provider = provider
-    session.deps = productionDeps(provider)
+  // forceMock 是显式测试覆盖；缺 key 判定必须来自 workspace active profile，
+  // 不能用通用 env 探测覆盖一个已由自定义 apiKeyEnv 正确装配的 provider。
+  if (opts.forceMock) {
+    const forced = createCliProvider({ forceMock: true })
+    session.provider = forced.provider
+    session.deps = productionDeps(forced.provider)
+  } else if (workspace.providerMissingKey) {
+    const delayedFailure = createCliProvider()
+    session.provider = delayedFailure.provider
+    session.deps = productionDeps(delayedFailure.provider)
+    const keyHint =
+      workspace.providerProfile?.apiKeyEnv ??
+      'BOLO_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY'
+    writeErr(
+      `warn: no API key (provider=${workspace.providerId}; set ${keyHint}); session starts, callModel will fail until keys are set.\n`,
+    )
   }
-  if (model && !session.model) session.model = model
 
   setSessionPersistMeta(session, {
     autoSave: true,
@@ -150,7 +154,11 @@ export async function runNewSessionCli(
   const interactive = !print && !prompt && isTty
 
   if (prompt) {
-    const turn = await runOnePrompt(session, prompt, { writeOut, writeErr })
+    const turn = await runOnePrompt(session, prompt, {
+      writeOut,
+      writeErr,
+      signal: opts.signal,
+    })
     try {
       const { endSession } = await import('../../core/src/index.ts')
       await endSession(session, { reason: 'other' })
@@ -161,7 +169,12 @@ export async function runNewSessionCli(
   }
 
   if (interactive) {
-    await runRepl(session, { writeOut, writeErr, isTty })
+    await runRepl(session, {
+      writeOut,
+      writeErr,
+      isTty,
+      signal: opts.signal,
+    })
     return { session }
   }
 

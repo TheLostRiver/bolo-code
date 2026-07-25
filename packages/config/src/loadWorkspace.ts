@@ -62,6 +62,8 @@ export type ResolvedWorkspace = {
   providerKind: ProviderKind
   providerModel?: string
   providerBaseUrl?: string
+  /** active profile 缺少所需 key；CLI 可提示/延迟失败，不能据全局 env 误判 */
+  providerMissingKey?: boolean
   /** P1：归一化后的多 provider 表 */
   providerRegistry: ProviderRegistry
   /** 启动 active profile id */
@@ -241,6 +243,7 @@ export async function loadWorkspace(
     if (foreign.warnings.length) {
       if (!pluginMerge) {
         pluginMerge = {
+          plugins: [],
           skills: [],
           hooks: {},
           mcpServers: [],
@@ -249,8 +252,9 @@ export async function loadWorkspace(
           errors: [],
         }
       }
-      pluginMerge.errors = [
-        ...(pluginMerge.errors ?? []),
+      const merge = pluginMerge
+      merge.errors = [
+        ...(merge.errors ?? []),
         ...foreign.warnings,
       ]
     }
@@ -279,6 +283,7 @@ export async function loadWorkspace(
     providerKind: resolved.kind,
     providerModel: resolved.model,
     providerBaseUrl: resolved.baseUrl,
+    ...(resolved.missingKey ? { providerMissingKey: true } : {}),
     providerRegistry: resolved.registry,
     providerId: resolved.profileId,
     providerProfile: resolved.profile,

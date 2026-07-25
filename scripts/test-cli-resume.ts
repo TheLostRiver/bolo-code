@@ -12,6 +12,7 @@ import {
   buildSessionSummary,
   formatSessionSummary,
   lastAssistantText,
+  runNewSessionCli,
 } from '../packages/cli/src/index.ts'
 import {
   createSession,
@@ -163,6 +164,124 @@ async function main() {
   await submitPrompt(byPath.session, 'ping')
   const asst = lastAssistantText(byPath.session.messages, before)
   assert(typeof asst === 'string', 'assistant text type')
+
+  // new / resume 必须共享 workspace runtime，尤其不能忽略自定义 apiKeyEnv
+  const workspaceCwd = path.join(tmpRoot, 'workspace-runtime')
+  const workspaceBolo = path.join(workspaceCwd, '.bolo')
+  const workspaceSessions = path.join(workspaceBolo, 'sessions')
+  const workspaceSkillDir = path.join(
+    workspaceBolo,
+    'skills',
+    'workspace-runtime-skill',
+  )
+  const isolatedUserBolo = path.join(tmpRoot, 'workspace-user-bolo')
+  await fs.mkdir(workspaceSessions, { recursive: true })
+  await fs.mkdir(workspaceSkillDir, { recursive: true })
+  await fs.mkdir(isolatedUserBolo, { recursive: true })
+  await fs.writeFile(
+    path.join(workspaceBolo, 'config.json'),
+    JSON.stringify({
+      version: 1,
+      defaultProvider: 'custom',
+      providers: {
+        custom: {
+          kind: 'openai-compatible',
+          baseUrl: 'https://workspace-provider.example/v1',
+          model: 'workspace-model',
+          apiKeyEnv: 'BOLO_TEST_WORKSPACE_CUSTOM_KEY',
+        },
+      },
+    }),
+    'utf8',
+  )
+  await fs.writeFile(
+    path.join(workspaceSkillDir, 'SKILL.md'),
+    [
+      '---',
+      'name: Workspace Runtime Skill',
+      'description: proves new and resume share workspace skills',
+      '---',
+      'workspace runtime test body',
+      '',
+    ].join('\n'),
+    'utf8',
+  )
+
+  const prevConfigDir = process.env.BOLO_CONFIG_DIR
+  const prevCustomKey = process.env.BOLO_TEST_WORKSPACE_CUSTOM_KEY
+  process.env.BOLO_CONFIG_DIR = isolatedUserBolo
+  process.env.BOLO_TEST_WORKSPACE_CUSTOM_KEY = 'sk-workspace-test-not-real'
+  try {
+    const workspaceFixture = await createSession({
+      cwd: workspaceCwd,
+      sessionId: 'sess_workspace_runtime',
+      systemPrompt: false,
+      providerId: 'custom',
+      model: 'workspace-model',
+    })
+    workspaceFixture.messages.push({
+      role: 'user',
+      content: 'workspace runtime fixture',
+    })
+    await saveSession(workspaceFixture, {
+      sessionsDir: workspaceSessions,
+    })
+
+    const freshWorkspace = await runNewSessionCli({
+      cwd: workspaceCwd,
+      print: true,
+      isTty: false,
+      skipBanner: true,
+      writeOut: () => {},
+      writeErr: () => {},
+    })
+    assert(
+      freshWorkspace.session.provider.id === 'openai-compatible',
+      `new workspace provider=${freshWorkspace.session.provider.id}`,
+    )
+    assert(
+      freshWorkspace.session.providerId === 'custom',
+      `new workspace providerId=${freshWorkspace.session.providerId}`,
+    )
+    assert(
+      freshWorkspace.session.skills.some(
+        (skill) => skill.meta.id === 'workspace-runtime-skill',
+      ),
+      'new workspace skill loaded',
+    )
+
+    const resumedWorkspace = await resumeFromIdOrPath({
+      idOrPath: 'sess_workspace_runtime',
+      cwd: workspaceCwd,
+      sessionsDir: workspaceSessions,
+      reassembleSystem: false,
+      systemPrompt: false,
+      writeOut: () => {},
+      writeErr: () => {},
+    })
+    assert(
+      resumedWorkspace.session.provider.id === 'openai-compatible',
+      `resume workspace provider=${resumedWorkspace.session.provider.id}`,
+    )
+    assert(
+      resumedWorkspace.session.providerId === 'custom',
+      `resume workspace providerId=${resumedWorkspace.session.providerId}`,
+    )
+    assert(
+      resumedWorkspace.session.skills.some(
+        (skill) => skill.meta.id === 'workspace-runtime-skill',
+      ),
+      'resume workspace skill loaded',
+    )
+  } finally {
+    if (prevConfigDir === undefined) delete process.env.BOLO_CONFIG_DIR
+    else process.env.BOLO_CONFIG_DIR = prevConfigDir
+    if (prevCustomKey === undefined) {
+      delete process.env.BOLO_TEST_WORKSPACE_CUSTOM_KEY
+    } else {
+      process.env.BOLO_TEST_WORKSPACE_CUSTOM_KEY = prevCustomKey
+    }
+  }
 
   await fs.rm(tmpRoot, { recursive: true, force: true })
   console.log('PASS: test-cli-resume')

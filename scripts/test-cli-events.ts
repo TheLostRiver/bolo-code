@@ -9,7 +9,13 @@ import {
   formatToolEventLine,
   parsePermissionAnswer,
   createTtyAskPermission,
+  runOnePrompt,
 } from '../packages/cli/src/index.ts'
+import {
+  createSession,
+  submitUserInput,
+} from '../packages/core/src/index.ts'
+import type { LlmProvider } from '../packages/providers/src/index.ts'
 
 function assert(cond: unknown, msg: string) {
   if (!cond) {
@@ -251,6 +257,81 @@ async function main() {
     toolUseId: 'u3',
   })
   assert(n === 'deny', 'tty empty deny')
+
+  // ── AbortSignal：权限等待必须 fail-closed，不可卡住 turn ──
+  const permissionAbort = new AbortController()
+  const blockedPermission = createTtyAskPermission({
+    isTty: true,
+    signal: permissionAbort.signal,
+    readAnswer: async () => await new Promise<string>(() => {}),
+  })
+  const pendingDecision = blockedPermission({
+    toolName: 'Edit',
+    toolInput: {},
+    toolUseId: 'u-abort',
+  })
+  permissionAbort.abort('test')
+  const abortedDecision = await Promise.race([
+    pendingDecision,
+    new Promise<'timeout'>((resolve) =>
+      setTimeout(() => resolve('timeout'), 500),
+    ),
+  ])
+  assert(abortedDecision === 'deny', `aborted permission=${abortedDecision}`)
+
+  // ── AbortSignal：submitUserInput → submitPrompt → provider ──
+  const abortingProvider: LlmProvider = {
+    id: 'mock',
+    async *completeStream(_messages, options) {
+      await new Promise<void>((resolve) => {
+        if (options?.signal?.aborted) return resolve()
+        options?.signal?.addEventListener('abort', () => resolve(), {
+          once: true,
+        })
+      })
+      throw Object.assign(new Error('aborted by test'), {
+        name: 'AbortError',
+      })
+    },
+  }
+  const abortSession = await createSession({
+    cwd: process.cwd(),
+    provider: abortingProvider,
+    systemPrompt: false,
+    askPermission: async () => 'allow',
+  })
+  const submitAbort = new AbortController()
+  const pendingSubmit = submitUserInput(abortSession, 'cancel me', {
+    signal: submitAbort.signal,
+  })
+  setTimeout(() => submitAbort.abort('test'), 5)
+  const submitResult = await pendingSubmit
+  assert(submitResult.type === 'prompt', 'abort submit result prompt')
+  assert(
+    submitResult.type === 'prompt' &&
+      submitResult.terminal.reason === 'aborted',
+    `abort terminal=${submitResult.type === 'prompt' ? submitResult.terminal.reason : submitResult.type}`,
+  )
+
+  // CLI runOnePrompt 也必须透传同一 signal
+  const cliAbortSession = await createSession({
+    cwd: process.cwd(),
+    provider: abortingProvider,
+    systemPrompt: false,
+    askPermission: async () => 'allow',
+  })
+  const cliAbort = new AbortController()
+  const pendingCliTurn = runOnePrompt(cliAbortSession, 'cancel cli turn', {
+    signal: cliAbort.signal,
+    writeOut: () => {},
+    writeErr: () => {},
+  })
+  setTimeout(() => cliAbort.abort('test'), 5)
+  const cliTurn = await pendingCliTurn
+  assert(
+    cliTurn.terminalReason === 'aborted',
+    `cli abort terminal=${cliTurn.terminalReason}`,
+  )
 
   console.log('ok: test-cli-events')
 }

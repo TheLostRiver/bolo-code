@@ -57,12 +57,6 @@ import {
   switchSessionModel,
   formatSessionProvidersSlash,
   listSessionProviders,
-  buildProviderPickerItems,
-  formatProviderPickerLabel,
-  activeProviderPickerIndex,
-  attachProviderRegistry,
-  type SwitchSessionProviderResult,
-  type SwitchSessionModelResult,
   type SwitchableProviderSession,
 } from './sessionProvider.ts'
 import { clampEffortForSession } from './effortClamp.ts'
@@ -103,6 +97,8 @@ export type SlashSession = {
    * false 时仍解析 provider 事件，仅不显示。
    */
   showThinking?: boolean
+  /** 是否把 reasoning_content 写入 assistant history */
+  persistReasoning?: boolean
   compactSummarizer?: CompactSummarizer
   /** 会话 skill 全文表；供 /skills 与 /<skill-id> 回落 */
   skills?: LoadedSkill[]
@@ -262,6 +258,12 @@ export type SubmitUserInputResult =
     }
   | { type: 'prompt'; terminal: Terminal }
   | { type: 'empty' }
+
+function asSwitchableSession(
+  session: SlashSession,
+): SwitchableProviderSession {
+  return session as unknown as SwitchableProviderSession
+}
 
 /** /help 分组（展示顺序固定） */
 export type SlashCommandGroup =
@@ -1291,7 +1293,7 @@ function cmdPlugins(session: SlashSession, args: string): Promise<SlashDispatchR
 }
 
 async function cmdPluginsMarket(
-  session: SlashSession,
+  _session: SlashSession,
   parts: string[],
 ): Promise<SlashDispatchResult> {
   const {
@@ -1890,14 +1892,14 @@ function cmdModel(session: SlashSession, args: string): SlashDispatchResult {
     const id = slash[1]!.trim()
     const model = slash[2]!.trim()
     if (session.providerRegistry) {
-      const sw = switchSessionProvider(session as SwitchableProviderSession, id, {
+      const sw = switchSessionProvider(asSwitchableSession(session), id, {
         model,
       })
       if (!sw.ok) return { ok: false, message: sw.reason }
       return { ok: true, message: sw.message }
     }
     // 无 registry：仅设 model 名（兼容）
-    const m = switchSessionModel(session as SwitchableProviderSession, model)
+    const m = switchSessionModel(asSwitchableSession(session), model)
     if (!m.ok) return { ok: false, message: m.reason }
     return {
       ok: true,
@@ -1905,10 +1907,10 @@ function cmdModel(session: SlashSession, args: string): SlashDispatchResult {
     }
   }
 
-  const m = switchSessionModel(session as SwitchableProviderSession, raw)
+  const m = switchSessionModel(asSwitchableSession(session), raw)
   if (!m.ok) return { ok: false, message: m.reason }
   // 换 model 后 clamp effort（CX2/CX6）
-  const clamp = clampEffortForSession(session as SwitchableProviderSession)
+  const clamp = clampEffortForSession(asSwitchableSession(session))
   if (clamp.warning) {
     return { ok: true, message: `${m.message}\n${clamp.warning}` }
   }
@@ -1958,7 +1960,7 @@ function cmdProvider(
 ): SlashDispatchResult | Promise<SlashDispatchResult> {
   const raw = args.trim()
   const textList = () =>
-    formatSessionProvidersSlash(session as SwitchableProviderSession)
+    formatSessionProvidersSlash(asSwitchableSession(session))
 
   // 强制文本（脚本 / 非交互）
   if (raw === 'list' || raw === 'show' || raw === 'ls') {
@@ -1967,7 +1969,7 @@ function cmdProvider(
 
   // 无参：带 interactiveProvider，CLI TTY 开箭头选；非 TTY 只看 message
   if (!raw) {
-    const list = listSessionProviders(session as SwitchableProviderSession)
+    const list = listSessionProviders(asSwitchableSession(session))
     if (!list.length) {
       return { ok: true, message: textList() }
     }
@@ -1989,7 +1991,7 @@ function cmdProvider(
       }
     }
     const model = parts.slice(2).join(' ').trim() || undefined
-    const sw = switchSessionProvider(session as SwitchableProviderSession, id, {
+    const sw = switchSessionProvider(asSwitchableSession(session), id, {
       model,
     })
     if (!sw.ok) return { ok: false, message: sw.reason }
@@ -2018,7 +2020,7 @@ function cmdProvider(
   // 无子命令：第一词当 id（/provider deepseek）
   const id = parts[0]!
   const model = parts.slice(1).join(' ').trim() || undefined
-  const sw = switchSessionProvider(session as SwitchableProviderSession, id, {
+  const sw = switchSessionProvider(asSwitchableSession(session), id, {
     model,
   })
   if (!sw.ok) {
@@ -2111,7 +2113,7 @@ async function cmdProviderAdd(
       session.providerRegistry = reg
     } else {
       const { attachProviderRegistry } = await import('./sessionProvider.ts')
-      attachProviderRegistry(session as SwitchableProviderSession, reg, session.providerId)
+      attachProviderRegistry(asSwitchableSession(session), reg, session.providerId)
     }
   } catch {
     /* registry refresh best-effort */
@@ -3205,7 +3207,11 @@ export async function dispatchSlashCommand(
 export async function submitUserInput(
   session: SlashSession,
   text: string,
-  options?: { maxTurns?: number; querySource?: string },
+  options?: {
+    maxTurns?: number
+    querySource?: string
+    signal?: AbortSignal
+  },
 ): Promise<SubmitUserInputResult> {
   const parsed = parseSlashLine(text)
   if (parsed.kind === 'empty') return { type: 'empty' }

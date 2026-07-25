@@ -98,6 +98,36 @@ export type CreateTtyAskPermissionOptions = {
   /** 面板前后（REPL 暂停 readline） */
   pauseInput?: () => void
   resumeInput?: () => void
+  /** 当前 turn 的取消信号；abort 时权限请求按 deny 收口 */
+  signal?: AbortSignal
+  /** raw diff panel 收到 Ctrl-C 时通知 turn owner */
+  onInterrupt?: () => void
+}
+
+function resolveOnAbort<T>(
+  pending: Promise<T>,
+  signal: AbortSignal | undefined,
+  fallback: T,
+): Promise<T> {
+  if (!signal) return pending
+  if (signal.aborted) return Promise.resolve(fallback)
+  return new Promise<T>((resolve, reject) => {
+    let settled = false
+    const finish = (value: T) => {
+      if (settled) return
+      settled = true
+      signal.removeEventListener('abort', onAbort)
+      resolve(value)
+    }
+    const onAbort = () => finish(fallback)
+    signal.addEventListener('abort', onAbort, { once: true })
+    pending.then(finish, (error) => {
+      if (settled) return
+      settled = true
+      signal.removeEventListener('abort', onAbort)
+      reject(error)
+    })
+  })
 }
 
 /**
@@ -122,18 +152,31 @@ export function createTtyAskPermission(
     })
     try {
       return await new Promise<string>((resolve) => {
-        rl.question(prompt, resolve)
+        let settled = false
+        const finish = (answer: string) => {
+          if (settled) return
+          settled = true
+          opts.signal?.removeEventListener('abort', onAbort)
+          resolve(answer)
+        }
+        const onAbort = () => finish('')
+        opts.signal?.addEventListener('abort', onAbort, { once: true })
+        rl.question(prompt, finish)
       })
     } finally {
       rl.close()
     }
   }
 
-  const readAnswer = opts.readAnswer ?? defaultRead
+  const readAnswer = opts.readAnswer
+    ? (prompt: string) =>
+        resolveOnAbort(opts.readAnswer!(prompt), opts.signal, '')
+    : defaultRead
   const writeOut = opts.writeOut ?? ((s: string) => process.stdout.write(s))
 
   return async (req) => {
     if (!isTty) return nonTty
+    if (opts.signal?.aborted) return 'deny'
 
     // U2：结构化 files → 可滚审批
     if (usePanel && req.preview?.files && req.preview.files.length > 0) {
@@ -153,6 +196,8 @@ export function createTtyAskPermission(
               writeOut,
               isTty: true,
               readKey: opts.readKey,
+              signal: opts.signal,
+              onInterrupt: opts.onInterrupt,
             })
             if (pane.ok) return pane.decision
           } finally {

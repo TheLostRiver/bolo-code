@@ -42,20 +42,56 @@ function parseRawKey(s: string): string {
   return 'none'
 }
 
-function defaultReadKeyFactory(): () => Promise<string> {
+function defaultReadKeyFactory(signal?: AbortSignal): () => Promise<string> {
   return async () => {
     const stdin = process.stdin
     if (!stdin.isTTY) return 'q'
+    if (signal?.aborted) return 'ctrl-c'
     return await new Promise<string>((resolve) => {
       const wasRaw = stdin.isRaw
+      let settled = false
+      const finish = (key: string) => {
+        if (settled) return
+        settled = true
+        signal?.removeEventListener('abort', onAbort)
+        stdin.removeListener('data', onData)
+        stdin.setRawMode?.(wasRaw ?? false)
+        resolve(key)
+      }
+      const onAbort = () => finish('ctrl-c')
+      const onData = (buf: Buffer) =>
+        finish(parseRawKey(buf.toString('utf8')))
+      signal?.addEventListener('abort', onAbort, { once: true })
       stdin.setRawMode?.(true)
       stdin.resume()
-      stdin.once('data', (buf: Buffer) => {
-        stdin.setRawMode?.(wasRaw ?? false)
-        resolve(parseRawKey(buf.toString('utf8')))
-      })
+      stdin.once('data', onData)
     })
   }
+}
+
+function readKeyWithAbort(
+  readKey: () => Promise<string>,
+  signal?: AbortSignal,
+): Promise<string> {
+  if (!signal) return readKey()
+  if (signal.aborted) return Promise.resolve('ctrl-c')
+  return new Promise<string>((resolve, reject) => {
+    let settled = false
+    const finish = (key: string) => {
+      if (settled) return
+      settled = true
+      signal.removeEventListener('abort', onAbort)
+      resolve(key)
+    }
+    const onAbort = () => finish('ctrl-c')
+    signal.addEventListener('abort', onAbort, { once: true })
+    readKey().then(finish, (error) => {
+      if (settled) return
+      settled = true
+      signal.removeEventListener('abort', onAbort)
+      reject(error)
+    })
+  })
 }
 
 async function runDiffPaneLoop(opts: {
@@ -67,6 +103,8 @@ async function runDiffPaneLoop(opts: {
   isTty?: boolean
   rows?: number
   cols?: number
+  signal?: AbortSignal
+  onInterrupt?: () => void
 }): Promise<
   | { kind: 'browse'; result: DiffPaneBrowseResult }
   | { kind: 'approve'; result: DiffPaneApproveResult }
@@ -107,7 +145,8 @@ async function runDiffPaneLoop(opts: {
       : 80)
 
   let toast: string | undefined
-  const readKey = opts.readKey ?? defaultReadKeyFactory()
+  const baseReadKey = opts.readKey ?? defaultReadKeyFactory(opts.signal)
+  const readKey = () => readKeyWithAbort(baseReadKey, opts.signal)
 
   const paint = () => {
     writeOut('\x1b[2J\x1b[H')
@@ -125,6 +164,7 @@ async function runDiffPaneLoop(opts: {
   paint()
   for (;;) {
     const key = await readKey()
+    if (key === 'ctrl-c') opts.onInterrupt?.()
     if (key === 'none') continue
     const next = applyDiffViewKey(vm, key, { mode: opts.mode })
     vm = next.vm
@@ -159,6 +199,8 @@ export async function runDiffPane(opts: {
   isTty?: boolean
   rows?: number
   cols?: number
+  signal?: AbortSignal
+  onInterrupt?: () => void
 }): Promise<DiffPaneBrowseResult> {
   const r = await runDiffPaneLoop({ ...opts, mode: 'browse' })
   return r.kind === 'browse' ? r.result : { ok: true, reason: 'quit' }
@@ -175,6 +217,8 @@ export async function runDiffApprovePane(opts: {
   isTty?: boolean
   rows?: number
   cols?: number
+  signal?: AbortSignal
+  onInterrupt?: () => void
 }): Promise<DiffPaneApproveResult> {
   const r = await runDiffPaneLoop({
     ...opts,
