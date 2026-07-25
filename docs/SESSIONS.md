@@ -53,6 +53,7 @@
 - resume 将最后状态仍为 admitted/running 的 turn 投影为 interrupted；默认不自动重放。
 - compact rewrite 保留 turn entries；turn entries、title、notes、file_diff 都不进入模型消息链。
 - 显式 in-memory session 可以无 transcript；CLI/workspace 的 autoSave 主路径提供上述 durable 保证。
+- recovery projection 会保留 `interruptedFrom=admitted|running` 与 `recoveryReason=process_restart`，供 protocol 判断是否有证据允许显式 retry-safe。
 
 ### 1.3 SessionCoordinator（DR2A）
 
@@ -171,18 +172,21 @@ controlId + sessionId + kind + state + timestamp
 - 若父 turn 已结束，result 等待下一 turn 的 `before_provider`；同一进程只 delivery 一次。resume 只恢复 `/bg` 诊断，不自动重复 delivery。
 - worktree path/保全摘要随 task_result 和 `/bg` 保留；dirty/untracked worktree 仍不得自动删除。
 
-### 1.6 Runtime Protocol v1（DR4A）
+### 1.6 Runtime Protocol v1（DR4A–DR4B）
 
 - `packages/shared/src/runtimeProtocol.ts` 是 transport-neutral schema：`runtime.hello`、`runtime.snapshot`、`runtime.command`、`runtime.result`，当前 `protocolVersion = 1`。
 - snapshot 只含纯数据 `session/runner/turns/controls/tasks`；core builder 不遍历或序列化 provider、tools、AbortController、Promise、lease/callback/closure。
 - feature negotiation 选择共同 v1；未知 optional feature 被忽略，缺 required feature 或无共同版本明确拒绝。
 - parser 允许 object 增加未知字段，但未知 version/kind/action/state、重复 id、跨 session control/task 均 fail-closed。
-- command 使用 `requestId + action + target + expectedState`；v1 只描述 inspect、interrupt 与 queued/pending/ready cancel，不提供自动 replay。
+- command 使用 `requestId + action + target + expectedState`；v1 描述 inspect、interrupt、queued/pending/ready cancel，以及 interrupted discard/retry-safe，但从不自动 replay。
 - DR4B1 已让 `/runtime list|json|inspect` 消费该 view-model，并由同一 executor 提供 expected-state interrupt/control/task cancel；target/state 竞态 fail-closed。
 - action 已生效但 durable audit 或后置 snapshot 有问题时，result 保持 accepted 并附 warnings；不会误导调用方重试已生效动作。
-- 这仍不是 daemon/RPC。interrupted discard/retry-safe 与 crash/restart E2E 属于 DR4B2–C。
+- `resolution` 是 append-only JSONL entry：记录 `resolutionId/sessionId/entityKind/entityId/action`，retry-safe 另含 replacement turn id；compact rewrite 与 resume 保留，原 lifecycle 不删除。
+- discard 可用于任意 interrupted turn/control/task。retry-safe 只接受 admitted-only turn 或 pending/ready queue control，并创建新的 admitted turn + ready control；running/steer/task 一律 fail-closed。
+- retry-safe requestId 稳定派生 replacement id；同请求幂等、同 entity 的不同 resolution 冲突。queue 已接受但 resolution 后写失败时返回 accepted + warning，marker 阻止另一请求重复排队。
+- 这仍不是 daemon/RPC。DR4C 只做真实 consumer 反馈、crash/restart E2E 与旧 transcript 兼容收紧。
 
-DR0–DR4A 与 DR4B1 已收口；当前 DR4B2 将定义 append-only discard/retry-safe resolution。
+DR0–DR4B 已收口；当前 DR4C 做 protocol closeout。
 
 ## 2. 快照格式（version 1，只读兼容）
 

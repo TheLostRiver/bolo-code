@@ -180,6 +180,8 @@ npm start
 | `/turn queue <text>` · `/turn cancel <controlId>` | FIFO 排队下一轮；执行前取消 pending/ready control |
 | `/runtime list` · `/runtime inspect [turn\|control\|task] <id>` · `/runtime json` | protocol v1 共用 runtime 诊断；`json` 适合自动化读取 |
 | `/runtime interrupt <turnId>` · `/runtime cancel <control\|task> <id>` | expected-state 安全动作；target/state 变化时拒绝 |
+| `/runtime discard <turn\|control\|task> <id>` | 对 interrupted 记录追加人工确认；不删除原历史 |
+| `/runtime retry-safe <turn\|control\|task> <id>` | 只为 admitted-only turn 或未启动 queue 建立新 FIFO turn；其它类型拒绝 |
 | `/diff` · `/diff last` · `/diff git` | 本会话文件改动 |
 | `/compact` · `/context` · `/cost` | 压缩 · 压力 · 本地 token |
 | `/permissions` · `/plan` · `/allow` · `/deny` | 权限 |
@@ -411,7 +413,10 @@ CLI：
 - resume 会把未完成 background task 显示为 `/bg` 的 interrupted 诊断，并恢复已完成摘要；不会重启 worker，也不会自动把 result 注入父消息或重放工具副作用。
 - `agents.overflow: "queue"` 会在 cap 满时建立 durable FIFO；queued 可用 `/bg cancel <taskId>` 取消。取消落盘失败会 warning，但任务仍从本进程 executable queue 移除。
 - background result 仅在主 queryLoop 安全边界进入 `<background_task_result>`；父 turn 已结束时等下一 turn。重启后只供 `/bg` 检查，不自动重复注入。
-- 开发者可通过 `buildRuntimeSnapshot(session)` 取得 protocol v1 纯数据 view-model，并用 `executeRuntimeCommand` 走与 `/runtime` 相同的 expected-state 安全动作；不存在后台 daemon 或自动 replay。interrupted discard/retry-safe 尚属 DR4B2。
+- 开发者可通过 `buildRuntimeSnapshot(session)` 取得 protocol v1 纯数据 view-model，并用 `executeRuntimeCommand` 走与 `/runtime` 相同的 expected-state 安全动作；不存在后台 daemon 或自动 replay。
+- interrupted turn/control/task 可用 `/runtime inspect` 查看、用 `/runtime discard` 追加确认。discard 不删除 lifecycle，只把 resolution 嵌入后续 snapshot。
+- `/runtime retry-safe` 仅接受崩溃前还在 admitted 的 turn，或 pending/ready queue control；它会创建新的 durable turn/control 并进入 FIFO，不复活旧 ID。running turn、steer 与 background task 都返回 `not_retry_safe`。
+- retry-safe 只表示“重新排队”，不会在命令内调用模型。若返回 accepted + warning，说明新 queue 可能已生效，不要换 requestId 重试；同 requestId 可安全补齐缺失的 resolution 审计。
 
 ```bash
 npx bolo --list

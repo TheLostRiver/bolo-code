@@ -31,11 +31,11 @@
 
 **已闭环主线：** headless 日用 → Diff · Hooks · Compact · Provider · Effort · **Provider UX CX0–CX8** · **CLI/Agent 可靠性 R0–R4**。
 
-**当前主线：** **Durable Runtime DR4B2**（§13：interrupted discard/retry-safe resolution；DR4B1 executor + `/runtime` diagnostics 已落地）。
+**当前主线：** **Durable Runtime DR4C**（§13：protocol closeout、crash/restart E2E 与旧 transcript 兼容收紧；DR4B discard/retry-safe 已落地）。
 
 **开放轨：**
 
-Durable Runtime DR0–DR4A 已落地，DR4B–C 继续开放；其后按 §13.10–§13.11 的 AR1–AR5 顺序推进 CLI/TUI、Compact、Desktop 与发布硬化。
+Durable Runtime DR0–DR4B 已落地，DR4C 继续开放；其后按 §13.10–§13.11 的 AR1–AR5 顺序推进 CLI/TUI、Compact、Desktop 与发布硬化。
 
 ---
 
@@ -170,7 +170,7 @@ apps/desktop       消费同一 DiffViewModel                 （U3）
 | **Effort 方言** | ✅ **E0–E9**（§10） |
 | **Provider UX** | ✅ **CX0–CX8**（§11；ultrathink 默认 off） |
 | **CLI / Agent 可靠性** | ✅ **R0–R4**（§12；流式终态 · runtime · 取消 · worktree · 门禁） |
-| **Durable Runtime** | ✅ **DR0–DR4A**（§13；DR4B–C 待做） |
+| **Durable Runtime** | ✅ **DR0–DR4B**（§13；DR4C 待做） |
 | 无遥测 | ✅ |
 
 ---
@@ -198,7 +198,7 @@ apps/desktop       消费同一 DiffViewModel                 （U3）
 **一句话：**  
 主路径、Diff、Hooks、Compact、**多 Provider、Effort、Provider UX（含 CX8）、CLI/Agent 可靠性 R0–R4**日用已收口；Durable Turn 正在把“可恢复 transcript”升级为“可恢复执行”。
 
-**下一刀（当前主线）：** Durable Runtime **DR4B2 append-only discard/retry-safe**；随后 DR4C closeout → AR1–AR5。
+**下一刀（当前主线）：** Durable Runtime **DR4C protocol closeout**；完成 crash/restart/旧 transcript consumer 验收后进入 AR1–AR5。
 
 **非阻塞加深：** Compact §8.9 · U5 · adaptive thinking · Desktop 体验打磨。
 
@@ -845,7 +845,7 @@ npx tsx scripts/test-worktree-safety.ts
 
 ---
 
-## 13. Durable Runtime 轨（DR0–DR4A ✅ · DR4B–C 开放）
+## 13. Durable Runtime 轨（DR0–DR4B ✅ · DR4C 开放）
 
 > **目标：** 把“turn 结束后保存 transcript”升级为“输入先 admission、执行有生命周期、崩溃后可识别未完成工作”。
 >
@@ -859,7 +859,7 @@ npx tsx scripts/test-worktree-safety.ts
 | **DR1** | UserPromptSubmit 归约后、provider 前写 admission/running；消息成功落盘后写 terminal；resume 识别未完成 turn | ✅ |
 | **DR2** | `SessionCoordinator`：同 session 单 runner、跨 session 并行、safe-boundary `queue/steer/interrupt` | ✅ DR2A–DR2C3 |
 | **DR3** | 后台 Subagent 任务/结果持久化；真正 queue；结果只在父 turn 安全边界 promotion | ✅ DR3A–DR3B |
-| **DR4** | CLI 任务诊断与恢复动作；稳定 thread/turn 协议，按真实多客户端需求再接 app-server/RPC | 🚧 DR4A ✅；DR4B 当前 |
+| **DR4** | CLI 任务诊断与恢复动作；稳定 thread/turn 协议，按真实多客户端需求再接 app-server/RPC | 🚧 DR4A–B ✅；DR4C 当前 |
 
 ### 13.1 DR0–DR1 契约
 
@@ -906,8 +906,8 @@ UserPromptSubmit hook 成功并归约最终 prompt
 | **DR3A · Durable task schema ✅** | background/subagent task 的 `admitted/running/completed/error/aborted/interrupted` append-only 记录与投影 | task/result 可恢复；未知执行状态只投影 interrupted；结果不自动注入父消息 | core/subagent + tests；docs |
 | **DR3B · Queue + promotion ✅** | `overflow: queue` 接入 coordinator；结果先持久化，只在父 turn safe boundary promotion | 并发上限、FIFO/取消、父 turn 结束竞态、worktree dirty 成果保全 | core/subagent + tests；CLI status；docs |
 | **DR4A · Runtime protocol ✅** | transport-neutral 的 session/turn/task snapshot 与 command/result schema；版本与 feature negotiation | 序列化 round-trip、未知字段兼容、非法状态迁移 fail-closed | shared/core + tests；docs |
-| **DR4B · CLI diagnostics（B1 ✅；B2 当前）** | B1 list/inspect/interrupt/cancel protocol executor；B2 discard/retry-safe，明确区分“查看”“丢弃”“显式重试” | 默认永不 replay；危险动作有明确目标与结果；new/resume 共用协议投影 | core contract；CLI + tests；docs |
-| **DR4C · Protocol closeout** | 用真实 CLI/Desktop 消费反馈收紧协议；只在已有第二客户端需求时评估 app-server/RPC | core 不依赖传输层；兼容旧 transcript；端到端 crash/restart 回归 | protocol + consumers；docs |
+| **DR4B · CLI diagnostics（B1–B2 ✅）** | B1 list/inspect/interrupt/cancel protocol executor；B2 append-only discard/retry-safe，明确区分“查看”“丢弃”“显式重试” | 默认永不 replay；危险动作有明确目标与结果；new/resume 共用协议投影 | core contract；CLI + tests；docs |
+| **DR4C · Protocol closeout（当前）** | 用真实 CLI/Desktop 消费反馈收紧协议；只在已有第二客户端需求时评估 app-server/RPC | core 不依赖传输层；兼容旧 transcript；端到端 crash/restart 回归 | protocol + consumers；docs |
 
 #### DR2A 已落地契约
 
@@ -1000,7 +1000,7 @@ UserPromptSubmit hook 成功并归约最终 prompt
 - snapshot 统一 `session + runner + turns + controls + tasks` view-model。`packages/core` builder 只读取 durable records、coordinator public snapshot 与 background 纯数据 entry，显式复制字段；provider、tool、AbortController、Promise、lease、callback、queue closure 不会跨边界。
 - durable 与 live 状态按 id 合并：live control 覆盖旧 durable 副本；live task 可把 admitted 显示为 queued，并保留 completed result。候选 snapshot 会再次经过 shared parser 自校验。
 - object 的新增未知字段会被忽略并规范化返回；未知 protocolVersion、kind/action、生命周期枚举、跨 session 记录、重复实体 id 均 fail-closed。
-- v1 command 只定义已有 core 语义证明的 `runtime.inspect | turn.interrupt | control.cancel | task.cancel`；变更动作携带合法 `expectedState`。未定义自动 replay/retry/discard，也未宣称远程 server。
+- DR4A 初始 v1 command 只定义已有 core 语义证明的 `runtime.inspect | turn.interrupt | control.cancel | task.cancel`；后续动作必须保持同一 expected-state/fail-closed 规则，且不宣称远程 server。
 - 默认 `npm test` 已纳入 runtime protocol round-trip、未知字段、feature negotiation、非法 expectedState、跨 session/duplicate、result envelope 与运行时对象泄漏回归。
 
 #### DR4B1 已落地契约
@@ -1011,6 +1011,15 @@ UserPromptSubmit hook 成功并归约最终 prompt
 - `/runtime list|json|inspect [turn|control|task]` 只消费 protocol snapshot；`/runtime interrupt <turnId>` 与 `/runtime cancel <control|task> <id>` 只构造/执行 protocol command，不读取 coordinator 私有状态。
 - target 消失、expectedState 变化、running/queued/pending/ready 竞态都 fail-closed。DR4B1 不 replay interrupted work，也没有实现 discard/retry-safe。
 - 默认 `npm test` 已纳入 executor、slash actions、幂等/stale target、旧 `/turn`/`/bg` 与 protocol warning result 回归。
+
+#### DR4B2 已落地契约
+
+- transcript 新增 append-only `resolution` entry；`discard` 只记录人工确认，不删除 turn/control/task 历史。resume、parser 与 compact rewrite 都保留 resolution，旧 transcript 不需要迁移。
+- runtime v1 新增 `runtime.discard | runtime.retry-safe`、nested resolution view 与 `not_retry_safe`。target 必须显式携带 `sessionId + entity + entityId + expectedState=interrupted`。
+- retry-safe 只接受 `interruptedFrom=admitted` 且保留 prompt 的 turn，或原状态为 pending/ready 的 queue control；running turn、steer 与 background task 一律拒绝，绝不自动 replay。
+- retry-safe 先以 requestId 稳定派生新的 control/turn，写 replacement admitted 后进入 ready FIFO；原 ID 永不复活。预留 turn 只有在同 prompt 的 queue 已 promoted 时才能进入 `submitPrompt`。
+- 同 requestId/payload 幂等；同一 entity 的不同 resolution 冲突。若 queue 已接受而 resolution 后写失败，result 保持 accepted + warning；marker 阻止换 requestId 重复排队，原 requestId 可只补齐审计。
+- `/runtime discard <turn|control|task> <id>` 与 `/runtime retry-safe <turn|control|task> <id>` 只组装 protocol command。默认 `npm test` 已纳入 provenance、resume/rewrite、safe/unsafe eligibility、重复请求、持久化失败与 slash 回归。
 
 ### 13.5 DR2 状态机与安全边界
 
@@ -1096,7 +1105,7 @@ DR4 仍然不是以下内容：
 - duplicate idempotency key 的 provider/tool 调用次数为 0。
 - background 结果可恢复、可诊断、不会越过父 turn 边界写消息。
 - CLI 能列出安全动作；默认动作不自动 replay。
-- 旧 JSON/JSONL 会话仍可读取，compact rewrite 不擦除 lifecycle/task 记录。
+- 旧 JSON/JSONL 会话仍可读取，compact rewrite 不擦除 lifecycle/task/resolution 记录。
 - `npm test` 与 `npm run typecheck` 为默认绿色门禁。
 
 ### 13.10 Durable Runtime 之后
@@ -1129,8 +1138,8 @@ DR0–DR4 收口后进入 Autonomous Road（AR）。一次只推进一个可独�
 | 2 | **DR3A** | durable task schema/projection、result-before-terminal | `/bg` 能区分 running/interrupted/completed | task crash + result write failure + old transcript | ✅ |
 | 3 | **DR3B** | coordinator overflow queue、parent-boundary promotion | queue/cancel/status；dirty worktree 结果可找回 | FIFO + concurrency cap + parent terminal race + R3 | ✅ |
 | 4 | **DR4A** | versioned runtime snapshot/command/result schema | CLI/Desktop 共用 view-model | round-trip + unknown fields + illegal transition | ✅ |
-| 5 | **DR4B** | B1 protocol executor ✅；B2 recovery resolution | list/inspect/interrupt/cancel 已落地；discard/retry-safe 待做 | target/state races；default no replay | **B2 当前** |
-| 6 | **DR4C** | 真实 consumer 反馈与兼容收紧 | new/resume 共用协议投影 | crash/restart E2E + old transcript | 📋 |
+| 5 | **DR4B** | B1 protocol executor；B2 append-only recovery resolution | list/inspect/interrupt/cancel/discard/retry-safe | target/state races；default no replay | ✅ |
+| 6 | **DR4C** | 真实 consumer 反馈与兼容收紧 | new/resume 共用协议投影 | crash/restart E2E + old transcript | **当前** |
 | 7 | **AR1A–C** | CLI runtime query/command contracts | list/inspect/queue edit/pager/`--json` | TTY + non-TTY + race snapshots | 📋 |
 | 8 | **AR2A–C** | compact range/watermark/token budget | 可量化上下文成本与稳定回退 | lifecycle/tool pairing + token/cost baseline | 📋 |
 | 9 | **AR3A–F** | protocol client/store；无 renderer 状态机 | Codex App 风格 Desktop 完整主路径 | mock/core IPC + crash/restart + Windows package | 📋 |

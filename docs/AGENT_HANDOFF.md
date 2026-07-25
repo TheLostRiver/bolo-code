@@ -117,13 +117,13 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | 多 Provider 热切 | ~92–96% | **P0–P4.1 + CX7 Desktop** |
 | Effort 方言 | ~92–95% | **E0–E9** |
 | Provider UX | ~95–98% | **CX0–CX8**（ultrathink 默认 off） |
-| Durable Runtime | DR0–DR4A ✅ | 输入先落盘 · recovery · 单 runner · durable control/task · FIFO/promotion · v1 protocol |
+| Durable Runtime | DR0–DR4B ✅ | 输入先落盘 · recovery · 单 runner · durable control/task · FIFO/promotion · v1 protocol/resolution |
 | Electron GUI | ~65–75% | 薄壳；非 HC 级 IDE |
 | 产品相对 HC 全家桶 | ~74–88% | 日用高；UI 密度另计 |
 
-**已闭环：** Diff · Hooks · Compact · Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4A**。
+**已闭环：** Diff · Hooks · Compact · Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4B**。
 
-**当前主线：** Durable Runtime **DR4B2 interrupted discard/retry-safe**；DR4B1 protocol executor + `/runtime` diagnostics 已落地，DR4C 后续。
+**当前主线：** Durable Runtime **DR4C protocol closeout**；DR4B2 append-only discard/retry-safe 已落地，随后进入 AR1。
 
 **其它开放轨（非阻塞）：**
 
@@ -149,8 +149,8 @@ DR2A 单 session runner ✅
 → DR3B queue + parent-boundary promotion ✅
 → DR4A runtime protocol ✅
 → DR4B1 executor + CLI diagnostics ✅
-→ DR4B2 discard/retry-safe（当前）
-→ DR4C closeout
+→ DR4B2 discard/retry-safe ✅
+→ DR4C closeout（当前）
 → AR1 CLI/TUI runtime UX
 → AR2 Compact depth
 → AR3 Codex App 风格 Desktop
@@ -272,7 +272,7 @@ npx tsx scripts/test-file-diff.ts
 npx tsx scripts/test-config.ts
 ```
 
-`npm test` 已覆盖 R0–R4 与 Durable Runtime DR0–DR4A 的关键回归；其它新轨仍以对应 `test-*` 脚本为准。
+`npm test` 已覆盖 R0–R4 与 Durable Runtime DR0–DR4B 的关键回归；其它新轨仍以对应 `test-*` 脚本为准。
 
 ### 7.3 Git
 
@@ -343,6 +343,7 @@ cd apps/desktop && npm install && set BOLO_DESKTOP_MOCK=1 && npm start
 | DR3B | real overflow FIFO · `/bg cancel` · cancel/start race closeout · safe-boundary single delivery · next-turn terminal race |
 | DR4A | protocol v1 · feature negotiation · pure snapshot builder · strict command/result parser · no runtime object leakage |
 | DR4B1 | expected-state executor · `/runtime` list/inspect/json/interrupt/cancel · warning/竞态 fail-closed |
+| DR4B2 | append-only `resolution` · admitted/queue-only retry-safe · 新 turn/control id · `/runtime discard/retry-safe` · accepted+warning failure window |
 
 最新 commit 以 `git log` 为准。
 
