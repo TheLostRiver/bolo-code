@@ -22,14 +22,15 @@
 | **Electron GUI** | **~55–65%** | 壳 + 流式 + 权限 + 设置 |
 | **Hooks · 日用契约** | **~96–98%** | **H0–H5 已落地**（SessionEnd · exit 语义 · updatedInput · `/hooks recent`）；trust/UI 菜单后置 |
 | **Compact · 日用管道** | **~92–95%** | **C0–C5 已落地**；后置 partial/remote/真 tokenizer（§8.9） |
-| **Provider · 多实例热切** | **~92–96%** | **P0–P4.1 已落地**（`providers` · 热切 · TTY 箭头选）；P5 Desktop / resume `providerId` 后置 |
-| **Effort · 推理强度方言** | **~92–95%** | **E0–E9**：真·wire + choosable 校验 + Anthropic max 门控 + TTY `/effort`；后置 OAI 按模型裁档 / adaptive thinking |
+| **Provider · 多实例热切** | **~92–96%** | **P0–P4.1 已落地**；**CX 轨**补 preset / resume `providerId` / 错误解释（见 §11） |
+| **Effort · 推理强度方言** | **~92–95%** | **E0–E9** 已落地；按模型轻表裁档归 **CX2**；adaptive thinking 后置 |
+| **Provider UX · 便利层** | **~65–75% → 目标 ~95%+** | **CX0 规格已定**；实现 CX1→CX6… 见 [PROVIDER_UX.md](./PROVIDER_UX.md) |
 | **产品整体（相对 HC）** | **~72–86%** | 日用高；UI 全家桶另计 |
 
-**主线已闭环：** headless 日用 → Diff · Hooks · Compact · Provider · **Effort E0–E9**。
+**主线已闭环：** headless 日用 → Diff · Hooks · Compact · Provider P · **Effort E0–E9**。
 
-**开放轨（非阻塞）：**  
-Effort 后置（OAI 按模型裁档 · adaptive thinking）· P5 Desktop 多 provider · Compact §8.9 · U5 · resume `providerId`。
+**开放轨（当前着重便利）：**  
+**Provider UX / CX**（[PROVIDER_UX.md](./PROVIDER_UX.md)）· P5 Desktop · Compact §8.9 · U5 · adaptive thinking。
 
 ---
 
@@ -760,4 +761,26 @@ function switchSessionModel(session, model: string): { ok, reason? }
 | [REFERENCES.md](./REFERENCES.md) | HC / Codex / OpenCode / Pi effort 摘要 |
 | [PROVIDERS.md](./PROVIDERS.md) | 与 kind / 多实例交叉 |
 | [CONFIG.md](./CONFIG.md) | `effort.dialect` 配置位 |
-| [CONFIG.md](./CONFIG.md) | `effort.dialect` 配置位 |
+| [PROVIDER_UX.md](./PROVIDER_UX.md) | **CX 便利层**（preset · caps · resume · 错误解释） |
+
+---
+
+## 11. Provider UX 轨（CX · 最好用 / 最稳）
+
+> **真源：** [PROVIDER_UX.md](./PROVIDER_UX.md)  
+> **定调：** 健壮 · 可测 · 日用方便；**不**绑 AI SDK、**不**全量 model 生成流水线。  
+> **已定决策：** Preset 先做 · 轻量 caps · resume `providerId`+clamp · ultrathink **默认 off 后置**。
+
+| 阶段 | 交付 | 状态 |
+|------|------|------|
+| **CX0** | 规格本文 + 路线挂链 | ✅ 文档 |
+| **CX1** | `/provider add` preset 表 | 📋 |
+| **CX6** | resume `providerId` + 统一 effort clamp | 📋 |
+| **CX3** | `explainProviderError` | 📋 |
+| **CX2** | ModelCapability 轻表 ∩ dialect | 📋 |
+| **CX4** | 状态行 / 热切 tip | 📋 |
+| **CX5** | `/model` 建议列表 | 📋 |
+| **CX7** | Desktop 对齐（P5） | 📋 |
+| **CX8** | ultrathink tip/turn（默认 off） | 🚫 后置 |
+
+**顺序：** `CX0 → CX1 → CX6 → CX3 → CX2 → CX4 → CX5 → CX7`（CX8 可选）。

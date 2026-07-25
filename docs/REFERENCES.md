@@ -78,13 +78,18 @@
 - **`ultrathink`**：关键词抬 high，不是 API 字面量
 - thinking 与 effort **两轴分离**
 
-→ Bolo E5 已接 `output_config.effort`；**max 门控**进优化 E7。
+→ Bolo E5 已接 `output_config.effort`；**max 门控** E7 已落地；按模型轻表归 **CX2**。
 
 ## 综合决策（一句话）
 
 > **HelsincyCode 的扩展与 Hook / Tool 管道语义 + pi 的包边界与 thinkingLevelMap 清晰度 + Codex 的「按模型选档」+ OpenCode 的「意图→options」思想（简化）+ Electron GUI；不做遥测；不绑 AI SDK。**
 
-Effort 实现：[EFFORT.md](./EFFORT.md) · 优化设计：[EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md)
+| 文档 | 角色 |
+|------|------|
+| [EFFORT.md](./EFFORT.md) | E0–E5 wire 契约 |
+| [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md) | E6–E9 能力视图 |
+| [PROVIDER_UX.md](./PROVIDER_UX.md) | **CX 便利层**（preset · caps · resume · 错误 · ultrathink 默认 off） |
+| [PROVIDERS.md](./PROVIDERS.md) | 协议与多实例 |
 
 ## 工程纪律
 

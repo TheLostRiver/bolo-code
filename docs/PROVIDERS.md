@@ -1,6 +1,9 @@
 # Provider 配置
 
-同时支持两种协议：
+> **便利层（接通 / 少 400 / resume 粘性 / 错误解释）：** 见 **[PROVIDER_UX.md](./PROVIDER_UX.md)**（CX 轨规格）。  
+> **Effort 方言：** [EFFORT.md](./EFFORT.md) · [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md)（E0–E9 已落地）。
+
+同时支持的协议：
 
 | kind | 协议 | 默认 base |
 |------|------|-----------|
@@ -308,15 +311,16 @@ npx tsx scripts/smoke-live.ts
 **不做：** 官方市场、密钥入库、遥测、默认同 turn 自动 failover。  
 **测试：** `scripts/test-multi-provider.ts`。
 
-## 路线：推理强度 · Effort 方言（**E 轨 · E0–E5 日用已闭环**）
+## 路线：推理强度 · Effort 方言（**E 轨 · E0–E9 日用已闭环**）
 
-> 实现契约 [EFFORT.md](./EFFORT.md) · 优化 [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md) · [ROADMAP.md §10](./ROADMAP.md)。
+> 实现契约 [EFFORT.md](./EFFORT.md) · 优化 [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md) · 便利层 [PROVIDER_UX.md](./PROVIDER_UX.md) · [ROADMAP.md §10–§11](./ROADMAP.md)。
 
 | 现状 | 目标 |
 |------|------|
 | `/effort` + **方言表** 写入 API | ✅ 引擎 + builtins（含 Anthropic） |
 | 厂商 if 不可扩展 | ✅ 有限 wire shape + 用户可配方言 |
-| 按模型限制可选档 / TTY | 📋 E6+ |
+| 按方言限制可选档 / TTY / doctor | ✅ E6–E9 |
+| 按模型轻表 · preset · resume 粘性 | 📋 **CX** 见 [PROVIDER_UX.md](./PROVIDER_UX.md) |
 
 | ID | 切片 | 状态 |
 |----|------|------|
@@ -326,7 +330,8 @@ npx tsx scripts/smoke-live.ts
 | **E3** | `openai-responses`：`reasoning.effort` | ✅ |
 | **E4** | `providers.*.effort.dialect` | ✅ |
 | **E5** | anthropic-output：`output_config.effort` + beta | ✅ |
-| **E6+** | choosable · max 门控 · TTY | 📋 |
+| **E6–E9** | choosable · max 门控 · TTY · doctor | ✅ |
+| **CX** | preset · caps · resume providerId · 错误解释 | 📋 [PROVIDER_UX.md](./PROVIDER_UX.md) |
 
 ```jsonc
 {
