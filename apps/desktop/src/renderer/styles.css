@@ -32,6 +32,28 @@ button.ghost {
   padding: 6px 10px;
   cursor: pointer;
 }
+.settings-card h3.sub {
+  margin-top: 16px;
+  font-size: 14px;
+}
+.settings-card .row-actions {
+  margin-top: 4px;
+  margin-bottom: 8px;
+}
+.settings-card .effort-line {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  word-break: break-word;
+}
+.provider-pick select {
+  max-width: 180px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 12px;
+}
 .settings-card label {
   display: block;
   margin: 10px 0;

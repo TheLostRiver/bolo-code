@@ -1,15 +1,15 @@
 # Desktop (Electron)
 
-> 可用壳：流式对话 · 权限弹窗 · 基础设置。**无遥测。**  
+> 可用壳：流式对话 · 权限弹窗 · 基础设置 · **多 provider（CX7）**。**无遥测。**  
 > 产品逻辑在 `packages/*`；本目录只做 IPC 编排。
 
 ## 结构
 
 ```text
 apps/desktop/
-  src/main/index.mjs      # 主进程 · 会话宿主
+  src/main/index.mjs      # 主进程 · 会话宿主 · provider IPC
   src/preload/index.cjs   # 白名单 bridge
-  src/renderer/           # chat · permission · settings
+  src/renderer/           # chat · permission · settings · provider 下拉
   scripts/smoke-ipc.mjs
 ```
 
@@ -28,14 +28,17 @@ pnpm dev
 | `BOLO_API_KEY` / `OPENAI_API_KEY` 等 | 与 CLI 相同 |
 
 Provider / 多后端配置仍读 `~/.bolo` 与项目 `.bolo`（与 headless 同一套）。  
-**P5 前** Desktop 设置里可能还没有多 provider 下拉；可用 CLI `/provider` 热切，或改 config 后重建会话。
+**CX7：** 顶栏与 Settings 可选 active backend、Add preset（只写 `apiKeyEnv`）；热切 tip 显示 dialect/choosable。关 mock 后才打真网。
 
 ## IPC（摘要）
 
 | 通道 | 作用 |
 |------|------|
-| getStatus / submit / listMessages | 会话 |
+| getStatus / submit / listMessages | 会话（status 含 providerId · effort） |
 | getSettings / setSettings | mode · mock · cwd（可重建会话） |
+| **listProviders** | providers 列表 + presets + effort tip |
+| **useProvider** | 热切命名后端（`switchSessionProvider`） |
+| **addProvider** | preset 写入 config（同 `/provider add`） |
 | event | 流式事件 |
 | permission_request / response | 权限 UI（可带 diff preview） |
 
@@ -45,4 +48,4 @@ Provider / 多后端配置仍读 `~/.bolo` 与项目 `.bolo`（与 headless 同�
 node --import tsx/esm apps/desktop/scripts/smoke-ipc.mjs
 ```
 
-总进度与后置项见仓库根 [README.md](../../README.md) · [docs/ROADMAP.md](../../docs/ROADMAP.md)。
+总进度与后置项见仓库根 [README.md](../../README.md) · [docs/ROADMAP.md](../../docs/ROADMAP.md) · [docs/PROVIDER_UX.md](../../docs/PROVIDER_UX.md)。

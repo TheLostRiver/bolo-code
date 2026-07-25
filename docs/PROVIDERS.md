@@ -253,7 +253,7 @@ npx tsx scripts/smoke-live.ts
 | **P3** | `/model` 增强 · cache-break · `/doctor` | ✅ |
 | **P4** | 单测 · CLI 摘要 · 缺 key 错误 | ✅ |
 | **P4.1** | TTY `/provider` 箭头选择器热切（不必记 id） | ✅ |
-| **P5** | Desktop 选 active（可选） | 📋 |
+| **P5 / CX7** | Desktop 选 active · list/add/use IPC | ✅ |
 
 配置示例：
 

@@ -19,18 +19,18 @@
 | **文件 Diff · 交互 UI** | **~90–95%** | **U0–U4 已落地**（VM · 面板 · 审批 · cell · 行号/主题/轻量语法）；U5 真·Ink/IDE 可选 |
 | **斜杠** | **~80–88%** | 日用 + polish |
 | **CLI TUI（壳）** | **~70–80%** | 文本框布局/picker/主题；**非**真 React Ink |
-| **Electron GUI** | **~55–65%** | 壳 + 流式 + 权限 + 设置 |
+| **Electron GUI** | **~65–75%** | 壳 + 流式 + 权限 + 设置 + **多 provider（CX7）** |
 | **Hooks · 日用契约** | **~96–98%** | **H0–H5 已落地**（SessionEnd · exit 语义 · updatedInput · `/hooks recent`）；trust/UI 菜单后置 |
 | **Compact · 日用管道** | **~92–95%** | **C0–C5 已落地**；后置 partial/remote/真 tokenizer（§8.9） |
-| **Provider · 多实例热切** | **~92–96%** | **P0–P4.1 已落地**；**CX1/3/6** preset · 错误解释 · resume `providerId`（见 §11） |
+| **Provider · 多实例热切** | **~92–96%** | **P0–P4.1 + CX7 Desktop**；preset · 错误 · resume（见 §11） |
 | **Effort · 推理强度方言** | **~92–95%** | **E0–E9** 已落地；按模型轻表裁档归 **CX2**；adaptive thinking 后置 |
-| **Provider UX · 便利层** | **~90–94%** | **CX0–CX6 已落地**；CX7 Desktop · CX8 ultrathink 后置 · [PROVIDER_UX.md](./PROVIDER_UX.md) |
-| **产品整体（相对 HC）** | **~72–86%** | 日用高；UI 全家桶另计 |
+| **Provider UX · 便利层** | **~94–97%** | **CX0–CX7 已落地**（含 Desktop）；CX8 ultrathink 后置 · [PROVIDER_UX.md](./PROVIDER_UX.md) |
+| **产品整体（相对 HC）** | **~74–88%** | 日用高；UI 全家桶另计 |
 
-**主线已闭环：** headless 日用 → Diff · Hooks · Compact · Provider P · **Effort E0–E9**。
+**主线已闭环：** headless 日用 → Diff · Hooks · Compact · Provider · Effort · **Provider UX CX0–CX7**。
 
-**开放轨（当前着重便利）：**  
-**Provider UX / CX**（[PROVIDER_UX.md](./PROVIDER_UX.md)）· P5 Desktop · Compact §8.9 · U5 · adaptive thinking。
+**开放轨（非阻塞）：**  
+CX8 ultrathink（默认 off）· Compact §8.9 · U5 · adaptive thinking。
 
 ---
 
@@ -780,7 +780,7 @@ function switchSessionModel(session, model: string): { ok, reason? }
 | **CX2** | ModelCapability 轻表 ∩ dialect | ✅ |
 | **CX4** | 状态行 / 热切 tip | ✅ |
 | **CX5** | `/model` 建议列表 | ✅ |
-| **CX7** | Desktop 对齐（P5） | 📋 |
+| **CX7** | Desktop 对齐（P5） | ✅ |
 | **CX8** | ultrathink tip/turn（默认 off） | 🚫 后置 |
 
-**顺序：** `CX0–CX6` 主路径已落地 → 下刀 `CX7 Desktop`（CX8 可选）。
+**顺序：** `CX0–CX7` 主路径已落地 → **CX8** 可选。

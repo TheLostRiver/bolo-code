@@ -1,5 +1,6 @@
 /**
- * Electron main — core + 权限 + 设置（mode/mock/cwd）
+ * Electron main — core + 权限 + 设置 + 多 provider（CX7 / P5）
+ * 产品逻辑在 packages/*；本文件只做 IPC 编排。无遥测。
  */
 
 import { app, BrowserWindow, ipcMain } from 'electron'
@@ -19,11 +20,30 @@ const {
   endSession,
   productionDeps,
   setPermissionMode,
+  switchSessionProvider,
+  listSessionProviders,
+  attachProviderRegistry,
 } = await import(
   pathToFileURL(path.join(repoRoot, 'packages/core/src/index.ts')).href
 )
-const { createMockProvider } = await import(
+const {
+  createMockProvider,
+  detectEffortDialectId,
+  listEffortChoosable,
+  listBuiltinEffortDialectIds,
+} = await import(
   pathToFileURL(path.join(repoRoot, 'packages/providers/src/index.ts')).href
+)
+const {
+  listProviderPresets,
+  addProviderProfileToConfigFile,
+  loadConfigJson,
+  mergeConfigs,
+  getUserLayout,
+  getProjectLayout,
+  normalizeProviderRegistry,
+} = await import(
+  pathToFileURL(path.join(repoRoot, 'packages/config/src/index.ts')).href
 )
 
 let mainWindow = null
@@ -80,11 +100,80 @@ async function destroySession(reason = 'other') {
   }
 }
 
+/**
+ * 从磁盘刷新 registry 并挂到 session（add provider 后用）。
+ */
+async function refreshSessionRegistry(s) {
+  try {
+    const user = await loadConfigJson(getUserLayout())
+    const project = await loadConfigJson(getProjectLayout(s.cwd))
+    const merged = mergeConfigs(user, project)
+    const reg = normalizeProviderRegistry(merged)
+    attachProviderRegistry(s, reg, s.providerId || reg.defaultId)
+    return reg
+  } catch {
+    return s.providerRegistry ?? null
+  }
+}
+
+function effortSnapshot(s) {
+  try {
+    const dialect =
+      s.effortDialect ??
+      s.providerProfile?.effortDialect ??
+      detectEffortDialectId({
+        kind: s.provider?.id,
+        baseUrl: s.providerProfile?.baseUrl,
+        model: s.model ?? s.providerProfile?.model,
+      })
+    const dialectId =
+      typeof dialect === 'string'
+        ? dialect
+        : dialect && typeof dialect === 'object' && dialect.id
+          ? String(dialect.id)
+          : 'max-tokens'
+    const choosable = listEffortChoosable(dialect, {
+      isAgent: true,
+      model: s.model ?? s.providerProfile?.model,
+    })
+    return {
+      effortLevel: s.effortLevel ?? 'auto',
+      dialectId,
+      choosable,
+    }
+  } catch {
+    return {
+      effortLevel: s.effortLevel ?? 'auto',
+      dialectId: null,
+      choosable: [],
+    }
+  }
+}
+
+function sessionStatusPayload(s) {
+  const effort = effortSnapshot(s)
+  return {
+    id: s.id,
+    cwd: s.cwd,
+    model: s.model ?? null,
+    permissionMode: s.permissionMode,
+    messageCount: s.messages.length,
+    /** 协议 kind（LlmProvider.id） */
+    providerKind: s.provider?.id ?? null,
+    /** 命名 profile id（config.providers key） */
+    providerId: s.providerId ?? null,
+    effortLevel: effort.effortLevel,
+    effortDialect: effort.dialectId,
+    effortChoosable: effort.choosable,
+    settings: { ...desktopSettings },
+  }
+}
+
 async function ensureSession(forceNew = false) {
   if (session && !forceNew) return session
   if (forceNew) await destroySession()
 
-  session = await createSessionFromWorkspace({
+  const created = await createSessionFromWorkspace({
     cwd: desktopSettings.cwd,
     ensureDefaults: true,
     connectMcp: false,
@@ -93,8 +182,10 @@ async function ensureSession(forceNew = false) {
     askPermission: createDesktopAskPermission(),
     onEvent: (e) => send('bolo:event', e),
   })
+  session = created?.session ?? created
 
   if (desktopSettings.useMock) {
+    // mock 覆盖协议实现，但保留 registry 以便 UI 列 providers
     session.provider = createMockProvider()
     session.deps = productionDeps(session.provider)
   }
@@ -133,15 +224,7 @@ function createWindow() {
 function registerIpc() {
   ipcMain.handle('bolo:getStatus', async () => {
     const s = await ensureSession()
-    return {
-      id: s.id,
-      cwd: s.cwd,
-      model: s.model ?? null,
-      permissionMode: s.permissionMode,
-      messageCount: s.messages.length,
-      providerId: s.provider?.id ?? null,
-      settings: { ...desktopSettings },
-    }
+    return sessionStatusPayload(s)
   })
 
   ipcMain.handle('bolo:getSettings', async () => ({ ...desktopSettings }))
@@ -172,14 +255,111 @@ function registerIpc() {
         } catch {
           session.permissionMode = patch.permissionMode
         }
-      } else if (needRecreate) {
-        // applied on recreate
       }
     }
     if (needRecreate || patch.recreate === true) {
       await ensureSession(true)
     }
     return { ok: true, settings: { ...desktopSettings } }
+  })
+
+  // ── CX7：providers ──
+  ipcMain.handle('bolo:listProviders', async () => {
+    const s = await ensureSession()
+    await refreshSessionRegistry(s)
+    const list = listSessionProviders(s)
+    return {
+      ok: true,
+      activeId: s.providerId ?? null,
+      providerKind: s.provider?.id ?? null,
+      model: s.model ?? null,
+      ...effortSnapshot(s),
+      providers: list.map((p) => ({
+        id: p.id,
+        kind: p.kind ?? null,
+        model: p.model ?? null,
+        label: p.label ?? null,
+        baseUrl: p.baseUrl ?? null,
+        hasKeyConfig: p.hasKeyConfig === true,
+        isDefault: p.isDefault === true,
+        isActive: p.isActive === true,
+      })),
+      presets: listProviderPresets().map((p) => ({
+        id: p.id,
+        label: p.label,
+        kind: p.kind,
+        model: p.model ?? null,
+        apiKeyEnv: p.apiKeyEnv ?? null,
+        notes: p.notes ?? null,
+      })),
+    }
+  })
+
+  ipcMain.handle('bolo:useProvider', async (_evt, payload) => {
+    const id = typeof payload === 'string' ? payload : payload?.id
+    const model =
+      typeof payload === 'object' && payload?.model
+        ? String(payload.model).trim()
+        : undefined
+    if (!id || !String(id).trim()) {
+      return { ok: false, error: 'provider id required' }
+    }
+    const s = await ensureSession()
+    // mock 模式仍允许切 profile 元数据；真正请求仍 mock，除非关 mock
+    if (desktopSettings.useMock) {
+      // 允许切换以便用户配置；提示关 mock 才打真网
+    }
+    await refreshSessionRegistry(s)
+    const sw = switchSessionProvider(s, String(id).trim(), {
+      ...(model ? { model } : {}),
+    })
+    if (!sw.ok) {
+      return { ok: false, error: sw.reason, status: sessionStatusPayload(s) }
+    }
+    // 若仍 useMock，协议层保持 mock，但 providerId/profile 已更新
+    if (desktopSettings.useMock) {
+      s.provider = createMockProvider()
+      s.deps = productionDeps(s.provider)
+    }
+    return {
+      ok: true,
+      message: sw.message,
+      status: sessionStatusPayload(s),
+    }
+  })
+
+  ipcMain.handle('bolo:addProvider', async (_evt, payload) => {
+    const presetId =
+      typeof payload === 'string' ? payload : payload?.presetId
+    if (!presetId || !String(presetId).trim()) {
+      return { ok: false, error: 'presetId required' }
+    }
+    const s = await ensureSession()
+    const added = await addProviderProfileToConfigFile({
+      presetId: String(presetId).trim(),
+      asId:
+        typeof payload === 'object' && payload?.asId
+          ? String(payload.asId).trim()
+          : undefined,
+      overwrite: !!(typeof payload === 'object' && payload?.overwrite),
+      setDefault: !!(typeof payload === 'object' && payload?.setDefault),
+      scope:
+        typeof payload === 'object' && payload?.scope === 'project'
+          ? 'project'
+          : 'user',
+      cwd: s.cwd,
+    })
+    if (!added.ok) {
+      return { ok: false, error: added.reason }
+    }
+    await refreshSessionRegistry(s)
+    return {
+      ok: true,
+      id: added.id,
+      message: added.message,
+      configPath: added.configPath,
+      providers: listSessionProviders(s),
+    }
   })
 
   ipcMain.handle('bolo:submit', async (_evt, text) => {
@@ -192,6 +372,7 @@ function registerIpc() {
       terminalReason:
         'terminal' in result ? result.terminal?.reason : undefined,
       messageCount: s.messages.length,
+      status: sessionStatusPayload(s),
     }
   })
 

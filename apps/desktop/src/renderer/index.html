@@ -13,6 +13,9 @@
     <header class="top">
       <div class="brand">BOLO</div>
       <div class="top-actions">
+        <label class="provider-pick" title="Active provider">
+          <select id="hdr-provider" aria-label="Provider"></select>
+        </label>
         <button type="button" id="btn-settings" class="ghost">Settings</button>
         <div id="status" class="status">loading…</div>
       </div>
@@ -46,6 +49,23 @@
         <label>Working directory (cwd)
           <input type="text" id="set-cwd" spellcheck="false" />
         </label>
+
+        <h3 class="sub">Providers (CX7)</h3>
+        <label>Active backend
+          <select id="set-provider"></select>
+        </label>
+        <p id="set-effort" class="hint effort-line"></p>
+        <label>Add preset
+          <select id="set-preset"></select>
+        </label>
+        <div class="perm-actions row-actions">
+          <button type="button" id="set-add-preset" class="ghost">Add preset</button>
+        </div>
+        <p class="hint">
+          Keys via env only (apiKeyEnv). Turn off mock to hit real APIs.
+          Same config as CLI <code>~/.bolo/config.json</code>.
+        </p>
+
         <p class="hint">Changing cwd or mock recreates the session.</p>
         <div class="perm-actions">
           <button type="button" id="set-cancel" class="ghost">Cancel</button>
