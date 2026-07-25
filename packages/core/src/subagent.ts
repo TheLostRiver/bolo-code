@@ -1058,6 +1058,7 @@ export type RunSubagentResult = {
 
 /** 后台 subagent 状态（S12 最小 async） */
 export type BackgroundAgentStatus =
+  | 'queued'
   | 'running'
   | 'done'
   | 'error'
@@ -1070,6 +1071,7 @@ export type BackgroundAgentEntry = {
   prompt: string
   status: BackgroundAgentStatus
   startedAt: string
+  parentTurnId?: string
   finishedAt?: string
   summary?: string
   isError?: boolean
@@ -1079,6 +1081,7 @@ export type BackgroundAgentEntry = {
   description?: string
   totalDurationMs?: number
   totalToolUseCount?: number
+  worktreePath?: string
 }
 
 export type BackgroundTaskAdmission = {
@@ -1122,12 +1125,41 @@ export type BackgroundAgentStore = {
   pendingAgents: Record<string, BackgroundAgentEntry>
   /** 完成后的结果摘要（与 pending 可并存；以 results 为准可轮询） */
   backgroundAgentResults: Record<string, BackgroundAgentEntry>
+  /** DR3B：纯数据 FIFO 视图；可执行 closure 只保存在 WeakMap runtime。 */
+  queuedAgentIds: string[]
+  /** 已 durable terminal、等待父 safe boundary promotion 的 task ids。 */
+  resultPromotionQueue: string[]
   /**
    * 并发上限（P-SA-CAP）。未设则用 getDefaultMaxBackgroundAgents()。
    */
   maxConcurrent?: number
   /** DR3A：createSession 绑定的 durable lifecycle；纯内存 embedding 可省略。 */
   durableLifecycle?: DurableBackgroundTaskLifecycle
+}
+
+type BackgroundAgentQueueRuntime = {
+  draining: boolean
+  jobs: Array<{
+    taskId: string
+    start(): Promise<void>
+    onStartError(error: unknown): void
+  }>
+}
+
+const backgroundAgentQueueRuntimes = new WeakMap<
+  BackgroundAgentStore,
+  BackgroundAgentQueueRuntime
+>()
+
+function getBackgroundAgentQueueRuntime(
+  store: BackgroundAgentStore,
+): BackgroundAgentQueueRuntime {
+  let runtime = backgroundAgentQueueRuntimes.get(store)
+  if (!runtime) {
+    runtime = { draining: false, jobs: [] }
+    backgroundAgentQueueRuntimes.set(store, runtime)
+  }
+  return runtime
 }
 
 /** 默认后台并发；环境 BOLO_MAX_BACKGROUND_AGENTS 可覆（1–32） */
@@ -1156,7 +1188,7 @@ export function countRunningBackgroundAgents(
 /**
  * 后台溢出策略（F-SA-PAR2）：
  * - reject（默认）：达 cap 拒绝
- * - queue：标记 queued（调用方负责稍后启动；本最小实现仍返回 queue 提示）
+ * - queue：DR3B 先 durable admitted，再交给 store FIFO 自动取得 slot。
  */
 export type BackgroundOverflowPolicy = 'reject' | 'queue'
 
@@ -1194,7 +1226,7 @@ export function canStartBackgroundAgent(
       policy,
       reason:
         policy === 'queue'
-          ? `background agent queue full (${running}/${max}); wait or poll /agents status · /bg (queue mode: try later)`
+          ? `background agent capacity full (${running}/${max}); enqueue for FIFO start`
           : `background agent limit reached (${running}/${max}); wait for one to finish or poll /agents status · /bg`,
     }
   }
@@ -1207,6 +1239,8 @@ export function createBackgroundAgentStore(opts?: {
   return {
     pendingAgents: {},
     backgroundAgentResults: {},
+    queuedAgentIds: [],
+    resultPromotionQueue: [],
     ...(opts?.maxConcurrent !== undefined
       ? { maxConcurrent: opts.maxConcurrent }
       : {}),
@@ -1218,6 +1252,7 @@ export function markBackgroundAgentRunning(
   entry: Pick<BackgroundAgentEntry, 'agentId' | 'agentType' | 'prompt'> & {
     startedAt?: string
     description?: string
+    parentTurnId?: string
   },
 ): BackgroundAgentEntry {
   const row: BackgroundAgentEntry = {
@@ -1226,6 +1261,9 @@ export function markBackgroundAgentRunning(
     prompt: entry.prompt,
     status: 'running',
     startedAt: entry.startedAt ?? nowIso(),
+    ...(entry.parentTurnId
+      ? { parentTurnId: entry.parentTurnId }
+      : {}),
     ...(entry.description?.trim()
       ? { description: entry.description.trim() }
       : {}),
@@ -1247,15 +1285,24 @@ export function markBackgroundAgentFinished(
     | 'totalDurationMs'
     | 'totalToolUseCount'
     | 'description'
-  > & { prompt?: string; startedAt?: string },
+  > & {
+    prompt?: string
+    startedAt?: string
+    parentTurnId?: string
+    worktreePath?: string
+    status?: Extract<BackgroundAgentStatus, 'done' | 'error' | 'aborted'>
+  },
 ): BackgroundAgentEntry {
   const prev = store.pendingAgents[result.agentId]
   const row: BackgroundAgentEntry = {
     agentId: result.agentId,
     agentType: result.agentType,
     prompt: result.prompt ?? prev?.prompt ?? '',
-    status: result.isError ? 'error' : 'done',
+    status: result.status ?? (result.isError ? 'error' : 'done'),
     startedAt: result.startedAt ?? prev?.startedAt ?? nowIso(),
+    ...(result.parentTurnId ?? prev?.parentTurnId
+      ? { parentTurnId: result.parentTurnId ?? prev?.parentTurnId }
+      : {}),
     finishedAt: nowIso(),
     summary: result.summary,
     isError: result.isError,
@@ -1274,10 +1321,187 @@ export function markBackgroundAgentFinished(
     ...(result.totalToolUseCount != null
       ? { totalToolUseCount: result.totalToolUseCount }
       : {}),
+    ...(result.worktreePath ? { worktreePath: result.worktreePath } : {}),
   }
   store.pendingAgents[result.agentId] = row
   store.backgroundAgentResults[result.agentId] = row
   return row
+}
+
+export function enqueueBackgroundAgent(
+  store: BackgroundAgentStore,
+  input: {
+    taskId: string
+    agentType: string
+    prompt: string
+    parentTurnId?: string
+    description?: string
+    admittedAt?: string
+    start(): Promise<void>
+    onStartError(error: unknown): void
+  },
+): BackgroundAgentEntry {
+  if (store.pendingAgents[input.taskId]) {
+    throw new Error(`background task "${input.taskId}" already exists`)
+  }
+  const row: BackgroundAgentEntry = {
+    agentId: input.taskId,
+    agentType: input.agentType,
+    prompt: input.prompt,
+    status: 'queued',
+    startedAt: input.admittedAt ?? nowIso(),
+    ...(input.parentTurnId ? { parentTurnId: input.parentTurnId } : {}),
+    ...(input.description?.trim()
+      ? { description: input.description.trim() }
+      : {}),
+  }
+  store.pendingAgents[input.taskId] = row
+  store.queuedAgentIds.push(input.taskId)
+  getBackgroundAgentQueueRuntime(store).jobs.push({
+    taskId: input.taskId,
+    start: input.start,
+    onStartError: input.onStartError,
+  })
+  return row
+}
+
+export async function pumpBackgroundAgentQueue(
+  store: BackgroundAgentStore,
+): Promise<void> {
+  const runtime = getBackgroundAgentQueueRuntime(store)
+  if (runtime.draining) return
+  runtime.draining = true
+  try {
+    const max =
+      store.maxConcurrent ?? getDefaultMaxBackgroundAgents()
+    while (
+      countRunningBackgroundAgents(store) < max &&
+      runtime.jobs.length > 0
+    ) {
+      const job = runtime.jobs.shift()
+      if (!job) break
+      store.queuedAgentIds = store.queuedAgentIds.filter(
+        (taskId) => taskId !== job.taskId,
+      )
+      const queued = store.pendingAgents[job.taskId]
+      if (queued?.status !== 'queued') continue
+      // 同步占住 slot 并关闭 queued-cancel 窗口；worker 仍须等 running 落盘。
+      store.pendingAgents[job.taskId] = {
+        ...queued,
+        status: 'running',
+      }
+      try {
+        await job.start()
+      } catch (error) {
+        job.onStartError(error)
+      }
+    }
+  } finally {
+    runtime.draining = false
+  }
+}
+
+export type CancelQueuedBackgroundAgentResult =
+  | {
+      ok: true
+      task: BackgroundAgentEntry
+      persistenceWarning?: string
+    }
+  | {
+      ok: false
+      code: 'task_not_found' | 'task_not_queued'
+      detail: string
+    }
+
+export async function cancelQueuedBackgroundAgent(
+  store: BackgroundAgentStore,
+  rawTaskId: string,
+): Promise<CancelQueuedBackgroundAgentResult> {
+  const taskId = rawTaskId.trim()
+  const row = store.pendingAgents[taskId]
+  if (!row) {
+    return {
+      ok: false,
+      code: 'task_not_found',
+      detail: `background task "${taskId}" not found`,
+    }
+  }
+  if (row.status !== 'queued') {
+    return {
+      ok: false,
+      code: 'task_not_queued',
+      detail: `background task "${taskId}" is ${row.status}, not queued`,
+    }
+  }
+
+  const runtime = getBackgroundAgentQueueRuntime(store)
+  runtime.jobs = runtime.jobs.filter((job) => job.taskId !== taskId)
+  store.queuedAgentIds = store.queuedAgentIds.filter(
+    (queuedId) => queuedId !== taskId,
+  )
+
+  const summary = 'Background task cancelled before start'
+  let persistenceWarning: string | undefined
+  try {
+    await store.durableLifecycle?.finish({
+      taskId,
+      agentType: row.agentType,
+      state: 'aborted',
+      summary,
+      isError: true,
+      detail: 'cancelled_while_queued',
+    })
+  } catch (error) {
+    persistenceWarning =
+      `background task cancellation persistence failed: ` +
+      `${error instanceof Error ? error.message : String(error)}`
+  }
+  const task = markBackgroundAgentFinished(store, {
+    agentId: taskId,
+    agentType: row.agentType,
+    summary: persistenceWarning
+      ? `${summary}; ${persistenceWarning}`
+      : summary,
+    isError: true,
+    prompt: row.prompt,
+    startedAt: row.startedAt,
+    parentTurnId: row.parentTurnId,
+    description: row.description,
+    status: 'aborted',
+  })
+  if (!persistenceWarning) {
+    queueBackgroundAgentResultForPromotion(store, taskId)
+  }
+  return {
+    ok: true,
+    task,
+    ...(persistenceWarning ? { persistenceWarning } : {}),
+  }
+}
+
+export function queueBackgroundAgentResultForPromotion(
+  store: BackgroundAgentStore,
+  taskId: string,
+): void {
+  if (!store.backgroundAgentResults[taskId]) return
+  if (!store.resultPromotionQueue.includes(taskId)) {
+    store.resultPromotionQueue.push(taskId)
+  }
+}
+
+export function takeBackgroundAgentResultsForPromotion(
+  store: BackgroundAgentStore,
+): BackgroundAgentEntry[] {
+  const ids = store.resultPromotionQueue.splice(
+    0,
+    store.resultPromotionQueue.length,
+  )
+  const rows: BackgroundAgentEntry[] = []
+  for (const taskId of ids) {
+    const row = store.backgroundAgentResults[taskId]
+    if (row) rows.push({ ...row })
+  }
+  return rows
 }
 
 /** resume 只恢复诊断状态，不重启任何 worker。 */
@@ -1285,8 +1509,11 @@ export function restoreBackgroundAgentStoreFromDurableTasks(
   store: BackgroundAgentStore,
   tasks: readonly DurableTaskRecord[],
 ): void {
+  backgroundAgentQueueRuntimes.delete(store)
   store.pendingAgents = {}
   store.backgroundAgentResults = {}
+  store.queuedAgentIds = []
+  store.resultPromotionQueue = []
   for (const task of tasks) {
     const status: BackgroundAgentStatus =
       task.state === 'completed'
@@ -1305,6 +1532,7 @@ export function restoreBackgroundAgentStoreFromDurableTasks(
       status,
       startedAt: task.admittedAt,
       finishedAt: task.updatedAt,
+      ...(task.parentTurnId ? { parentTurnId: task.parentTurnId } : {}),
       ...(task.result?.summary ? { summary: task.result.summary } : {}),
       ...(task.result ? { isError: task.result.isError } : {}),
       ...(task.result?.agentTranscriptPath
@@ -1317,6 +1545,9 @@ export function restoreBackgroundAgentStoreFromDurableTasks(
         : {}),
       ...(task.result?.totalToolUseCount != null
         ? { totalToolUseCount: task.result.totalToolUseCount }
+        : {}),
+      ...(task.result?.worktreePath
+        ? { worktreePath: task.result.worktreePath }
         : {}),
     }
     store.pendingAgents[task.taskId] = row
@@ -1353,6 +1584,7 @@ export function formatBackgroundAgentsStatus(
     rows.push(r)
   }
   const nRun = rows.filter((r) => r.status === 'running').length
+  const nQueued = rows.filter((r) => r.status === 'queued').length
   const nDone = rows.filter((r) => r.status === 'done').length
   const nErr = rows.filter((r) => r.status === 'error').length
   const nAborted = rows.filter((r) => r.status === 'aborted').length
@@ -1360,13 +1592,15 @@ export function formatBackgroundAgentsStatus(
   const max =
     store.maxConcurrent ?? getDefaultMaxBackgroundAgents()
   const lines: string[] = [
-    `Background agents: total=${rows.length}  running=${nRun}/${max}  done=${nDone}  error=${nErr}  aborted=${nAborted}  interrupted=${nInterrupted}`,
+    `Background agents: total=${rows.length}  queued=${nQueued}  running=${nRun}/${max}  done=${nDone}  error=${nErr}  aborted=${nAborted}  interrupted=${nInterrupted}`,
     '',
   ]
   for (const r of rows) {
     const tag =
-      r.status === 'running'
-        ? 'RUNNING'
+      r.status === 'queued'
+        ? 'QUEUED'
+        : r.status === 'running'
+          ? 'RUNNING'
         : r.status === 'error'
           ? 'ERROR'
           : r.status === 'aborted'
@@ -1376,15 +1610,20 @@ export function formatBackgroundAgentsStatus(
               : 'DONE'
     const desc = r.description?.trim() ? `  · ${r.description.trim()}` : ''
     lines.push(`  ${r.agentId}  [${tag}]  type=${r.agentType}${desc}`)
-    if (r.status === 'running') {
+    if (r.status === 'queued' || r.status === 'running') {
       lines.push(`    prompt:  ${truncateOneLine(r.prompt, 80)}`)
-      lines.push(`    started: ${r.startedAt}`)
+      lines.push(
+        `    ${r.status === 'queued' ? 'queued' : 'started'}: ${r.startedAt}`,
+      )
     } else {
       const sum = (r.summary ?? '').trim() || '(no summary)'
       lines.push(`    summary: ${truncateOneLine(sum, 120)}`)
       if (r.finishedAt) lines.push(`    finished: ${r.finishedAt}`)
       if (r.agentTranscriptPath) {
         lines.push(`    transcript: ${r.agentTranscriptPath}`)
+      }
+      if (r.worktreePath) {
+        lines.push(`    worktree: ${r.worktreePath}`)
       }
       const meta: string[] = []
       if (r.totalDurationMs != null) {
@@ -1892,9 +2131,126 @@ export function buildAgentToolDescription(
     'Spawn a specialized subagent for a focused task. The child starts with its own context unless you fork.',
     'Omit subagent_type (or use fork / fork:true) to inherit parent messages. Prefer a complete briefing in prompt — file paths, constraints, done criteria.',
     'Optional: description (3–5 words for status UI), run_in_background, max_turns, isolation=worktree|none.',
-    'Poll background runs with /agents status or /bg. Nested Agent is disabled in children.',
+    'Poll background runs with /agents status or /bg; cancel queued work with /bg cancel <taskId>. Nested Agent is disabled in children.',
     typeLines ? `Available types:\n${typeLines}` : 'Types: explore|general|plan|fork',
   ].join(' ')
+}
+
+function launchBackgroundAgentWorker(input: {
+  store: BackgroundAgentStore
+  runParams: RunSubagentParams
+  agentId: string
+  agentType: string
+  prompt: string
+  parentTurnId?: string
+  description?: string
+}): void {
+  const {
+    store,
+    runParams,
+    agentId,
+    agentType,
+    prompt,
+    parentTurnId,
+    description,
+  } = input
+  void (async () => {
+    try {
+      let result: RunSubagentResult
+      try {
+        result = await runSubagent({ ...runParams, agentId })
+      } catch (error) {
+        const detail =
+          error instanceof Error ? error.message : String(error)
+        let durable = true
+        try {
+          await store.durableLifecycle?.finish({
+            taskId: agentId,
+            agentType,
+            state: 'error',
+            summary: `Background subagent failed: ${detail}`,
+            isError: true,
+            detail,
+          })
+        } catch {
+          durable = false
+          // durable error 写失败时磁盘保持 running，resume 投影 interrupted。
+        }
+        markBackgroundAgentFinished(store, {
+          agentId,
+          agentType,
+          summary: `Background subagent failed: ${detail}`,
+          isError: true,
+          description,
+          prompt,
+          parentTurnId,
+        })
+        if (durable) {
+          queueBackgroundAgentResultForPromotion(store, agentId)
+        }
+        return
+      }
+
+      try {
+        const taskState: BackgroundTaskCompletion['state'] =
+          result.terminal.reason === 'aborted'
+            ? 'aborted'
+            : result.isError
+              ? 'error'
+              : 'completed'
+        await store.durableLifecycle?.finish({
+          taskId: result.agentId,
+          agentType: result.agentType,
+          state: taskState,
+          summary: result.summary,
+          isError: result.isError,
+          agentTranscriptPath: result.agentTranscriptPath,
+          usage: result.usage,
+          totalDurationMs: result.totalDurationMs,
+          totalToolUseCount: result.totalToolUseCount,
+          worktreePath: result.worktreePath,
+        })
+      } catch (error) {
+        const detail =
+          error instanceof Error ? error.message : String(error)
+        markBackgroundAgentFinished(store, {
+          agentId,
+          agentType,
+          summary:
+            `Background task result persistence failed: ${detail}`,
+          isError: true,
+          description,
+          prompt,
+          parentTurnId,
+        })
+        return
+      }
+
+      markBackgroundAgentFinished(store, {
+        agentId: result.agentId,
+        agentType: result.agentType,
+        summary: result.summary,
+        isError: result.isError,
+        agentTranscriptPath: result.agentTranscriptPath,
+        usage: result.usage,
+        totalDurationMs: result.totalDurationMs,
+        totalToolUseCount: result.totalToolUseCount,
+        description: result.description ?? description,
+        prompt,
+        parentTurnId,
+        worktreePath: result.worktreePath,
+        status:
+          result.terminal.reason === 'aborted'
+            ? 'aborted'
+            : result.isError
+              ? 'error'
+              : 'done',
+      })
+      queueBackgroundAgentResultForPromotion(store, result.agentId)
+    } finally {
+      await pumpBackgroundAgentQueue(store)
+    }
+  })()
 }
 
 /**
@@ -2124,11 +2480,14 @@ export function createAgentTool(
             errorCode: 'no_background_store',
           }
         }
+        if (store.maxConcurrent === undefined) {
+          store.maxConcurrent = policy.maxConcurrent
+        }
         const cap = canStartBackgroundAgent(store, {
           maxConcurrent: store.maxConcurrent ?? policy.maxConcurrent,
           policy: policy.overflow,
         })
-        if (!cap.ok) {
+        if (!cap.ok && cap.policy !== 'queue') {
           return {
             ok: false,
             isError: true,
@@ -2150,10 +2509,6 @@ export function createAgentTool(
             description: taskDescription,
             isolation: durableIsolation,
           })
-          await store.durableLifecycle?.markRunning({
-            taskId: agentId,
-            agentType: def.agentType,
-          })
         } catch (error) {
           return {
             ok: false,
@@ -2164,91 +2519,80 @@ export function createAgentTool(
             errorCode: 'background_persistence',
           }
         }
-        markBackgroundAgentRunning(store, {
-          agentId,
-          agentType: def.agentType,
-          prompt,
-          ...(taskDescription ? { description: taskDescription } : {}),
-        })
-        void (async () => {
-          let result: RunSubagentResult
-          try {
-            result = await runSubagent({ ...runParams, agentId })
-          } catch (error) {
-            const detail =
-              error instanceof Error ? error.message : String(error)
-            try {
-              await store.durableLifecycle?.finish({
-                taskId: agentId,
-                agentType: def.agentType,
-                state: 'error',
-                summary: `Background subagent failed: ${detail}`,
-                isError: true,
-                detail,
-              })
-            } catch {
-              // durable error 写失败时磁盘保持 running，resume 投影 interrupted。
-            }
-            markBackgroundAgentFinished(store, {
-              agentId,
-              agentType: def.agentType,
-              summary: `Background subagent failed: ${detail}`,
-              isError: true,
-              description: taskDescription,
-              prompt,
-            })
-            return
-          }
-
-          try {
-            const taskState: BackgroundTaskCompletion['state'] =
-              result.terminal.reason === 'aborted'
-                ? 'aborted'
-                : result.isError
-                  ? 'error'
-                  : 'completed'
-            await store.durableLifecycle?.finish({
-              taskId: result.agentId,
-              agentType: result.agentType,
-              state: taskState,
-              summary: result.summary,
-              isError: result.isError,
-              agentTranscriptPath: result.agentTranscriptPath,
-              usage: result.usage,
-              totalDurationMs: result.totalDurationMs,
-              totalToolUseCount: result.totalToolUseCount,
-              worktreePath: result.worktreePath,
-            })
-          } catch (error) {
-            const detail =
-              error instanceof Error ? error.message : String(error)
-            markBackgroundAgentFinished(store, {
-              agentId,
-              agentType: def.agentType,
-              summary:
-                `Background task result persistence failed: ${detail}`,
-              isError: true,
-              description: taskDescription,
-              prompt,
-            })
-            return
-          }
-
-          markBackgroundAgentFinished(store, {
-            agentId: result.agentId,
-            agentType: result.agentType,
-            summary: result.summary,
-            isError: result.isError,
-            agentTranscriptPath: result.agentTranscriptPath,
-            usage: result.usage,
-            totalDurationMs: result.totalDurationMs,
-            totalToolUseCount: result.totalToolUseCount,
-            description: result.description ?? taskDescription,
-            prompt,
-          })
-        })()
 
         const label = taskDescription ? ` (${taskDescription})` : ''
+        const startTask = async (): Promise<void> => {
+          await store.durableLifecycle?.markRunning({
+            taskId: agentId,
+            agentType: def.agentType,
+          })
+          markBackgroundAgentRunning(store, {
+            agentId,
+            agentType: def.agentType,
+            prompt,
+            parentTurnId: parent.parentTurnId,
+            ...(taskDescription
+              ? { description: taskDescription }
+              : {}),
+          })
+          launchBackgroundAgentWorker({
+            store,
+            runParams,
+            agentId,
+            agentType: def.agentType,
+            prompt,
+            parentTurnId: parent.parentTurnId,
+            description: taskDescription,
+          })
+        }
+        const markStartFailure = (error: unknown): void => {
+          const detail =
+            error instanceof Error ? error.message : String(error)
+          markBackgroundAgentFinished(store, {
+            agentId,
+            agentType: def.agentType,
+            summary:
+              `Background task durable start failed: ${detail}`,
+            isError: true,
+            prompt,
+            parentTurnId: parent.parentTurnId,
+            description: taskDescription,
+          })
+        }
+
+        if (!cap.ok) {
+          enqueueBackgroundAgent(store, {
+            taskId: agentId,
+            agentType: def.agentType,
+            prompt,
+            parentTurnId: parent.parentTurnId,
+            description: taskDescription,
+            start: startTask,
+            onStartError: markStartFailure,
+          })
+          const position = store.queuedAgentIds.indexOf(agentId) + 1
+          void pumpBackgroundAgentQueue(store)
+          return {
+            ok: true,
+            output:
+              `queued agent ${agentId}${label} at position ${position}; ` +
+              `poll with /agents status or /bg`,
+          }
+        }
+
+        try {
+          await startTask()
+        } catch (error) {
+          markStartFailure(error)
+          return {
+            ok: false,
+            isError: true,
+            output:
+              `background task durable start failed: ` +
+              `${error instanceof Error ? error.message : String(error)}`,
+            errorCode: 'background_persistence',
+          }
+        }
         return {
           ok: true,
           output: `started agent ${agentId}${label} in background; poll with /agents status or /bg`,

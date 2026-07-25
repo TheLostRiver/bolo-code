@@ -78,6 +78,7 @@ import {
   loadAgentsDir,
   restoreBackgroundAgentStoreFromDurableTasks,
   resolveAgentPolicy,
+  takeBackgroundAgentResultsForPromotion,
   type ActiveAgentDefinitions,
 } from './subagent.ts'
 import {
@@ -703,6 +704,12 @@ export type SessionEvent =
       controlId: string
       boundary: import('./sessionCoordinator.ts').SessionSafeBoundary
       prompt: string
+    }
+  | {
+      type: 'background_result'
+      taskId: string
+      status: import('./subagent.ts').BackgroundAgentStatus
+      boundary: import('./sessionCoordinator.ts').SessionSafeBoundary
     }
   | { type: 'done'; terminal?: Terminal }
 
@@ -2133,6 +2140,12 @@ async function runOwnedPrompt(
         }),
       agentDefinitions: session.agentDefinitions,
       backgroundStore: session.backgroundAgents,
+      takeBackgroundResults: () =>
+        session.backgroundAgents
+          ? takeBackgroundAgentResultsForPromotion(
+              session.backgroundAgents,
+            )
+          : [],
       agentPolicy: session.agentPolicy,
       spawnDepth: 0,
       maxTurns: options?.maxTurns ?? 8,
@@ -2761,6 +2774,11 @@ export {
   formatBackgroundAgentsStatus,
   markBackgroundAgentRunning,
   markBackgroundAgentFinished,
+  enqueueBackgroundAgent,
+  pumpBackgroundAgentQueue,
+  cancelQueuedBackgroundAgent,
+  queueBackgroundAgentResultForPromotion,
+  takeBackgroundAgentResultsForPromotion,
   restoreBackgroundAgentStoreFromDurableTasks,
   canStartBackgroundAgent,
   countRunningBackgroundAgents,
@@ -2803,6 +2821,7 @@ export {
   type BackgroundTaskAdmission,
   type BackgroundTaskCompletion,
   type DurableBackgroundTaskLifecycle,
+  type CancelQueuedBackgroundAgentResult,
   type LoadAgentsDirOptions,
   type LoadAgentsDirResult,
   type ResolveAgentToolsResult,

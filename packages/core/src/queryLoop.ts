@@ -50,6 +50,7 @@ import type {
   SessionControlRecord,
   SessionSafeBoundary,
 } from './sessionCoordinator.ts'
+import type { BackgroundAgentEntry } from './subagent.ts'
 
 export type TerminalReason =
   | 'completed'
@@ -95,6 +96,12 @@ export type QueryLoopEvent =
       controlId: string
       boundary: SessionSafeBoundary
       prompt: string
+    }
+  | {
+      type: 'background_result'
+      taskId: string
+      status: BackgroundAgentEntry['status']
+      boundary: SessionSafeBoundary
     }
   | { type: 'done'; terminal: Terminal }
   | ToolExecutionEvent
@@ -154,6 +161,8 @@ export type QueryLoopParams = {
   agentDefinitions?: import('./subagent.ts').ActiveAgentDefinitions
   /** 后台 subagent 状态表（Agent run_in_background） */
   backgroundStore?: import('./subagent.ts').BackgroundAgentStore
+  /** DR3B：父 session owner 在 safe boundary 提供尚未 delivery 的结果。 */
+  takeBackgroundResults?: () => readonly BackgroundAgentEntry[]
   /** 全局 agent 策略（Spec v0） */
   agentPolicy?: import('./subagent.ts').AgentPolicy
   /**
@@ -220,22 +229,52 @@ function emit(params: QueryLoopParams, e: QueryLoopEvent) {
   params.onEvent?.(e)
 }
 
+const BACKGROUND_RESULT_PROMOTION_BOUNDARIES =
+  new Set<SessionSafeBoundary>([
+    'before_provider',
+    'after_tools',
+    'after_compact',
+    'before_stop',
+  ])
+
+function formatBackgroundResultMessage(
+  task: BackgroundAgentEntry,
+): string {
+  const summary = (task.summary ?? '(no summary)').trim()
+  const boundedSummary =
+    summary.length > 20_000
+      ? `${summary.slice(0, 19_999)}…`
+      : summary
+  const lines = [
+    '<background_task_result>',
+    `task_id: ${task.agentId}`,
+    `agent_type: ${task.agentType}`,
+    `status: ${task.status}`,
+    ...(task.description ? [`description: ${task.description}`] : []),
+    ...(task.worktreePath ? [`worktree_path: ${task.worktreePath}`] : []),
+    'summary:',
+    boundedSummary,
+    '</background_task_result>',
+  ]
+  return lines.join('\n')
+}
+
 async function visitSafeBoundary(
   params: QueryLoopParams,
   boundary: SessionSafeBoundary,
 ): Promise<number> {
-  if (!params.onSafeBoundary) return 0
-  let controls: readonly SessionControlRecord[]
-  try {
-    controls = await params.onSafeBoundary(boundary)
-  } catch (error) {
-    emit(params, {
-      type: 'error',
-      message: `safe boundary "${boundary}" failed: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    })
-    return 0
+  let controls: readonly SessionControlRecord[] = []
+  if (params.onSafeBoundary) {
+    try {
+      controls = await params.onSafeBoundary(boundary)
+    } catch (error) {
+      emit(params, {
+        type: 'error',
+        message: `safe boundary "${boundary}" failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      })
+    }
   }
   let promoted = 0
   for (const control of controls) {
@@ -255,6 +294,25 @@ async function visitSafeBoundary(
       boundary,
       prompt: control.prompt,
     })
+  }
+  if (
+    params.takeBackgroundResults &&
+    BACKGROUND_RESULT_PROMOTION_BOUNDARIES.has(boundary)
+  ) {
+    const results = params.takeBackgroundResults()
+    for (const result of results) {
+      params.messages.push({
+        role: 'user',
+        content: formatBackgroundResultMessage(result),
+      })
+      promoted += 1
+      emit(params, {
+        type: 'background_result',
+        taskId: result.agentId,
+        status: result.status,
+        boundary,
+      })
+    }
   }
   return promoted
 }

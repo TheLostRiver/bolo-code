@@ -3037,8 +3037,51 @@ function formatAgentsPolicyBlock(
   ].join('\n')
 }
 
-async function cmdBg(session: SlashSession): Promise<SlashDispatchResult> {
-  const { formatBackgroundAgentsStatus } = await import('./subagent.ts')
+async function cmdBg(
+  session: SlashSession,
+  args: string,
+): Promise<SlashDispatchResult> {
+  const {
+    cancelQueuedBackgroundAgent,
+    formatBackgroundAgentsStatus,
+  } = await import('./subagent.ts')
+  const parts = args.trim().split(/\s+/).filter(Boolean)
+  if (parts[0]?.toLowerCase() === 'cancel') {
+    const taskId = parts[1]?.trim() ?? ''
+    if (!taskId) {
+      return {
+        ok: false,
+        message: 'Usage: /bg cancel <taskId>',
+      }
+    }
+    if (!session.backgroundAgents) {
+      return {
+        ok: false,
+        message: 'No background agent store on session.',
+      }
+    }
+    const cancelled = await cancelQueuedBackgroundAgent(
+      session.backgroundAgents,
+      taskId,
+    )
+    if (!cancelled.ok) {
+      return { ok: false, message: cancelled.detail }
+    }
+    return {
+      ok: true,
+      message:
+        `Cancelled queued background task ${taskId}.` +
+        (cancelled.persistenceWarning
+          ? `\nWarning: ${cancelled.persistenceWarning}`
+          : ''),
+    }
+  }
+  if (parts.length > 0 && parts[0]?.toLowerCase() !== 'status') {
+    return {
+      ok: false,
+      message: 'Usage: /bg [status] | /bg cancel <taskId>',
+    }
+  }
   return {
     ok: true,
     message: formatBackgroundAgentsStatus(session.backgroundAgents),
@@ -3373,9 +3416,10 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
   },
   {
     name: 'bg',
-    summary: 'List background subagent running/done results',
+    summary: 'List background tasks or cancel a queued task',
+    usage: '[status] | cancel <taskId>',
     group: 'extensions',
-    run: (session) => cmdBg(session),
+    run: cmdBg,
   },
   {
     name: 'skill',
