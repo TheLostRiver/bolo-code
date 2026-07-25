@@ -55,6 +55,7 @@
 
 - 路径：`.bolo/agents/<name>.md`
 - 字段说明见同目录初始化写入的说明；契约：`docs/SUBAGENT_SPEC.md`
+- **操作步骤（含全局 `agents` 段）：** [docs/USAGE.md §5](../docs/USAGE.md)
 
 ## Skills
 
@@ -75,4 +76,10 @@ npx tsx scripts/bolo-init.ts
 - Key：环境变量或 `apiKeyEnv`；不要提交 `config.json` 里的明文 key  
 - 建议 ignore：`.bolo/sessions/`、含密钥的本地覆盖  
 
-全局配置与合并规则：[docs/CONFIG.md](../docs/CONFIG.md) · Provider：[docs/PROVIDERS.md](../docs/PROVIDERS.md)
+| 文档 | 说明 |
+|------|------|
+| [docs/USAGE.md](../docs/USAGE.md) | 使用手册 |
+| [docs/AGENT_HANDOFF.md](../docs/AGENT_HANDOFF.md) | 开发交接 |
+| [docs/CONFIG.md](../docs/CONFIG.md) | 配置合并规则 |
+| [docs/PROVIDERS.md](../docs/PROVIDERS.md) | Provider |
+| [docs/ROADMAP.md](../docs/ROADMAP.md) | 进度 |

@@ -1,7 +1,9 @@
 # Bolo Code 整体路线图
 
 > **原则：** 日用主路径已收口 ≠ 相对 HC/Codex UI 密度 100%。无 stub 冒充完成。  
-> **永不：** 遥测 · Claude/Codex **官方市场 API**。
+> **永不：** 遥测 · Claude/Codex **官方市场 API**。  
+> **进度真源：** 本文 §0 / 各轨表格。  
+> **使用手册：** [USAGE.md](./USAGE.md) · **Agent 交接：** [AGENT_HANDOFF.md](./AGENT_HANDOFF.md) · 仓库入口 [README.md](../README.md)
 
 ---
 
@@ -156,12 +158,14 @@ apps/desktop       消费同一 DiffViewModel                 （U3）
 | Headless Core | ✅ |
 | CLI 可日用 | ✅ |
 | Skill/MCP/Plugin/Subagent | ✅ |
-| Electron 可用壳 | ✅ |
+| Electron 可用壳 | ✅（CX7 多 provider；非 HC 密度） |
 | Diff 日用契约 D0–D7 | ✅ |
 | Diff 交互 UI U0–U4 | ✅（U5 可选） |
 | Hooks 日用 11 事件 + exit 语义 | ✅ **H0–H5** |
 | Compact 日用管道打磨 | ✅ **C0–C5**（后置见 §8.9） |
-| **多 Provider 热切** | 📋 **P 轨**（§9 · **当前着重**） |
+| **多 Provider 热切** | ✅ **P0–P4.1**（§9）；Desktop **CX7** |
+| **Effort 方言** | ✅ **E0–E9**（§10） |
+| **Provider UX** | ✅ **CX0–CX8**（§11；ultrathink 默认 off） |
 | 无遥测 | ✅ |
 
 ---
@@ -174,16 +178,20 @@ apps/desktop       消费同一 DiffViewModel                 （U3）
 | M-Loop / Tool / Compact / Slash | ✅ | 日用 |
 | M-Subagent / Cost / MCP / JSONL | ✅ | 日用 |
 | M-TUI（文本壳） | ✅ | 布局/picker/主题；非真 Ink |
-| M4 Electron | ✅ | 壳 + 流式 + 权限 + Settings |
+| M4 Electron | ✅ | 壳 + 流式 + 权限 + Settings + 多 provider |
 | **M-Diff-A（D0–D7）** | ✅ | 日用文件 diff 契约 |
 | **M-Diff-B（U0–U4）** | ✅ U0–U4 | 交互 diff UI 主路径收口；U5 可选 |
 | **M-Hooks（H0–H5）** | ✅ H0–H5 | SessionEnd + exit + updatedInput + `/hooks recent` |
 | **M-Compact（C0–C5）** | ✅ C0–C5 | keep · usage · mid-turn · reinject · /context；后置 §8.9 |
-| **M-Provider（P0–P5）** | 📋 规划 · **当前着重** | 多 provider 配置 + 运行时 `/provider`/`/model` 热切；见 §9 |
+| **M-Provider（P0–P4.1）** | ✅ | 多 provider + `/provider` 热切 + picker；见 §9 |
+| **M-Effort（E0–E9）** | ✅ | 方言引擎 · choosable · 门控 · TTY · doctor |
+| **M-Provider-UX（CX0–CX8）** | ✅ | preset · caps · errors · resume · Desktop · ultrathink |
 | 官方市场 / 遥测 | 🚫 | 永不 |
 
 **一句话：**  
-主路径、Diff、Hooks、**Compact 日用**已收口。**下一刀：P 轨多 Provider 热切**（会话内换 baseUrl/key/协议/模型，无需关 agent 改配置）。
+主路径、Diff、Hooks、Compact、**多 Provider、Effort、Provider UX（含 CX8）**日用已收口。  
+
+**下一刀（开放 · 非阻塞）：** Compact §8.9 · U5 · adaptive thinking · Desktop 体验打磨。
 
 ---
 
@@ -191,16 +199,22 @@ apps/desktop       消费同一 DiffViewModel                 （U3）
 
 | 文档 | 用途 |
 |------|------|
-| 本文件 | 总路线 + U / H / C / **P 轨** |
-| `PROVIDERS.md` | Provider 协议与 **多实例配置真源**（P 轨实现时扩写） |
-| `COMPACTION.md` | Compact 契约；§8 后置清单 |
-| `HOOKS.md` | Hook 契约 |
-| `FILE_DIFF_SPEC.md` | Diff 契约与阶段 |
-| `TUI.md` | CLI TUI 壳与 U 挂载 |
-| `CONFIG.md` | 配置布局（含 providers 段） |
-| `ARCHITECTURE.md` | 架构 |
+| 本文件 | **进度真源** · 总路线 + 各轨水位 |
+| [USAGE.md](./USAGE.md) | **使用手册**（安装 · Provider · **Agent 配置**） |
+| [AGENT_HANDOFF.md](./AGENT_HANDOFF.md) | **交接手册**（架构 · 入口 · 反模式） |
+| [PROVIDERS.md](./PROVIDERS.md) | Provider 协议与多实例 |
+| [PROVIDER_UX.md](./PROVIDER_UX.md) | CX 便利层（preset · caps · ultrathink） |
+| [EFFORT.md](./EFFORT.md) / [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md) | Effort 方言 |
+| [COMPACTION.md](./COMPACTION.md) | Compact 契约；§8.9 后置 |
+| [HOOKS.md](./HOOKS.md) | Hook 契约 |
+| [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) | Diff 契约与阶段 |
+| [TUI.md](./TUI.md) | CLI TUI 壳与 U 挂载 |
+| [CONFIG.md](./CONFIG.md) | 配置布局 |
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | 架构 |
+| [SUBAGENT_SPEC.md](./SUBAGENT_SPEC.md) | Subagent 契约 |
+| [ENGINEERING_PRINCIPLES.md](./ENGINEERING_PRINCIPLES.md) | 工程原则 · 禁止遥测 |
 | `apps/desktop/README.md` | 桌面 |
-| `TODO*.md` | 历史轨（只读） |
+| `TODO*.md` | 历史轨（**只读**，非现行真源） |
 
 ---
 
@@ -505,29 +519,29 @@ compact 成功且非 override system 时：
 
 ---
 
-## 9. Provider 轨（P0–P5 · **规划 · 当前着重 · 多实例热切**）
+## 9. Provider 轨（P0–P5 · **P0–P4.1 + CX7 已落地**）
 
-> **用户痛点：** 现在只有**单个** `config.provider`；`/model` 只改 `session.model` 字符串，**不换** baseUrl / apiKey / 协议 kind。换 DeepSeek ↔ OpenAI ↔ Anthropic 必须改配置或环境变量并重启。  
-> **目标：** 配置里**同时登记多个 provider**；agent **运行中** `/provider` / `/model` 热切，**无需关闭进程**。  
-> **对标（语义，不抄实现/遥测）：**  
-> - Codex：`model_providers` 表 + `model_provider` id + `/model` 换模；线程可记 provider  
-> - HC：运行时 model 选择 / 迁移提示；多后端凭 env+settings  
-> **Bolo 原则：** key 仍优先环境变量；**不**写遥测；**不**接官方市场。
+> **用户痛点（已解）：** 曾只有单个 `config.provider`；现已支持 **`providers` 表 + 运行中热切**。  
+> **目标：** 配置里同时登记多个 provider；agent 运行中 `/provider` / `/model` 热切，无需关闭进程。  
+> **对标（语义，不抄实现/遥测）：** Codex model_providers · HC 运行时选模。  
+> **Bolo 原则：** key 仍优先环境变量；**不**写遥测；**不**接官方市场。  
+> **便利层：** preset / caps / resume / ultrathink 见 §11 · [PROVIDER_UX.md](./PROVIDER_UX.md)
 
 ### 9.1 现状水位
 
 | 项 | 状态 |
 |----|------|
-| 单 `provider.kind` + env 推断 | ✅ `resolveProviderFromConfig` / `createProviderFromEnv` |
+| 单 `provider.kind` + env 推断 | ✅ |
 | 协议：openai-compatible / openai-responses / anthropic / mock | ✅ |
-| `/model <name>` 仅改 session.model | ✅（P3 起可带 provider 糖） |
-| `/effort` · `/thinking` | ✅ |
-| **多 provider 配置表** | ✅ `providers` + `defaultProvider` + 旧 `provider` 兼容 |
-| **运行时切换 provider（baseUrl/key/kind）** | ✅ `switchSessionProvider` · `/provider use` |
-| **按 provider 列模型 / 校验** | ✅ 列表 + 缺 key 拒绝切换；远程 catalog 后置 |
-| Desktop 设置里多后端 | ❌ 轻量/后置（P5） |
+| `/model` · provider-qualified 糖 | ✅ |
+| `/effort` · `/thinking` · `/ultrathink` | ✅ |
+| **多 provider 配置表** | ✅ `providers` + `defaultProvider` |
+| **运行时切换 provider** | ✅ `switchSessionProvider` · `/provider use` · TTY picker |
+| **缺 key 拒绝切换 + 可行动错误** | ✅ CX3 |
+| **resume `providerId` + effort clamp** | ✅ CX6 |
+| **Desktop 多后端** | ✅ **CX7**（原 P5） |
 
-**粗估：** 日用单后端 **~85%+**；**多后端热切体验 ~90–95%**（P0–P4）；Desktop / resume `providerId` 仍后置。
+**粗估：** 多后端热切 **~92–96%**；Provider UX（含 CX8）**~95–98%**。
 
 ### 9.2 目标与验收（P 轨完成定义）
 
@@ -548,7 +562,7 @@ packages/config     providers[] 解析 · 与旧 provider 兼容 · 不实例化
 packages/providers  工厂：id → LlmProvider；createFromProfile(profile)
 packages/core       session.providerId · switchProvider · /provider /model
 packages/cli        启动打印当前；REPL 热切
-apps/desktop        设置里选 active（P4+，可后置）
+apps/desktop        设置里选 active（✅ CX7）
 ```
 
 ```mermaid
@@ -665,12 +679,12 @@ function switchSessionModel(session, model: string): { ok, reason? }
 | **P3** | `/model` 增强 + cache break + `/doctor` 显示 active | P1 | ✅ |
 | **P4** | CLI 启动摘要 · 错误信息（缺 key）· 单测 | P1 | ✅ |
 | **P4.1** | TTY `/provider` 箭头选择器（不必记 id） | P1 | ✅ |
-| **P5** | Desktop 设置选 provider（最小下拉）；可选 | P2 | 📋 |
+| **P5** | Desktop 设置选 provider（最小下拉） | P2 | ✅ **并入 CX7** |
 | 后置 | 远程拉模型列表 · 官方市场 · 按 turn 自动 failover 路由 | — | 🚫 非本轨默认 |
 
-**顺序硬约束：** **P0 文档 → P1 配置 → P2 热切 → P3 model/doctor → P4 测 → P4.1 picker → P5 Desktop**。
+**顺序：** P0–P4.1 ✅ → Desktop 经 **CX7** ✅ → 便利层 **CX0–CX8** ✅。
 
-**日用水位（P0–P4.1）：** 多后端热切体验 **~92–96%**（Desktop 选 active / resume 持久化 providerId 仍后置）。
+**日用水位：** 多后端热切 **~92–96%**；UX 便利 **~95–98%**（见 §11）。
 
 ### 9.7 与 Compact / 会话交叉
 

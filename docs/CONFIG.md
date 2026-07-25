@@ -1,7 +1,8 @@
 # 配置目录 — 全局 `~/.bolo` 与项目 `.bolo`
 
 > 对照 HelsincyCode：`CLAUDE_CONFIG_DIR` / `~/.claude` + 项目级配置分层。  
-> Bolo：`BOLO_CONFIG_DIR` / `~/.bolo` + 项目 `.bolo/`。
+> Bolo：`BOLO_CONFIG_DIR` / `~/.bolo` + 项目 `.bolo/`。  
+> **上手操作**（含 Agent 配置）：[USAGE.md](./USAGE.md) · **交接**：[AGENT_HANDOFF.md](./AGENT_HANDOFF.md)
 
 ## 1. 目录布局
 

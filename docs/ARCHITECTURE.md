@@ -230,3 +230,14 @@ Renderer  ──IPC──►  Main  ──invoke──►  Core Runtime
 3. Hook 是横切能力，禁止在 tool 内 if-else 复制 hook 逻辑  
 4. 复杂度扩散（参数爆炸、数据流回溯）时先拆模块，不先加 flag  
 5. Functional + DSL 风格优先（配置即数据、pipeline 可组合）
+
+---
+
+## 11. 文档与交接
+
+| 文档 | 角色 |
+|------|------|
+| [ROADMAP.md](./ROADMAP.md) | 进度真源 |
+| [USAGE.md](./USAGE.md) | 使用手册（含 Agent 配置） |
+| [AGENT_HANDOFF.md](./AGENT_HANDOFF.md) | 给下一位 agent 的交接 |
+| [ENGINEERING_PRINCIPLES.md](./ENGINEERING_PRINCIPLES.md) | 工程硬原则 |
