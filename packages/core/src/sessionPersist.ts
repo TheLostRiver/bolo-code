@@ -39,6 +39,7 @@ import {
   appendControlEntry,
   appendTaskEntry,
   appendTaskResultEntry,
+  appendResolutionEntry,
   ensureTranscriptFile,
   metaInputFromSession,
   getTranscriptWriteState,
@@ -48,6 +49,7 @@ import {
   type TranscriptTaskEntry,
   type TranscriptTaskResultEntry,
   type TranscriptTurnEntry,
+  type TranscriptResolutionEntry,
 } from './sessionTranscript.ts'
 import type { DurableTurnRecord, DurableTurnState } from './durableTurn.ts'
 import type {
@@ -61,6 +63,11 @@ import type {
   DurableTaskRecord,
   DurableTaskState,
 } from './durableTask.ts'
+import type {
+  DurableResolutionAction,
+  DurableResolutionEntityKind,
+  DurableResolutionRecord,
+} from './durableResolution.ts'
 import type { SessionUsage } from './sessionUsage.ts'
 import { cloneSessionUsage } from './sessionUsage.ts'
 import {
@@ -116,6 +123,8 @@ export type PersistableSession = {
   durableControls?: DurableControlRecord[]
   /** DR3A：运行时 task 投影；JSONL task/task_result 是持久化真源。 */
   durableTasks?: DurableTaskRecord[]
+  /** DR4B2：interrupted work 的 append-only resolution 投影。 */
+  durableResolutions?: DurableResolutionRecord[]
   onEvent?: (e: { type: 'error'; message: string }) => void
 }
 
@@ -1535,6 +1544,41 @@ export async function appendSessionTaskResult(
     metaInputFromSession(session, { createdAt: meta.createdAt }),
   )
   const entry = await appendTaskResultEntry(transcriptPath, {
+    sessionId: session.id,
+    ...opts,
+  })
+  setSessionPersistMeta(session, { filePath: transcriptPath })
+  return entry
+}
+
+/** DR4B2：按 session persist meta 追加 interrupted-work resolution。 */
+export async function appendSessionResolution(
+  session: PersistableSession,
+  opts: {
+    resolutionId: string
+    entityKind: DurableResolutionEntityKind
+    entityId: string
+    action: DurableResolutionAction
+    replacementId?: string
+    detail?: string
+    timestamp?: string
+  },
+): Promise<TranscriptResolutionEntry | null> {
+  const meta = persistMeta.get(session)
+  if (!meta?.autoSave) return null
+  const rawFilePath = meta.filePath
+    ? path.resolve(meta.filePath)
+    : resolveSessionFilePath(session.id, {
+        scope: meta.scope,
+        cwd: session.cwd,
+        sessionsDir: meta.sessionsDir,
+      })
+  const transcriptPath = resolveTranscriptPathFromJson(rawFilePath)
+  await ensureTranscriptFile(
+    transcriptPath,
+    metaInputFromSession(session, { createdAt: meta.createdAt }),
+  )
+  const entry = await appendResolutionEntry(transcriptPath, {
     sessionId: session.id,
     ...opts,
   })

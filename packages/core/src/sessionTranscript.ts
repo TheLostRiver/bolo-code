@@ -48,6 +48,18 @@ import {
   type DurableTaskRecord,
   type DurableTaskState,
 } from './durableTask.ts'
+import {
+  isDurableResolutionAction,
+  isDurableResolutionEntityKind,
+  normalizeDurableResolutionEntityId,
+  normalizeDurableResolutionId,
+  normalizeDurableResolutionSessionId,
+  projectDurableResolutionEvents,
+  type DurableResolutionAction,
+  type DurableResolutionEntityKind,
+  type DurableResolutionEvent,
+  type DurableResolutionRecord,
+} from './durableResolution.ts'
 
 /** 公共头字段（线性 transcript；可选 parentUuid 供分叉元数据） */
 export type TranscriptEntryBase = {
@@ -182,6 +194,17 @@ export type TranscriptTaskResultEntry = TranscriptEntryBase & {
   detail?: string
 }
 
+/** DR4B2：interrupted entity 的 append-only 人工处置；不删除 lifecycle。 */
+export type TranscriptResolutionEntry = TranscriptEntryBase & {
+  type: 'resolution'
+  resolutionId: string
+  entityKind: DurableResolutionEntityKind
+  entityId: string
+  action: DurableResolutionAction
+  replacementId?: string
+  detail?: string
+}
+
 export type TranscriptEntry =
   | TranscriptMetaEntry
   | TranscriptMessageEntry
@@ -193,6 +216,7 @@ export type TranscriptEntry =
   | TranscriptControlEntry
   | TranscriptTaskEntry
   | TranscriptTaskResultEntry
+  | TranscriptResolutionEntry
 
 export type TranscriptMetaInput = {
   sessionId: string
@@ -794,6 +818,66 @@ export async function appendTaskResultEntry(
   return entry
 }
 
+export function buildResolutionEntry(
+  opts: Omit<DurableResolutionEvent, 'timestamp'> & {
+    timestamp?: string
+  },
+): TranscriptResolutionEntry {
+  const resolutionId = normalizeDurableResolutionId(opts.resolutionId)
+  const sessionId = normalizeDurableResolutionSessionId(opts.sessionId)
+  const entityId = normalizeDurableResolutionEntityId(opts.entityId)
+  if (!isDurableResolutionEntityKind(opts.entityKind)) {
+    throw new Error(
+      `buildResolutionEntry: invalid entity kind ${String(opts.entityKind)}`,
+    )
+  }
+  if (!isDurableResolutionAction(opts.action)) {
+    throw new Error(
+      `buildResolutionEntry: invalid action ${String(opts.action)}`,
+    )
+  }
+  const replacementId = opts.replacementId?.trim()
+    ? normalizeDurableResolutionEntityId(opts.replacementId)
+    : undefined
+  if (opts.action === 'discard' && replacementId) {
+    throw new Error(
+      'buildResolutionEntry: discard cannot have replacementId',
+    )
+  }
+  if (opts.action === 'retry_safe' && !replacementId) {
+    throw new Error(
+      'buildResolutionEntry: retry_safe requires replacementId',
+    )
+  }
+  if (opts.detail?.includes('\0')) {
+    throw new Error(
+      'buildResolutionEntry: detail contains a null character',
+    )
+  }
+  return {
+    type: 'resolution',
+    sessionId,
+    resolutionId,
+    entityKind: opts.entityKind,
+    entityId,
+    action: opts.action,
+    timestamp: opts.timestamp ?? nowIso(),
+    ...(replacementId ? { replacementId } : {}),
+    ...(opts.detail?.trim() ? { detail: opts.detail.trim() } : {}),
+  }
+}
+
+export async function appendResolutionEntry(
+  file: string,
+  opts: Omit<DurableResolutionEvent, 'timestamp'> & {
+    timestamp?: string
+  },
+): Promise<TranscriptResolutionEntry> {
+  const entry = buildResolutionEntry(opts)
+  await appendTranscriptLine(file, entry)
+  return entry
+}
+
 /** 从 transcript 投影 turn；默认把 admitted/running 识别为 interrupted。 */
 export function projectDurableTurns(
   entries: readonly TranscriptEntry[],
@@ -895,6 +979,29 @@ export function projectDurableTasks(
     }
   }
   return projectDurableTaskEvents(events, opts)
+}
+
+/** 从 transcript 投影 append-only recovery resolutions。 */
+export function projectDurableResolutions(
+  entries: readonly TranscriptEntry[],
+): DurableResolutionRecord[] {
+  const events: DurableResolutionEvent[] = []
+  for (const entry of entries) {
+    if (entry.type !== 'resolution') continue
+    events.push({
+      resolutionId: entry.resolutionId,
+      sessionId: entry.sessionId,
+      entityKind: entry.entityKind,
+      entityId: entry.entityId,
+      action: entry.action,
+      timestamp: entry.timestamp,
+      ...(entry.replacementId
+        ? { replacementId: entry.replacementId }
+        : {}),
+      ...(entry.detail ? { detail: entry.detail } : {}),
+    })
+  }
+  return projectDurableResolutionEvents(events)
 }
 
 /** entries 中全部 file_diff（保持文件顺序） */
@@ -1042,6 +1149,7 @@ async function rewriteTranscriptFromMessagesUnlocked(
   let preservedTasks: Array<
     TranscriptTaskEntry | TranscriptTaskResultEntry
   > = []
+  let preservedResolutions: TranscriptResolutionEntry[] = []
   if (opts && 'title' in opts && opts.title !== undefined) {
     preservedTitle = normalizeSessionTitle(opts.title)
   }
@@ -1094,6 +1202,12 @@ async function rewriteTranscriptFromMessagesUnlocked(
             entry.type === 'task' || entry.type === 'task_result',
         )
         .map((entry) => ({ ...entry }))
+      preservedResolutions = entries
+        .filter(
+          (entry): entry is TranscriptResolutionEntry =>
+            entry.type === 'resolution',
+        )
+        .map((entry) => ({ ...entry }))
     } catch {
       /* 新文件或不可读 */
     }
@@ -1130,6 +1244,19 @@ async function rewriteTranscriptFromMessagesUnlocked(
             entry,
           ): entry is TranscriptTaskEntry | TranscriptTaskResultEntry =>
             entry.type === 'task' || entry.type === 'task_result',
+        )
+        .map((entry) => ({ ...entry }))
+    } catch {
+      /* 新文件或不可读 */
+    }
+  }
+  if (preservedResolutions.length === 0) {
+    try {
+      const { entries } = await loadTranscriptFile(filePath)
+      preservedResolutions = entries
+        .filter(
+          (entry): entry is TranscriptResolutionEntry =>
+            entry.type === 'resolution',
         )
         .map((entry) => ({ ...entry }))
     } catch {
@@ -1205,6 +1332,9 @@ async function rewriteTranscriptFromMessagesUnlocked(
   }
   for (const task of preservedTasks) {
     lines.push(JSON.stringify(task))
+  }
+  for (const resolution of preservedResolutions) {
+    lines.push(JSON.stringify(resolution))
   }
   const body = lines.length ? lines.join('\n') + '\n' : ''
   const tmp = path.join(
@@ -1677,6 +1807,39 @@ export async function loadTranscriptFile(
             ...(typeof o.detail === 'string' ? { detail: o.detail } : {}),
           }),
         )
+        continue
+      }
+      if (o.type === 'resolution') {
+        if (
+          typeof o.resolutionId !== 'string' ||
+          typeof o.sessionId !== 'string' ||
+          typeof o.entityId !== 'string' ||
+          !isDurableResolutionEntityKind(o.entityKind) ||
+          !isDurableResolutionAction(o.action)
+        ) {
+          continue
+        }
+        try {
+          entries.push(
+            buildResolutionEntry({
+              resolutionId: o.resolutionId,
+              sessionId: o.sessionId,
+              entityKind: o.entityKind,
+              entityId: o.entityId,
+              action: o.action,
+              timestamp:
+                typeof o.timestamp === 'string' ? o.timestamp : nowIso(),
+              ...(typeof o.replacementId === 'string'
+                ? { replacementId: o.replacementId }
+                : {}),
+              ...(typeof o.detail === 'string'
+                ? { detail: o.detail }
+                : {}),
+            }),
+          )
+        } catch {
+          // 非法 resolution 行 fail-closed 跳过。
+        }
         continue
       }
       if (o.type === 'compact_boundary') {

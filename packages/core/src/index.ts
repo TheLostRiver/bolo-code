@@ -126,6 +126,7 @@ import {
   projectDurableTurns,
   projectDurableControls,
   projectDurableTasks,
+  projectDurableResolutions,
 } from './sessionTranscript.ts'
 import {
   applyDurableTurnEvent,
@@ -135,6 +136,7 @@ import {
 } from './durableTurn.ts'
 import type { DurableControlRecord } from './durableControl.ts'
 import type { DurableTaskRecord } from './durableTask.ts'
+import type { DurableResolutionRecord } from './durableResolution.ts'
 import {
   defaultSessionCoordinator,
   type SessionCoordinator,
@@ -499,6 +501,7 @@ export {
   appendSessionControlState,
   appendSessionTaskState,
   appendSessionTaskResult,
+  appendSessionResolution,
   hasDurableSessionPersistence,
   type SessionSnapshot,
   type SessionScope,
@@ -534,6 +537,7 @@ export {
   appendControlEntry,
   appendTaskEntry,
   appendTaskResultEntry,
+  appendResolutionEntry,
   dualWriteSessionTranscript,
   writeTranscriptAfterCompact,
   resolveTranscriptPathFromJson,
@@ -550,6 +554,7 @@ export {
   projectDurableTurns,
   projectDurableControls,
   projectDurableTasks,
+  projectDurableResolutions,
   normalizeSessionTitle,
   normalizeSystemNoteText,
   buildTitleEntry,
@@ -559,6 +564,7 @@ export {
   buildControlEntry,
   buildTaskEntry,
   buildTaskResultEntry,
+  buildResolutionEntry,
   scanTranscriptLite,
   DEFAULT_LITE_SCAN_BYTES,
   getTranscriptWriteState,
@@ -576,6 +582,7 @@ export {
   type TranscriptControlEntry,
   type TranscriptTaskEntry,
   type TranscriptTaskResultEntry,
+  type TranscriptResolutionEntry,
   type TranscriptMetaInput,
   type TranscriptLiteScan,
 } from './sessionTranscript.ts'
@@ -621,6 +628,21 @@ export {
   type DurableTaskState,
   type DurableTaskIsolation,
 } from './durableTask.ts'
+export {
+  DURABLE_RESOLUTION_ACTIONS,
+  DURABLE_RESOLUTION_ENTITY_KINDS,
+  applyDurableResolutionEvent,
+  isDurableResolutionAction,
+  isDurableResolutionEntityKind,
+  normalizeDurableResolutionId,
+  normalizeDurableResolutionSessionId,
+  normalizeDurableResolutionEntityId,
+  projectDurableResolutionEvents,
+  type DurableResolutionAction,
+  type DurableResolutionEntityKind,
+  type DurableResolutionEvent,
+  type DurableResolutionRecord,
+} from './durableResolution.ts'
 export {
   createSessionBackgroundTaskLifecycle,
   type SessionTaskRuntimeSession,
@@ -844,6 +866,8 @@ export type BoloSession = {
   durableControls: DurableControlRecord[]
   /** DR3A：由 transcript task/task_result entries 投影；不自动重启 worker。 */
   durableTasks: DurableTaskRecord[]
+  /** DR4B2：由 transcript resolution entries 投影；不删除原 lifecycle。 */
+  durableResolutions: DurableResolutionRecord[]
   /**
    * 权威 system 段（对照 HC systemPrompt）。
    * callModel 时由 prepareModelMessages 前缀；对话历史尽量不混入 system。
@@ -1206,6 +1230,7 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
     durableTurns: [],
     durableControls: [],
     durableTasks: [],
+    durableResolutions: [],
     hookDiagLog: createHookDiagLog(),
     postCompactReinjection: true,
     onEvent: opts.onEvent ?? (() => {}),
@@ -1960,7 +1985,19 @@ export async function submitPrompt(
     return terminal
   }
   const existing = session.durableTurns.find((turn) => turn.turnId === turnId)
-  if (existing) {
+  const promotedQueueAdmission =
+    existing?.state === 'admitted' &&
+    existing.prompt === prompt &&
+    session.coordinator
+      .snapshot(session.id)
+      .controls.some(
+        (control) =>
+          control.kind === 'queue' &&
+          control.state === 'promoted' &&
+          control.turnId === turnId &&
+          control.prompt === prompt,
+      )
+  if (existing && !promotedQueueAdmission) {
     const detail = `duplicate turnId "${turnId}" (state=${existing.state})`
     const terminal: Terminal = { reason: 'error', detail }
     emit(session, { type: 'error', message: detail })
@@ -2385,6 +2422,7 @@ export async function resumeSession(
     session.durableTurns = projectDurableTurns(entries)
     session.durableControls = projectDurableControls(entries)
     session.durableTasks = projectDurableTasks(entries)
+    session.durableResolutions = projectDurableResolutions(entries)
     if (session.backgroundAgents) {
       restoreBackgroundAgentStoreFromDurableTasks(
         session.backgroundAgents,

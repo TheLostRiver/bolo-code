@@ -133,6 +133,7 @@ export type SlashSession = {
   durableTurns?: import('./durableTurn.ts').DurableTurnRecord[]
   durableControls?: import('./durableControl.ts').DurableControlRecord[]
   durableTasks?: import('./durableTask.ts').DurableTaskRecord[]
+  durableResolutions?: import('./durableResolution.ts').DurableResolutionRecord[]
   /** 本地 usage 累计；/cost · /context · /doctor */
   usage?: SessionUsage
   /** 本地 prompt-cache 观测；/cost */
@@ -1092,7 +1093,8 @@ function asRuntimeCommandSession(
     !session.phase ||
     !Array.isArray(session.durableTurns) ||
     !Array.isArray(session.durableControls) ||
-    !Array.isArray(session.durableTasks)
+    !Array.isArray(session.durableTasks) ||
+    !Array.isArray(session.durableResolutions)
   ) {
     return null
   }
@@ -1172,7 +1174,7 @@ async function cmdRuntime(
       return {
         ok: false,
         message:
-          'Usage: /runtime [list|json|inspect [turn|control|task] [id]|interrupt <turnId>|cancel <control|task> <id>]',
+          'Usage: /runtime [list|json|inspect [turn|control|task] [id]|interrupt <turnId>|cancel <control|task> <id>|discard <turn|control|task> <id>|retry-safe <turn|control|task> <id>]',
       }
     }
     return { ok: true, message: formatRuntimeList(snapshot) }
@@ -1284,10 +1286,43 @@ async function cmdRuntime(
     const result = await executeRuntimeCommand(runtimeSession, command)
     return { ok: result.ok, message: runtimeResultMessage(result) }
   }
+  if (action === 'discard' || action === 'retry-safe') {
+    const entity = parts[1]?.toLowerCase()
+    const id = parts[2]
+    if (
+      !id ||
+      parts.length !== 3 ||
+      (entity !== 'turn' &&
+        entity !== 'control' &&
+        entity !== 'task')
+    ) {
+      return {
+        ok: false,
+        message:
+          `Usage: /runtime ${action} <turn|control|task> <id>`,
+      }
+    }
+    const result = await executeRuntimeCommand(runtimeSession, {
+      protocolVersion: RUNTIME_PROTOCOL_VERSION,
+      kind: 'runtime.command',
+      requestId: runtimeCommandId(),
+      action:
+        action === 'discard'
+          ? 'runtime.discard'
+          : 'runtime.retry-safe',
+      target: {
+        sessionId: session.id,
+        entity,
+        entityId: id,
+        expectedState: 'interrupted',
+      },
+    })
+    return { ok: result.ok, message: runtimeResultMessage(result) }
+  }
   return {
     ok: false,
     message:
-      'Usage: /runtime [list|json|inspect [turn|control|task] [id]|interrupt <turnId>|cancel <control|task> <id>]',
+      'Usage: /runtime [list|json|inspect [turn|control|task] [id]|interrupt <turnId>|cancel <control|task> <id>|discard <turn|control|task> <id>|retry-safe <turn|control|task> <id>]',
   }
 }
 
@@ -3478,9 +3513,10 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
   },
   {
     name: 'runtime',
-    summary: 'Protocol v1 runtime list/inspect/interrupt/cancel',
+    summary:
+      'Protocol v1 runtime inspect/control/discard/retry-safe',
     usage:
-      '[list|json|inspect [turn|control|task] [id]|interrupt <turnId>|cancel <control|task> <id>]',
+      '[list|json|inspect [turn|control|task] [id]|interrupt <turnId>|cancel <control|task> <id>|discard <turn|control|task> <id>|retry-safe <turn|control|task> <id>]',
     group: 'session',
     run: cmdRuntime,
   },

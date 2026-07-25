@@ -5,6 +5,7 @@ import {
   parseRuntimeSnapshot,
   type RuntimeControlView,
   type RuntimeRunnerView,
+  type RuntimeResolutionView,
   type RuntimeSessionPhase,
   type RuntimeSnapshot,
   type RuntimeTaskResultView,
@@ -16,6 +17,7 @@ import {
 import type { DurableControlRecord } from './durableControl.ts'
 import type { DurableTaskRecord } from './durableTask.ts'
 import type { DurableTurnRecord } from './durableTurn.ts'
+import type { DurableResolutionRecord } from './durableResolution.ts'
 import type {
   SessionControlRecord,
   SessionRunnerSnapshot,
@@ -42,6 +44,7 @@ export type RuntimeSnapshotSource = {
   durableTurns: readonly DurableTurnRecord[]
   durableControls: readonly DurableControlRecord[]
   durableTasks: readonly DurableTaskRecord[]
+  durableResolutions: readonly DurableResolutionRecord[]
   backgroundAgents?: BackgroundAgentStore
 }
 
@@ -73,7 +76,37 @@ function copyUsage(
   }
 }
 
-function turnView(record: DurableTurnRecord): RuntimeTurnView {
+function resolutionView(
+  record: DurableResolutionRecord | undefined,
+): RuntimeResolutionView | undefined {
+  if (!record) return undefined
+  return {
+    resolutionId: record.resolutionId,
+    sessionId: record.sessionId,
+    entityKind: record.entityKind,
+    entityId: record.entityId,
+    action: record.action,
+    resolvedAt: record.resolvedAt,
+    updatedAt: record.updatedAt,
+    ...(record.replacementId
+      ? { replacementId: record.replacementId }
+      : {}),
+    ...(record.detail ? { detail: record.detail } : {}),
+  }
+}
+
+function resolutionKey(
+  entityKind: 'turn' | 'control' | 'task',
+  entityId: string,
+): string {
+  return `${entityKind}:${entityId}`
+}
+
+function turnView(
+  record: DurableTurnRecord,
+  resolution?: DurableResolutionRecord,
+): RuntimeTurnView {
+  const resolved = resolutionView(resolution)
   return {
     turnId: record.turnId,
     state: record.state,
@@ -88,12 +121,21 @@ function turnView(record: DurableTurnRecord): RuntimeTurnView {
     ...(record.recovered !== undefined
       ? { recovered: record.recovered }
       : {}),
+    ...(record.interruptedFrom
+      ? { interruptedFrom: record.interruptedFrom }
+      : {}),
+    ...(record.recoveryReason
+      ? { recoveryReason: record.recoveryReason }
+      : {}),
+    ...(resolved ? { resolution: resolved } : {}),
   }
 }
 
 function durableControlView(
   record: DurableControlRecord,
+  resolution?: DurableResolutionRecord,
 ): RuntimeControlView {
+  const resolved = resolutionView(resolution)
   return {
     controlId: record.controlId,
     sessionId: record.sessionId,
@@ -118,10 +160,14 @@ function durableControlView(
     ...(record.recoveryReason
       ? { recoveryReason: record.recoveryReason }
       : {}),
+    ...(resolved ? { resolution: resolved } : {}),
   }
 }
 
-function liveControlView(record: SessionControlRecord): RuntimeControlView {
+function liveControlView(
+  record: SessionControlRecord,
+  resolution?: RuntimeResolutionView,
+): RuntimeControlView {
   return {
     controlId: record.controlId,
     sessionId: record.sessionId,
@@ -136,6 +182,7 @@ function liveControlView(record: SessionControlRecord): RuntimeControlView {
     ...(record.prompt !== undefined ? { prompt: record.prompt } : {}),
     ...(record.querySource ? { querySource: record.querySource } : {}),
     ...(record.boundary ? { boundary: record.boundary } : {}),
+    ...(resolution ? { resolution } : {}),
   }
 }
 
@@ -201,8 +248,10 @@ function taskState(status: BackgroundAgentStatus): RuntimeTaskState {
 function durableTaskView(
   record: DurableTaskRecord,
   live?: BackgroundAgentEntry,
+  resolution?: DurableResolutionRecord,
 ): RuntimeTaskView {
   const result = taskResultView(record.result) ?? liveResultView(live)
+  const resolved = resolutionView(resolution)
   const parentTurnId = live?.parentTurnId ?? record.parentTurnId
   const prompt = live?.prompt ?? record.prompt
   const description = live?.description ?? record.description
@@ -228,6 +277,7 @@ function durableTaskView(
     ...(record.recoveryReason
       ? { recoveryReason: record.recoveryReason }
       : {}),
+    ...(resolved ? { resolution: resolved } : {}),
   }
 }
 
@@ -284,20 +334,49 @@ export function buildRuntimeSnapshot(
   options?: BuildRuntimeSnapshotOptions,
 ): RuntimeSnapshot {
   const coordinator = source.coordinator.snapshot(source.id)
+  const resolutions = new Map<string, DurableResolutionRecord>()
+  for (const resolution of source.durableResolutions) {
+    const key = resolutionKey(
+      resolution.entityKind,
+      resolution.entityId,
+    )
+    if (resolutions.has(key)) {
+      throw new Error(`duplicate runtime resolution target "${key}"`)
+    }
+    resolutions.set(key, resolution)
+  }
+  const attachedResolutionKeys = new Set<string>()
   const controls = new Map<string, RuntimeControlView>()
   for (const record of source.durableControls) {
-    controls.set(record.controlId, durableControlView(record))
+    const key = resolutionKey('control', record.controlId)
+    const resolution = resolutions.get(key)
+    if (resolution) attachedResolutionKeys.add(key)
+    controls.set(
+      record.controlId,
+      durableControlView(record, resolution),
+    )
   }
   for (const record of coordinator.controls) {
-    controls.set(record.controlId, liveControlView(record))
+    const previous = controls.get(record.controlId)
+    controls.set(
+      record.controlId,
+      liveControlView(record, previous?.resolution),
+    )
   }
 
   const liveTasks = liveBackgroundEntries(source.backgroundAgents)
   const tasks = new Map<string, RuntimeTaskView>()
   for (const record of source.durableTasks) {
+    const key = resolutionKey('task', record.taskId)
+    const resolution = resolutions.get(key)
+    if (resolution) attachedResolutionKeys.add(key)
     tasks.set(
       record.taskId,
-      durableTaskView(record, liveTasks.get(record.taskId)),
+      durableTaskView(
+        record,
+        liveTasks.get(record.taskId),
+        resolution,
+      ),
     )
   }
   for (const [taskId, entry] of liveTasks) {
@@ -316,10 +395,21 @@ export function buildRuntimeSnapshot(
       cwd: source.cwd,
       phase: source.phase,
       runner: runnerView(coordinator),
-      turns: source.durableTurns.map(turnView),
+      turns: source.durableTurns.map((record) => {
+        const key = resolutionKey('turn', record.turnId)
+        const resolution = resolutions.get(key)
+        if (resolution) attachedResolutionKeys.add(key)
+        return turnView(record, resolution)
+      }),
       controls: [...controls.values()],
       tasks: [...tasks.values()],
     },
+  }
+  if (attachedResolutionKeys.size !== resolutions.size) {
+    const missing = [...resolutions.keys()].find(
+      (key) => !attachedResolutionKeys.has(key),
+    )
+    throw new Error(`runtime resolution target "${missing}" was not found`)
   }
   const parsed = parseRuntimeSnapshot(candidate)
   if (!parsed.ok) {

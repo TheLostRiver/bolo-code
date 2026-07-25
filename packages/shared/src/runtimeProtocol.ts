@@ -19,6 +19,9 @@ export const RUNTIME_PROTOCOL_FEATURES = [
   'commands.inspect',
   'commands.interrupt',
   'commands.cancel',
+  'commands.discard',
+  'commands.retry-safe',
+  'views.resolutions',
 ] as const
 
 export type RuntimeProtocolVersion = typeof RUNTIME_PROTOCOL_VERSION
@@ -94,6 +97,33 @@ export const RUNTIME_TASK_ISOLATIONS = ['none', 'worktree'] as const
 export type RuntimeTaskIsolation =
   (typeof RUNTIME_TASK_ISOLATIONS)[number]
 
+export const RUNTIME_RESOLUTION_ACTIONS = [
+  'discard',
+  'retry_safe',
+] as const
+export type RuntimeResolutionAction =
+  (typeof RUNTIME_RESOLUTION_ACTIONS)[number]
+
+export const RUNTIME_RESOLUTION_ENTITY_KINDS = [
+  'turn',
+  'control',
+  'task',
+] as const
+export type RuntimeResolutionEntityKind =
+  (typeof RUNTIME_RESOLUTION_ENTITY_KINDS)[number]
+
+export type RuntimeResolutionView = {
+  resolutionId: string
+  sessionId: string
+  entityKind: RuntimeResolutionEntityKind
+  entityId: string
+  action: RuntimeResolutionAction
+  resolvedAt: string
+  updatedAt: string
+  replacementId?: string
+  detail?: string
+}
+
 export type RuntimeRunnerOwnerView = {
   sessionId: string
   turnId: string
@@ -115,6 +145,9 @@ export type RuntimeTurnView = {
   terminalReason?: string
   detail?: string
   recovered?: boolean
+  interruptedFrom?: 'admitted' | 'running'
+  recoveryReason?: 'process_restart'
+  resolution?: RuntimeResolutionView
 }
 
 export type RuntimeControlView = {
@@ -133,6 +166,7 @@ export type RuntimeControlView = {
   recovered?: boolean
   interruptedFrom?: 'pending' | 'ready'
   recoveryReason?: 'process_restart'
+  resolution?: RuntimeResolutionView
 }
 
 export type RuntimeUsageView = {
@@ -173,6 +207,7 @@ export type RuntimeTaskView = {
   recovered?: boolean
   interruptedFrom?: 'admitted' | 'running'
   recoveryReason?: 'process_restart'
+  resolution?: RuntimeResolutionView
 }
 
 export type RuntimeSessionView = {
@@ -225,6 +260,8 @@ export const RUNTIME_COMMAND_ACTIONS = [
   'turn.interrupt',
   'control.cancel',
   'task.cancel',
+  'runtime.discard',
+  'runtime.retry-safe',
 ] as const
 export type RuntimeCommandAction = (typeof RUNTIME_COMMAND_ACTIONS)[number]
 
@@ -266,11 +303,22 @@ export type RuntimeTaskCancelCommand = RuntimeCommandBase & {
   }
 }
 
+export type RuntimeRecoveryCommand = RuntimeCommandBase & {
+  action: 'runtime.discard' | 'runtime.retry-safe'
+  target: {
+    sessionId: string
+    entity: RuntimeResolutionEntityKind
+    entityId: string
+    expectedState: 'interrupted'
+  }
+}
+
 export type RuntimeCommand =
   | RuntimeInspectCommand
   | RuntimeTurnInterruptCommand
   | RuntimeControlCancelCommand
   | RuntimeTaskCancelCommand
+  | RuntimeRecoveryCommand
 
 export const RUNTIME_COMMAND_ERROR_CODES = [
   'invalid_command',
@@ -278,6 +326,7 @@ export const RUNTIME_COMMAND_ERROR_CODES = [
   'state_conflict',
   'not_cancellable',
   'persistence_failed',
+  'not_retry_safe',
   'internal_error',
 ] as const
 export type RuntimeCommandErrorCode =
@@ -528,8 +577,79 @@ function parseRunner(value: unknown, path: string): RuntimeRunnerView {
   }
 }
 
+function parseResolution(
+  value: unknown,
+  path: string,
+): RuntimeResolutionView {
+  const record = requiredRecord(value, path)
+  const action = oneOf(
+    record.action,
+    RUNTIME_RESOLUTION_ACTIONS,
+    `${path}.action`,
+  )
+  const replacementId =
+    record.replacementId === undefined
+      ? undefined
+      : requiredString(
+          record.replacementId,
+          `${path}.replacementId`,
+        )
+  if (action === 'discard' && replacementId !== undefined) {
+    throw new Error(`${path}.discard cannot have a replacementId`)
+  }
+  if (action === 'retry_safe' && replacementId === undefined) {
+    throw new Error(`${path}.retry_safe requires a replacementId`)
+  }
+  return {
+    resolutionId: requiredString(
+      record.resolutionId,
+      `${path}.resolutionId`,
+    ),
+    sessionId: requiredString(record.sessionId, `${path}.sessionId`),
+    entityKind: oneOf(
+      record.entityKind,
+      RUNTIME_RESOLUTION_ENTITY_KINDS,
+      `${path}.entityKind`,
+    ),
+    entityId: requiredString(record.entityId, `${path}.entityId`),
+    action,
+    resolvedAt: requiredString(
+      record.resolvedAt,
+      `${path}.resolvedAt`,
+      512,
+    ),
+    updatedAt: requiredString(
+      record.updatedAt,
+      `${path}.updatedAt`,
+      512,
+    ),
+    ...(replacementId !== undefined
+      ? { replacementId }
+      : {}),
+    ...(optionalText(record, 'detail', path) !== undefined
+      ? { detail: optionalText(record, 'detail', path) }
+      : {}),
+  }
+}
+
 function parseTurn(value: unknown, path: string): RuntimeTurnView {
   const record = requiredRecord(value, path)
+  const interruptedFrom =
+    record.interruptedFrom === undefined
+      ? undefined
+      : oneOf(
+          record.interruptedFrom,
+          ['admitted', 'running'] as const,
+          `${path}.interruptedFrom`,
+        )
+  const recoveryReason =
+    record.recoveryReason === undefined
+      ? undefined
+      : oneOf(
+          record.recoveryReason,
+          ['process_restart'] as const,
+          `${path}.recoveryReason`,
+        )
   return {
     turnId: requiredString(record.turnId, `${path}.turnId`),
     state: oneOf(record.state, RUNTIME_TURN_STATES, `${path}.state`),
@@ -551,6 +671,16 @@ function parseTurn(value: unknown, path: string): RuntimeTurnView {
       : {}),
     ...(optionalBoolean(record, 'recovered', path) !== undefined
       ? { recovered: optionalBoolean(record, 'recovered', path) }
+      : {}),
+    ...(interruptedFrom ? { interruptedFrom } : {}),
+    ...(recoveryReason ? { recoveryReason } : {}),
+    ...(record.resolution !== undefined
+      ? {
+          resolution: parseResolution(
+            record.resolution,
+            `${path}.resolution`,
+          ),
+        }
       : {}),
   }
 }
@@ -613,6 +743,14 @@ function parseControl(value: unknown, path: string): RuntimeControlView {
       : {}),
     ...(interruptedFrom ? { interruptedFrom } : {}),
     ...(recoveryReason ? { recoveryReason } : {}),
+    ...(record.resolution !== undefined
+      ? {
+          resolution: parseResolution(
+            record.resolution,
+            `${path}.resolution`,
+          ),
+        }
+      : {}),
   }
 }
 
@@ -721,6 +859,14 @@ function parseTask(value: unknown, path: string): RuntimeTaskView {
       : {}),
     ...(interruptedFrom ? { interruptedFrom } : {}),
     ...(recoveryReason ? { recoveryReason } : {}),
+    ...(record.resolution !== undefined
+      ? {
+          resolution: parseResolution(
+            record.resolution,
+            `${path}.resolution`,
+          ),
+        }
+      : {}),
   }
 }
 
@@ -780,6 +926,57 @@ function parseSnapshotOrThrow(input: unknown): RuntimeSnapshot {
   if (tasks.some((task) => task.sessionId !== sessionId)) {
     throw new Error('snapshot contains a task from another session')
   }
+  const resolutions: RuntimeResolutionView[] = []
+  for (const turn of turns) {
+    if (!turn.resolution) continue
+    if (
+      turn.state !== 'interrupted' ||
+      turn.resolution.sessionId !== sessionId ||
+      turn.resolution.entityKind !== 'turn' ||
+      turn.resolution.entityId !== turn.turnId
+    ) {
+      throw new Error('snapshot contains a resolution for another entity')
+    }
+    resolutions.push(turn.resolution)
+  }
+  for (const control of controls) {
+    if (!control.resolution) continue
+    if (
+      control.state !== 'interrupted' ||
+      control.resolution.sessionId !== sessionId ||
+      control.resolution.entityKind !== 'control' ||
+      control.resolution.entityId !== control.controlId
+    ) {
+      throw new Error('snapshot contains a resolution for another entity')
+    }
+    resolutions.push(control.resolution)
+  }
+  for (const task of tasks) {
+    if (!task.resolution) continue
+    if (
+      task.state !== 'interrupted' ||
+      task.resolution.sessionId !== sessionId ||
+      task.resolution.entityKind !== 'task' ||
+      task.resolution.entityId !== task.taskId
+    ) {
+      throw new Error('snapshot contains a resolution for another entity')
+    }
+    resolutions.push(task.resolution)
+  }
+  for (const resolution of resolutions) {
+    if (
+      resolution.action === 'retry_safe' &&
+      (!resolution.replacementId ||
+        resolution.replacementId === resolution.entityId ||
+        !turns.some(
+          (turn) => turn.turnId === resolution.replacementId,
+        ))
+    ) {
+      throw new Error(
+        `snapshot resolution "${resolution.resolutionId}" has an invalid replacement turn`,
+      )
+    }
+  }
   assertUniqueIds(turns, (turn) => turn.turnId, 'snapshot.session.turns')
   assertUniqueIds(
     controls,
@@ -787,6 +984,11 @@ function parseSnapshotOrThrow(input: unknown): RuntimeSnapshot {
     'snapshot.session.controls',
   )
   assertUniqueIds(tasks, (task) => task.taskId, 'snapshot.session.tasks')
+  assertUniqueIds(
+    resolutions,
+    (resolution) => resolution.resolutionId,
+    'snapshot.session.resolutions',
+  )
   return {
     protocolVersion: RUNTIME_PROTOCOL_VERSION,
     kind: 'runtime.snapshot',
@@ -950,6 +1152,38 @@ export function parseRuntimeCommand(
               'command.target.controlId',
             ),
             expectedState: target.expectedState,
+          },
+        },
+      }
+    }
+    if (
+      action === 'runtime.discard' ||
+      action === 'runtime.retry-safe'
+    ) {
+      if (target.expectedState !== 'interrupted') {
+        return {
+          ok: false,
+          code: 'invalid_transition',
+          detail: `${action} requires expectedState="interrupted"`,
+        }
+      }
+      return {
+        ok: true,
+        value: {
+          ...base,
+          action,
+          target: {
+            sessionId,
+            entity: oneOf(
+              target.entity,
+              RUNTIME_RESOLUTION_ENTITY_KINDS,
+              'command.target.entity',
+            ),
+            entityId: requiredString(
+              target.entityId,
+              'command.target.entityId',
+            ),
+            expectedState: 'interrupted',
           },
         },
       }

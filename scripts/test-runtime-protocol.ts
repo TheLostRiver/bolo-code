@@ -67,6 +67,16 @@ const source = {
       admittedAt: '2026-07-25T23:59:00.000Z',
       updatedAt: '2026-07-25T23:59:03.000Z',
     },
+    {
+      turnId: 'turn_interrupted',
+      state: 'interrupted' as const,
+      prompt: 'acknowledge old input',
+      admittedAt: '2026-07-25T23:58:00.000Z',
+      updatedAt: '2026-07-25T23:58:01.000Z',
+      recovered: true,
+      interruptedFrom: 'admitted' as const,
+      recoveryReason: 'process_restart' as const,
+    },
   ],
   durableControls: [
     {
@@ -121,6 +131,17 @@ const source = {
       },
     },
   ],
+  durableResolutions: [
+    {
+      resolutionId: 'resolution_discard_turn',
+      sessionId: 'session_protocol',
+      entityKind: 'turn' as const,
+      entityId: 'turn_interrupted',
+      action: 'discard' as const,
+      resolvedAt: '2026-07-26T00:00:04.000Z',
+      updatedAt: '2026-07-26T00:00:04.000Z',
+    },
+  ],
   backgroundAgents: {
     pendingAgents: {
       task_queued: {
@@ -171,6 +192,12 @@ assert.equal(
     ?.summary,
   'finished',
 )
+assert.equal(
+  snapshot.session.turns.find(
+    (row) => row.turnId === 'turn_interrupted',
+  )?.resolution?.action,
+  'discard',
+)
 
 const serialized = JSON.stringify(snapshot)
 for (const forbidden of [
@@ -196,6 +223,13 @@ const unknownSession = withUnknownFields.session as Record<string, unknown>
 unknownSession.futureSessionField = 'ignored'
 const unknownTurns = unknownSession.turns as Array<Record<string, unknown>>
 unknownTurns[0].futureTurnField = 42
+const resolvedTurn = unknownTurns.find(
+  (turn) => turn.turnId === 'turn_interrupted',
+)
+if (resolvedTurn?.resolution) {
+  ;(resolvedTurn.resolution as Record<string, unknown>).futureField =
+    'ignored'
+}
 const forwardCompatible = parseRuntimeSnapshot(withUnknownFields)
 assert.equal(forwardCompatible.ok, true)
 if (forwardCompatible.ok) assert.deepEqual(forwardCompatible.value, snapshot)
@@ -227,6 +261,21 @@ assert.equal(rejectedDuplicate.ok, false)
 if (!rejectedDuplicate.ok) {
   assert.equal(rejectedDuplicate.code, 'invalid_snapshot')
   assert.match(rejectedDuplicate.detail, /duplicate id/)
+}
+
+const invalidResolution = cloneJson(snapshot)
+const invalidResolvedTurn = invalidResolution.session.turns.find(
+  (turn) => turn.turnId === 'turn_interrupted',
+)
+if (!invalidResolvedTurn?.resolution) {
+  throw new Error('resolution fixture missing')
+}
+;(invalidResolvedTurn.resolution as { action: string }).action =
+  'force_replay'
+const rejectedResolution = parseRuntimeSnapshot(invalidResolution)
+assert.equal(rejectedResolution.ok, false)
+if (!rejectedResolution.ok) {
+  assert.equal(rejectedResolution.code, 'invalid_snapshot')
 }
 
 const hello = createRuntimeProtocolHello()
@@ -342,6 +391,17 @@ if (parsedResult.ok) {
     detail: 'turn already completed',
   })
 }
+
+const parsedRetryFailure = parseRuntimeCommandResult({
+  protocolVersion: RUNTIME_PROTOCOL_VERSION,
+  kind: 'runtime.result',
+  requestId: 'request_retry_rejected',
+  action: 'runtime.retry-safe',
+  ok: false,
+  code: 'not_retry_safe',
+  detail: 'running work may have side effects',
+})
+assert.equal(parsedRetryFailure.ok, true)
 
 const parsedSuccessResult = parseRuntimeCommandResult({
   protocolVersion: RUNTIME_PROTOCOL_VERSION,

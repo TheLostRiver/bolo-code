@@ -30,6 +30,8 @@ export type DurableTurnRecord = {
   detail?: string
   /** admitted/running 在恢复时只投影为 interrupted，不代表自动重放。 */
   recovered?: boolean
+  interruptedFrom?: Extract<DurableTurnState, 'admitted' | 'running'>
+  recoveryReason?: 'process_restart'
 }
 
 export function isDurableTurnState(value: unknown): value is DurableTurnState {
@@ -92,9 +94,12 @@ export function projectDurableTurnEvents(
     if (record.state !== 'admitted' && record.state !== 'running') {
       return record
     }
+    const interruptedFrom = record.state
     return {
       ...record,
       state: 'interrupted',
+      interruptedFrom,
+      recoveryReason: 'process_restart',
       terminalReason: 'process_restart',
       recovered: true,
     }
