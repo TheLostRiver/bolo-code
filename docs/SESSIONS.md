@@ -29,6 +29,7 @@
 | `compact_boundary` | full compact 边界（`compactSession` 成功后 rewrite jsonl 写入） |
 | `title` | 会话标题（**last-wins**；**不进**模型 messages；rewrite 时保留最后一条） |
 | `turn` | Durable Turn 生命周期（`turnId` + `state`；**不进**模型 messages；rewrite 时保留） |
+| `control` | Durable control 生命周期（`controlId` + `kind/state`；**不进**模型 messages；rewrite 时保留） |
 
 `saveSession` **默认**只增量 append / rewrite `.jsonl`；不再默认原子写 JSON。`migrateSessionToJsonl` 可将旧 JSON 旁路写出 jsonl（默认不删 JSON）。`setSessionTitle` / `/title` 追加 `title` 行；`appendSessionSystemNote` / `/note` 追加 `system_note`（不进模型链）。list 对 jsonl 走 `scanTranscriptLite`（轻量计数字段 + 近况 preview）。详见 `docs/TODO_SESSION_JSONL.md`。
 
@@ -83,7 +84,7 @@ requestControl(controlId, kind, sessionId, expectedTurnId, ...)
 - queue/steer 在 promotion 前可取消；未使用 steer 在 active turn 释放时 cancelled。
 - `after_provider` / `before_tools` 等会破坏 assistant-tool pairing 的位置不 promotion steer。
 - interrupt 产生 lease-local signal，并由 DR2B2 合并到 queryLoop/provider/tool/permission abort 链。
-- controls 暂为进程内投影，不写 transcript；崩溃恢复与 compact 保留规则归 DR2C。
+- 裸 coordinator API 保持进程内投影；产品路径从 DR2C2 起经 session wrapper 写 transcript。
 
 #### DR2B2 queryLoop wiring
 
@@ -123,7 +124,17 @@ controlId + sessionId + kind + state + timestamp
 - 重启时 pending/ready 只投影为 diagnostic interrupted，不自动重新入队；promoted/cancelled 保持事实状态。
 - compact/shrink rewrite 保留 control entries；坏行与未知状态跳过；旧 transcript 无 control 仍可读。
 
-DR2C1 只完成 schema/projection；产品 request/cancel/promote/take/release 的持久化 wiring 属于 DR2C2。
+#### DR2C2 lifecycle persistence wiring
+
+- 产品 request/cancel/promote/take/release 全部经过 session-level durable wrapper；显式使用裸 coordinator 的 embedding 仍是纯内存。
+- queue/steer accepted entry 写失败会立即 cancelled 并向调用方返回 `control_persistence_failed`；不会进入消息或执行队列。
+- interrupt 先作用于 runner-local signal；若审计写失败，调用方收到 persistence warning，但不能把已发生的 interrupt 伪装成拒绝。
+- safe-boundary promotion 与 CLI queue take 只有落盘成功才把 control 交给消息链/执行器。
+- `releaseWithBarrier` 在 ready/cancelled terminal transitions 落盘前保留 active owner；barrier 期间同 session acquire 仍 busy，新 control 返回 `turn_releasing`。
+- barrier 失败仍在 finally 释放 runner，且未审计的 ready queue 转 cancelled；磁盘 pending 在重启后仍只投影 interrupted。
+- resume 填充 `session.durableControls` 供后续协议/诊断消费，但不会重建 coordinator queue。
+
+DR2C3 将继续覆盖 concurrent append、crash fixture、重复/部分写入与 compact/rewrite/terminal failure 组合回归。
 
 ## 2. 快照格式（version 1，只读兼容）
 

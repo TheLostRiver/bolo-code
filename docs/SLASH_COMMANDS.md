@@ -26,9 +26,9 @@
 | `/compact [note]` | `compactSession`；成功后报告 messages token 前后与节省量；无 summarizer 时错误文案 |
 | `/autocompact [on\|off]` | 会话级 auto compact 开关；无参显示 on/off + summarizer + 环境熔断；重挂 prepare 链 |
 | `/context` | 消息数、字符粗算、**tokens 分拆（messages + system）**、**window / auto threshold / pressure**、permissionMode、model、effort、cwd、id、**各 system section 标签·长度·token·角色（cache-stable/memory·volatile…）**、skill catalog 预算、**memory 路径/cap 提示**、**cache + prepare 顺序**、usage 一行；提示 `/autocompact` |
-| `/turn status` | 显示 coordinator `idle/running`、active turn 与 control 历史（pending/ready/promoted/cancelled） |
+| `/turn status` | 显示当前进程 coordinator `idle/running`、active turn 与 live control 历史（pending/ready/promoted/cancelled） |
 | `/turn steer <text>` · `/turn interrupt` | 自动携带 snapshot 的 expected active turn；stale/no-active 由 core fail-closed |
-| `/turn queue <text>` · `/turn cancel <controlId>` | active 时 pending、idle 时 ready；REPL FIFO drain；pending/ready 可取消；取出后不重放 |
+| `/turn queue <text>` · `/turn cancel <controlId>` | active 时 pending、idle 时 ready；REPL FIFO drain；pending/ready 可取消；durable 写成功后才交给执行器 |
 | `/doctor` · `/status` | 本地诊断：node/platform、cwd/id/**provider**/mode/model/effort、messages/sections、tools/skills/agent types、**plugins(+warnings)**、**memory user/project 路径**、**mcp 连接数 + 失败摘要**、usage、autoCompact/maxPtlRetries、`getBoloHomeDir()`；无遥测；`/status` 为隐藏别名 |
 | `/memory` · `/memory path` · `/memory topics` | 跨会话 **MEMORY.md**：user/project 路径、开关、预览、topic 列表（见 `docs/MEMORY.md`） |
 | `/mcp` · `/mcp status` · `/mcp tools` | 已连接 MCP：**transport / status / live / caps / 脱敏 endpoint**；`status` 含 **failures + configWarnings**；`tools` 列 `mcp__server__tool` |
@@ -74,7 +74,8 @@ REPL 额外：`/exit` `/quit` 由 CLI 处理（退出循环，不进总线）。
 ## CLI
 
 - resume 与新会话的 readline 均经 `runOnePrompt` → `submitUserInput`。
-- Ctrl-C 优先向 coordinator active turn 提交 interrupt；REPL 在询问新输入前消费一条 ready queue，并透传原 `turnId/querySource`。
+- Ctrl-C 优先向 coordinator active turn 提交 durable interrupt；REPL 在询问新输入前持久化 queue promotion，再透传原 `turnId/querySource`。
+- 持久化写失败时 queue/steer fail-closed；已触发的 interrupt 会明确提示 persistence warning。重启不会自动重放 pending/ready control。
 - 模块：`packages/core/src/slash.ts`；导出见 `@bolo/core`。
 
 ## 插件 slash（PL2 最小）

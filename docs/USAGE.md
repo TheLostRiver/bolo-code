@@ -401,7 +401,9 @@ CLI：
 - `/diff` 摘要可经 transcript `file_diff` 恢复（无全文 hunk）  
 - 持久化 CLI turn 会在调用模型前写入 `admitted/running`；完成、错误或取消后写 terminal。若进程中断，resume 将未完成 turn 识别为 `interrupted`，但不会自动重放可能已有副作用的工作。
 - 同一进程若有两个调用方同时提交相同 `sessionId`，core 会立即拒绝后到者（`session runner busy`），不会把它写入消息或调用模型；不同 session 可并行。CLI REPL 本身仍按 turn 串行。
-- `/turn queue` 在 active turn 后建立 ready 输入；REPL 会在再次询问人工输入前 FIFO 执行，并沿用已分配的 durable `turnId`。controls 当前只在进程内存在，重启后的恢复投影归后续 DR2C。
+- `/turn queue` 在 active turn 后建立 ready 输入；REPL 会在再次询问人工输入前 FIFO 执行，并沿用已分配的 durable `turnId`。
+- 持久化会话会把 request/cancel/promote/take/release control lifecycle 追加到 JSONL；写失败时 queue/steer 不执行，interrupt 若已生效会显示 persistence warning。
+- 重启后 pending/ready control 只恢复为 `interrupted` 诊断记录，不自动重新排队或重放；当前进程的 `/turn status` 仍只展示 live coordinator。
 
 ```bash
 npx bolo --list
