@@ -9,7 +9,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { register } from 'tsx/esm/api'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const repoRoot = path.resolve(__dirname, '../../..')
+// src/main → src → desktop → apps → repo root
+const repoRoot = path.resolve(__dirname, '../../../..')
 
 register()
 

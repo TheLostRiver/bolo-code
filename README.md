@@ -21,12 +21,12 @@
 | 文件 Diff 日用 | ~95%+ | D0–D7 · U0–U4 |
 | Hooks 日用 | ~96–98% | H0–H5（含 SessionEnd） |
 | Compact 日用 | ~92–95% | C0–C5 |
-| **多 Provider 热切** | **~92–96%** | P0–P4.1：`providers` 表 + `/provider` 箭头选 |
-| Electron GUI | ~55–65% | 可用壳，非 HC 级 IDE |
+| **多 Provider 热切** | **~92–96%** | P0–P4.1 + **CX7 Desktop** |
+| Electron GUI | ~65–75% | 壳 + 流式 + 权限 + Settings + 多 provider |
 | 相对 HC 全家桶 UI | 另计 | 不设 100% |
 
-**主线已收口：** 日用 agent 改文件 · hooks · compact · 多后端热切。  
-**后置：** Desktop 多 provider UI（P5）· resume 持久化 `providerId` · U5 真·Ink/IDE。
+**主线已收口：** 日用 agent 改文件 · hooks · compact · 多后端热切 · Provider UX CX0–CX7。  
+**后置：** CX8 ultrathink · Compact §8.9 · U5 真·Ink/IDE。
 
 进度真源：[docs/ROADMAP.md](docs/ROADMAP.md)
 
@@ -145,7 +145,11 @@ npx bolo --continue
 ### Desktop（可选）
 
 ```bash
-cd apps/desktop && pnpm install && pnpm dev
+cd apps/desktop
+# 国内可：set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
+npm install          # 或 pnpm install
+set BOLO_DESKTOP_MOCK=1
+npm start            # 或 npm run dev
 ```
 
 见 [apps/desktop/README.md](apps/desktop/README.md)
