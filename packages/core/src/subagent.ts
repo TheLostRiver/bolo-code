@@ -32,7 +32,10 @@ import {
   recordSessionMessages,
 } from './sessionTranscript.ts'
 import type { AskPermissionFn } from './toolExecution.ts'
-import { isWorktreeEnabled } from './worktree.ts'
+import {
+  isWorktreeEnabled,
+  type WorktreeCleanupResult,
+} from './worktree.ts'
 
 export const AGENT_TOOL_NAME = 'Agent'
 
@@ -1036,6 +1039,10 @@ export type RunSubagentResult = {
   /** 实际工作目录（可能为 worktree） */
   cwd?: string
   isolation?: 'none' | 'worktree'
+  /** worktree 绝对路径（removed 后用于审计，retained 时用于恢复成果） */
+  worktreePath?: string
+  /** 自动清理的可观察结果；dirty/untracked 默认 retained */
+  worktreeCleanup?: WorktreeCleanupResult
   /** 墙钟耗时 ms（对照 HC totalDurationMs） */
   totalDurationMs?: number
   /** 子消息中 tool_calls 总数 */
@@ -1427,25 +1434,42 @@ export async function runSubagent(
     params.permissionMode,
     params.def.permissionMode,
   )
-  const isolationPref =
-    params.isolation ?? params.def.isolation ?? 'none'
+  const requestedIsolation = params.isolation ?? params.def.isolation
+  const envRequestsWorktree =
+    requestedIsolation === undefined && isWorktreeEnabled()
   const wantWorktree =
-    isolationPref === 'worktree' ||
-    (isolationPref !== 'none' && isWorktreeEnabled())
+    requestedIsolation === 'worktree' || envRequestsWorktree
   let cwd = params.cwd
   let isolationUsed: 'none' | 'worktree' = 'none'
   let worktreePath: string | undefined
+  let worktreeCreated = false
   if (wantWorktree) {
     const { tryCreateSubagentWorktree } = await import('./worktree.ts')
     const wt = await tryCreateSubagentWorktree({
       parentCwd: params.cwd,
       agentId,
-      force: isolationPref === 'worktree',
+      force: requestedIsolation === 'worktree',
     })
     if (wt.ok) {
       cwd = wt.cwd
       isolationUsed = 'worktree'
       worktreePath = wt.path
+      worktreeCreated = wt.created
+    } else {
+      const detail = `worktree isolation failed: ${wt.reason}`
+      return {
+        agentId,
+        agentType,
+        summary: `Subagent ${agentType} ${detail}`,
+        isError: true,
+        terminal: { reason: 'error', detail },
+        messages,
+        cwd: params.cwd,
+        isolation: 'none',
+        totalDurationMs: Math.max(0, Date.now() - startTimeMs),
+        totalToolUseCount: 0,
+        ...(taskDescription ? { description: taskDescription } : {}),
+      }
     }
   }
   const maxTurns =
@@ -1621,20 +1645,43 @@ export async function runSubagent(
     mergeSessionUsage(params.parentUsage, childUsage)
   }
 
-  // worktree 清理（默认 on；cleanupWorktree=false 保留）
-  if (
-    isolationUsed === 'worktree' &&
-    worktreePath &&
-    params.cleanupWorktree !== false
-  ) {
-    try {
-      const { removeSubagentWorktree } = await import('./worktree.ts')
-      await removeSubagentWorktree({
-        parentCwd: params.cwd,
-        worktreePath,
-      })
-    } catch {
-      /* 清理失败不阻断 */
+  // worktree 清理：只删除本次创建且 clean 的 worktree；其它一律显式保留。
+  let worktreeCleanup: WorktreeCleanupResult | undefined
+  if (isolationUsed === 'worktree' && worktreePath) {
+    if (params.cleanupWorktree === false) {
+      worktreeCleanup = {
+        status: 'retained',
+        path: worktreePath,
+        reason: 'automatic cleanup disabled',
+      }
+    } else if (!worktreeCreated) {
+      worktreeCleanup = {
+        status: 'retained',
+        path: worktreePath,
+        reason: 'pre-existing worktree is not owned by this subagent run',
+      }
+    } else {
+      try {
+        const { removeSubagentWorktree } = await import('./worktree.ts')
+        worktreeCleanup = await removeSubagentWorktree({
+          parentCwd: params.cwd,
+          worktreePath,
+        })
+      } catch (error) {
+        worktreeCleanup = {
+          status: 'retained',
+          path: worktreePath,
+          reason:
+            error instanceof Error
+              ? `worktree cleanup failed: ${error.message}`
+              : `worktree cleanup failed: ${String(error)}`,
+        }
+      }
+    }
+    if (worktreeCleanup.status === 'retained') {
+      summary +=
+        `\n\n[worktree retained] ${worktreeCleanup.path}` +
+        ` (${worktreeCleanup.reason})`
     }
   }
 
@@ -1649,6 +1696,8 @@ export async function runSubagent(
     usage: childUsage,
     cwd,
     isolation: isolationUsed,
+    ...(worktreePath ? { worktreePath } : {}),
+    ...(worktreeCleanup ? { worktreeCleanup } : {}),
     totalDurationMs: stats.totalDurationMs,
     totalToolUseCount: stats.totalToolUseCount,
     ...(taskDescription ? { description: taskDescription } : {}),

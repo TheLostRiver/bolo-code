@@ -85,7 +85,7 @@
 | `BOLO_SUBAGENT_EFFORT` | 强制所有子 effort |
 | `BOLO_SUBAGENT_MAX_SPAWN_DEPTH` | 覆盖全局 `maxSpawnDepth` |
 | `BOLO_BACKGROUND_OVERFLOW` | `overflow` |
-| `BOLO_SUBAGENT_WORKTREE=1` | 默认尝试 worktree（已有） |
+| `BOLO_SUBAGENT_WORKTREE=1` | 请求 worktree；创建失败/跨仓库复用 fail-closed，modified/untracked/ignored 成果保留 |
 
 ### 2.2 类型定义 — `agents/*.md`（保持 Markdown，不强制 TOML）
 

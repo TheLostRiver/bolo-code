@@ -5,7 +5,7 @@
 
 > **Spec v0 已实现：** `config.agents` · frontmatter `model`/`effort`/`maxSpawnDepth`/`sandbox` · `spawnDepth` · 条件 Agent · model/effort 解析链 · `agents.enabled`。
 
-**F-SA-WORKTREE：** `BOLO_SUBAGENT_WORKTREE=1` 时尝试 `git worktree add --detach`；失败回落父 cwd。  
+**F-SA-WORKTREE：** `BOLO_SUBAGENT_WORKTREE=1` 时请求 `git worktree add --detach`；创建失败直接终止子任务，不回落父 cwd。
 **F-SA-PAR2：** `BOLO_BACKGROUND_OVERFLOW=queue|reject`（默认 reject）。  
 **F-S8-PLUS：** `filterToolsBySubagentAllowlist` 收紧子工具表。
 
@@ -154,14 +154,16 @@ fork 路径不走白名单表，直接 `parent.allTools` 去掉 `Agent`。
 ## Worktree
 
 - `BOLO_SUBAGENT_WORKTREE=1` 或 `isolation: worktree` → `git worktree add --detach`。
-- 结束后默认 `removeSubagentWorktree`（`cleanupWorktree: false` 可保留调试）。
+- 结束后仅自动删除本次创建且 clean 的 worktree；modified/untracked/ignored、复用目录或清理失败均保留。
+- worktree 路径从 Git repo root 计算；同路径若属于其它仓库会 fail-closed，不跨仓库复用。
+- 保留时 `RunSubagentResult.worktreeCleanup` 与工具摘要返回绝对路径和原因，便于恢复成果。
+- `cleanupWorktree: false` 可显式保留调试。
 - 侧链 transcript 写在**父 cwd** 的 sessions，避免 worktree 清掉后丢文件。
 
 ## 刻意不做（P2+）
 
 - swarm / teammate / 跨会话完整 prompt cache 共享
 - 遥测 / GrowthBook
-- worktree「有改动则保留」的精细策略（当前默认 force remove）
 
 侧链 transcript（可选）：`runSubagent({ writeTranscript: true })` 写入 `{cwd}/.bolo/sessions/agent-{id}.jsonl`；`SubagentStop` 可带 `agent_transcript_path`。
 

@@ -1,5 +1,5 @@
 /**
- * F-SA-WORKTREE：git worktree 隔离最小（可关；失败回落同 cwd）
+ * F-SA-WORKTREE：git worktree 隔离（可关；失败 fail-closed；dirty 成果保留）
  * 无遥测。
  */
 
@@ -11,6 +11,19 @@ import os from 'node:os'
 export type WorktreeResult =
   | { ok: true; cwd: string; path: string; created: boolean }
   | { ok: false; cwd: string; reason: string }
+
+export type WorktreeCleanupResult =
+  | {
+      status: 'removed'
+      path: string
+      dirty: false
+    }
+  | {
+      status: 'retained'
+      path: string
+      dirty?: boolean
+      reason: string
+    }
 
 function run(
   cmd: string,
@@ -38,6 +51,18 @@ function run(
       resolve({ code: code ?? 1, stdout, stderr })
     })
   })
+}
+
+function gitReportedPath(cwd: string, value: string): string {
+  return path.resolve(cwd, value.trim())
+}
+
+function samePath(left: string, right: string): boolean {
+  const a = path.resolve(left)
+  const b = path.resolve(right)
+  return process.platform === 'win32'
+    ? a.toLowerCase() === b.toLowerCase()
+    : a === b
 }
 
 export function isWorktreeEnabled(
@@ -68,16 +93,30 @@ export async function tryCreateSubagentWorktree(opts: {
     }
   }
 
-  const check = await run('git', ['rev-parse', '--is-inside-work-tree'], parentCwd)
-  if (check.code !== 0 || !check.stdout.trim().includes('true')) {
+  const topLevel = await run('git', ['rev-parse', '--show-toplevel'], parentCwd)
+  const commonDir = await run(
+    'git',
+    ['rev-parse', '--git-common-dir'],
+    parentCwd,
+  )
+  if (
+    topLevel.code !== 0 ||
+    !topLevel.stdout.trim() ||
+    commonDir.code !== 0 ||
+    !commonDir.stdout.trim()
+  ) {
     return { ok: false, cwd: parentCwd, reason: 'not a git work tree' }
   }
+  const repoRoot = gitReportedPath(parentCwd, topLevel.stdout)
+  const parentCommonDir = gitReportedPath(parentCwd, commonDir.stdout)
 
+  const safeAgentId =
+    opts.agentId.replace(/[^\w.-]+/g, '_').slice(0, 48) || 'agent'
   const base = path.resolve(
-    parentCwd,
+    repoRoot,
     '..',
     '.bolo-worktrees',
-    opts.agentId.replace(/[^\w.-]+/g, '_').slice(0, 48),
+    safeAgentId,
   )
   try {
     await fs.mkdir(path.dirname(base), { recursive: true })
@@ -89,7 +128,34 @@ export async function tryCreateSubagentWorktree(opts: {
   try {
     const st = await fs.stat(base)
     if (st.isDirectory()) {
-      return { ok: true, cwd: base, path: base, created: false }
+      const existingTop = await run(
+        'git',
+        ['rev-parse', '--show-toplevel'],
+        base,
+      )
+      const existingCommon = await run(
+        'git',
+        ['rev-parse', '--git-common-dir'],
+        base,
+      )
+      if (
+        existingTop.code === 0 &&
+        existingTop.stdout.trim() &&
+        existingCommon.code === 0 &&
+        existingCommon.stdout.trim() &&
+        samePath(gitReportedPath(base, existingTop.stdout), base) &&
+        samePath(
+          gitReportedPath(base, existingCommon.stdout),
+          parentCommonDir,
+        )
+      ) {
+        return { ok: true, cwd: base, path: base, created: false }
+      }
+      return {
+        ok: false,
+        cwd: parentCwd,
+        reason: `worktree target exists but is not an isolated worktree for this repository: ${base}`,
+      }
     }
   } catch {
     /* create */
@@ -113,13 +179,72 @@ export async function tryCreateSubagentWorktree(opts: {
 export async function removeSubagentWorktree(opts: {
   parentCwd: string
   worktreePath: string
-}): Promise<void> {
-  await run(
+}): Promise<WorktreeCleanupResult> {
+  const parentCwd = path.resolve(opts.parentCwd)
+  const worktreePath = path.resolve(opts.worktreePath)
+  if (worktreePath === parentCwd) {
+    return {
+      status: 'retained',
+      path: worktreePath,
+      reason: 'refused to remove parent working directory',
+    }
+  }
+
+  const status = await run(
     'git',
-    ['worktree', 'remove', '--force', opts.worktreePath],
-    opts.parentCwd,
-  ).catch(() => {})
-  await fs.rm(opts.worktreePath, { recursive: true, force: true }).catch(() => {})
+    [
+      'status',
+      '--porcelain=v1',
+      '--untracked-files=all',
+      '--ignored=matching',
+    ],
+    worktreePath,
+  )
+  if (status.code !== 0) {
+    return {
+      status: 'retained',
+      path: worktreePath,
+      reason: `cannot verify worktree status: ${status.stderr.trim() || status.code}`,
+    }
+  }
+  if (status.stdout.trim()) {
+    return {
+      status: 'retained',
+      path: worktreePath,
+      dirty: true,
+      reason: 'worktree has modified, untracked, or ignored files',
+    }
+  }
+
+  const removed = await run(
+    'git',
+    ['worktree', 'remove', worktreePath],
+    parentCwd,
+  )
+  if (removed.code !== 0) {
+    return {
+      status: 'retained',
+      path: worktreePath,
+      dirty: false,
+      reason: `git worktree remove failed: ${removed.stderr.trim() || removed.code}`,
+    }
+  }
+
+  try {
+    await fs.stat(worktreePath)
+    return {
+      status: 'retained',
+      path: worktreePath,
+      dirty: false,
+      reason: 'git removed the worktree registration but the directory remains',
+    }
+  } catch {
+    return {
+      status: 'removed',
+      path: worktreePath,
+      dirty: false,
+    }
+  }
 }
 
 /** 测试用：临时目录伪装 worktree 根 */

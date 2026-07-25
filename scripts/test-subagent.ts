@@ -36,6 +36,7 @@ import {
   defaultAgentPolicy,
   agentDefinitionFromMarkdown,
   type QueryDeps,
+  type BackgroundAgentEntry,
 } from '../packages/core/src/index.ts'
 import { createBuiltinTools, findToolByName } from '../packages/tools/src/index.ts'
 import type { ChatMessage } from '../packages/shared/src/index.ts'
@@ -353,7 +354,6 @@ async function main() {
   // --- 侧链 transcript ---
   const sideTmp = await fs.mkdtemp(path.join(os.tmpdir(), 'bolo-side-'))
   const sideSessions = path.join(sideTmp, 'sessions')
-  let stopPath: string | undefined
   const side = await runSubagent({
     def: getAgentDefinition('general'),
     prompt: 'sidechain me',
@@ -1090,7 +1090,9 @@ async function testForkSubagent(): Promise<void> {
   )
   assert(viaType.ok, `fork tool type: ${viaType.output}`)
   assert(viaType.output.includes('[subagent fork'), `header: ${viaType.output}`)
-  const conv2 = (sawChildMessages ?? []).filter((m) => m.role !== 'system')
+  const conv2 = (
+    (sawChildMessages as ChatMessage[] | undefined) ?? []
+  ).filter((m) => m.role !== 'system')
   assert(conv2.length === 3, 'fork tool inherits 2 + directive')
   assert(conv2[2]!.content === 'FORK_VIA_TYPE', 'fork tool directive')
   assert(!sawChildTools!.includes(AGENT_TOOL_NAME), 'fork tool no Agent')
@@ -1119,7 +1121,9 @@ async function testForkSubagent(): Promise<void> {
   )
   assert(viaOmit.ok, `fork omit type: ${viaOmit.output}`)
   assert(viaOmit.output.includes('[subagent fork'), 'omit type is fork')
-  const conv3 = (sawChildMessages ?? []).filter((m) => m.role !== 'system')
+  const conv3 = (
+    (sawChildMessages as ChatMessage[] | undefined) ?? []
+  ).filter((m) => m.role !== 'system')
   assert(conv3[2]?.content === 'FORK_VIA_OMIT', 'omit path directive')
 
   // 显式 fork: true
@@ -1146,7 +1150,9 @@ async function testForkSubagent(): Promise<void> {
   )
   assert(viaFlag.ok, `fork flag: ${viaFlag.output}`)
   assert(viaFlag.output.includes('[subagent fork'), 'fork:true forces fork')
-  const conv4 = (sawChildMessages ?? []).filter((m) => m.role !== 'system')
+  const conv4 = (
+    (sawChildMessages as ChatMessage[] | undefined) ?? []
+  ).filter((m) => m.role !== 'system')
   assert(conv4.length === 3, 'fork:true inherits history')
 }
 
@@ -1230,8 +1236,10 @@ async function testBackgroundSubagent(): Promise<void> {
     let done = false
     for (let i = 0; i < 50; i++) {
       await flushMicrotasks(5)
-      const row =
-        store.backgroundAgentResults[agentId] ?? store.pendingAgents[agentId]
+      const row = (
+        store.backgroundAgentResults[agentId] ??
+        store.pendingAgents[agentId]
+      ) as BackgroundAgentEntry | undefined
       if (row && (row.status === 'done' || row.status === 'error')) {
         done = true
         assert(row.status === 'done', `bg status done: ${row.status}`)
