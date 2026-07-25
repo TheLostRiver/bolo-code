@@ -147,6 +147,10 @@ export type RunToolUseContext = {
   parentMessages?: import('../../shared/src/index.ts').ChatMessage[]
   /** fork 时注入子 agent 的父 system 段 */
   parentSystemPromptSections?: readonly string[]
+  /** 父会话 model（Agent → 子 usage.byModel） */
+  model?: string
+  /** 父会话 usage；子完成后 merge 回卷 */
+  parentUsage?: import('./sessionUsage.ts').SessionUsage
   /**
    * auto 模式分类器（Y2）。mode=auto 且规则层 ask 时调用。
    * 未注入则 auto 对非快路径 **deny**（fail-closed）。
@@ -715,6 +719,8 @@ export async function runToolUse(
               backgroundStore: ctx.backgroundStore,
               parentMessages: ctx.parentMessages,
               parentSystemPromptSections: ctx.parentSystemPromptSections,
+              model: ctx.model,
+              parentUsage: ctx.parentUsage,
             }
           : undefined,
       },

@@ -6,6 +6,9 @@ import {
   accumulateSessionUsage,
   createEmptySessionUsage,
   cloneSessionUsage,
+  mergeSessionUsage,
+  computeCacheHitRate,
+  formatCacheHitRatePercent,
   formatSessionUsage,
   formatUsageOneLiner,
   normalizeProviderUsage,
@@ -74,11 +77,47 @@ assert(formatted.includes('by model:'), 'format by model')
 assert(formatted.includes('gpt-test:'), 'format model name')
 assert(formatted.includes('other-model:'), 'format other model')
 assert(formatted.includes('local only'), 'local only banner')
+assert(formatted.includes('cacheHitRate:'), 'format cacheHitRate')
 assert(!formatted.toLowerCase().includes('telemetry') || formatted.includes('no telemetry'), 'no telemetry')
+
+const hit = computeCacheHitRate(empty)
+assert(hit != null && hit > 0 && hit <= 1, `cache hit rate: ${hit}`)
+assert(formatCacheHitRatePercent(empty)?.endsWith('%'), 'hit percent string')
+
+// merge child into parent
+const parentU = createEmptySessionUsage()
+accumulateSessionUsage(parentU, {
+  inputTokens: 10,
+  outputTokens: 2,
+  totalTokens: 12,
+  cacheReadInputTokens: 4,
+  model: 'parent-m',
+})
+const childU = createEmptySessionUsage()
+accumulateSessionUsage(childU, {
+  inputTokens: 50,
+  outputTokens: 10,
+  totalTokens: 60,
+  cacheReadInputTokens: 20,
+  cacheCreationInputTokens: 5,
+  model: 'child-m',
+})
+mergeSessionUsage(parentU, childU)
+assert(parentU.calls === 2, 'merged calls')
+assert(parentU.inputTokens === 60, 'merged input')
+assert(parentU.outputTokens === 12, 'merged output')
+assert(parentU.totalTokens === 72, 'merged total')
+assert(parentU.cacheReadInputTokens === 24, 'merged cache read')
+assert(parentU.cacheCreationInputTokens === 5, 'merged cache create')
+assert(parentU.byModel?.['parent-m']?.calls === 1, 'parent model kept')
+assert(parentU.byModel?.['child-m']?.inputTokens === 50, 'child model rolled up')
+// child unchanged
+assert(childU.calls === 1, 'child not mutated')
 
 const one = formatUsageOneLiner(empty)
 assert(/usage:\s+\d+ tokens/.test(one), 'one-liner tokens')
 assert(one.includes('cache r/w'), 'one-liner cache')
+assert(one.includes('hit '), 'one-liner hit')
 
 const cloned = cloneSessionUsage(empty)!
 assert(cloned.byModel?.['gpt-test']?.calls === 2, 'clone byModel')

@@ -23,6 +23,7 @@ import {
   loadAgentsDir,
   mergeAgentDefinitions,
   listActiveAgents,
+  createEmptySessionUsage,
   type QueryDeps,
 } from '../packages/core/src/index.ts'
 import { createBuiltinTools, findToolByName } from '../packages/tools/src/index.ts'
@@ -412,6 +413,9 @@ async function main() {
   // --- S12 fork inherits parent messages ---
   await testForkSubagent()
 
+  // --- polish: maxTurns / disallowedTools / parent usage rollup ---
+  await testSubagentUsageAndLimits()
+
   // --- S7 project agents ---
   await testProjectAgentsDir()
   assert(
@@ -422,6 +426,164 @@ async function main() {
   )
 
   console.log('PASS test-subagent')
+}
+
+async function testSubagentUsageAndLimits(): Promise<void> {
+  // disallowedTools 二次剔除
+  const banned = resolveAgentTools(
+    { tools: '*', disallowedTools: ['Write', 'Edit'] },
+    createDefaultTools(),
+  )
+  assert(
+    !banned.resolvedTools.some((t) => t.name === 'Write' || t.name === 'Edit'),
+    'disallowedTools strips Write/Edit',
+  )
+  assert(
+    banned.resolvedTools.some((t) => t.name === 'Read'),
+    'disallowedTools keeps Read',
+  )
+  assert(
+    !banned.resolvedTools.some((t) => t.name === AGENT_TOOL_NAME),
+    'disallowed still no Agent',
+  )
+
+  // maxTurns=1：子若试图 tool 后仍会停
+  let childCalls = 0
+  const limitedProvider: LlmProvider = {
+    id: 'mock',
+    async *completeStream(
+      _messages: ChatMessage[],
+      options?: CompleteStreamOptions,
+    ): AsyncIterable<ProviderStreamEvent> {
+      childCalls += 1
+      const names = toolNames(options)
+      if (childCalls === 1 && names.includes('Read')) {
+        yield {
+          type: 'tool_call',
+          id: 'call_read_1',
+          name: 'Read',
+          arguments: JSON.stringify({ path: 'package.json' }),
+        }
+        yield { type: 'done' }
+        return
+      }
+      yield { type: 'text_delta', text: 'SHOULD_NOT_REACH_IF_MAX1' }
+      yield { type: 'done' }
+    },
+    async completeText() {
+      return 'n/a'
+    },
+  }
+  const limitedDeps: QueryDeps = {
+    callModel: async function* ({ messages, signal, tools }) {
+      yield* limitedProvider.completeStream(messages, {
+        signal,
+        tools: tools as CompleteStreamOptions['tools'],
+      })
+    },
+    prepareMessages: identityPrepareMessages,
+    uuid: () => `uuid_lim_${childCalls}`,
+  }
+  const parentUsage = createEmptySessionUsage()
+  const limited = await runSubagent({
+    def: {
+      ...getAgentDefinition('general'),
+      maxTurns: 1,
+      tools: ['Read'],
+    },
+    prompt: 'read something',
+    parentSessionId: 'sess_lim',
+    cwd: process.cwd(),
+    hooks: {},
+    deps: limitedDeps,
+    permissionMode: 'bypassPermissions',
+    askPermission: async () => 'allow',
+    allTools: createBuiltinTools(),
+    parentUsage,
+    model: 'mock-sub',
+    writeTranscript: false,
+  })
+  // maxTurns=1：第一轮 tool_call 后 turn 用尽，可能无最终 assistant 文本
+  assert(childCalls === 1, `maxTurns=1 only one model call, got ${childCalls}`)
+  assert(limited.usage != null && limited.usage.calls >= 1, 'child usage tracked')
+  assert(parentUsage.calls >= 1, 'parent usage rollup after subagent')
+  assert(
+    parentUsage.totalTokens === limited.usage!.totalTokens,
+    'parent totals match child after merge',
+  )
+  assert(
+    parentUsage.byModel?.['mock-sub'] != null || limited.usage!.calls > 0,
+    'byModel or estimated child calls present',
+  )
+
+  // Agent 工具 max_turns + parentUsage 注入
+  childCalls = 0
+  const toolProvider: LlmProvider = {
+    id: 'mock',
+    async *completeStream(): AsyncIterable<ProviderStreamEvent> {
+      childCalls += 1
+      yield {
+        type: 'usage',
+        usage: {
+          inputTokens: 30,
+          outputTokens: 10,
+          totalTokens: 40,
+          cacheReadInputTokens: 12,
+        },
+      }
+      yield { type: 'text_delta', text: 'USAGE_CHILD_OK' }
+      yield { type: 'done' }
+    },
+    async completeText() {
+      return 'n/a'
+    },
+  }
+  const toolDeps: QueryDeps = {
+    callModel: async function* ({ messages, signal, tools }) {
+      yield* toolProvider.completeStream(messages, {
+        signal,
+        tools: tools as CompleteStreamOptions['tools'],
+      })
+    },
+    prepareMessages: identityPrepareMessages,
+    uuid: () => 'uuid_usage_tool',
+  }
+  const parentU2 = createEmptySessionUsage()
+  const tool = createAgentTool()
+  const tr = await tool.call(
+    {
+      prompt: 'report usage',
+      subagent_type: 'general',
+      max_turns: 2,
+    },
+    {
+      cwd: process.cwd(),
+      sessionId: 'sess_usage_tool',
+      extras: {
+        writeTranscript: false,
+        subagentParent: {
+          parentSessionId: 'sess_usage_tool',
+          cwd: process.cwd(),
+          hooks: {},
+          deps: toolDeps,
+          permissionMode: 'bypassPermissions' as const,
+          askPermission: async () => 'allow' as const,
+          allTools: createBuiltinTools(),
+          parentUsage: parentU2,
+          model: 'mock-parent-model',
+        },
+      },
+    },
+  )
+  assert(tr.ok, `usage tool ok: ${tr.output}`)
+  assert(tr.output.includes('USAGE_CHILD_OK'), 'usage summary')
+  assert(/usage:\s+\d+ tokens/.test(tr.output), `tool output usage line: ${tr.output}`)
+  assert(parentU2.calls >= 1, 'tool path parentUsage rollup')
+  assert((parentU2.cacheReadInputTokens ?? 0) >= 12, 'cache read rolled up')
+  assert(
+    parentU2.byModel?.['mock-parent-model'] != null,
+    'parent model tag on child usage',
+  )
 }
 
 async function flushMicrotasks(times = 20): Promise<void> {

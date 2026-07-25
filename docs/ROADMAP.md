@@ -13,9 +13,9 @@
 | **Headless 核心** | **~80–88%** | loop/STE/权限/auto/snip/policy/**OS 沙箱包装** |
 | 会话与 CLI | **~80–88%** | JSONL · resume · slash |
 | **扩展面** | **~80–88%** | MCP×3 · Skills · Plugins · WebFetch · **OAuth 本地回调** |
-| **Subagent** | **~75–85%** | worktree · 并发 · 白名单 |
+| **Subagent** | **~82–90%** | worktree cleanup · usage 回卷 · maxTurns/disallowed · 并发 |
 | **Rules / Creators** | **~75–85%** | 日用齐 |
-| **成本与缓存** | **~60–70%** | C1–C5 + TTL/break |
+| **成本与缓存** | **~72–80%** | C1–C5 + TTL/break · hit rate · subagent merge 进 /cost |
 | **斜杠** | **~80–88%** | 日用 + polish |
 | **CLI TUI** | **~70–80%** | 布局/picker/主题 |
 | **Electron GUI** | **~55–65%** | 壳 + 流式 + 权限 + **设置页** |

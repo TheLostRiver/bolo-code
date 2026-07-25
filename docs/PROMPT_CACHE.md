@@ -116,14 +116,30 @@ Provider 侧按 `# Environment` 再 partition 打标——**最小侵入**，无
 | tools 增删或改 schema | API tools 前缀变化 |
 | user 消息 / tool 结果 | 对话尾部；消息级断点随「最后一条」移动（预期） |
 
-## 6. 测试
+## 6. 会话 usage 与 cache 命中率（本地 /cost）
+
+实现：`packages/core/src/sessionUsage.ts`。
+
+| API | 作用 |
+|-----|------|
+| `accumulateSessionUsage` | 单轮 delta（含 cache read/write、byModel） |
+| `mergeSessionUsage(parent, child)` | **子 agent 回卷**进父会话（无遥测） |
+| `computeCacheHitRate` / `formatCacheHitRatePercent` | 粗算 `cacheRead / (cacheRead + cacheCreate + uncachedInput)` |
+| `formatSessionUsage` | `/cost`：calls、tokens、cache、**cacheHitRate**、by model |
+
+接线：
+
+- 主 loop：`queryLoop({ usage: session.usage, model })`
+- 子 agent：`runSubagent({ parentUsage: session.usage, model })` → 结束 merge
+- Agent 工具经 `toolExecution` 自动注入 `parentUsage` / `model`
+
+## 7. 测试
 
 ```bash
 npx tsx scripts/test-prompt-cache.ts
 npx tsx scripts/test-provider-unit.ts
-# 或
-npm run test:prompt-cache
-npm run test:provider
+npx tsx scripts/test-session-usage.ts
+npx tsx scripts/test-subagent.ts
 ```
 
 验收：
@@ -132,8 +148,9 @@ npm run test:provider
 - 乱序 tools 输入 → `toolsToOpenAI` 输出 name 序列稳定且有序
 - Anthropic 请求体：`system[0].cache_control.type === 'ephemeral'`；可选 tools/messages 末断点
 - OpenAI / Responses：`prompt_cache_key` 存在且仅 user 变化时不变
+- `/cost` 在有 cache 字段时显示 `cacheHitRate`；子 agent 后父 `calls`/tokens 增加
 
-## 7. 有意不做
+## 8. 有意不做
 
 | 项 | 原因 |
 |----|------|
@@ -141,13 +158,14 @@ npm run test:provider
 | GrowthBook 门控长段 / 1h TTL | 无订阅与远程配置 |
 | 全局 `DYNAMIC_BOUNDARY` cache scope | 过重；文档保留对照 |
 | cached microcompact / cache_edits | 后置；见 COMPACTION |
-| prompt cache break detection | 后置；无 UI/遥测诉求 |
+| 完整 fork 字节级 cache 共享（HC cacheSafeParams） | 过重；fork 仅消息继承 |
 | 把 core system 改成结构化 blocks 贯穿 session | 当前 provider 侧 partition 足够 |
 
-## 8. 相关文档
+## 9. 相关文档
 
 - `docs/SYSTEM_PROMPT.md` — 段语义与 BOLO.md  
 - `docs/PROVIDERS.md` — 各协议 cache 字段  
 - `docs/PROMPT_CATALOG.md` — 文案查阅  
+- `docs/SUBAGENT.md` — usage 回卷  
 - `docs/TODO.md` — C1–C5  
 - `docs/ROADMAP.md` — M-Cost

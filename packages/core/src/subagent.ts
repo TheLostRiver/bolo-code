@@ -43,10 +43,20 @@ export type AgentDefinition = {
   description: string
   /** 白名单工具名，或 '*' 表示默认可写集（仍会排除 Agent） */
   tools: string[] | '*'
+  /** HC disallowedTools：从已解析工具集中再剔除 */
+  disallowedTools?: string[]
   systemPrompt: string
   permissionMode?: PermissionMode
   /** 定义来源；内置为 builtin */
   source?: AgentDefinitionSource
+  /** 最大 agentic turns（对照 HC maxTurns）；默认 run 侧 8 */
+  maxTurns?: number
+  /** 定义级默认后台跑（对照 HC background） */
+  background?: boolean
+  /** 何时选用（可与 description 相同；/agents 展示） */
+  whenToUse?: string
+  /** 默认 isolation；Agent 工具 isolation 参数可覆盖 */
+  isolation?: 'none' | 'worktree'
 }
 
 export const EXPLORE_AGENT: AgentDefinition = {
@@ -265,9 +275,41 @@ export function agentDefinitionFromMarkdown(
     permissionMode = meta.permissionmode
   }
 
+  let maxTurns: number | undefined
+  if (meta.maxturns != null && meta.maxturns !== '') {
+    const n = Number(meta.maxturns)
+    if (Number.isFinite(n) && n >= 1) maxTurns = Math.min(200, Math.floor(n))
+  }
+
+  let background: boolean | undefined
+  if (meta.background != null && meta.background !== '') {
+    const b = parseBoolish(String(meta.background))
+    if (b === true) background = true
+    if (b === false) background = false
+  }
+
+  let disallowedTools: string[] | undefined
+  if (meta.disallowedtools != null && meta.disallowedtools !== '') {
+    const parts = String(meta.disallowedtools)
+      .split(/[,|\s]+/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+    if (parts.length) disallowedTools = parts
+  }
+
+  let isolation: 'none' | 'worktree' | undefined
+  if (meta.isolation != null) {
+    const iso = String(meta.isolation).trim().toLowerCase()
+    if (iso === 'worktree') isolation = 'worktree'
+    if (iso === 'none' || iso === 'off') isolation = 'none'
+  }
+
   const description =
     meta.description?.trim() ||
+    meta.whentouse?.trim() ||
     `Custom subagent "${agentType}" from ${source} .bolo/agents`
+
+  const whenToUse = meta.whentouse?.trim() || undefined
 
   const systemBody = body.trim()
   // body = system 内容；覆盖内置时由 merge 整表替换；空 body 给简短默认
@@ -282,6 +324,11 @@ export function agentDefinitionFromMarkdown(
     systemPrompt,
     permissionMode,
     source,
+    ...(maxTurns !== undefined ? { maxTurns } : {}),
+    ...(background !== undefined ? { background } : {}),
+    ...(disallowedTools ? { disallowedTools } : {}),
+    ...(whenToUse ? { whenToUse } : {}),
+    ...(isolation ? { isolation } : {}),
   }
 }
 
@@ -373,9 +420,10 @@ export type ResolveAgentToolsResult = {
 
 /**
  * 按 AgentDefinition 裁剪工具；始终排除 Agent（防递归）。
+ * 支持 disallowedTools 二次剔除（HC loadAgentsDir 语义）。
  */
 export function resolveAgentTools(
-  def: Pick<AgentDefinition, 'tools'>,
+  def: Pick<AgentDefinition, 'tools' | 'disallowedTools'>,
   allTools: readonly BoloTool[],
 ): ResolveAgentToolsResult {
   const withoutAgent = allTools.filter((t) => t.name !== AGENT_TOOL_NAME)
@@ -383,30 +431,34 @@ export function resolveAgentTools(
     def.tools === '*' ||
     (Array.isArray(def.tools) && def.tools.includes('*'))
 
+  let resolvedTools: BoloTool[]
+  const invalidTools: string[] = []
+
   if (hasWildcard) {
-    return {
-      resolvedTools: withoutAgent,
-      invalidTools: [],
-      hasWildcard: true,
+    resolvedTools = [...withoutAgent]
+  } else {
+    const allow = new Set(
+      (def.tools as string[]).map((n) => n.trim()).filter(Boolean),
+    )
+    allow.delete(AGENT_TOOL_NAME)
+    const byName = new Map(withoutAgent.map((t) => [t.name, t]))
+    resolvedTools = []
+    for (const name of allow) {
+      const t = byName.get(name)
+      if (t) resolvedTools.push(t)
+      else invalidTools.push(name)
     }
   }
 
-  const allow = new Set(
-    (def.tools as string[]).map((n) => n.trim()).filter(Boolean),
-  )
-  allow.delete(AGENT_TOOL_NAME)
-
-  const byName = new Map(withoutAgent.map((t) => [t.name, t]))
-  const resolvedTools: BoloTool[] = []
-  const invalidTools: string[] = []
-
-  for (const name of allow) {
-    const t = byName.get(name)
-    if (t) resolvedTools.push(t)
-    else invalidTools.push(name)
+  if (def.disallowedTools?.length) {
+    const ban = new Set(
+      def.disallowedTools.map((n) => n.trim()).filter(Boolean),
+    )
+    ban.add(AGENT_TOOL_NAME)
+    resolvedTools = resolvedTools.filter((t) => !ban.has(t.name))
   }
 
-  return { resolvedTools, invalidTools, hasWildcard: false }
+  return { resolvedTools, invalidTools, hasWildcard }
 }
 
 function lastAssistantText(messages: ChatMessage[]): string {
@@ -455,6 +507,25 @@ export type RunSubagentParams = {
   parentMessages?: readonly ChatMessage[]
   /** fork 时优先使用的父 system 段；缺省用 def.systemPrompt */
   parentSystemPromptSections?: readonly string[]
+  /**
+   * 强制 isolation：worktree / none；缺省用 def.isolation 再 env。
+   */
+  isolation?: 'none' | 'worktree'
+  /**
+   * 子 agent 本地 usage（可选）；不传则内部新建。
+   */
+  usage?: import('./sessionUsage.ts').SessionUsage
+  /**
+   * 父会话 usage：子 loop 结束后 merge 进去（对照 HC totalUsage 回卷）。
+   * 与 `usage` 不同：`usage` 是子自己的桶，`parentUsage` 是回卷目标。
+   */
+  parentUsage?: import('./sessionUsage.ts').SessionUsage
+  model?: string
+  /**
+   * worktree 结束后是否清理（默认 true；有改动时仍 force remove，可逆靠 git）。
+   * 设 false 保留 worktree 目录便于调试。
+   */
+  cleanupWorktree?: boolean
 }
 
 export type RunSubagentResult = {
@@ -466,6 +537,11 @@ export type RunSubagentResult = {
   messages: ChatMessage[]
   /** 侧链 transcript 路径（若写入） */
   agentTranscriptPath?: string
+  /** 子 loop 本地 usage 快照（若启用） */
+  usage?: import('./sessionUsage.ts').SessionUsage
+  /** 实际工作目录（可能为 worktree） */
+  cwd?: string
+  isolation?: 'none' | 'worktree'
 }
 
 /** 后台 subagent 状态（S12 最小 async） */
@@ -481,6 +557,8 @@ export type BackgroundAgentEntry = {
   summary?: string
   isError?: boolean
   agentTranscriptPath?: string
+  /** 完成后的子 usage 快照（calls>0 时） */
+  usage?: import('./sessionUsage.ts').SessionUsage
 }
 
 /**
@@ -602,7 +680,7 @@ export function markBackgroundAgentFinished(
   store: BackgroundAgentStore,
   result: Pick<
     RunSubagentResult,
-    'agentId' | 'agentType' | 'summary' | 'isError' | 'agentTranscriptPath'
+    'agentId' | 'agentType' | 'summary' | 'isError' | 'agentTranscriptPath' | 'usage'
   > & { prompt?: string; startedAt?: string },
 ): BackgroundAgentEntry {
   const prev = store.pendingAgents[result.agentId]
@@ -618,6 +696,7 @@ export function markBackgroundAgentFinished(
     ...(result.agentTranscriptPath
       ? { agentTranscriptPath: result.agentTranscriptPath }
       : {}),
+    ...(result.usage && result.usage.calls > 0 ? { usage: result.usage } : {}),
   }
   store.pendingAgents[result.agentId] = row
   store.backgroundAgentResults[result.agentId] = row
@@ -673,6 +752,14 @@ export function formatBackgroundAgentsStatus(
       if (r.agentTranscriptPath) {
         lines.push(`    transcript: ${r.agentTranscriptPath}`)
       }
+      if (r.usage && r.usage.calls > 0) {
+        lines.push(
+          `    usage: ${r.usage.totalTokens} tokens (${r.usage.calls} calls)` +
+            (r.usage.cacheReadInputTokens || r.usage.cacheCreationInputTokens
+              ? ` cache r/w ${r.usage.cacheReadInputTokens ?? 0}/${r.usage.cacheCreationInputTokens ?? 0}`
+              : ''),
+        )
+      }
     }
   }
   lines.push('')
@@ -722,6 +809,7 @@ async function writeSubagentTranscript(opts: {
 /**
  * 真子 loop：SubagentStart → 独立 messages + queryLoop → 摘要 → SubagentStop
  * fork 时 messages = 父浅拷贝 + directive；tools = 父集去 Agent。
+ * 结束时：merge usage → parentUsage；可选 cleanup worktree。
  */
 export async function runSubagent(
   params: RunSubagentParams,
@@ -753,17 +841,38 @@ export async function runSubagent(
     params.permissionMode,
     params.def.permissionMode,
   )
-  // F-SA-WORKTREE：可选隔离目录
+  // isolation：参数 > def > env BOLO_SUBAGENT_WORKTREE
+  const isolationPref =
+    params.isolation ?? params.def.isolation ?? 'none'
+  const wantWorktree =
+    isolationPref === 'worktree' ||
+    (isolationPref !== 'none' && isWorktreeEnabled())
   let cwd = params.cwd
-  if (isWorktreeEnabled()) {
+  let isolationUsed: 'none' | 'worktree' = 'none'
+  let worktreePath: string | undefined
+  if (wantWorktree) {
     const { tryCreateSubagentWorktree } = await import('./worktree.ts')
     const wt = await tryCreateSubagentWorktree({
       parentCwd: params.cwd,
       agentId,
+      force: isolationPref === 'worktree',
     })
-    if (wt.ok) cwd = wt.cwd
+    if (wt.ok) {
+      cwd = wt.cwd
+      isolationUsed = 'worktree'
+      worktreePath = wt.path
+    }
   }
-  const maxTurns = params.maxTurns ?? 8
+  const maxTurns =
+    params.maxTurns ??
+    params.def.maxTurns ??
+    8
+  // 子 agent 本地 usage（无遥测）
+  let childUsage = params.usage
+  if (!childUsage) {
+    const { createEmptySessionUsage } = await import('./sessionUsage.ts')
+    childUsage = createEmptySessionUsage()
+  }
 
   await runHooks(
     'SubagentStart',
@@ -799,6 +908,8 @@ export async function runSubagent(
       querySource: `subagent:${agentType}`,
       signal: params.signal,
       onEvent: params.onEvent,
+      usage: childUsage,
+      model: params.model,
     })
   } catch (e) {
     const detail = e instanceof Error ? e.message : String(e)
@@ -818,7 +929,8 @@ export async function runSubagent(
 
   let agentTranscriptPath: string | undefined
   const sidePath = resolveSubagentTranscriptPath({
-    cwd,
+    // 侧链写在父 cwd 的 sessions，避免 worktree 清理后丢失
+    cwd: params.cwd,
     agentId,
     writeTranscript: params.writeTranscript,
   })
@@ -838,12 +950,35 @@ export async function runSubagent(
     }
   }
 
+  // 父会话 usage 回卷（同步与后台均可）
+  if (params.parentUsage && childUsage) {
+    const { mergeSessionUsage } = await import('./sessionUsage.ts')
+    mergeSessionUsage(params.parentUsage, childUsage)
+  }
+
+  // worktree 清理（默认 on；cleanupWorktree=false 保留）
+  if (
+    isolationUsed === 'worktree' &&
+    worktreePath &&
+    params.cleanupWorktree !== false
+  ) {
+    try {
+      const { removeSubagentWorktree } = await import('./worktree.ts')
+      await removeSubagentWorktree({
+        parentCwd: params.cwd,
+        worktreePath,
+      })
+    } catch {
+      // 清理失败不阻断
+    }
+  }
+
   await runHooks(
     'SubagentStop',
     {
       hook_event_name: 'SubagentStop',
       session_id: params.parentSessionId,
-      cwd,
+      cwd: params.cwd,
       timestamp: nowIso(),
       agent_id: agentId,
       agent_type: agentType,
@@ -863,6 +998,9 @@ export async function runSubagent(
     terminal,
     messages,
     ...(agentTranscriptPath ? { agentTranscriptPath } : {}),
+    usage: childUsage,
+    cwd,
+    isolation: isolationUsed,
   }
 }
 
@@ -893,6 +1031,12 @@ export type SubagentParentContext = {
   parentMessages?: ChatMessage[]
   /** fork 时继承的父 system 段 */
   parentSystemPromptSections?: readonly string[]
+  /** 父会话 model 标签；写入子 usage.byModel */
+  model?: string
+  /**
+   * 父会话 usage 引用；子完成后 merge 回卷（同步 + 后台均生效）。
+   */
+  parentUsage?: import('./sessionUsage.ts').SessionUsage
 }
 
 function agentTypesHint(active?: ActiveAgentDefinitions | null): string {
@@ -961,6 +1105,14 @@ export function createAgentTool(
           type: 'boolean',
           description: 'Alias of run_in_background',
         },
+        max_turns: {
+          type: 'number',
+          description: 'Max agentic turns for this spawn (overrides agent def)',
+        },
+        isolation: {
+          type: 'string',
+          description: 'none | worktree — worktree uses git worktree isolation',
+        },
       },
       required: ['prompt'],
     },
@@ -1019,6 +1171,18 @@ export function createAgentTool(
             ? (ctx.extras.writeTranscript as boolean | string)
             : true
 
+      let maxTurnsOverride: number | undefined
+      if (input.max_turns != null && input.max_turns !== '') {
+        const n = Number(input.max_turns)
+        if (Number.isFinite(n) && n >= 1) maxTurnsOverride = Math.min(200, Math.floor(n))
+      }
+      let isolationOverride: 'none' | 'worktree' | undefined
+      if (input.isolation != null) {
+        const iso = String(input.isolation).trim().toLowerCase()
+        if (iso === 'worktree') isolationOverride = 'worktree'
+        if (iso === 'none' || iso === 'off') isolationOverride = 'none'
+      }
+
       const runParams: RunSubagentParams = {
         def,
         prompt,
@@ -1034,8 +1198,11 @@ export function createAgentTool(
         skills: parent.skills,
         signal: parent.signal ?? ctx.signal,
         onEvent: parent.onEvent,
-        // 默认写侧链 transcript（S7+）；可用 extras.writeTranscript=false 关闭
         writeTranscript,
+        model: parent.model,
+        parentUsage: parent.parentUsage,
+        ...(maxTurnsOverride !== undefined ? { maxTurns: maxTurnsOverride } : {}),
+        ...(isolationOverride ? { isolation: isolationOverride } : {}),
         ...(useFork
           ? {
               fork: true,
@@ -1045,9 +1212,9 @@ export function createAgentTool(
           : {}),
       }
 
-      const runInBackground = isTruthyBackgroundFlag(
-        input.run_in_background ?? input.async,
-      )
+      const runInBackground =
+        isTruthyBackgroundFlag(input.run_in_background ?? input.async) ||
+        def.background === true
 
       if (runInBackground) {
         const store = parent.backgroundStore
@@ -1083,13 +1250,18 @@ export function createAgentTool(
               summary: result.summary,
               isError: result.isError,
               agentTranscriptPath: result.agentTranscriptPath,
+              usage: result.usage,
               prompt,
             })
             if (parent.parentMessages) {
               const tag = result.isError ? 'error' : 'done'
+              const u =
+                result.usage && result.usage.calls > 0
+                  ? ` · ${result.usage.totalTokens} tok`
+                  : ''
               parent.parentMessages.push({
                 role: 'system',
-                content: `[background agent ${result.agentId} ${tag}] ${result.summary}`,
+                content: `[background agent ${result.agentId} ${tag}] ${result.summary}${u}`,
               })
             }
           })
@@ -1123,10 +1295,14 @@ export function createAgentTool(
       const pathNote = result.agentTranscriptPath
         ? `\ntranscript: ${result.agentTranscriptPath}`
         : ''
+      const usageNote =
+        result.usage && result.usage.calls > 0
+          ? `\nusage: ${result.usage.totalTokens} tokens (${result.usage.calls} calls)`
+          : ''
       return {
         ok: !result.isError,
         isError: result.isError,
-        output: `${header}\n${body}${pathNote}`,
+        output: `${header}\n${body}${pathNote}${usageNote}`,
         errorCode: result.isError ? 'subagent_failed' : undefined,
       }
     },

@@ -28,8 +28,12 @@
 | `agentType` | 如 `explore` / `general` / `fork` / 项目自定义 |
 | `description` | 给主模型选类型用 |
 | `tools` | 白名单工具名，或 `'*'` |
+| `disallowedTools?` | 从已解析集再剔除（frontmatter / 定义级） |
 | `systemPrompt` | 子 agent 短 system |
 | `permissionMode?` | 可选；未设则继承父会话 |
+| `maxTurns?` | 定义级 max turns（Agent 工具 `max_turns` 可覆盖） |
+| `background?` | 定义级默认后台跑 |
+| `isolation?` | `none` \| `worktree` |
 | `source?` | `builtin` / `user` / `project` |
 
 ## 内置类型
@@ -101,32 +105,59 @@ Optional system append / replacement body for the subagent.
 2. `tools === '*'` → 保留全部（再扣黑名单）。
 3. 否则只保留白名单中的名字。
 4. **始终排除 `Agent`**，防止子 agent 再 spawn（无限递归）。
-5. 未知白名单名字忽略（不抛）。
+5. `disallowedTools` 二次剔除（与白名单叠加）。
+6. 未知白名单名字忽略（不抛）。
 
 fork 路径不走白名单表，直接 `parent.allTools` 去掉 `Agent`。
 
 ## Agent 工具（主会话 builtins）
 
 - **name:** `Agent`
-- **input:** `prompt`（必填）；`subagent_type`（可选：省略/`fork`=继承父会话，其它=独立子 agent）；`fork`（可选布尔）；`run_in_background` / `async`（可选布尔）
+- **input:**
+  - `prompt`（必填）
+  - `subagent_type`（可选：省略/`fork`=继承父会话，其它=独立子 agent）
+  - `fork`（可选布尔）
+  - `run_in_background` / `async`（可选布尔；或定义 `background: true`）
+  - `max_turns`（可选；覆盖定义级 maxTurns）
+  - `isolation`（可选：`none` \| `worktree`）
 - **`isConcurrencySafe`:** 恒 `false`（同轮多个 Agent 串行）
-- **结果：** 同步成功为摘要文本；`run_in_background=true` 时立即返回 `started agent <id>…`，结果写入 `session.backgroundAgents`，用 `/agents status` 或 `/bg` 轮询
+- **结果：** 同步成功为摘要 + 可选 `usage:` 行；`run_in_background=true` 时立即返回 `started agent <id>…`，结果写入 `session.backgroundAgents`，用 `/agents status` 或 `/bg` 轮询
 - **失败：** `isError` + 错误说明
+
+## Usage 回卷（成本）
+
+```text
+子 queryLoop → childUsage
+  → mergeSessionUsage(parentUsage, childUsage)
+  → 父 /cost 含 subagent tokens + cache
+```
+
+- `runSubagent({ parentUsage, model })`：结束时 merge；`model` 写入 `byModel`。
+- Agent 工具经 `toolExecution` 注入 `parentUsage: session.usage`、`model: session.model`（同步 + 后台均生效）。
+- 后台结果可带 `usage` 快照；`/agents status` 展示 tokens 行。
+- 无遥测。
+
+## Worktree
+
+- `BOLO_SUBAGENT_WORKTREE=1` 或 `isolation: worktree` → `git worktree add --detach`。
+- 结束后默认 `removeSubagentWorktree`（`cleanupWorktree: false` 可保留调试）。
+- 侧链 transcript 写在**父 cwd** 的 sessions，避免 worktree 清掉后丢文件。
 
 ## 刻意不做（P2+）
 
-- 完整 worktree / swarm / 跨会话 cache 共享
-- 遥测 / GrowthBook / teammate
+- swarm / teammate / 跨会话完整 prompt cache 共享
+- 遥测 / GrowthBook
+- worktree「有改动则保留」的精细策略（当前默认 force remove）
 
 侧链 transcript（可选）：`runSubagent({ writeTranscript: true })` 写入 `{cwd}/.bolo/sessions/agent-{id}.jsonl`；`SubagentStop` 可带 `agent_transcript_path`。
 
 **S12 最小 async：** Agent 工具 `run_in_background` 后台 `runSubagent`；会话 `backgroundAgents.pendingAgents` / `backgroundAgentResults`；可选 system 通知进 `session.messages`。
 
-**S12 最小 fork：** 见上文；无 worktree / 无完整 cache 共享。
+**S12 最小 fork：** 见上文；无完整 cache 共享。
 
 **S8 最小权限：** `resolveSubagentPermissionMode(parent, def)` — 子 agent **不得**比父会话更宽（rank：`plan < default < acceptEdits < bypass`）。定义写 `bypass` 而父为 `default` 时实际仍用 `default`。
 
-**SA-PAR：** `/agents status` · `/bg` 展示 `total/running/done/error` 计数 + `RUNNING|DONE|ERROR` 标签 + finished 时间。
+**SA-PAR：** `/agents status` · `/bg` 展示 `total/running/done/error` 计数 + `RUNNING|DONE|ERROR` 标签 + finished 时间 + 可选 usage。
 
 **P-SA-CAP：** 后台并发上限默认 **3**（`BOLO_MAX_BACKGROUND_AGENTS` 或 `store.maxConcurrent`）；超额拒绝并提示 `/agents status`。
 
@@ -137,6 +168,6 @@ fork 路径不走白名单表，直接 `parent.allTools` 去掉 `Agent`。
 - **S0–S6：** 文档 + `runSubagent` + Agent 工具 + 测试绿
 - **S7：** `.bolo/agents` 发现、覆盖内置、resolve + `/agents` + `ensure*Layout` 的 `agents/`
 - **S8 最小：** 子权限不升级（`resolveSubagentPermissionMode`）
-- **S12 partial：** 可选后台 subagent + **fork 继承父 messages**（无 worktree）
-- **SA-PAR：** 后台队列可见性（计数 + 状态标签）
-- **P-SA-CAP：** 并发上限（默认 3）
+- **S12 partial：** 可选后台 subagent + **fork 继承父 messages**
+- **SA-PAR / P-SA-CAP：** 后台可见性 + 并发上限
+- **Usage 回卷 / maxTurns / disallowedTools / worktree cleanup：** 已接线（相对 HC 仍简化）

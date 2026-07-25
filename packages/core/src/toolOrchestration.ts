@@ -53,6 +53,10 @@ export type RunToolsParams = {
   parentMessages?: import('../../shared/src/index.ts').ChatMessage[]
   /** fork 时注入子 agent 的父 system 段 */
   parentSystemPromptSections?: readonly string[]
+  /** 父会话 model；Agent 子 usage.byModel */
+  model?: string
+  /** 父会话 usage；子 merge 回卷 */
+  parentUsage?: import('./sessionUsage.ts').SessionUsage
   signal?: AbortSignal
   onEvent?: (e: ToolExecutionEvent) => void
 }
@@ -118,6 +122,8 @@ export async function runTools(params: RunToolsParams): Promise<RunToolsResult> 
     backgroundStore: params.backgroundStore,
     parentMessages: params.parentMessages,
     parentSystemPromptSections: params.parentSystemPromptSections,
+    model: params.model,
+    parentUsage: params.parentUsage,
     signal: params.signal,
     onEvent: params.onEvent,
   }

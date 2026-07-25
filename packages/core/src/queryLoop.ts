@@ -275,6 +275,8 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
           backgroundStore: params.backgroundStore,
           parentMessages: params.messages,
           parentSystemPromptSections: params.systemPromptSections,
+          model: params.model,
+          parentUsage: params.usage,
           signal: params.signal,
           onEvent: params.onEvent,
         },

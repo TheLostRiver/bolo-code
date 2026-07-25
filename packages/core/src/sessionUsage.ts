@@ -180,6 +180,82 @@ export function accumulateSessionUsage(
 }
 
 /**
+ * 将子 agent usage 合并进父会话（对照 HC fork/subagent totalUsage 回卷）。
+ * - 父 totals / cache 累加
+ * - byModel 按子桶名合并；可选 `labelPrefix`（如 `sub:`）仅用于展示时由调用方先改 key
+ * - 不修改 child
+ */
+export function mergeSessionUsage(
+  parent: SessionUsage,
+  child: SessionUsage | undefined | null,
+): void {
+  if (!child || child.calls === 0) return
+
+  parent.inputTokens += child.inputTokens
+  parent.outputTokens += child.outputTokens
+  parent.totalTokens += child.totalTokens
+  parent.calls += child.calls
+  if (child.estimated) parent.estimated = true
+
+  const cr = child.cacheReadInputTokens ?? 0
+  const cc = child.cacheCreationInputTokens ?? 0
+  if (cr > 0) {
+    parent.cacheReadInputTokens = (parent.cacheReadInputTokens ?? 0) + cr
+  }
+  if (cc > 0) {
+    parent.cacheCreationInputTokens =
+      (parent.cacheCreationInputTokens ?? 0) + cc
+  }
+
+  if (child.byModel) {
+    for (const [name, bucket] of Object.entries(child.byModel)) {
+      const b = ensureBucket(parent, name)
+      b.inputTokens += bucket.inputTokens
+      b.outputTokens += bucket.outputTokens
+      b.totalTokens += bucket.totalTokens
+      b.calls += bucket.calls
+      if (bucket.estimated) b.estimated = true
+      const bcr = bucket.cacheReadInputTokens ?? 0
+      const bcc = bucket.cacheCreationInputTokens ?? 0
+      if (bcr > 0) {
+        b.cacheReadInputTokens = (b.cacheReadInputTokens ?? 0) + bcr
+      }
+      if (bcc > 0) {
+        b.cacheCreationInputTokens = (b.cacheCreationInputTokens ?? 0) + bcc
+      }
+    }
+  }
+}
+
+/**
+ * cache 命中率：cacheRead / (cacheRead + cacheCreate + 非缓存 input 粗估)
+ * 无 cache 字段时返回 null。
+ * 粗估非缓存 input ≈ max(0, inputTokens - cacheRead)（与多数 API 语义近似）。
+ */
+export function computeCacheHitRate(
+  usage: SessionUsage | undefined | null,
+): number | null {
+  if (!usage || usage.calls === 0) return null
+  const cacheRead = usage.cacheReadInputTokens ?? 0
+  const cacheCreate = usage.cacheCreationInputTokens ?? 0
+  if (cacheRead <= 0 && cacheCreate <= 0) return null
+  // 分母：cache 相关 + 未命中的 prompt 部分
+  const uncachedInput = Math.max(0, usage.inputTokens - cacheRead)
+  const denom = cacheRead + cacheCreate + uncachedInput
+  if (denom <= 0) return null
+  return cacheRead / denom
+}
+
+/** 0–100 百分比字符串，一位小数；null → null */
+export function formatCacheHitRatePercent(
+  usage: SessionUsage | undefined | null,
+): string | null {
+  const r = computeCacheHitRate(usage)
+  if (r == null) return null
+  return `${(r * 100).toFixed(1)}%`
+}
+
+/**
  * 从 provider usage 字段归一化；全空则返回 null（调用方应走 estimate）。
  */
 export function normalizeProviderUsage(u: {
@@ -273,7 +349,7 @@ function formatNum(n: number): string {
   return String(n)
 }
 
-/** /cost · /usage 展示文案（含 cache + by-model breakdown） */
+/** /cost · /usage 展示文案（含 cache + hit rate + by-model breakdown） */
 export function formatSessionUsage(usage: SessionUsage | undefined): string {
   if (!usage || usage.calls === 0) {
     return [
@@ -283,6 +359,7 @@ export function formatSessionUsage(usage: SessionUsage | undefined): string {
   }
   const cacheRead = usage.cacheReadInputTokens ?? 0
   const cacheCreate = usage.cacheCreationInputTokens ?? 0
+  const hitPct = formatCacheHitRatePercent(usage)
   const lines = [
     'Session usage (local only, no telemetry):',
     `  calls:         ${usage.calls}`,
@@ -292,6 +369,9 @@ export function formatSessionUsage(usage: SessionUsage | undefined): string {
     `  cacheRead:     ${formatNum(cacheRead)}`,
     `  cacheWrite:    ${formatNum(cacheCreate)}`,
   ]
+  if (hitPct != null) {
+    lines.push(`  cacheHitRate:  ${hitPct}`)
+  }
   if (usage.estimated) {
     lines.push('  note: some/all values estimated (chars/4)')
   }
@@ -304,9 +384,19 @@ export function formatSessionUsage(usage: SessionUsage | undefined): string {
       const cr = b.cacheReadInputTokens ?? 0
       const cw = b.cacheCreationInputTokens ?? 0
       const est = b.estimated ? ' est' : ''
+      const bucketHit = formatCacheHitRatePercent({
+        inputTokens: b.inputTokens,
+        outputTokens: b.outputTokens,
+        totalTokens: b.totalTokens,
+        calls: b.calls,
+        cacheReadInputTokens: b.cacheReadInputTokens,
+        cacheCreationInputTokens: b.cacheCreationInputTokens,
+        estimated: b.estimated,
+      })
+      const hitPart = bucketHit != null ? `; hit ${bucketHit}` : ''
       lines.push(
         `    ${name}: ${formatNum(b.inputTokens)} in / ${formatNum(b.outputTokens)} out / ${formatNum(b.totalTokens)} total` +
-          ` (${b.calls} calls; cache r/w ${formatNum(cr)}/${formatNum(cw)})${est}`,
+          ` (${b.calls} calls; cache r/w ${formatNum(cr)}/${formatNum(cw)}${hitPart})${est}`,
       )
     }
   }
@@ -321,7 +411,10 @@ export function formatUsageOneLiner(usage: SessionUsage | undefined): string {
   const est = usage.estimated ? ' est' : ''
   const cr = usage.cacheReadInputTokens ?? 0
   const cw = usage.cacheCreationInputTokens ?? 0
+  const hitPct = formatCacheHitRatePercent(usage)
   const cachePart =
-    cr > 0 || cw > 0 ? ` cache r/w ${cr}/${cw}` : ''
+    cr > 0 || cw > 0
+      ? ` cache r/w ${cr}/${cw}${hitPct != null ? ` hit ${hitPct}` : ''}`
+      : ''
   return `usage:           ${usage.totalTokens} tokens (${usage.calls} calls)${cachePart}${est}`
 }
