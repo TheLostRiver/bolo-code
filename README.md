@@ -26,7 +26,7 @@
 | 层 | 粗估 | 说明 |
 |----|------|------|
 | Headless 核心 | ~80–88% | queryLoop · 权限 · tools · STE；partial stream fail-closed |
-| 会话 / CLI | ~86–92% | JSONL · new/resume 同构 runtime · `/turn` · durable controls · coordinator Ctrl-C · Durable Turn DR0–DR2C2 |
+| 会话 / CLI | ~87–93% | JSONL · new/resume 同构 runtime · `/turn` · durable controls · serialized transcript writes · Durable Turn DR0–DR2 |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
 | Subagent | ~85–92% | `config.agents` + `agents/*.md` · worktree 成果保全 |
 | 文件 Diff 日用 | ~95%+ | D0–D7 · U0–U4 |
@@ -35,13 +35,13 @@
 | **多 Provider 热切** | **~92–96%** | P0–P4.1 + CX7 Desktop |
 | **Effort 方言** | **~92–95%** | E0–E9 |
 | **Provider UX** | **~95–98%** | CX0–CX8（ultrathink 默认 off） |
-| Durable Turn | DR0–DR2C2 ✅ | admission · recovery · 单 runner · safe-boundary control · lifecycle persistence |
+| Durable Turn | DR0–DR2 ✅ | admission · recovery · 单 runner · durable safe-boundary control · crash/concurrency closeout |
 | Electron GUI | ~65–75% | 壳 + 流式 + 权限 + Settings + 多 provider |
 | 相对 HC 全家桶 UI | 另计 | 不设 100% |
 
-**已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Turn DR0–DR2C2。
+**已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Turn DR0–DR2。
 
-**当前主线：** Durable Turn DR2C3 crash/failure closeout；随后 DR3 background/subagent、DR4 protocol 与 AR1–AR5。
+**当前主线：** Durable Runtime DR3A background/subagent task schema；随后 DR3B queue/promotion、DR4 protocol 与 AR1–AR5。
 
 **非阻塞开放轨：** Compact §8.9 · U5 真·Ink/IDE · adaptive thinking · Desktop 体验打磨。
 

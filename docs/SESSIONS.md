@@ -134,7 +134,15 @@ controlId + sessionId + kind + state + timestamp
 - barrier 失败仍在 finally 释放 runner，且未审计的 ready queue 转 cancelled；磁盘 pending 在重启后仍只投影 interrupted。
 - resume 填充 `session.durableControls` 供后续协议/诊断消费，但不会重建 coordinator queue。
 
-DR2C3 将继续覆盖 concurrent append、crash fixture、重复/部分写入与 compact/rewrite/terminal failure 组合回归。
+#### DR2C3 crash / concurrent rewrite closeout
+
+- 同一 transcript 的 append、meta ensure、message batch 与 compact/shrink rewrite 按绝对路径串行；不同 session 文件保持并行。
+- rewrite 从读取旧 lifecycle 到原子 rename 全程持有 write barrier，期间到达的 control 会在 rewrite 后追加，不会被覆盖。
+- 一次 append 失败只拒绝当前写；finally 释放 barrier，后续写仍可继续。
+- 截断尾行、未知状态、冲突 controlId fail-closed 跳过；已确认 lifecycle 保留并按 interrupted 规则恢复。
+- 默认门禁组合覆盖 concurrent append、append-vs-rewrite、EIO 后续写、terminal/release failure 与 compact rewrite。
+
+DR2A–DR2C 已收口；下一阶段 DR3 为 background/subagent task 与 result 建立独立 durable lifecycle。
 
 ## 2. 快照格式（version 1，只读兼容）
 

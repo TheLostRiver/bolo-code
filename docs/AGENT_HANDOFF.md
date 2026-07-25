@@ -107,7 +107,7 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | 层 | 粗估 | 状态摘要 |
 |----|------|----------|
 | Headless 核心 | ~80–88% | queryLoop · STE · 权限 · tools；partial stream fail-closed |
-| 会话 / CLI | ~86–92% | JSONL · new/resume 同构 runtime · `/turn` · durable controls · coordinator Ctrl-C；Durable Turn DR0–DR2C2 |
+| 会话 / CLI | ~87–93% | JSONL · new/resume 同构 runtime · `/turn` · durable controls · serialized transcript writes；Durable Turn DR0–DR2 |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
 | Subagent | ~85–92% | Spec v0；默认子不可再 spawn；worktree 成果保全 |
 | 文件 Diff 日用 | ~95%+ | **D0–D7** |
@@ -117,13 +117,13 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | 多 Provider 热切 | ~92–96% | **P0–P4.1 + CX7 Desktop** |
 | Effort 方言 | ~92–95% | **E0–E9** |
 | Provider UX | ~95–98% | **CX0–CX8**（ultrathink 默认 off） |
-| Durable Turn | DR0–DR2C2 ✅ | 输入先落盘 · recovery · 单 runner · safe-boundary control · lifecycle persistence |
+| Durable Turn | DR0–DR2 ✅ | 输入先落盘 · recovery · 单 runner · durable control · crash/concurrency closeout |
 | Electron GUI | ~65–75% | 薄壳；非 HC 级 IDE |
 | 产品相对 HC 全家桶 | ~74–88% | 日用高；UI 密度另计 |
 
-**已闭环：** Diff · Hooks · Compact · Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Turn DR0–DR2C2**。
+**已闭环：** Diff · Hooks · Compact · Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Turn DR0–DR2**。
 
-**当前主线：** Durable Turn **DR2C3 crash/failure closeout**；DR2C2 lifecycle persistence wiring 已完成，DR3 background/subagent、DR4 protocol 后续。
+**当前主线：** Durable Runtime **DR3A durable background/subagent task schema**；DR2 已完整收口，DR3B queue/promotion、DR4 protocol 后续。
 
 **其它开放轨（非阻塞）：**
 
@@ -144,8 +144,8 @@ DR2A 单 session runner ✅
 → DR2B3 permission/diff ask + CLI races ✅
 → DR2C1 control schema/projection ✅
 → DR2C2 lifecycle persistence wiring ✅
-→ DR2C3 crash/failure closeout（当前）
-→ DR3A durable background task
+→ DR2C3 crash/failure closeout ✅
+→ DR3A durable background task（当前）
 → DR3B queue + parent-boundary promotion
 → DR4A runtime protocol
 → DR4B CLI diagnostics
@@ -271,7 +271,7 @@ npx tsx scripts/test-file-diff.ts
 npx tsx scripts/test-config.ts
 ```
 
-`npm test` 已覆盖 R0–R4 与 Durable Turn DR0–DR2C2 的关键回归；其它新轨仍以对应 `test-*` 脚本为准。
+`npm test` 已覆盖 R0–R4 与 Durable Turn DR0–DR2 的关键回归；其它新轨仍以对应 `test-*` 脚本为准。
 
 ### 7.3 Git
 
@@ -337,6 +337,7 @@ cd apps/desktop && npm install && set BOLO_DESKTOP_MOCK=1 && npm start
 | DR2B3 | ask abort race · permission/diff exit boundary · `/turn` control · queued REPL drain · coordinator Ctrl-C |
 | DR2C1 | `control` transcript schema · fail-closed recovery projection · compact rewrite preservation |
 | DR2C2 | session durable wrappers · release barrier · request/promote/take fail-closed · resume durableControls |
+| DR2C3 | transcript write barrier · append/rewrite race closeout · partial-tail/duplicate/EIO recovery |
 
 最新 commit 以 `git log` 为准。
 
