@@ -321,12 +321,7 @@ queryLoop (spawnDepth)
 | S-A4 | spawnDepth 贯穿 + 条件保留 Agent | ✅ | §4 规则 |
 | S-A5 | Agent 工具 `model`/`effort` 参数 | ✅ | schema + call |
 | S-A6 | `agents.enabled` 控制是否挂工具 | ✅ | createDefaultTools / session |
-| S-A7 | 文档 + 测试 | ✅ | test-subagent Spec v0 |
-| S-A3 | effort 传入子 queryLoop | 未接 | 接 effortLevel |
-| S-A4 | spawnDepth 贯穿 + 条件保留 Agent | 恒删 Agent | §4 规则 |
-| S-A5 | Agent 工具 `model`/`effort` 参数 | 无 | schema + call |
-| S-A6 | `agents.enabled` 控制是否挂工具 | 无 | createDefaultTools / session |
-| S-A7 | 文档 + 测试 | 部分 | test-subagent 扩 |
+| S-A7 | 文档 + 测试 + JSONC 模板注释 | ✅ | test-subagent / test-config |
 
 **已有、本 spec 不重做：** loadAgentsDir、disallowedTools、background cap、usage 回卷、finalize stats、worktree cleanup、permission 不升级、fork 消息继承。
 

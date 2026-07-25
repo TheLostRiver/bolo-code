@@ -1019,7 +1019,10 @@ export async function createSessionFromWorkspace(
     }
     if (mcp.tools.length > 0) {
       session.tools = [
-        ...(session.tools ?? createDefaultTools(session.agentDefinitions)),
+        ...(session.tools ??
+          createDefaultTools(session.agentDefinitions, {
+            agentPolicy: session.agentPolicy,
+          })),
         ...mcp.tools,
       ]
     }
@@ -1090,7 +1093,10 @@ export async function reloadSessionPlugins(
     await closeSessionMcp(session)
     // 去掉旧 mcp 工具，保留内置（与 mergeSessionToolsWithMcp 同源）
     session.tools = (
-      session.tools ?? createDefaultTools(session.agentDefinitions)
+      session.tools ??
+      createDefaultTools(session.agentDefinitions, {
+        agentPolicy: session.agentPolicy,
+      })
     ).filter((t) => !isMcpManagedToolName(t.name))
 
     if (workspace.mcpServers.length > 0) {
@@ -1131,7 +1137,10 @@ export async function reloadSessionPlugins(
       }
       if (mcp.tools.length > 0) {
         session.tools = [
-          ...(session.tools ?? createDefaultTools(session.agentDefinitions)),
+          ...(session.tools ??
+            createDefaultTools(session.agentDefinitions, {
+              agentPolicy: session.agentPolicy,
+            })),
           ...mcp.tools,
         ]
       }

@@ -70,6 +70,8 @@ export type SlashSession = {
   skills?: LoadedSkill[]
   /** 活跃 subagent 定义；供 /agents · /doctor */
   agentDefinitions?: import('./subagent.ts').ActiveAgentDefinitions
+  /** Subagent 全局策略；/agents · /doctor */
+  agentPolicy?: import('./subagent.ts').AgentPolicy
   /** 后台 subagent 表；/agents status · /bg */
   backgroundAgents?: import('./subagent.ts').BackgroundAgentStore
   /** 本地 usage 累计；/cost · /context · /doctor */
@@ -826,6 +828,7 @@ function cmdDoctor(session: SlashSession, _args: string): SlashDispatchResult {
     `tools:           ${toolsCount}`,
     `skills:          ${skillsCount}`,
     `agent types:     ${agentTypesCount}`,
+    `agents policy:   ${formatAgentsPolicyOneLiner(session.agentPolicy)}`,
     `plugins:         ${pluginsCount}` +
       (pluginMergeErrs ? `  warnings=${pluginMergeErrs}` : ''),
     `memory user:     ${memoryUser}`,
@@ -2041,20 +2044,28 @@ async function cmdAgents(
     }
   }
 
-  const { listActiveAgents, loadAgentsDir, builtinAgentMap } = await import(
-    './subagent.ts'
-  )
+  const {
+    listActiveAgents,
+    loadAgentsDir,
+    builtinAgentMap,
+    defaultAgentPolicy,
+  } = await import('./subagent.ts')
   let active = session.agentDefinitions
   if (!active || !Object.keys(active).length) {
     const loaded = await loadAgentsDir({ cwd: session.cwd })
     active = loaded.active
   }
   const agents = listActiveAgents(active ?? builtinAgentMap())
+  const policy = session.agentPolicy ?? defaultAgentPolicy()
   if (!agents.length) {
     return {
       ok: true,
-      message:
-        'No agent types.\nPlace markdown under .bolo/agents/ (or ~/.bolo/agents/).\nSee docs/SUBAGENT.md.',
+      message: [
+        'No agent types.',
+        'Place markdown under .bolo/agents/ (or ~/.bolo/agents/).',
+        formatAgentsPolicyBlock(policy),
+        'See docs/SUBAGENT.md · docs/SUBAGENT_SPEC.md.',
+      ].join('\n'),
     }
   }
   const lines = [
@@ -2074,17 +2085,42 @@ async function cmdAgents(
           ? ` ban=${a.disallowedTools.join(',')}`
           : ''
       const mt = a.maxTurns != null ? ` maxTurns=${a.maxTurns}` : ''
+      const msd =
+        a.maxSpawnDepth != null ? ` maxSpawnDepth=${a.maxSpawnDepth}` : ''
+      const mod = a.model?.trim() ? ` model=${a.model.trim()}` : ''
+      const eft = a.effort?.trim() ? ` effort=${a.effort.trim()}` : ''
       const when = a.whenToUse?.trim()
         ? `\n    when: ${a.whenToUse.trim()}`
         : ''
-      return `  ${a.agentType}  [${src}]${mode}${mt}${ban}\n    ${a.description}${when}\n    tools: ${tools}`
+      return `  ${a.agentType}  [${src}]${mode}${mt}${msd}${mod}${eft}${ban}\n    ${a.description}${when}\n    tools: ${tools}`
     }),
     '',
+    formatAgentsPolicyBlock(policy),
     'Dirs: .bolo/agents/*.md  ·  ~/.bolo/agents/*.md  ·  project overrides builtin',
-    'Agent tool: subagent_type=<name> · description · run_in_background · max_turns · isolation',
+    'Agent tool: subagent_type · description · model · effort · max_turns · isolation · run_in_background',
     'Background: /agents status  ·  /bg',
+    'Docs: docs/SUBAGENT_SPEC.md',
   ]
   return { ok: true, message: lines.join('\n') }
+}
+
+function formatAgentsPolicyOneLiner(
+  policy?: import('./subagent.ts').AgentPolicy,
+): string {
+  if (!policy) return '(default: enabled maxSpawnDepth=0)'
+  const on = policy.enabled ? 'on' : 'off'
+  return `enabled=${on}  maxConcurrent=${policy.maxConcurrent}  maxSpawnDepth=${policy.maxSpawnDepth}  defaultModel=${policy.defaultModel}${policy.defaultEffort ? `  defaultEffort=${policy.defaultEffort}` : ''}  overflow=${policy.overflow}`
+}
+
+function formatAgentsPolicyBlock(
+  policy: import('./subagent.ts').AgentPolicy,
+): string {
+  return [
+    'Policy (config.agents):',
+    `  enabled=${policy.enabled}  maxConcurrent=${policy.maxConcurrent}  maxSpawnDepth=${policy.maxSpawnDepth}`,
+    `  defaultModel=${policy.defaultModel}${policy.defaultEffort ? `  defaultEffort=${policy.defaultEffort}` : ''}  overflow=${policy.overflow}`,
+    '  note: maxSpawnDepth=0 → only primary may spawn; type frontmatter may raise per agent',
+  ].join('\n')
 }
 
 async function cmdBg(session: SlashSession): Promise<SlashDispatchResult> {

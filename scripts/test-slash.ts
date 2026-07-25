@@ -120,6 +120,11 @@ async function main() {
     assert(doctor.message.includes('skills:'), 'doctor has skills count')
     assert(doctor.message.includes('agent types:'), 'doctor has agent types')
     assert(
+      doctor.message.includes('agents policy:') ||
+        doctor.message.includes('maxSpawnDepth'),
+      'doctor has agents policy',
+    )
+    assert(
       doctor.message.includes('provider:') &&
         doctor.message.includes('mock'),
       'doctor has provider id',
@@ -541,6 +546,27 @@ async function main() {
       'mode=default · model=(unset) · effort=auto · messages=0',
     `status defaults: ${statusDefault}`,
   )
+
+  // ── /agents 展示 policy + type meta ──
+  const agentsList = await submitUserInput(session, '/agents')
+  assert(agentsList.type === 'slash', '/agents slash')
+  if (agentsList.type === 'slash') {
+    assert(
+      agentsList.message.includes('Policy') ||
+        agentsList.message.includes('maxSpawnDepth'),
+      `/agents policy: ${agentsList.message.slice(0, 200)}`,
+    )
+    assert(
+      agentsList.message.includes('explore') ||
+        agentsList.message.includes('general'),
+      '/agents lists builtins',
+    )
+    assert(
+      agentsList.message.includes('model=') ||
+        agentsList.message.includes('Agent tool:'),
+      '/agents has model or tool hint',
+    )
+  }
 
   // ── parseArgs 无参不崩 ──
   const bare = parseArgs([])
