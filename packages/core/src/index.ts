@@ -504,6 +504,7 @@ export {
   appendSystemNote,
   appendFileDiffEntry,
   appendTurnEntry,
+  appendControlEntry,
   dualWriteSessionTranscript,
   writeTranscriptAfterCompact,
   resolveTranscriptPathFromJson,
@@ -518,12 +519,14 @@ export {
   systemNotesFromTranscriptEntries,
   fileDiffsFromTranscriptEntries,
   projectDurableTurns,
+  projectDurableControls,
   normalizeSessionTitle,
   normalizeSystemNoteText,
   buildTitleEntry,
   buildSystemNoteEntry,
   buildFileDiffEntry,
   buildTurnEntry,
+  buildControlEntry,
   scanTranscriptLite,
   DEFAULT_LITE_SCAN_BYTES,
   getTranscriptWriteState,
@@ -538,6 +541,7 @@ export {
   type TranscriptSystemNoteEntry,
   type TranscriptFileDiffEntry,
   type TranscriptTurnEntry,
+  type TranscriptControlEntry,
   type TranscriptMetaInput,
   type TranscriptLiteScan,
 } from './sessionTranscript.ts'
@@ -551,6 +555,21 @@ export {
   type DurableTurnRecord,
   type DurableTurnState,
 } from './durableTurn.ts'
+export {
+  DURABLE_CONTROL_STATES,
+  DURABLE_CONTROL_BOUNDARIES,
+  applyDurableControlEvent,
+  isDurableControlState,
+  isDurableControlBoundary,
+  isSessionControlKind,
+  normalizeDurableControlId,
+  normalizeDurableControlSessionId,
+  projectDurableControlEvents,
+  type DurableControlBoundary,
+  type DurableControlEvent,
+  type DurableControlRecord,
+  type DurableControlState,
+} from './durableControl.ts'
 
 export type SessionEvent =
   | { type: 'phase'; phase: SessionPhase | string }

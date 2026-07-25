@@ -24,6 +24,19 @@ import {
   type DurableTurnRecord,
   type DurableTurnState,
 } from './durableTurn.ts'
+import {
+  isDurableControlBoundary,
+  isDurableControlState,
+  isSessionControlKind,
+  normalizeDurableControlId,
+  normalizeDurableControlSessionId,
+  projectDurableControlEvents,
+  type DurableControlBoundary,
+  type DurableControlEvent,
+  type DurableControlRecord,
+  type DurableControlState,
+} from './durableControl.ts'
+import type { SessionControlKind } from './sessionCoordinator.ts'
 
 /** 公共头字段（线性 transcript；可选 parentUuid 供分叉元数据） */
 export type TranscriptEntryBase = {
@@ -117,6 +130,20 @@ export type TranscriptTurnEntry = TranscriptEntryBase & {
   detail?: string
 }
 
+/** DR2C：append-only control 生命周期；不进模型 messages。 */
+export type TranscriptControlEntry = TranscriptEntryBase & {
+  type: 'control'
+  controlId: string
+  kind: SessionControlKind
+  state: DurableControlState
+  expectedTurnId?: string
+  turnId?: string
+  prompt?: string
+  querySource?: string
+  boundary?: DurableControlBoundary
+  detail?: string
+}
+
 export type TranscriptEntry =
   | TranscriptMetaEntry
   | TranscriptMessageEntry
@@ -125,6 +152,7 @@ export type TranscriptEntry =
   | TranscriptSystemNoteEntry
   | TranscriptFileDiffEntry
   | TranscriptTurnEntry
+  | TranscriptControlEntry
 
 export type TranscriptMetaInput = {
   sessionId: string
@@ -536,6 +564,57 @@ export async function appendTurnEntry(
   return entry
 }
 
+export function buildControlEntry(
+  opts: DurableControlEvent,
+): TranscriptControlEntry {
+  const controlId = normalizeDurableControlId(opts.controlId)
+  const sessionId = normalizeDurableControlSessionId(opts.sessionId)
+  if (!isSessionControlKind(opts.kind)) {
+    throw new Error(`buildControlEntry: invalid kind ${String(opts.kind)}`)
+  }
+  if (!isDurableControlState(opts.state)) {
+    throw new Error(`buildControlEntry: invalid state ${String(opts.state)}`)
+  }
+  if (
+    opts.boundary !== undefined &&
+    !isDurableControlBoundary(opts.boundary)
+  ) {
+    throw new Error(
+      `buildControlEntry: invalid boundary ${String(opts.boundary)}`,
+    )
+  }
+  return {
+    type: 'control',
+    sessionId,
+    timestamp: opts.timestamp ?? nowIso(),
+    controlId,
+    kind: opts.kind,
+    state: opts.state,
+    ...(opts.expectedTurnId?.trim()
+      ? { expectedTurnId: normalizeDurableTurnId(opts.expectedTurnId) }
+      : {}),
+    ...(opts.turnId?.trim()
+      ? { turnId: normalizeDurableTurnId(opts.turnId) }
+      : {}),
+    ...(opts.prompt !== undefined ? { prompt: opts.prompt } : {}),
+    ...(opts.querySource?.trim()
+      ? { querySource: opts.querySource.trim() }
+      : {}),
+    ...(opts.boundary ? { boundary: opts.boundary } : {}),
+    ...(opts.detail?.trim() ? { detail: opts.detail.trim() } : {}),
+  }
+}
+
+/** 追加 DR2C control lifecycle entry（不进模型链）。 */
+export async function appendControlEntry(
+  file: string,
+  event: DurableControlEvent,
+): Promise<TranscriptControlEntry> {
+  const entry = buildControlEntry(event)
+  await appendTranscriptLine(file, entry)
+  return entry
+}
+
 /** 从 transcript 投影 turn；默认把 admitted/running 识别为 interrupted。 */
 export function projectDurableTurns(
   entries: readonly TranscriptEntry[],
@@ -557,6 +636,33 @@ export function projectDurableTurns(
     })
   }
   return projectDurableTurnEvents(events, opts)
+}
+
+/** 从 transcript 投影 controls；默认将 pending/ready 恢复为 interrupted。 */
+export function projectDurableControls(
+  entries: readonly TranscriptEntry[],
+  opts?: { recoverIncomplete?: boolean },
+): DurableControlRecord[] {
+  const events: DurableControlEvent[] = []
+  for (const entry of entries) {
+    if (entry.type !== 'control') continue
+    events.push({
+      controlId: entry.controlId,
+      sessionId: entry.sessionId,
+      kind: entry.kind,
+      state: entry.state,
+      timestamp: entry.timestamp,
+      ...(entry.expectedTurnId
+        ? { expectedTurnId: entry.expectedTurnId }
+        : {}),
+      ...(entry.turnId ? { turnId: entry.turnId } : {}),
+      ...(entry.prompt !== undefined ? { prompt: entry.prompt } : {}),
+      ...(entry.querySource ? { querySource: entry.querySource } : {}),
+      ...(entry.boundary ? { boundary: entry.boundary } : {}),
+      ...(entry.detail ? { detail: entry.detail } : {}),
+    })
+  }
+  return projectDurableControlEvents(events, opts)
 }
 
 /** entries 中全部 file_diff（保持文件顺序） */
@@ -689,6 +795,7 @@ export async function rewriteTranscriptFromMessages(
     turn?: number
   }> = []
   let preservedTurns: TranscriptTurnEntry[] = []
+  let preservedControls: TranscriptControlEntry[] = []
   if (opts && 'title' in opts && opts.title !== undefined) {
     preservedTitle = normalizeSessionTitle(opts.title)
   }
@@ -727,6 +834,12 @@ export async function rewriteTranscriptFromMessages(
       preservedTurns = entries
         .filter((entry): entry is TranscriptTurnEntry => entry.type === 'turn')
         .map((entry) => ({ ...entry }))
+      preservedControls = entries
+        .filter(
+          (entry): entry is TranscriptControlEntry =>
+            entry.type === 'control',
+        )
+        .map((entry) => ({ ...entry }))
     } catch {
       /* 新文件或不可读 */
     }
@@ -736,6 +849,19 @@ export async function rewriteTranscriptFromMessages(
       const { entries } = await loadTranscriptFile(filePath)
       preservedTurns = entries
         .filter((entry): entry is TranscriptTurnEntry => entry.type === 'turn')
+        .map((entry) => ({ ...entry }))
+    } catch {
+      /* 新文件或不可读 */
+    }
+  }
+  if (preservedControls.length === 0) {
+    try {
+      const { entries } = await loadTranscriptFile(filePath)
+      preservedControls = entries
+        .filter(
+          (entry): entry is TranscriptControlEntry =>
+            entry.type === 'control',
+        )
         .map((entry) => ({ ...entry }))
     } catch {
       /* 新文件或不可读 */
@@ -804,6 +930,9 @@ export async function rewriteTranscriptFromMessages(
   }
   for (const turn of preservedTurns) {
     lines.push(JSON.stringify(turn))
+  }
+  for (const control of preservedControls) {
+    lines.push(JSON.stringify(control))
   }
   const body = lines.length ? lines.join('\n') + '\n' : ''
   const tmp = path.join(
@@ -1158,6 +1287,39 @@ export async function loadTranscriptFile(
               : {}),
             ...(typeof o.terminalReason === 'string'
               ? { terminalReason: o.terminalReason }
+              : {}),
+            ...(typeof o.detail === 'string' ? { detail: o.detail } : {}),
+          }),
+        )
+        continue
+      }
+      if (o.type === 'control') {
+        if (
+          typeof o.controlId !== 'string' ||
+          typeof o.sessionId !== 'string' ||
+          !isSessionControlKind(o.kind) ||
+          !isDurableControlState(o.state)
+        ) {
+          continue
+        }
+        entries.push(
+          buildControlEntry({
+            controlId: o.controlId,
+            sessionId: o.sessionId,
+            kind: o.kind,
+            state: o.state,
+            timestamp:
+              typeof o.timestamp === 'string' ? o.timestamp : nowIso(),
+            ...(typeof o.expectedTurnId === 'string'
+              ? { expectedTurnId: o.expectedTurnId }
+              : {}),
+            ...(typeof o.turnId === 'string' ? { turnId: o.turnId } : {}),
+            ...(typeof o.prompt === 'string' ? { prompt: o.prompt } : {}),
+            ...(typeof o.querySource === 'string'
+              ? { querySource: o.querySource }
+              : {}),
+            ...(isDurableControlBoundary(o.boundary)
+              ? { boundary: o.boundary }
               : {}),
             ...(typeof o.detail === 'string' ? { detail: o.detail } : {}),
           }),
