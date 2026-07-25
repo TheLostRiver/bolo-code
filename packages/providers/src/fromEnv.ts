@@ -157,6 +157,7 @@ export function createProviderFromEnv(
       model,
       timeoutMs: overrides?.timeoutMs,
       maxTokens: overrides?.maxTokens,
+      effortDialect: overrides?.effortDialect,
     }
     return {
       provider: createAnthropicProvider(cfg),

@@ -15,6 +15,7 @@ import {
   DIALECT_MAX_TOKENS,
   buildOpenAICompatibleRequestBody,
   buildResponsesRequest,
+  buildAnthropicRequestBody,
 } from '../packages/providers/src/index.ts'
 import type { ChatMessage } from '../packages/shared/src/index.ts'
 import { normalizeEffortDialectFromConfig } from '../packages/config/src/index.ts'
@@ -157,4 +158,47 @@ assert(status.includes('deepseek-chat'), 'status dialect')
   assert(!bad.ok, 'reject unknown')
 }
 
-console.log('ok: effort-dialect E1–E3')
+// ── Anthropic output_config.effort (E5) ──
+{
+  assert(
+    detectEffortDialectId({ kind: 'anthropic', model: 'claude-sonnet-4' }) ===
+      'anthropic-output',
+    'detect anthropic',
+  )
+  const d = resolveEffortDialect('anthropic-output')
+  const high = resolveEffortWire(d, 'high', { isAgent: true })
+  assert(high.ok && high.ok && high.resolvedWire === 'high', 'ant high')
+  const body: Record<string, unknown> = { model: 'claude', max_tokens: 1024 }
+  if (high.ok) applyBodyPatches(body, high.patches)
+  const oc = body.output_config as { effort?: string }
+  assert(oc?.effort === 'high', 'ant output_config.effort')
+  assert(
+    high.ok &&
+      high.requestHeaders?.['anthropic-beta']?.includes('effort-2025-11-24'),
+    'ant beta on plan',
+  )
+  const xh = resolveEffortWire(d, 'xhigh', {})
+  assert(xh.ok && xh.ok && xh.resolvedWire === 'max', 'ant xhigh→max')
+  const auto = resolveEffortWire(d, 'auto', { isAgent: true })
+  assert(auto.ok && auto.ok && auto.resolvedWire == null, 'ant auto omit')
+
+  const built = buildAnthropicRequestBody(
+    msgs,
+    {
+      model: 'claude-opus-4-6',
+      maxTokens: 4096,
+      effortDialect: 'anthropic-output',
+    },
+    { effort: 'medium', stream: true, isAgent: true },
+  )
+  const oc2 = built.body.output_config as { effort?: string }
+  assert(oc2?.effort === 'medium', 'buildAnthropic body effort')
+  assert(
+    built.requestHeaders?.['anthropic-beta']?.includes('effort'),
+    'buildAnthropic headers',
+  )
+  // thinking 独立：未传 anthropicThinking 则无 thinking 字段
+  assert(built.body.thinking == null, 'effort does not force thinking')
+}
+
+console.log('ok: effort-dialect E1–E5')

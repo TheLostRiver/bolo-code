@@ -63,6 +63,11 @@ export type EffortDialect = {
    * true / 缺省且 id=max-tokens：开；有 reasoning wire 的方言默认 false。
    */
   applyTokenScale?: boolean
+  /**
+   * 当 resolvedWire 非 null 时合并进请求 Header（如 Anthropic effort beta）。
+   * 多值用逗号与已有同名 header 合并去重。
+   */
+  requestHeaders?: Record<string, string>
   notes?: string
 }
 
@@ -84,6 +89,8 @@ export type EffortWirePlan = {
   patches: Array<{ path: string[]; value: unknown; op: 'set' | 'delete' }>
   maxTokens?: number
   dialectId?: string
+  /** 有强度 wire 时附带的请求头（如 anthropic-beta） */
+  requestHeaders?: Record<string, string>
   notes?: string
 }
 
@@ -200,6 +207,41 @@ export const DIALECT_OPENAI_RESPONSES: EffortDialect = {
   notes: 'OpenAI Responses reasoning.effort; ultra→max',
 }
 
+/** Anthropic Messages · output_config.effort（对照 HC / Claude） */
+export const DIALECT_ANTHROPIC_OUTPUT: EffortDialect = {
+  id: 'anthropic-output',
+  levels: ['low', 'medium', 'high', 'max'],
+  default: null,
+  agentDefault: null,
+  map: {
+    none: null,
+    off: null,
+    minimal: 'low',
+    low: 'low',
+    medium: 'medium',
+    high: 'high',
+    xhigh: 'max',
+    max: 'max',
+    ultra: 'max',
+  },
+  aliases: { ultra: 'max', off: 'none' },
+  wire: [
+    {
+      shape: 'output_config',
+      key: 'effort',
+      valueFrom: 'resolved',
+    },
+  ],
+  missing: 'reject',
+  applyTokenScale: false,
+  // HelsincyCode constants/betas.ts
+  requestHeaders: {
+    'anthropic-beta': 'effort-2025-11-24',
+  },
+  notes:
+    'Anthropic/HC: output_config.effort low|medium|high|max; xhigh/ultra→max; thinking 独立',
+}
+
 /** 顶栏 reasoning_effort 透传（自定义 levels 可再配） */
 export const DIALECT_PASSTHROUGH_REASONING_EFFORT: EffortDialect = {
   id: 'passthrough-reasoning-effort',
@@ -233,16 +275,20 @@ const BUILTIN: Record<string, EffortDialect> = {
   off: DIALECT_OFF,
   'deepseek-chat': DIALECT_DEEPSEEK_CHAT,
   'openai-responses': DIALECT_OPENAI_RESPONSES,
+  'anthropic-output': DIALECT_ANTHROPIC_OUTPUT,
   'passthrough-reasoning-effort': DIALECT_PASSTHROUGH_REASONING_EFFORT,
   // 别名
   deepseek: DIALECT_DEEPSEEK_CHAT,
   responses: DIALECT_OPENAI_RESPONSES,
+  anthropic: DIALECT_ANTHROPIC_OUTPUT,
+  claude: DIALECT_ANTHROPIC_OUTPUT,
   legacy: DIALECT_MAX_TOKENS,
 }
 
 export function listBuiltinEffortDialectIds(): string[] {
   return Object.keys(BUILTIN).filter(
-    (k) => !['deepseek', 'responses', 'legacy'].includes(k),
+    (k) =>
+      !['deepseek', 'responses', 'legacy', 'anthropic', 'claude'].includes(k),
   )
 }
 
@@ -262,6 +308,7 @@ function cloneDialect(d: EffortDialect): EffortDialect {
     ...(d.aliases ? { aliases: { ...d.aliases } } : {}),
     wire: d.wire.map((w) => ({ ...w })),
     ...(d.onNone ? { onNone: d.onNone.map((w) => ({ ...w })) } : {}),
+    ...(d.requestHeaders ? { requestHeaders: { ...d.requestHeaders } } : {}),
   }
 }
 
@@ -291,6 +338,9 @@ export function resolveEffortDialect(
     aliases: { ...(base.aliases ?? {}), ...(raw.aliases ?? {}) },
     wire: raw.wire?.length ? raw.wire.map((w) => ({ ...w })) : base.wire,
     onNone: raw.onNone ?? base.onNone,
+    requestHeaders: raw.requestHeaders
+      ? { ...(base.requestHeaders ?? {}), ...raw.requestHeaders }
+      : base.requestHeaders,
     id: raw.id ?? base.id,
   }
 }
@@ -307,6 +357,9 @@ export function detectEffortDialectId(opts: {
   const blob = `${opts.baseUrl ?? ''} ${opts.model ?? ''}`.toLowerCase()
   if (kind === 'openai-responses' || kind === 'responses') {
     return 'openai-responses'
+  }
+  if (kind === 'anthropic' || kind === 'claude') {
+    return 'anthropic-output'
   }
   if (kind === 'mock') return 'off'
   if (blob.includes('deepseek')) return 'deepseek-chat'
@@ -469,6 +522,9 @@ export function resolveEffortWire(
     patches,
     ...(maxTokens != null ? { maxTokens } : {}),
     dialectId,
+    ...(resolvedWire != null && dialect.requestHeaders
+      ? { requestHeaders: { ...dialect.requestHeaders } }
+      : {}),
     ...(dialect.notes ? { notes: dialect.notes } : {}),
   }
 }
@@ -486,6 +542,34 @@ export function applyBodyPatches<T extends Record<string, unknown>>(
     setAtPath(body, p.path, p.value)
   }
   return body
+}
+
+/**
+ * 合并 requestHeaders 进 headers 对象（anthropic-beta 逗号去重合并）。
+ */
+export function mergeEffortRequestHeaders(
+  headers: Record<string, string>,
+  extra?: Record<string, string> | null,
+): Record<string, string> {
+  if (!extra) return headers
+  const out = { ...headers }
+  for (const [k, v] of Object.entries(extra)) {
+    if (!v?.trim()) continue
+    const key = k.toLowerCase() === 'anthropic-beta' ? 'anthropic-beta' : k
+    const prev = out[key] ?? out[k]
+    if (key === 'anthropic-beta' && prev) {
+      const parts = new Set(
+        [...prev.split(','), ...v.split(',')]
+          .map((s) => s.trim())
+          .filter(Boolean),
+      )
+      out[key] = [...parts].join(',')
+      if (k !== key) delete out[k]
+    } else {
+      out[key] = v.trim()
+    }
+  }
+  return out
 }
 
 function setAtPath(

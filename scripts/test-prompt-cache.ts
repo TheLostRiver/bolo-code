@@ -141,7 +141,7 @@ async function main() {
   const { buildAnthropicRequestBody, buildOpenAICompatibleRequestBody } =
     await import('../packages/providers/src/index.ts')
   const sysJoined = sections.join('\n\n')
-  const antBody = buildAnthropicRequestBody(
+  const antBuilt = buildAnthropicRequestBody(
     [
       { role: 'system', content: sysJoined },
       { role: 'user', content: 'hi' },
@@ -149,6 +149,7 @@ async function main() {
     { model: 'claude-test', maxTokens: 128 },
     { stream: false },
   )
+  const antBody = antBuilt.body
   const antSys = antBody.system as Array<{
     text?: string
     cache_control?: { type: string }

@@ -429,7 +429,7 @@ assert(
 )
 assert(sysBlocks![1]!.cache_control == null, 'volatile no cache_control')
 
-const antBody = buildAnthropicRequestBody(
+const antBuilt = buildAnthropicRequestBody(
   [
     { role: 'system', content: '# Identity\nBolo\n\n# Environment\nDate: 1' },
     { role: 'user', content: 'ping' },
@@ -437,6 +437,7 @@ const antBody = buildAnthropicRequestBody(
   { model: 'claude-test', maxTokens: 256 },
   { tools: BUILTIN_TOOLS, stream: true },
 )
+const antBody = antBuilt.body
 assert(Array.isArray(antBody.system), 'anthropic body system is blocks')
 const antSys = antBody.system as Array<{ cache_control?: { type: string } }>
 assert(antSys[0]?.cache_control?.type === 'ephemeral', 'body system cache')
@@ -454,11 +455,12 @@ const lastBlock = (lastMsg.content as Array<{ cache_control?: { type: string } }
   .slice(-1)[0]
 assert(lastBlock?.cache_control?.type === 'ephemeral', 'last msg cache_control')
 
-const antOff = buildAnthropicRequestBody(
+const antOffBuilt = buildAnthropicRequestBody(
   [{ role: 'user', content: 'x' }],
   { model: 'claude-test', maxTokens: 64 },
   { enablePromptCaching: false, stream: false },
 )
+const antOff = antOffBuilt.body
 const offMsgs = antOff.messages as Array<{ content: string | unknown[] }>
 assert(
   typeof offMsgs[0]?.content === 'string' ||
@@ -504,15 +506,39 @@ assert(
   resolveAnthropicThinking(5000, 4000)?.budget_tokens === 3999,
   'budget capped by max_tokens-1',
 )
-const antThinkBody = buildAnthropicRequestBody(
+const antThinkBuilt = buildAnthropicRequestBody(
   [{ role: 'user', content: 'hi' }],
   { model: 'claude-test', maxTokens: 4096 },
   { anthropicThinking: true, stream: false },
 )
+const antThinkBody = antThinkBuilt.body
 const thinkField = antThinkBody.thinking as
   | { type: string; budget_tokens: number }
   | undefined
 assert(thinkField?.type === 'enabled', 'body has thinking')
+
+// E5：output_config.effort
+const antEffortBuilt = buildAnthropicRequestBody(
+  [{ role: 'user', content: 'hi' }],
+  { model: 'claude-opus-4-6', maxTokens: 4096, effortDialect: 'anthropic-output' },
+  { effort: 'high', stream: false, isAgent: true },
+)
+const oc = antEffortBuilt.body.output_config as { effort?: string } | undefined
+assert(oc?.effort === 'high', 'anthropic output_config.effort high')
+assert(
+  antEffortBuilt.requestHeaders?.['anthropic-beta']?.includes('effort-2025-11-24'),
+  'anthropic effort beta header',
+)
+const antEffortAuto = buildAnthropicRequestBody(
+  [{ role: 'user', content: 'hi' }],
+  { model: 'claude-test', maxTokens: 1024, effortDialect: 'anthropic-output' },
+  { effort: 'auto', stream: false, isAgent: false },
+)
+assert(
+  antEffortAuto.body.output_config == null ||
+    (antEffortAuto.body.output_config as { effort?: string }).effort == null,
+  'auto omits effort',
+)
 
 const cacheMsgs: ChatMessage[] = [
   { role: 'system', content: '# Identity\nStable\n\n# Environment\nDate: z' },

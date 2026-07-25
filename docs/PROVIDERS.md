@@ -321,7 +321,7 @@ npx tsx scripts/smoke-live.ts
 | **E2** | `deepseek-chat`：`reasoning_effort` | ✅ |
 | **E3** | `openai-responses`：`reasoning.effort` | ✅ |
 | **E4** | `providers.*.effort.dialect` | ✅ |
-| **E5** | anthropic / doctor 抛光 | 📋 |
+| **E5** | anthropic-output：`output_config.effort` + beta | ✅ |
 
 ```jsonc
 {

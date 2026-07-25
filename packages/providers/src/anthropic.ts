@@ -14,6 +14,14 @@ import type {
   ProviderUsage,
 } from './types.ts'
 import { mapEffort, DEFAULT_EFFORT_BASE_MAX_TOKENS } from './effort.ts'
+import {
+  applyBodyPatches,
+  detectEffortDialectId,
+  mergeEffortRequestHeaders,
+  resolveEffortDialect,
+  resolveEffortWire,
+  type EffortDialect,
+} from './effortDialect.ts'
 import { mergeProviderUsage, parseAnthropicStreamUsage } from './sseUsage.ts'
 import {
   addMessageCacheBreakpoint,
@@ -31,6 +39,8 @@ export type AnthropicConfig = {
   /** 默认 2023-06-01 */
   anthropicVersion?: string
   timeoutMs?: number
+  /** Effort 方言；缺省 anthropic-output */
+  effortDialect?: string | EffortDialect
 }
 
 type AnthropicContentBlock =
@@ -223,15 +233,23 @@ export function eventsFromAnthropicSseEvent(
 }
 
 /**
- * 组装 Anthropic Messages 请求体（含最小 cache_control 断点）。
+ * 组装 Anthropic Messages 请求体（含最小 cache_control 断点 · effort 方言）。
  * 断点策略：system 稳定段末尾 + tools 末项（若有）+ messages 最后一条末块。
  * 可选 thinking: { type:'enabled', budget_tokens }（options.anthropicThinking）。
+ * E5：output_config.effort 经 dialect `anthropic-output`（与 thinking 独立）。
  */
 export function buildAnthropicRequestBody(
   messages: ChatMessage[],
-  config: { model: string; maxTokens: number },
-  options?: CompleteStreamOptions & { stream?: boolean },
-): Record<string, unknown> {
+  config: {
+    model: string
+    maxTokens: number
+    effortDialect?: string | EffortDialect | null
+  },
+  options?: CompleteStreamOptions & {
+    stream?: boolean
+    isAgent?: boolean
+  },
+): { body: Record<string, unknown>; requestHeaders?: Record<string, string> } {
   const { system, messages: antMessages } = toAnthropicMessages(messages)
   const caching = isPromptCachingEnabled(options)
   const body: Record<string, unknown> = {
@@ -248,9 +266,33 @@ export function buildAnthropicRequestBody(
       caching,
     )
   }
-  const thinking = resolveAnthropicThinking(options?.anthropicThinking, config.maxTokens)
+  const thinking = resolveAnthropicThinking(
+    options?.anthropicThinking,
+    config.maxTokens,
+  )
   if (thinking) body.thinking = thinking
-  return body
+
+  const dialectRaw =
+    config.effortDialect ??
+    detectEffortDialectId({ kind: 'anthropic', model: config.model })
+  const dialect = resolveEffortDialect(dialectRaw)
+  const hasTools = Boolean(options?.tools?.length && !options?.disableTools)
+  const plan = resolveEffortWire(dialect, options?.effort, {
+    isAgent: options?.isAgent ?? hasTools,
+    model: config.model,
+    baseMaxTokens: config.maxTokens,
+  })
+  let requestHeaders: Record<string, string> | undefined
+  if (plan.ok) {
+    applyBodyPatches(body, plan.patches)
+    if (plan.maxTokens != null && dialect.applyTokenScale) {
+      body.max_tokens = plan.maxTokens
+    }
+    if (plan.requestHeaders) {
+      requestHeaders = { ...plan.requestHeaders }
+    }
+  }
+  return { body, ...(requestHeaders ? { requestHeaders } : {}) }
 }
 
 /** 最小 thinking 请求块；budget 必须 < max_tokens */
@@ -274,25 +316,42 @@ export function createAnthropicProvider(config: AnthropicConfig): LlmProvider {
   const timeoutMs = config.timeoutMs ?? 120_000
   const baseMaxTokens = config.maxTokens ?? DEFAULT_EFFORT_BASE_MAX_TOKENS
   const version = config.anthropicVersion ?? '2023-06-01'
+  const effortDialect =
+    config.effortDialect ??
+    detectEffortDialectId({
+      kind: 'anthropic',
+      baseUrl: config.baseUrl ?? baseUrl,
+      model: config.model,
+    })
 
   async function* streamMessages(
     messages: ChatMessage[],
     options?: CompleteStreamOptions,
   ): AsyncIterable<ProviderStreamEvent> {
     const url = `${baseUrl}/messages`
+    const hasTools = Boolean(options?.tools?.length && !options?.disableTools)
+    const dialect = resolveEffortDialect(effortDialect)
+    const plan = resolveEffortWire(dialect, options?.effort, {
+      isAgent: hasTools,
+      model: (options?.model && options.model.trim()) || config.model,
+      baseMaxTokens,
+    })
     const maxTokens =
       options?.maxTokens ??
-      mapEffort(options?.effort, baseMaxTokens).maxTokens
+      (plan.ok && plan.maxTokens != null
+        ? plan.maxTokens
+        : mapEffort(options?.effort, baseMaxTokens).maxTokens)
 
-    const body = buildAnthropicRequestBody(
+    const built = buildAnthropicRequestBody(
       messages,
       {
-        model:
-          (options?.model && options.model.trim()) || config.model,
+        model: (options?.model && options.model.trim()) || config.model,
         maxTokens,
+        effortDialect,
       },
-      { ...options, stream: true },
+      { ...options, stream: true, isAgent: hasTools },
     )
+    const body = built.body
 
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
@@ -309,13 +368,17 @@ export function createAnthropicProvider(config: AnthropicConfig): LlmProvider {
     const thinkingState = { inThinking: false }
 
     try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
+      const headers = mergeEffortRequestHeaders(
+        {
           'Content-Type': 'application/json',
           'x-api-key': config.apiKey,
           'anthropic-version': version,
         },
+        built.requestHeaders,
+      )
+      const res = await fetch(url, {
+        method: 'POST',
+        headers,
         body: JSON.stringify(body),
         signal: controller.signal,
       })
@@ -495,26 +558,40 @@ export function createAnthropicProvider(config: AnthropicConfig): LlmProvider {
     },
   ): Promise<string> {
     const url = `${baseUrl}/messages`
+    const dialect = resolveEffortDialect(effortDialect)
+    const plan = resolveEffortWire(dialect, options?.effort, {
+      isAgent: false,
+      model: config.model,
+      baseMaxTokens,
+    })
     const maxTokens =
       options?.maxTokens ??
-      mapEffort(options?.effort, baseMaxTokens).maxTokens
-    const body = buildAnthropicRequestBody(
+      (plan.ok && plan.maxTokens != null
+        ? plan.maxTokens
+        : mapEffort(options?.effort, baseMaxTokens).maxTokens)
+    const built = buildAnthropicRequestBody(
       messages,
-      { model: config.model, maxTokens },
+      { model: config.model, maxTokens, effortDialect },
       {
         stream: false,
         disableTools: true,
         enablePromptCaching: options?.enablePromptCaching,
+        effort: options?.effort,
+        isAgent: false,
       },
     )
+    const body = built.body
 
     const res = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': config.apiKey,
-        'anthropic-version': version,
-      },
+      headers: mergeEffortRequestHeaders(
+        {
+          'Content-Type': 'application/json',
+          'x-api-key': config.apiKey,
+          'anthropic-version': version,
+        },
+        built.requestHeaders,
+      ),
       body: JSON.stringify(body),
       signal: options?.signal,
     })

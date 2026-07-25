@@ -39,13 +39,11 @@
 
 | 项 | 状态 |
 |----|------|
-| `/effort low\|medium\|high\|max\|auto` | ✅ 会话字符串 |
-| `mapEffort` → `max_tokens` / `max_output_tokens` | ✅ **仅此** |
-| DeepSeek `reasoning_effort` 写入 | ❌ |
-| OpenAI Responses `reasoning.effort` 写入 | ❌ |
-| Anthropic / HC `output_config.effort` | ❌ |
-| 读流：`reasoning_content` / thinking_delta | ✅ 展示侧已有 |
-| `xhigh` / `ultra` 入 `/effort` | ❌（subagent 别名压成 max 仍走 tokens） |
+| DeepSeek `reasoning_effort` | ✅ |
+| OpenAI Responses `reasoning.effort` | ✅ |
+| **Anthropic `output_config.effort` + beta** | ✅ E5 |
+| Anthropic 模型门控 max / adaptive thinking 联动 | 📋 后置 |
+| 读流 thinking_delta | ✅ |
 
 **结论：** 名字像「推理强度」，实现是「输出长度旋钮」。对 GPT‑5.x / DeepSeek V4 等 **启动不了真·高档推理**。
 
@@ -315,16 +313,41 @@ function resolveEffortWire(dialect, level, ctx):
 
 `reasoning.mode: pro`：**后置**（独立字段或 `/effort mode pro`），不塞进 strength map。
 
-### 5.3 `anthropic-output`（对齐 HC 语义，能做多少做多少）
+### 5.3 `anthropic-output`（对齐 HC / Claude Messages · **E5**）
+
+> 对照 HelsincyCode `configureEffortParams`：`output_config.effort` + beta `effort-2025-11-24`。  
+> **不**抄 `anthropic_internal.effort_override`（ant-only）。
 
 | 项 | 值 |
 |----|-----|
-| levels | low, medium, high, max |
-| map | xhigh/ultra→max；minimal→low；none→null |
-| wire | `output_config.effort`（若当前 anthropic 客户端已支持该字段；否则分阶段） |
-| 另 | 现有 `anthropicThinking` / budget 与 effort **协同策略在实现切片写清**，避免双拧 |
+| levels | `low`, `medium`, `high`, `max` |
+| default | `null`（auto 非 agent → 不写字段，模型默认） |
+| agentDefault | `null`（与 OpenAI 一致：不强制拉满；可用 config 覆盖为 `high`） |
+| map | minimal→low；low/medium/high/max 恒等；xhigh/ultra→max；none/off→null |
+| wire | `output_config.effort`（shape `output_config`） |
+| headers | 当 resolved ≠ null：`anthropic-beta: effort-2025-11-24`（可与已有 beta 逗号合并） |
+| applyTokenScale | **false**（effort ≠ max_tokens；max_tokens 用配置默认） |
+| thinking | **独立**：现有 `anthropicThinking` / `CompleteStreamOptions.anthropicThinking` 不因 `/effort` 自动改写 |
 
-### 5.4 `max-tokens`（兼容旧 Bolo）
+**与 thinking 的边界（避免双拧）：**
+
+| 旋钮 | 职责 |
+|------|------|
+| `/effort` → `output_config.effort` | 努力/推理档（HC 产品档） |
+| `anthropicThinking` | 是否发 `thinking: { type:'enabled', budget_tokens }` |
+| 后置 | effort 与 adaptive thinking 的精细联动；模型门控 max |
+
+**模型差异（诚实）：**
+
+- 部分 Claude 4.6+ 支持 `output_config.effort`；不支持时上游可能 400。  
+- E5 **最小**：照写 + 错误回显；**不做**完整 HC `modelSupportsEffort` 矩阵。  
+- `max`：HC 常限 Opus 4.6；Bolo E5 仍允许设置，由 API 裁决。
+
+**detect：** `kind === 'anthropic'` → `anthropic-output`。
+
+---
+
+## 6. 产品行为
 
 | 项 | 值 |
 |----|-----|
@@ -378,6 +401,17 @@ function resolveEffortWire(dialect, level, ctx):
 
 - model/baseUrl 含 `deepseek` → `deepseek-chat`
 - kind `openai-responses` → `openai-responses`
+- kind `anthropic` → **`anthropic-output`**
+- 否则 → `max-tokens` 或 `off`（诚实降级）
+
+用户 `effort.dialect` **总是覆盖**探测。
+
+---
+
+## 7. 阶段切片（E0–E5）
+
+- model/baseUrl 含 `deepseek` → `deepseek-chat`
+- kind `openai-responses` → `openai-responses`
 - kind `anthropic` → `anthropic-output`
 - 否则 → `max-tokens` 或 `off`（诚实降级）
 
@@ -389,19 +423,27 @@ function resolveEffortWire(dialect, level, ctx):
 
 | 阶段 | 交付 | 灵活点 | 状态 |
 |------|------|--------|------|
-| **E0** | 本文 + ROADMAP §10 + PROVIDERS/CONFIG 入口 | 契约 | 📋 本文 |
-| **E1** | `EffortDialect` 类型 · `resolveEffortWire` · `applyBodyPatches` · 单测纯函数 | **引擎一次** | 📋 |
-| **E2** | builtin：`deepseek-chat` + `max-tokens`；compatible 发车 apply；`/effort` 超集 + 预览 | DS/硅基日用 | 📋 |
-| **E3** | builtin：`openai-responses`；Responses 写 `reasoning.effort` | 5.x 真强度 | 📋 |
-| **E4** | `providers.*.effort` 配置 · 内联方言 · 可选 detect | **用户自扩展** | 📋 |
-| **E5** | anthropic-output 协同 · doctor 深化 · cache-break 文案 · 回归 | 对齐 HC | 📋 |
-| 后置 | `reasoning.mode=pro` · 数字档 shape · TTY 选档 · Desktop | — | 🚫 非默认 |
+| **E0** | 本文 + ROADMAP §10 | 契约 | ✅ |
+| **E1** | resolve 引擎 + body patch | **引擎一次** | ✅ |
+| **E2** | `deepseek-chat` + compatible | DS 日用 | ✅ |
+| **E3** | `openai-responses` | 5.x | ✅ |
+| **E4** | config `effort.dialect` | 用户自扩展 | ✅ |
+| **E5** | **`anthropic-output`**：`output_config.effort` + beta · detect · 单测 | 对齐 HC 主路径 | ✅ |
+| 后置 | 模型门控 max · adaptive thinking 联动 · pro mode · Desktop | — | 🚫 |
+
+**E5 验收（Anthropic）：**
+
+1. `/effort high` + kind anthropic → body 含 `output_config.effort: "high"`  
+2. Header 含 `anthropic-beta: effort-2025-11-24`（有 effort 时）  
+3. `/effort auto`（非强制 agentDefault）→ 不写 output_config.effort  
+4. `/effort xhigh` → `max`  
+5. `thinking` 仍仅由 `anthropicThinking` 控制，不因 effort 自动开关  
+6. `test-effort-dialect` + provider-unit 绿  
 
 **顺序硬约束：**
 
 ```text
-E0 文档 → E1 引擎 → E2 数据+compatible 接线
-       → E3 responses → E4 配置开放 → E5 抛光
+E0 → E1 → E2 → E3 → E4 → E5（本刀）
 ```
 
 **禁止：** 未完成 E1 就堆厂商 if；未完成 wire 就宣称「支持 ultra」。
@@ -415,17 +457,18 @@ E0 文档 → E1 引擎 → E2 数据+compatible 接线
 1. DeepSeek 类：`/effort max` → 请求 JSON **含** `"reasoning_effort":"max"`  
 2. `/effort low` → DS 上 `"high"`；UI 可显示 `low → high`  
 3. OpenAI Responses：`/effort xhigh` → `reasoning.effort = "xhigh"`  
-4. 自定义 dialect：只改 config，**不改代码**，新 `body_field` 能下发  
-5. 无方言/off：行为可预测；doctor 不谎称「已开 API 推理强度」  
-6. `/provider` 热切后，同一 `effortLevel` 按新方言重新 resolve  
+4. **Anthropic：`/effort high` → `output_config.effort` + effort beta**  
+5. 自定义 dialect：只改 config，**不改代码**，新 `body_field` 能下发  
+6. 无方言/off：行为可预测；doctor 不谎称「已开 API 推理强度」  
+7. `/provider` 热切后，同一 `effortLevel` 按新方言重新 resolve  
 
 ### 工程
 
 | 测试 | 覆盖 |
 |------|------|
-| `test-effort-resolve.ts`（新） | map/alias/auto/agentDefault/missing |
-| build body fixture | deepseek · responses 快照（无真 key） |
-| 回归 | test-provider-unit · test-slash · smoke-turn |
+| `test-effort-dialect.ts` | map/alias/auto · deepseek · responses · **anthropic** |
+| build body fixture | 无真 key |
+| 回归 | test-provider-unit · test-slash |
 
 ### 不做（E 轨内）
 
