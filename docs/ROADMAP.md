@@ -23,13 +23,13 @@
 | **Hooks · 日用契约** | **~96–98%** | **H0–H5 已落地**（SessionEnd · exit 语义 · updatedInput · `/hooks recent`）；trust/UI 菜单后置 |
 | **Compact · 日用管道** | **~92–95%** | **C0–C5 已落地**；后置 partial/remote/真 tokenizer（§8.9） |
 | **Provider · 多实例热切** | **~92–96%** | **P0–P4.1 已落地**（`providers` · 热切 · TTY 箭头选）；P5 Desktop / resume `providerId` 后置 |
-| **Effort · 推理强度方言** | **~88–92%** | **E0–E5**：deepseek / openai-responses / **anthropic output_config.effort**；模型门控 max 后置 |
+| **Effort · 推理强度方言** | **~88–92%** wire · 体验 ~55–65% | **E0–E5** 真·wire 已闭环；**E6+** 可选档/门控/TTY 见 [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md) |
 | **产品整体（相对 HC）** | **~72–86%** | 日用高；UI 全家桶另计 |
 
-**主线已闭环：** headless 日用 → Diff · Hooks · Compact C0–C5 · **Provider P0–P4.1** · **Effort E0–E4**。
+**主线已闭环：** headless 日用 → Diff · Hooks · Compact C0–C5 · **Provider P0–P4.1** · **Effort E0–E5**。
 
 **开放轨（非阻塞）：**  
-E5 anthropic effort · P5 Desktop 多 provider · Compact §8.9 后置 · U5 可选 · resume 持久化 `providerId`。
+**Effort E6+**（[EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md)：可选档 · max 门控 · TTY 选档）· P5 Desktop 多 provider · Compact §8.9 · U5 · resume `providerId`。
 
 ---
 
@@ -720,12 +720,11 @@ function switchSessionModel(session, model: string): { ok, reason? }
 
 ---
 
-## 10. Effort 轨（E0–E5 · **规划 · 推理强度方言**）
+## 10. Effort 轨（E0–E5 闭环 · E6+ 优化）
 
-> **痛点：** `/effort` 现只把 low/medium/high/max/auto 映射为 **`max_tokens` 倍率**，并不写 DeepSeek `reasoning_effort`、OpenAI `reasoning.effort`、HC `output_config.effort`。  
-> **另：** 各家档位集合不同（DS 仅 high/max；OpenAI 可至 xhigh/max；HC 四档+auto）。若按厂商写死 `if`，不可扩展。  
-> **目标：** **通用 resolve 引擎 + 可插拔 EffortDialect 数据**（内置包 + 用户 config）；新后端以改表为主。  
-> **完整契约：** [EFFORT.md](./EFFORT.md)（真源）。
+> **E0–E5：** 通用 dialect 引擎 + deepseek / openai-responses / anthropic 真·wire。契约 [EFFORT.md](./EFFORT.md)。  
+> **E6+：** 按方言/模型约束可选档、少 400、TTY 选档。设计 [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md)。  
+> **原则：** 表驱动；禁止每品牌永久 TS 适配器；无遥测。
 
 ### 10.1 原则（摘录）
 
@@ -744,14 +743,21 @@ function switchSessionModel(session, model: string): { ok, reason? }
 | **E3** | builtin `openai-responses` → `reasoning.effort` | ✅ |
 | **E4** | `providers.*.effort.dialect` 配置 / 内联 | ✅ |
 | **E5** | anthropic-output：`output_config.effort` + beta · detect · 单测 | ✅ |
-| 后置 | 模型门控 max · adaptive thinking 联动 · pro mode · Desktop | 🚫 |
+| **E6** | EffortCapabilityView · strict choosable | 📋 |
+| **E7** | Anthropic max 轻门控 | 📋 |
+| **E8** | TTY `/effort` 箭头选择器 | 📋 |
+| **E9** | doctor 一行 + 文档水位 | 📋 |
+| 后置 | adaptive thinking 联动 · pro mode · Desktop · OAI 按模型裁档 | 🚫 |
 
-**顺序：** E0 → E1 → E2 → E3 → E4 → **E5**。
+**顺序：** E0–E5 已完成 → **E6 能力视图** → E7 门控 → E8 TTY → E9 doctor。
 
 ### 10.3 文档入口
 
 | 文档 | 角色 |
 |------|------|
-| [EFFORT.md](./EFFORT.md) | **E 轨真源**（含 §5.3 Anthropic） |
+| [EFFORT.md](./EFFORT.md) | **E0–E5 实现契约**（含 §5.3 Anthropic） |
+| [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md) | **E6+ 优化设计**（业界对照 + 阶段） |
+| [REFERENCES.md](./REFERENCES.md) | HC / Codex / OpenCode / Pi effort 摘要 |
 | [PROVIDERS.md](./PROVIDERS.md) | 与 kind / 多实例交叉 |
+| [CONFIG.md](./CONFIG.md) | `effort.dialect` 配置位 |
 | [CONFIG.md](./CONFIG.md) | `effort.dialect` 配置位 |

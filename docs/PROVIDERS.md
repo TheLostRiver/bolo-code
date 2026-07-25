@@ -305,14 +305,15 @@ npx tsx scripts/smoke-live.ts
 **不做：** 官方市场、密钥入库、遥测、默认同 turn 自动 failover。  
 **测试：** `scripts/test-multi-provider.ts`。
 
-## 路线：推理强度 · Effort 方言（**E 轨 · E0–E4 日用已闭环**）
+## 路线：推理强度 · Effort 方言（**E 轨 · E0–E5 日用已闭环**）
 
-> 总规划见 [ROADMAP.md §10](./ROADMAP.md) · **真源** [EFFORT.md](./EFFORT.md)。
+> 实现契约 [EFFORT.md](./EFFORT.md) · 优化 [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md) · [ROADMAP.md §10](./ROADMAP.md)。
 
 | 现状 | 目标 |
 |------|------|
-| `/effort` + **方言表** 写入 API | ✅ 引擎 + builtins |
+| `/effort` + **方言表** 写入 API | ✅ 引擎 + builtins（含 Anthropic） |
 | 厂商 if 不可扩展 | ✅ 有限 wire shape + 用户可配方言 |
+| 按模型限制可选档 / TTY | 📋 E6+ |
 
 | ID | 切片 | 状态 |
 |----|------|------|
@@ -322,6 +323,7 @@ npx tsx scripts/smoke-live.ts
 | **E3** | `openai-responses`：`reasoning.effort` | ✅ |
 | **E4** | `providers.*.effort.dialect` | ✅ |
 | **E5** | anthropic-output：`output_config.effort` + beta | ✅ |
+| **E6+** | choosable · max 门控 · TTY | 📋 |
 
 ```jsonc
 {

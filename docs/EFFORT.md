@@ -1,19 +1,21 @@
 # Effort 轨 · 推理强度方言（规划）
 
-> **状态：** E0–E4 日用已落地（引擎 + deepseek-chat + openai-responses + config）；E5 抛光后置  
-> **痛点（已缓解）：** `/effort` 曾只映射 `max_tokens`；现按 **EffortDialect 表** 写入各家 reasoning 字段。  
-> **目标：** **通用「强度意图 → 请求体补丁」引擎** + **可插拔方言数据**（内置包 + 用户 config）；新后端以改表为主。  
-> **原则：** 无遥测；密钥不进 log；借鉴 HC / OpenAI / DeepSeek **语义**，不抄实现。
+> **状态：** E0–E5 日用已落地（引擎 + deepseek / openai-responses / anthropic-output + config）  
+> **下一阶段优化：** [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md)（E6+ 能力视图 · 门控 · TTY 选档）  
+> **痛点（E0–E5 已缓解）：** `/effort` 曾只映射 `max_tokens`；现按 **EffortDialect 表** 写入各家 reasoning 字段。  
+> **原则：** 无遥测；密钥不进 log；借鉴 HC / OpenAI / DeepSeek / Pi / OpenCode / Codex **语义**，不抄实现。
 
 相关入口：
 
 | 文档 | 角色 |
 |------|------|
-| 本文 | **E 轨真源**（方言 schema · 映射 · 阶段） |
+| 本文 | **E0–E5 实现契约**（方言 schema · 映射 · 阶段） |
+| [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md) | **E6+ 优化设计**（业界对照 · 可选档 · 门控） |
 | [ROADMAP.md](./ROADMAP.md) §10 | 总路线水位 |
 | [PROVIDERS.md](./PROVIDERS.md) | 协议 kind · 多 provider |
 | [CONFIG.md](./CONFIG.md) | `providers.*.effort` 配置位 |
 | [PROMPT_CACHE.md](./PROMPT_CACHE.md) | 切换 effort 时 cache-break |
+| [REFERENCES.md](./REFERENCES.md) | 参考项目 |
 
 ---
 
@@ -42,10 +44,12 @@
 | DeepSeek `reasoning_effort` | ✅ |
 | OpenAI Responses `reasoning.effort` | ✅ |
 | **Anthropic `output_config.effort` + beta** | ✅ E5 |
-| Anthropic 模型门控 max / adaptive thinking 联动 | 📋 后置 |
+| Anthropic 模型门控 max / adaptive thinking 联动 | 📋 见 [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md) E7 |
+| 按方言限制 UI 可选档 / TTY 选择器 | 📋 见优化方案 E6 / E8 |
 | 读流 thinking_delta | ✅ |
 
-**结论：** 名字像「推理强度」，实现是「输出长度旋钮」。对 GPT‑5.x / DeepSeek V4 等 **启动不了真·高档推理**。
+**结论（E5 后）：** 主路径已能写 DS / OpenAI Responses / Anthropic 真·effort 字段。  
+剩余主要是 **按模型/方言约束可选档、少 400、TTY 选档**（优化轨），不是「再发明一套 wire」。
 
 ### 1.2 各家客观差异（对照）
 
@@ -408,18 +412,7 @@ function resolveEffortWire(dialect, level, ctx):
 
 ---
 
-## 7. 阶段切片（E0–E5）
-
-- model/baseUrl 含 `deepseek` → `deepseek-chat`
-- kind `openai-responses` → `openai-responses`
-- kind `anthropic` → `anthropic-output`
-- 否则 → `max-tokens` 或 `off`（诚实降级）
-
-用户 `effort.dialect` **总是覆盖**探测。
-
----
-
-## 7. 阶段切片（E0–E5）
+## 7. 阶段切片（E0–E5 · 已完成）
 
 | 阶段 | 交付 | 灵活点 | 状态 |
 |------|------|--------|------|
@@ -429,24 +422,11 @@ function resolveEffortWire(dialect, level, ctx):
 | **E3** | `openai-responses` | 5.x | ✅ |
 | **E4** | config `effort.dialect` | 用户自扩展 | ✅ |
 | **E5** | **`anthropic-output`**：`output_config.effort` + beta · detect · 单测 | 对齐 HC 主路径 | ✅ |
-| 后置 | 模型门控 max · adaptive thinking 联动 · pro mode · Desktop | — | 🚫 |
+| **E6+** | 可选档 / 门控 / TTY | 体验 | 📋 [优化方案](./EFFORT_OPTIMIZATION.md) |
 
-**E5 验收（Anthropic）：**
+**E5 验收（Anthropic）已满足：** wire + beta + xhigh→max + thinking 独立 + 单测绿。
 
-1. `/effort high` + kind anthropic → body 含 `output_config.effort: "high"`  
-2. Header 含 `anthropic-beta: effort-2025-11-24`（有 effort 时）  
-3. `/effort auto`（非强制 agentDefault）→ 不写 output_config.effort  
-4. `/effort xhigh` → `max`  
-5. `thinking` 仍仅由 `anthropicThinking` 控制，不因 effort 自动开关  
-6. `test-effort-dialect` + provider-unit 绿  
-
-**顺序硬约束：**
-
-```text
-E0 → E1 → E2 → E3 → E4 → E5（本刀）
-```
-
-**禁止：** 未完成 E1 就堆厂商 if；未完成 wire 就宣称「支持 ultra」。
+**禁止（仍适用）：** 未完成引擎就堆厂商 if；未完成 wire 就宣称「支持 ultra」。
 
 ---
 
@@ -479,14 +459,9 @@ E0 → E1 → E2 → E3 → E4 → E5（本刀）
 
 ---
 
-## 9. 提交建议
+## 9. 提交建议（历史）
 
-1. `docs: plan effort dialect E-track`（E0 · 本文）  
-2. `feat: effort resolve engine and body patches`（E1）  
-3. `feat: deepseek-chat dialect and reasoning_effort wire`（E2）  
-4. `feat: openai-responses reasoning.effort dialect`（E3）  
-5. `feat: config providers.effort dialect hookup`（E4）  
-6. `test+docs: effort waterline`（E5 部分）
+E0–E5 已合入 main；后续优化提交见 [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md) §11。
 
 只 stage 本轨；**勿提交 `.bolo-tmp/`**；**勿提交真实 apiKey**。
 
@@ -512,5 +487,6 @@ E0 → E1 → E2 → E3 → E4 → E5（本刀）
 | 新增 wire shape | 本文 §4.1 + shapes 实现 |
 | 配置字段 | CONFIG.md · PROVIDERS.md |
 | 水位 | ROADMAP §0 / §10 |
+| 体验优化 | [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md) |
 
-**实现开始后：** 将本文状态从 📋 改为分阶段 ✅；`mapEffort` 仅作为 `max-tokens` 方言内部细节保留。
+`mapEffort` 仅作为 `max-tokens` 方言内部细节保留。

@@ -36,15 +36,55 @@
 **借鉴**：core 与 UI 分包；统一 LLM API。  
 **注意**：权限默认弱，Bolo 必须自带 PermissionRequest 体系。
 
+### 推理 / thinking（对 Bolo Effort 轨）
+
+- 用户层统一 **thinking level**：`off|minimal|low|medium|high|xhigh|max`
+- 每模型 **`thinkingLevelMap`**：string = 发给上游的值；`null` = 隐藏/不支持
+- **`compat`**：`supportsReasoningEffort`、`thinkingFormat`、`forceAdaptiveThinking` 等
+- 扩展自定义模型 ≈ 改 `models.json`，不是改 agent 核心
+
+→ Bolo 的 **EffortDialect.map / levels** 与此同构；优化见 [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md)。
+
 ## Codex（https://github.com/openai/codex）
 
 - 本地 coding agent 产品完整度高
 - CLI + App/IDE 多入口
 - 实现语言以 Rust 为主——**思想可借，栈不跟**
 
+### 推理 effort（对 Bolo）
+
+- 配置 / 线程：`model_reasoning_effort`
+- 枚举很宽：`none|minimal|low|medium|high|xhigh|max|ultra|Custom`
+- **模型 catalog** 声明 `supported_reasoning_efforts` + default；UI 只展示支持档
+- 上线前可折叠（如部分路径 `Ultra → Max`）
+- `/model` 与快捷键升/降 effort
+
+→ 学 **「按模型暴露可选档」**，不学把 Rust catalog 整搬进 TS。
+
+## OpenCode（本地参考树 / 产品）
+
+- 会话 **variant**（effort 选项）来自模型 **`reasoning_options` / variants**
+- **`ProviderTransform`**：同一 `high` 按 npm/SDK 变成 `reasoningEffort`、`reasoning.effort`、`effort`、`thinkingLevel`…
+- 按模型 id / release_date **裁** OpenAI 的 `none`/`xhigh`，减少 400
+- 多厂商变换最全，但与 **AI SDK 绑定**
+
+→ 学 **「意图 → 请求碎片」**；Bolo 用轻量 dialect patch，**不**引入 AI SDK 巨表。
+
+## HelsincyCode · Effort（补充）
+
+- 产品档：`low|medium|high|max` + auto（**无**全球 xhigh）
+- Wire：`output_config.effort` + beta `effort-2025-11-24`
+- **`modelSupportsEffort` / `modelSupportsMaxEffort`**（max ≈ Opus 4.6）
+- **`ultrathink`**：关键词抬 high，不是 API 字面量
+- thinking 与 effort **两轴分离**
+
+→ Bolo E5 已接 `output_config.effort`；**max 门控**进优化 E7。
+
 ## 综合决策（一句话）
 
-> **HelsincyCode 的扩展与 Hook / Tool 管道语义 + pi 的包边界 + Codex 的产品入口意识 + Electron GUI；不做遥测。**
+> **HelsincyCode 的扩展与 Hook / Tool 管道语义 + pi 的包边界与 thinkingLevelMap 清晰度 + Codex 的「按模型选档」+ OpenCode 的「意图→options」思想（简化）+ Electron GUI；不做遥测；不绑 AI SDK。**
+
+Effort 实现：[EFFORT.md](./EFFORT.md) · 优化设计：[EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md)
 
 ## 工程纪律
 
