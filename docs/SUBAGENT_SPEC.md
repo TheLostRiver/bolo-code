@@ -314,9 +314,14 @@ queryLoop (spawnDepth)
 
 | # | 项 | 现状 | v0 目标 |
 |---|-----|------|---------|
-| S-A0 | `config.agents` schema + 合并 | 无 | types + load |
-| S-A1 | frontmatter `model` / `effort` / `maxSpawnDepth` / `sandbox` | 部分有 maxTurns 等 | 解析进 AgentDefinition |
-| S-A2 | model 解析链 + 传入 callModel | 仅 usage 标签 | 真切 provider model |
+| S-A0 | `config.agents` schema + 合并 | ✅ | types + load + `resolveAgentPolicy` |
+| S-A1 | frontmatter `model` / `effort` / `maxSpawnDepth` / `sandbox` | ✅ | 解析进 AgentDefinition |
+| S-A2 | model 解析链 + 传入 callModel | ✅ | provider `options.model` 覆盖 |
+| S-A3 | effort 传入子 queryLoop | ✅ | `effortLevel` |
+| S-A4 | spawnDepth 贯穿 + 条件保留 Agent | ✅ | §4 规则 |
+| S-A5 | Agent 工具 `model`/`effort` 参数 | ✅ | schema + call |
+| S-A6 | `agents.enabled` 控制是否挂工具 | ✅ | createDefaultTools / session |
+| S-A7 | 文档 + 测试 | ✅ | test-subagent Spec v0 |
 | S-A3 | effort 传入子 queryLoop | 未接 | 接 effortLevel |
 | S-A4 | spawnDepth 贯穿 + 条件保留 Agent | 恒删 Agent | §4 规则 |
 | S-A5 | Agent 工具 `model`/`effort` 参数 | 无 | schema + call |

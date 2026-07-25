@@ -470,10 +470,18 @@ export function createOpenAIResponsesProvider(
     const maxTokens =
       options?.maxTokens ??
       mapEffort(options?.effort, baseMaxTokens).maxTokens
-    const body = buildResponsesRequest(messages, { model: config.model, store }, {
-      ...options,
-      maxOutputTokens: maxTokens,
-    })
+    const body = buildResponsesRequest(
+      messages,
+      {
+        model:
+          (options?.model && options.model.trim()) || config.model,
+        store,
+      },
+      {
+        ...options,
+        maxOutputTokens: maxTokens,
+      },
+    )
 
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)

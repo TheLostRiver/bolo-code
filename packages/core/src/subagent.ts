@@ -41,7 +41,7 @@ export type AgentDefinitionSource = 'builtin' | 'user' | 'project'
 export type AgentDefinition = {
   agentType: string
   description: string
-  /** 白名单工具名，或 '*' 表示默认可写集（仍会排除 Agent） */
+  /** 白名单工具名，或 '*' 表示默认可写集（仍会按 depth 规则处理 Agent） */
   tools: string[] | '*'
   /** HC disallowedTools：从已解析工具集中再剔除 */
   disallowedTools?: string[]
@@ -57,6 +57,258 @@ export type AgentDefinition = {
   whenToUse?: string
   /** 默认 isolation；Agent 工具 isolation 参数可覆盖 */
   isolation?: 'none' | 'worktree'
+  /**
+   * 子 agent 模型：`inherit` 或具体 model id。
+   * 解析见 resolveSubagentModel。
+   */
+  model?: string
+  /**
+   * 子 agent effort：`inherit` 或 low|medium|high|max|…。
+   */
+  effort?: string
+  /**
+   * 本 agent 作为父时允许的最大 spawnDepth（子 depth 必须 ≤ 此值才可再带 Agent）。
+   * 缺省用 AgentPolicy.maxSpawnDepth（默认 0）。
+   */
+  maxSpawnDepth?: number
+  /**
+   * Codex sandbox 语法糖：`read-only` → 只读工具集。
+   */
+  sandbox?: 'read-only' | 'workspace-write' | 'none'
+}
+
+/** 全局 subagent 策略（config.agents + env） */
+export type AgentPolicy = {
+  enabled: boolean
+  maxConcurrent: number
+  defaultModel: string
+  defaultEffort?: string
+  /** 默认 0：主(depth0)可 spawn，子不可再 spawn */
+  maxSpawnDepth: number
+  overflow: 'reject' | 'queue'
+}
+
+export const MAX_SPAWN_DEPTH_CLAMP = 3
+
+export function defaultAgentPolicy(): AgentPolicy {
+  return {
+    enabled: true,
+    maxConcurrent: 3,
+    defaultModel: 'inherit',
+    maxSpawnDepth: 0,
+    overflow: 'reject',
+  }
+}
+
+/** 从 config.agents + env 归一化（无遥测） */
+export function resolveAgentPolicy(
+  raw?: {
+    enabled?: boolean
+    maxConcurrent?: number
+    defaultModel?: string
+    defaultEffort?: string
+    maxSpawnDepth?: number
+    overflow?: 'reject' | 'queue'
+  } | null,
+  env: NodeJS.ProcessEnv = process.env,
+): AgentPolicy {
+  const base = defaultAgentPolicy()
+  const enabledEnv = env.BOLO_AGENTS_ENABLED?.trim().toLowerCase()
+  let enabled = raw?.enabled ?? base.enabled
+  if (enabledEnv === '0' || enabledEnv === 'false' || enabledEnv === 'off') {
+    enabled = false
+  }
+  if (enabledEnv === '1' || enabledEnv === 'true' || enabledEnv === 'on') {
+    enabled = true
+  }
+
+  let maxConcurrent = raw?.maxConcurrent ?? base.maxConcurrent
+  const mcEnv = env.BOLO_MAX_BACKGROUND_AGENTS?.trim()
+  if (mcEnv) {
+    const n = Number(mcEnv)
+    if (Number.isFinite(n) && n >= 1) maxConcurrent = Math.min(32, Math.floor(n))
+  }
+  if (Number.isFinite(maxConcurrent) && maxConcurrent >= 1) {
+    maxConcurrent = Math.min(32, Math.floor(maxConcurrent))
+  } else {
+    maxConcurrent = 3
+  }
+
+  let maxSpawnDepth = raw?.maxSpawnDepth ?? base.maxSpawnDepth
+  const depthEnv = env.BOLO_SUBAGENT_MAX_SPAWN_DEPTH?.trim()
+  if (depthEnv) {
+    const n = Number(depthEnv)
+    if (Number.isFinite(n) && n >= 0) maxSpawnDepth = Math.floor(n)
+  }
+  maxSpawnDepth = clampSpawnDepth(maxSpawnDepth)
+
+  let overflow: 'reject' | 'queue' =
+    raw?.overflow === 'queue' ? 'queue' : base.overflow
+  const ovEnv = env.BOLO_BACKGROUND_OVERFLOW?.trim().toLowerCase()
+  if (ovEnv === 'queue') overflow = 'queue'
+  if (ovEnv === 'reject') overflow = 'reject'
+
+  const defaultModel =
+    (raw?.defaultModel && String(raw.defaultModel).trim()) || base.defaultModel
+  const defaultEffort =
+    raw?.defaultEffort != null && String(raw.defaultEffort).trim()
+      ? String(raw.defaultEffort).trim()
+      : undefined
+
+  return {
+    enabled,
+    maxConcurrent,
+    defaultModel,
+    ...(defaultEffort ? { defaultEffort } : {}),
+    maxSpawnDepth,
+    overflow,
+  }
+}
+
+export function clampSpawnDepth(n: number): number {
+  if (!Number.isFinite(n) || n < 0) return 0
+  return Math.min(MAX_SPAWN_DEPTH_CLAMP, Math.floor(n))
+}
+
+/**
+ * 当前 loop 是否允许在工具表中保留 Agent。
+ * - spawnDepth=0（主）：policy.enabled 即可
+ * - spawnDepth>0：spawnDepth <= effectiveMax（def ?? policy），且 enabled
+ */
+export function canExposeAgentTool(opts: {
+  spawnDepth: number
+  policy?: AgentPolicy | null
+  /** 当前 loop 的 agent 定义（主会话无） */
+  def?: Pick<AgentDefinition, 'maxSpawnDepth'> | null
+}): boolean {
+  const policy = opts.policy ?? defaultAgentPolicy()
+  if (!policy.enabled) return false
+  const depth = Math.max(0, Math.floor(opts.spawnDepth || 0))
+  if (depth === 0) return true
+  const cap = clampSpawnDepth(
+    opts.def?.maxSpawnDepth ?? policy.maxSpawnDepth ?? 0,
+  )
+  return depth <= cap
+}
+
+/**
+ * model 解析：env 强制 → 工具参数 → def → policy.default → 父 → undefined
+ * fork 时强制 inherit（用父 model）。
+ */
+export function resolveSubagentModel(opts: {
+  fork?: boolean
+  toolModel?: string | null
+  defModel?: string | null
+  policy?: AgentPolicy | null
+  parentModel?: string | null
+  env?: NodeJS.ProcessEnv
+}): string | undefined {
+  const env = opts.env ?? process.env
+  const forced = env.BOLO_SUBAGENT_MODEL?.trim()
+  if (forced) return forced
+
+  if (opts.fork) {
+    return pickInherit(opts.parentModel)
+  }
+
+  const fromTool = normalizeModelSpec(opts.toolModel)
+  if (fromTool && fromTool !== 'inherit') return fromTool
+  if (fromTool === 'inherit') return pickInherit(opts.parentModel)
+
+  const fromDef = normalizeModelSpec(opts.defModel)
+  if (fromDef && fromDef !== 'inherit') return fromDef
+  if (fromDef === 'inherit') return pickInherit(opts.parentModel)
+
+  const fromPolicy = normalizeModelSpec(opts.policy?.defaultModel)
+  if (fromPolicy && fromPolicy !== 'inherit') return fromPolicy
+
+  return pickInherit(opts.parentModel)
+}
+
+/**
+ * effort 解析：env → 工具 → def → policy.defaultEffort → 父
+ * fork 默认 inherit 父。
+ */
+export function resolveSubagentEffort(opts: {
+  fork?: boolean
+  toolEffort?: string | null
+  defEffort?: string | null
+  policy?: AgentPolicy | null
+  parentEffort?: string | null
+  env?: NodeJS.ProcessEnv
+}): string | undefined {
+  const env = opts.env ?? process.env
+  const forced = env.BOLO_SUBAGENT_EFFORT?.trim()
+  if (forced) return forced
+
+  if (opts.fork) {
+    const t = normalizeEffortSpec(opts.toolEffort)
+    if (t && t !== 'inherit') return t
+    const d = normalizeEffortSpec(opts.defEffort)
+    if (d && d !== 'inherit') return d
+    return pickInherit(opts.parentEffort)
+  }
+
+  const fromTool = normalizeEffortSpec(opts.toolEffort)
+  if (fromTool && fromTool !== 'inherit') return fromTool
+  if (fromTool === 'inherit') return pickInherit(opts.parentEffort)
+
+  const fromDef = normalizeEffortSpec(opts.defEffort)
+  if (fromDef && fromDef !== 'inherit') return fromDef
+  if (fromDef === 'inherit') return pickInherit(opts.parentEffort)
+
+  const fromPolicy = normalizeEffortSpec(opts.policy?.defaultEffort)
+  if (fromPolicy && fromPolicy !== 'inherit') return fromPolicy
+  if (fromPolicy === 'inherit') return pickInherit(opts.parentEffort)
+
+  return pickInherit(opts.parentEffort)
+}
+
+function normalizeModelSpec(raw: string | null | undefined): string | undefined {
+  if (raw == null) return undefined
+  const t = String(raw).trim()
+  if (!t) return undefined
+  if (t.toLowerCase() === 'inherit') return 'inherit'
+  return t
+}
+
+function normalizeEffortSpec(
+  raw: string | null | undefined,
+): string | undefined {
+  if (raw == null) return undefined
+  const t = String(raw).trim().toLowerCase()
+  if (!t) return undefined
+  if (t === 'inherit') return 'inherit'
+  // Codex aliases → Bolo
+  if (t === 'xhigh' || t === 'ultra') return 'max'
+  return t
+}
+
+function pickInherit(parent: string | null | undefined): string | undefined {
+  if (parent == null) return undefined
+  const t = String(parent).trim()
+  return t || undefined
+}
+
+/** read-only sandbox：只保留读工具 */
+const READ_ONLY_TOOL_NAMES = new Set([
+  'Read',
+  'Glob',
+  'Grep',
+  'WebFetch',
+  'Skill',
+  'ListMcpResources',
+  'ReadMcpResource',
+])
+
+export function applySandboxToolFilter(
+  tools: readonly BoloTool[],
+  sandbox?: AgentDefinition['sandbox'],
+): BoloTool[] {
+  if (sandbox !== 'read-only') return [...tools]
+  return tools.filter(
+    (t) => READ_ONLY_TOOL_NAMES.has(t.name) || t.name.startsWith('mcp__'),
+  )
 }
 
 export const EXPLORE_AGENT: AgentDefinition = {
@@ -80,20 +332,26 @@ Guidelines:
   permissionMode: 'default',
   source: 'builtin',
   maxTurns: 12,
+  maxSpawnDepth: 0,
+  model: 'inherit',
+  effort: 'medium',
 }
 
 export const GENERAL_AGENT: AgentDefinition = {
   agentType: 'general',
   description:
-    'General-purpose subagent for multi-step tasks. Cannot spawn further agents.',
+    'General-purpose subagent for multi-step tasks. Cannot spawn further agents by default.',
   whenToUse:
-    'Multi-step implementation or investigation that should not pollute the parent context. Full tools except nested Agent.',
+    'Multi-step implementation or investigation that should not pollute the parent context. Full tools except nested Agent (unless maxSpawnDepth allows).',
   tools: '*',
   disallowedTools: ['Agent'],
   systemPrompt: `You are a general-purpose subagent for Bolo.
-Complete the task with the tools you have. Do not spawn nested agents.
+Complete the task with the tools you have. Do not spawn nested agents unless your tool list includes Agent.
 When done, reply with a concise report of what you did and key findings.`,
   source: 'builtin',
+  maxSpawnDepth: 0,
+  model: 'inherit',
+  effort: 'inherit',
 }
 
 /**
@@ -111,6 +369,9 @@ export const PLAN_AGENT: AgentDefinition = {
   permissionMode: 'plan',
   source: 'builtin',
   maxTurns: 16,
+  maxSpawnDepth: 0,
+  model: 'inherit',
+  effort: 'high',
   systemPrompt: `You are a software architect and planning specialist for Bolo.
 
 === CRITICAL: READ-ONLY — NO FILE MODIFICATIONS ===
@@ -145,6 +406,9 @@ export const FORK_AGENT: AgentDefinition = {
   systemPrompt: `你是 fork 工作者。继承父会话上下文，完成指派任务后给出简洁报告。不要再 spawn 子 agent。`,
   source: 'builtin',
   maxTurns: 32,
+  maxSpawnDepth: 0,
+  model: 'inherit',
+  effort: 'inherit',
 }
 
 const BUILTIN_AGENTS: Record<string, AgentDefinition> = {
@@ -360,6 +624,42 @@ export function agentDefinitionFromMarkdown(
     if (iso === 'none' || iso === 'off') isolation = 'none'
   }
 
+  let model: string | undefined
+  if (meta.model != null && String(meta.model).trim()) {
+    model = String(meta.model).trim()
+  }
+
+  let effort: string | undefined
+  if (meta.effort != null && String(meta.effort).trim()) {
+    effort = String(meta.effort).trim()
+  } else if (
+    meta.model_reasoning_effort != null &&
+    String(meta.model_reasoning_effort).trim()
+  ) {
+    // Codex alias
+    effort = String(meta.model_reasoning_effort).trim()
+  }
+
+  let maxSpawnDepth: number | undefined
+  const depthRaw =
+    meta.maxspawndepth ?? meta.max_spawn_depth ?? meta.spawn_depth
+  if (depthRaw != null && depthRaw !== '') {
+    const n = Number(depthRaw)
+    if (Number.isFinite(n) && n >= 0) maxSpawnDepth = clampSpawnDepth(n)
+  }
+
+  let sandbox: AgentDefinition['sandbox'] | undefined
+  if (meta.sandbox != null && String(meta.sandbox).trim()) {
+    const s = String(meta.sandbox).trim().toLowerCase()
+    if (s === 'read-only' || s === 'readonly' || s === 'read_only') {
+      sandbox = 'read-only'
+    } else if (s === 'workspace-write' || s === 'workspace_write') {
+      sandbox = 'workspace-write'
+    } else if (s === 'none' || s === 'off') {
+      sandbox = 'none'
+    }
+  }
+
   const description =
     meta.description?.trim() ||
     meta.whentouse?.trim() ||
@@ -373,6 +673,14 @@ export function agentDefinitionFromMarkdown(
     systemBody ||
     `You are the "${agentType}" subagent. Complete the assigned task and reply with a concise report.`
 
+  // sandbox: read-only 语法糖 — 未显式写 tools 时收紧
+  if (sandbox === 'read-only' && tools === '*') {
+    tools = ['Read', 'Glob', 'Grep', 'WebFetch']
+    if (!disallowedTools) {
+      disallowedTools = ['Write', 'Edit', 'ApplyPatch', 'Bash', 'Agent']
+    }
+  }
+
   return {
     agentType,
     description,
@@ -385,6 +693,10 @@ export function agentDefinitionFromMarkdown(
     ...(disallowedTools ? { disallowedTools } : {}),
     ...(whenToUse ? { whenToUse } : {}),
     ...(isolation ? { isolation } : {}),
+    ...(model ? { model } : {}),
+    ...(effort ? { effort } : {}),
+    ...(maxSpawnDepth !== undefined ? { maxSpawnDepth } : {}),
+    ...(sandbox ? { sandbox } : {}),
   }
 }
 
@@ -472,17 +784,28 @@ export type ResolveAgentToolsResult = {
   /** 白名单里不存在的名字 */
   invalidTools: string[]
   hasWildcard: boolean
+  /** 是否因 depth/policy 强制去掉 Agent */
+  agentToolAllowed: boolean
 }
 
 /**
- * 按 AgentDefinition 裁剪工具；始终排除 Agent（防递归）。
+ * 按 AgentDefinition 裁剪工具。
+ * Agent 工具：仅当 opts.allowAgentTool === true 且未被 disallowed 时保留
+ * （默认 false = 与历史「子 agent 无 Agent」兼容）。
  * 支持 disallowedTools 二次剔除（HC loadAgentsDir 语义）。
  */
 export function resolveAgentTools(
-  def: Pick<AgentDefinition, 'tools' | 'disallowedTools'>,
+  def: Pick<AgentDefinition, 'tools' | 'disallowedTools' | 'sandbox'>,
   allTools: readonly BoloTool[],
+  opts?: {
+    allowAgentTool?: boolean
+  },
 ): ResolveAgentToolsResult {
-  const withoutAgent = allTools.filter((t) => t.name !== AGENT_TOOL_NAME)
+  const allowAgent = opts?.allowAgentTool === true
+  const basePool = allowAgent
+    ? [...allTools]
+    : allTools.filter((t) => t.name !== AGENT_TOOL_NAME)
+
   const hasWildcard =
     def.tools === '*' ||
     (Array.isArray(def.tools) && def.tools.includes('*'))
@@ -491,15 +814,16 @@ export function resolveAgentTools(
   const invalidTools: string[] = []
 
   if (hasWildcard) {
-    resolvedTools = [...withoutAgent]
+    resolvedTools = [...basePool]
   } else {
     const allow = new Set(
       (def.tools as string[]).map((n) => n.trim()).filter(Boolean),
     )
-    allow.delete(AGENT_TOOL_NAME)
-    const byName = new Map(withoutAgent.map((t) => [t.name, t]))
+    if (!allowAgent) allow.delete(AGENT_TOOL_NAME)
+    const byName = new Map(basePool.map((t) => [t.name, t]))
     resolvedTools = []
     for (const name of allow) {
+      if (name === AGENT_TOOL_NAME && !allowAgent) continue
       const t = byName.get(name)
       if (t) resolvedTools.push(t)
       else invalidTools.push(name)
@@ -510,11 +834,25 @@ export function resolveAgentTools(
     const ban = new Set(
       def.disallowedTools.map((n) => n.trim()).filter(Boolean),
     )
-    ban.add(AGENT_TOOL_NAME)
+    if (!allowAgent) ban.add(AGENT_TOOL_NAME)
     resolvedTools = resolvedTools.filter((t) => !ban.has(t.name))
+  } else if (!allowAgent) {
+    resolvedTools = resolvedTools.filter((t) => t.name !== AGENT_TOOL_NAME)
   }
 
-  return { resolvedTools, invalidTools, hasWildcard }
+  resolvedTools = applySandboxToolFilter(resolvedTools, def.sandbox)
+
+  // sandbox 后再确保 Agent 策略
+  if (!allowAgent) {
+    resolvedTools = resolvedTools.filter((t) => t.name !== AGENT_TOOL_NAME)
+  }
+
+  return {
+    resolvedTools,
+    invalidTools,
+    hasWildcard,
+    agentToolAllowed: allowAgent,
+  }
 }
 
 function lastAssistantText(messages: ChatMessage[]): string {
@@ -619,7 +957,7 @@ export type RunSubagentParams = {
   /** 父会话 always-allow；子 agent 共享引用 */
   permissionRules?: SessionPermissionRules
   maxToolResultChars?: number
-  /** 父侧全量工具（含 Agent）；内部会 resolve 并去掉 Agent */
+  /** 父侧全量工具（含 Agent）；内部按 depth/policy resolve */
   allTools?: readonly BoloTool[]
   skills?: LoadedSkill[]
   maxTurns?: number
@@ -636,7 +974,7 @@ export type RunSubagentParams = {
   agentId?: string
   /**
    * S12 fork：子 messages = 父 messages 浅拷贝 + 新 user 任务。
-   * 工具 = 父 allTools 去掉 Agent；system 优先用父 sections。
+   * 工具 = 父 allTools 按 depth 处理 Agent；system 优先用父 sections。
    */
   fork?: boolean
   /** fork 时继承的父会话 messages（浅拷贝数组；不改父） */
@@ -653,18 +991,33 @@ export type RunSubagentParams = {
   usage?: import('./sessionUsage.ts').SessionUsage
   /**
    * 父会话 usage：子 loop 结束后 merge 进去（对照 HC totalUsage 回卷）。
-   * 与 `usage` 不同：`usage` 是子自己的桶，`parentUsage` 是回卷目标。
    */
   parentUsage?: import('./sessionUsage.ts').SessionUsage
-  model?: string
+  /** 父会话 model（inherit 与 usage 标签） */
+  parentModel?: string
+  /** 父会话 effort */
+  parentEffort?: string
   /**
-   * worktree 结束后是否清理（默认 true；有改动时仍 force remove，可逆靠 git）。
-   * 设 false 保留 worktree 目录便于调试。
+   * 解析后的子 model / effort（若已在 Agent 工具侧算好可直接传）。
+   * 未传则用 resolveSubagentModel/Effort。
+   */
+  model?: string
+  effort?: string
+  /** 全局策略 */
+  agentPolicy?: AgentPolicy
+  /**
+   * 本子 agent 的 spawnDepth（主 spawn 的子 = 1）。
+   * 默认 1。
+   */
+  spawnDepth?: number
+  /** 活跃类型表（嵌套 Agent resolve） */
+  agentDefinitions?: ActiveAgentDefinitions
+  /**
+   * worktree 结束后是否清理（默认 true）。
    */
   cleanupWorktree?: boolean
   /**
-   * 短任务标签（对照 HC AgentTool description，3–5 词）。
-   * 写入后台表与 tool_result trailer；不进子模型 prompt（prompt 已是完整任务）。
+   * 短任务标签（对照 HC AgentTool description）。
    */
   description?: string
 }
@@ -990,7 +1343,7 @@ async function writeSubagentTranscript(opts: {
 
 /**
  * 真子 loop：SubagentStart → 独立 messages + queryLoop → 摘要 → SubagentStop
- * fork 时 messages = 父浅拷贝 + directive；tools = 父集去 Agent。
+ * fork 时 messages = 父浅拷贝 + directive；tools 按 spawnDepth/policy 处理 Agent。
  * 结束时：merge usage → parentUsage；可选 cleanup worktree。
  */
 export async function runSubagent(
@@ -1001,16 +1354,65 @@ export async function runSubagent(
   const isFork = params.fork === true || agentType === 'fork'
   const taskDescription = params.description?.trim() || undefined
   const startTimeMs = Date.now()
-  const allTools = params.allTools ?? createDefaultTools()
-  const { resolvedTools } = isFork
-    ? {
-        // fork：与父相同工具，仅去掉 Agent（禁递归 fork）
-        resolvedTools: allTools.filter((t) => t.name !== AGENT_TOOL_NAME),
-      }
-    : resolveAgentTools(params.def, allTools)
+  const policy = params.agentPolicy ?? defaultAgentPolicy()
+  // 子 agent 默认 depth=1（由主会话 spawn）
+  const spawnDepth = Math.max(
+    1,
+    Math.floor(params.spawnDepth ?? 1),
+  )
+  // 子能否再暴露 Agent：看「子作为父」时 depth 规则
+  // 即子 loop 的 spawnDepth 是否仍允许带 Agent
+  const allowAgentTool = canExposeAgentTool({
+    spawnDepth,
+    policy,
+    def: params.def,
+  })
+
+  const allTools =
+    params.allTools ??
+    createDefaultTools(undefined, { agentPolicy: policy })
+
+  let resolvedTools: BoloTool[]
+  if (isFork) {
+    // fork：父工具集，再按 allowAgentTool / sandbox
+    let tools = allowAgentTool
+      ? [...allTools]
+      : allTools.filter((t) => t.name !== AGENT_TOOL_NAME)
+    tools = applySandboxToolFilter(tools, params.def.sandbox)
+    if (!allowAgentTool) {
+      tools = tools.filter((t) => t.name !== AGENT_TOOL_NAME)
+    }
+    // fork 定义级 disallowed
+    if (params.def.disallowedTools?.length) {
+      const ban = new Set(params.def.disallowedTools)
+      tools = tools.filter((t) => !ban.has(t.name))
+    }
+    resolvedTools = tools
+  } else {
+    resolvedTools = resolveAgentTools(params.def, allTools, {
+      allowAgentTool,
+    }).resolvedTools
+  }
+
+  const resolvedModel =
+    params.model ??
+    resolveSubagentModel({
+      fork: isFork,
+      defModel: params.def.model,
+      policy,
+      parentModel: params.parentModel,
+    })
+  const resolvedEffort =
+    params.effort ??
+    resolveSubagentEffort({
+      fork: isFork,
+      defEffort: params.def.effort,
+      policy,
+      parentEffort: params.parentEffort,
+    })
+
   const messages: ChatMessage[] = isFork
     ? [
-        // 浅拷贝父 messages，再追加本任务 directive
         ...(params.parentMessages ?? []).map((m) => ({ ...m })),
         { role: 'user', content: params.prompt },
       ]
@@ -1025,7 +1427,6 @@ export async function runSubagent(
     params.permissionMode,
     params.def.permissionMode,
   )
-  // isolation：参数 > def > env BOLO_SUBAGENT_WORKTREE
   const isolationPref =
     params.isolation ?? params.def.isolation ?? 'none'
   const wantWorktree =
@@ -1094,7 +1495,11 @@ export async function runSubagent(
       signal: params.signal,
       onEvent: params.onEvent,
       usage: childUsage,
-      model: params.model,
+      model: resolvedModel,
+      effortLevel: resolvedEffort,
+      agentDefinitions: params.agentDefinitions,
+      agentPolicy: policy,
+      spawnDepth,
     })
   } catch (e) {
     const detail = e instanceof Error ? e.message : String(e)
@@ -1229,12 +1634,18 @@ export type SubagentParentContext = {
   parentMessages?: ChatMessage[]
   /** fork 时继承的父 system 段 */
   parentSystemPromptSections?: readonly string[]
-  /** 父会话 model 标签；写入子 usage.byModel */
+  /** 父会话 model 标签；inherit + usage.byModel */
   model?: string
+  /** 父会话 effort */
+  effort?: string
   /**
    * 父会话 usage 引用；子完成后 merge 回卷（同步 + 后台均生效）。
    */
   parentUsage?: import('./sessionUsage.ts').SessionUsage
+  /** 全局策略 */
+  agentPolicy?: AgentPolicy
+  /** 父 loop 的 spawnDepth（主=0） */
+  spawnDepth?: number
 }
 
 function agentTypesHint(active?: ActiveAgentDefinitions | null): string {
@@ -1292,6 +1703,7 @@ export function buildAgentToolDescription(
  */
 export function createAgentTool(
   activeAgents?: ActiveAgentDefinitions | null,
+  activePolicy?: AgentPolicy | null,
 ): BoloTool {
   const hint = agentTypesHint(activeAgents)
   return buildTool({
@@ -1339,6 +1751,16 @@ export function createAgentTool(
           type: 'string',
           description: 'none | worktree — worktree uses git worktree isolation',
         },
+        model: {
+          type: 'string',
+          description:
+            'Model override for this spawn (or "inherit"). Precedence over agent def / config default.',
+        },
+        effort: {
+          type: 'string',
+          description:
+            'Effort override (low|medium|high|max|inherit). Precedence over agent def / config default.',
+        },
       },
       required: ['prompt'],
     },
@@ -1368,6 +1790,17 @@ export function createAgentTool(
           output:
             'Agent tool missing parent context (subagentParent). Use session tools from core createDefaultTools().',
           errorCode: 'no_parent',
+        }
+      }
+
+      const policy =
+        parent.agentPolicy ?? activePolicy ?? defaultAgentPolicy()
+      if (!policy.enabled) {
+        return {
+          ok: false,
+          isError: true,
+          output: 'Subagent tools disabled (config.agents.enabled=false)',
+          errorCode: 'agents_disabled',
         }
       }
 
@@ -1414,6 +1847,33 @@ export function createAgentTool(
         if (iso === 'none' || iso === 'off') isolationOverride = 'none'
       }
 
+      const parentDepth = Math.max(0, Math.floor(parent.spawnDepth ?? 0))
+      const childDepth = parentDepth + 1
+
+      const toolModel =
+        input.model != null && String(input.model).trim()
+          ? String(input.model).trim()
+          : undefined
+      const toolEffort =
+        input.effort != null && String(input.effort).trim()
+          ? String(input.effort).trim()
+          : undefined
+
+      const resolvedModel = resolveSubagentModel({
+        fork: useFork,
+        toolModel,
+        defModel: def.model,
+        policy,
+        parentModel: parent.model,
+      })
+      const resolvedEffort = resolveSubagentEffort({
+        fork: useFork,
+        toolEffort,
+        defEffort: def.effort,
+        policy,
+        parentEffort: parent.effort,
+      })
+
       const runParams: RunSubagentParams = {
         def,
         prompt,
@@ -1430,8 +1890,14 @@ export function createAgentTool(
         signal: parent.signal ?? ctx.signal,
         onEvent: parent.onEvent,
         writeTranscript,
-        model: parent.model,
+        parentModel: parent.model,
+        parentEffort: parent.effort,
         parentUsage: parent.parentUsage,
+        agentPolicy: policy,
+        spawnDepth: childDepth,
+        model: resolvedModel,
+        effort: resolvedEffort,
+        agentDefinitions: active,
         ...(taskDescription ? { description: taskDescription } : {}),
         ...(maxTurnsOverride !== undefined ? { maxTurns: maxTurnsOverride } : {}),
         ...(isolationOverride ? { isolation: isolationOverride } : {}),
@@ -1459,7 +1925,10 @@ export function createAgentTool(
             errorCode: 'no_background_store',
           }
         }
-        const cap = canStartBackgroundAgent(store)
+        const cap = canStartBackgroundAgent(store, {
+          maxConcurrent: store.maxConcurrent ?? policy.maxConcurrent,
+          policy: policy.overflow,
+        })
         if (!cap.ok) {
           return {
             ok: false,
@@ -1550,11 +2019,19 @@ export function createAgentTool(
   })
 }
 
-/** 主会话默认工具集：内置 + Agent */
+/** 主会话默认工具集：内置 +（可选）Agent */
 export function createDefaultTools(
   activeAgents?: ActiveAgentDefinitions | null,
+  opts?: { agentPolicy?: AgentPolicy | null; includeAgent?: boolean },
 ): BoloTool[] {
-  return [...createBuiltinTools(), createAgentTool(activeAgents)]
+  const policy = opts?.agentPolicy ?? defaultAgentPolicy()
+  const include =
+    opts?.includeAgent !== undefined
+      ? opts.includeAgent
+      : policy.enabled
+  const builtins = createBuiltinTools()
+  if (!include) return [...builtins]
+  return [...builtins, createAgentTool(activeAgents, policy)]
 }
 
 /**
@@ -1573,12 +2050,16 @@ export async function spawnSubagent(
     maxToolResultChars?: number
     skills?: LoadedSkill[]
     agentDefinitions?: ActiveAgentDefinitions
+    agentPolicy?: AgentPolicy
+    model?: string
+    effortLevel?: string
     onEvent?: (e: QueryLoopEvent) => void
   },
   agentType: string,
   prompt?: string,
 ): Promise<RunSubagentResult> {
   const def = getAgentDefinition(agentType, parent.agentDefinitions)
+  const policy = parent.agentPolicy ?? defaultAgentPolicy()
   return runSubagent({
     def,
     prompt:
@@ -1592,9 +2073,15 @@ export async function spawnSubagent(
     askPermission: parent.askPermission,
     permissionRules: parent.permissionRules,
     maxToolResultChars: parent.maxToolResultChars,
-    allTools: createDefaultTools(parent.agentDefinitions),
+    allTools: createDefaultTools(parent.agentDefinitions, {
+      agentPolicy: policy,
+    }),
     skills: parent.skills,
     onEvent: parent.onEvent,
+    agentPolicy: policy,
+    parentModel: parent.model,
+    parentEffort: parent.effortLevel,
+    spawnDepth: 1,
   })
 }
 

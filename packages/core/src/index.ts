@@ -62,6 +62,7 @@ import {
   createBackgroundAgentStore,
   createDefaultTools,
   loadAgentsDir,
+  resolveAgentPolicy,
   type ActiveAgentDefinitions,
 } from './subagent.ts'
 import {
@@ -501,6 +502,10 @@ export type CreateSessionOptions = {
    */
   agentDefinitions?: ActiveAgentDefinitions
   /**
+   * Subagent 全局策略（Spec v0）。未传则 defaultAgentPolicy() + env。
+   */
+  agentPolicy?: import('./subagent.ts').AgentPolicy
+  /**
    * 每轮 submitPrompt 结束后自动 saveSession。
    * true = project scope；或传 { scope, sessionsDir, filePath }。
    */
@@ -587,6 +592,10 @@ export type BoloSession = {
    * Agent 工具 / spawnSubagent 按此 resolve。
    */
   agentDefinitions?: ActiveAgentDefinitions
+  /**
+   * Subagent 全局策略（enabled / maxConcurrent / maxSpawnDepth / defaults）。
+   */
+  agentPolicy?: import('./subagent.ts').AgentPolicy
   /**
    * 后台 subagent 表（Agent run_in_background）。
    * pendingAgents + backgroundAgentResults；/agents status · /bg 读取。
@@ -706,6 +715,10 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
     opts.agentDefinitions ??
     (await loadAgentsDir({ cwd: opts.cwd })).active
 
+  const agentPolicy =
+    opts.agentPolicy ??
+    resolveAgentPolicy(undefined)
+
   const session: BoloSession = {
     id: opts.sessionId ?? newId('sess'),
     cwd: opts.cwd,
@@ -751,8 +764,11 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
         ? 3
         : Math.max(0, opts.maxPtlRetries),
     agentDefinitions,
-    backgroundAgents: createBackgroundAgentStore(),
-    tools: createDefaultTools(agentDefinitions),
+    agentPolicy,
+    backgroundAgents: createBackgroundAgentStore({
+      maxConcurrent: agentPolicy.maxConcurrent,
+    }),
+    tools: createDefaultTools(agentDefinitions, { agentPolicy }),
     usage: opts.usage
       ? cloneSessionUsage(opts.usage)
       : createEmptySessionUsage(),
@@ -902,6 +918,7 @@ export async function createSessionFromWorkspace(
       : createCompactSummarizerFromProvider(workspace.provider)
 
   const injectSkills = opts.injectSkills !== false
+  const agentPolicy = resolveAgentPolicy(workspace.config.agents)
   const session = await createSession({
     cwd: opts.cwd,
     provider: workspace.provider,
@@ -913,6 +930,7 @@ export async function createSessionFromWorkspace(
     model: workspace.providerModel,
     source: opts.source,
     onEvent: opts.onEvent,
+    agentPolicy,
     autoCompactEnabled:
       opts.autoCompactEnabled ??
       workspace.config.autoCompactEnabled !== false,
@@ -1248,9 +1266,15 @@ export async function submitPrompt(
     },
     maxToolResultChars: session.maxToolResultChars,
     skills: session.skills,
-    tools: session.tools ?? createDefaultTools(session.agentDefinitions),
+    tools:
+      session.tools ??
+      createDefaultTools(session.agentDefinitions, {
+        agentPolicy: session.agentPolicy,
+      }),
     agentDefinitions: session.agentDefinitions,
     backgroundStore: session.backgroundAgents,
+    agentPolicy: session.agentPolicy,
+    spawnDepth: 0,
     maxTurns: options?.maxTurns ?? 8,
     querySource: options?.querySource ?? 'repl_main_thread',
     maxPtlRetries: session.maxPtlRetries,
@@ -1614,9 +1638,17 @@ export {
   finalizeSubagentStats,
   formatSubagentToolOutput,
   buildAgentToolDescription,
+  defaultAgentPolicy,
+  resolveAgentPolicy,
+  resolveSubagentModel,
+  resolveSubagentEffort,
+  canExposeAgentTool,
+  clampSpawnDepth,
+  applySandboxToolFilter,
   type AgentDefinition,
   type AgentDefinitionSource,
   type ActiveAgentDefinitions,
+  type AgentPolicy,
   type BackgroundAgentEntry,
   type BackgroundAgentStatus,
   type BackgroundAgentStore,

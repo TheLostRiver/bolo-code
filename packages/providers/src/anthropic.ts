@@ -286,7 +286,11 @@ export function createAnthropicProvider(config: AnthropicConfig): LlmProvider {
 
     const body = buildAnthropicRequestBody(
       messages,
-      { model: config.model, maxTokens },
+      {
+        model:
+          (options?.model && options.model.trim()) || config.model,
+        maxTokens,
+      },
       { ...options, stream: true },
     )
 

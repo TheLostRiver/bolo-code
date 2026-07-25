@@ -29,6 +29,12 @@ import {
   finalizeSubagentStats,
   formatSubagentToolOutput,
   buildAgentToolDescription,
+  resolveAgentPolicy,
+  resolveSubagentModel,
+  resolveSubagentEffort,
+  canExposeAgentTool,
+  defaultAgentPolicy,
+  agentDefinitionFromMarkdown,
   type QueryDeps,
 } from '../packages/core/src/index.ts'
 import { createBuiltinTools, findToolByName } from '../packages/tools/src/index.ts'
@@ -424,6 +430,9 @@ async function main() {
   // --- polish: plan builtin + finalize stats + description ---
   await testPlanAndFinalize()
 
+  // --- Spec v0: policy / depth / model / effort ---
+  await testAgentPolicySpecV0()
+
   // --- S7 project agents ---
   await testProjectAgentsDir()
   assert(
@@ -738,6 +747,234 @@ async function testPlanAndFinalize(): Promise<void> {
   assert(tr.ok, `plan tool: ${tr.output}`)
   assert(tr.output.includes('task: quick plan'), `task line: ${tr.output}`)
   assert(tr.output.includes('stats:'), `stats line: ${tr.output}`)
+}
+
+async function testAgentPolicySpecV0(): Promise<void> {
+  const pol = defaultAgentPolicy()
+  assert(pol.enabled === true, 'default enabled')
+  assert(pol.maxSpawnDepth === 0, 'default maxSpawnDepth 0')
+  assert(pol.defaultModel === 'inherit', 'default model inherit')
+
+  // depth gate
+  assert(canExposeAgentTool({ spawnDepth: 0, policy: pol }) === true, 'main can agent')
+  assert(
+    canExposeAgentTool({ spawnDepth: 1, policy: pol }) === false,
+    'depth1 blocked by global 0',
+  )
+  assert(
+    canExposeAgentTool({
+      spawnDepth: 1,
+      policy: pol,
+      def: { maxSpawnDepth: 1 },
+    }) === true,
+    'depth1 allowed when def maxSpawnDepth=1',
+  )
+  assert(
+    canExposeAgentTool({
+      spawnDepth: 2,
+      policy: pol,
+      def: { maxSpawnDepth: 1 },
+    }) === false,
+    'depth2 blocked when maxSpawnDepth=1',
+  )
+
+  // resolve tools: default no Agent
+  const noAgent = resolveAgentTools(GENERAL_AGENT, createDefaultTools())
+  assert(
+    !noAgent.resolvedTools.some((t) => t.name === AGENT_TOOL_NAME),
+    'general no Agent by default',
+  )
+  assert(noAgent.agentToolAllowed === false, 'agentToolAllowed false')
+
+  // allow Agent when depth policy + not disallowed
+  const nestDef = {
+    tools: '*' as const,
+    disallowedTools: undefined as string[] | undefined,
+    maxSpawnDepth: 1,
+  }
+  const withAgent = resolveAgentTools(nestDef, createDefaultTools(), {
+    allowAgentTool: true,
+  })
+  assert(
+    withAgent.resolvedTools.some((t) => t.name === AGENT_TOOL_NAME),
+    'allowAgentTool keeps Agent',
+  )
+
+  // model chain
+  assert(
+    resolveSubagentModel({
+      parentModel: 'parent-m',
+      policy: { ...pol, defaultModel: 'inherit' },
+    }) === 'parent-m',
+    'model inherit parent',
+  )
+  assert(
+    resolveSubagentModel({
+      defModel: 'def-m',
+      parentModel: 'parent-m',
+      policy: pol,
+    }) === 'def-m',
+    'model def wins',
+  )
+  assert(
+    resolveSubagentModel({
+      toolModel: 'tool-m',
+      defModel: 'def-m',
+      parentModel: 'parent-m',
+      policy: pol,
+    }) === 'tool-m',
+    'model tool wins',
+  )
+  assert(
+    resolveSubagentModel({
+      fork: true,
+      toolModel: 'tool-m',
+      defModel: 'def-m',
+      parentModel: 'parent-m',
+      policy: pol,
+    }) === 'parent-m',
+    'fork forces parent model',
+  )
+
+  // effort chain
+  assert(
+    resolveSubagentEffort({
+      defEffort: 'high',
+      parentEffort: 'low',
+      policy: pol,
+    }) === 'high',
+    'effort def',
+  )
+  assert(
+    resolveSubagentEffort({
+      toolEffort: 'max',
+      defEffort: 'high',
+      parentEffort: 'low',
+      policy: pol,
+    }) === 'max',
+    'effort tool',
+  )
+  assert(
+    resolveSubagentEffort({
+      fork: true,
+      parentEffort: 'medium',
+      policy: pol,
+    }) === 'medium',
+    'fork effort inherit',
+  )
+
+  // frontmatter model/effort/maxSpawnDepth/sandbox
+  const md = agentDefinitionFromMarkdown(
+    `---
+name: lead
+description: coord
+model: custom-m
+effort: high
+maxSpawnDepth: 1
+sandbox: read-only
+tools: "*"
+---
+
+Lead body.
+`,
+    'lead.md',
+    'project',
+  )
+  assert(md != null, 'parse lead')
+  assert(md!.model === 'custom-m', 'fm model')
+  assert(md!.effort === 'high', 'fm effort')
+  assert(md!.maxSpawnDepth === 1, 'fm depth')
+  assert(md!.sandbox === 'read-only', 'fm sandbox')
+  // read-only sugar tightens tools
+  assert(
+    Array.isArray(md!.tools) && md!.tools.includes('Read'),
+    'sandbox tools',
+  )
+
+  // enabled=false → no Agent in default tools
+  const disabled = resolveAgentPolicy({ enabled: false })
+  const toolsOff = createDefaultTools(undefined, { agentPolicy: disabled })
+  assert(
+    !toolsOff.some((t) => t.name === AGENT_TOOL_NAME),
+    'disabled no Agent tool',
+  )
+
+  // runSubagent passes effort; mock provider sees options
+  let sawEffort: string | undefined
+  let sawTools: string[] = []
+  const effortProvider: LlmProvider = {
+    id: 'mock',
+    async *completeStream(
+      _m: ChatMessage[],
+      options?: CompleteStreamOptions,
+    ): AsyncIterable<ProviderStreamEvent> {
+      sawEffort = options?.effort
+      sawTools = toolNames(options)
+      yield { type: 'text_delta', text: 'EFFORT_OK' }
+      yield { type: 'done' }
+    },
+    async completeText() {
+      return 'n/a'
+    },
+  }
+  const effortDeps: QueryDeps = {
+    callModel: async function* ({ messages, signal, tools, effort }) {
+      yield* effortProvider.completeStream(messages, {
+        signal,
+        tools: tools as CompleteStreamOptions['tools'],
+        effort,
+      })
+    },
+    prepareMessages: identityPrepareMessages,
+    uuid: () => 'uuid_effort',
+  }
+  const er = await runSubagent({
+    def: {
+      ...GENERAL_AGENT,
+      effort: 'high',
+      maxSpawnDepth: 0,
+    },
+    prompt: 'go',
+    parentSessionId: 's_e',
+    cwd: process.cwd(),
+    hooks: {},
+    deps: effortDeps,
+    permissionMode: 'bypassPermissions',
+    askPermission: async () => 'allow',
+    allTools: createDefaultTools(),
+    writeTranscript: false,
+    spawnDepth: 1,
+  })
+  assert(!er.isError, `effort run: ${er.summary}`)
+  assert(sawEffort === 'high', `saw effort high got ${sawEffort}`)
+  assert(!sawTools.includes(AGENT_TOOL_NAME), 'child tools no Agent at depth1')
+
+  // nested allow: maxSpawnDepth=1 + tools without ban Agent
+  sawTools = []
+  const nestRun = await runSubagent({
+    def: {
+      agentType: 'leader',
+      description: 'nest',
+      tools: '*',
+      systemPrompt: 'lead',
+      maxSpawnDepth: 1,
+    },
+    prompt: 'nest',
+    parentSessionId: 's_n',
+    cwd: process.cwd(),
+    hooks: {},
+    deps: effortDeps,
+    permissionMode: 'bypassPermissions',
+    askPermission: async () => 'allow',
+    allTools: createDefaultTools(),
+    writeTranscript: false,
+    spawnDepth: 1,
+  })
+  assert(!nestRun.isError, nestRun.summary)
+  assert(
+    sawTools.includes(AGENT_TOOL_NAME),
+    `leader depth1 maxSpawnDepth1 has Agent: ${sawTools.join(',')}`,
+  )
 }
 
 async function flushMicrotasks(times = 20): Promise<void> {

@@ -31,6 +31,8 @@ export type CallModelFn = (req: {
   signal?: AbortSignal
   tools?: readonly BoloTool[] | ToolSpec[]
   disableTools?: boolean
+  /** 覆盖本轮 model（子 agent 解析链） */
+  model?: string
   /** session.effortLevel；透传 provider mapEffort → max_tokens */
   effort?: string
   maxTokens?: number
@@ -70,6 +72,7 @@ export function createCallModelFromProvider(
     signal,
     tools,
     disableTools,
+    model,
     effort,
     maxTokens,
   }) {
@@ -77,6 +80,7 @@ export function createCallModelFromProvider(
       signal,
       tools,
       disableTools,
+      model,
       effort,
       maxTokens,
     })

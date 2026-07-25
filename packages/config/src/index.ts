@@ -16,9 +16,11 @@ export {
 
 export {
   DEFAULT_CONFIG,
+  DEFAULT_AGENTS_CONFIG,
   DEFAULT_MCP_FILE,
   DEFAULT_HOOKS_FILE,
   type BoloConfigJson,
+  type AgentsConfigJson,
   type ProviderConfigJson,
   type McpFileJson,
   type HooksFileJson,

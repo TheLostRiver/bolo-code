@@ -123,6 +123,13 @@ export type QueryLoopParams = {
   agentDefinitions?: import('./subagent.ts').ActiveAgentDefinitions
   /** 后台 subagent 状态表（Agent run_in_background） */
   backgroundStore?: import('./subagent.ts').BackgroundAgentStore
+  /** 全局 agent 策略（Spec v0） */
+  agentPolicy?: import('./subagent.ts').AgentPolicy
+  /**
+   * 当前 loop 的 spawn 深度：主=0，子≥1。
+   * 用于条件暴露 Agent 工具。
+   */
+  spawnDepth?: number
   /**
    * callModel 因上下文过长失败时，截断最旧轮次再试的次数。
    * 默认 3；0 = 关闭。对照 HC MAX_PTL_RETRIES。
@@ -277,6 +284,9 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
           parentSystemPromptSections: params.systemPromptSections,
           model: params.model,
           parentUsage: params.usage,
+          parentEffort: params.effortLevel,
+          agentPolicy: params.agentPolicy,
+          spawnDepth: params.spawnDepth ?? 0,
           signal: params.signal,
           onEvent: params.onEvent,
         },
@@ -296,6 +306,7 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
           messages: messagesForQuery,
           signal: params.signal,
           tools,
+          model: params.model,
           effort: params.effortLevel,
           onModelRetry: (info: ModelRetryInfo) => {
             emit(params, {

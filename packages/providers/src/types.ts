@@ -38,6 +38,11 @@ export type CompleteStreamOptions = {
   signal?: AbortSignal
   disableTools?: boolean
   /**
+   * 本轮覆盖 model（缺省用 provider 构造时的 config.model）。
+   * 子 agent 解析链可传入。
+   */
+  model?: string
+  /**
    * 会话 effort 档位（low|medium|high|max|auto）。
    * provider 用 mapEffort 映射 max_tokens；auto/缺省 = 配置默认。
    */

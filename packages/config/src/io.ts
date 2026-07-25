@@ -45,7 +45,7 @@ export async function loadHooksJson(
   return (await readJsonFile<HooksFileJson>(layout.hooksJson)) ?? {}
 }
 
-/** 浅合并 config：后写覆盖前写；provider 字段深度合并；list 字段拼接去重 */
+/** 浅合并 config：后写覆盖前写；provider / agents 字段深度合并；list 字段拼接去重 */
 export function mergeConfigJson(
   base: BoloConfigJson,
   over: BoloConfigJson,
@@ -58,6 +58,10 @@ export function mergeConfigJson(
     base.foreignPluginRoots,
     over.foreignPluginRoots,
   )
+  const agents =
+    base.agents || over.agents
+      ? { ...(base.agents ?? {}), ...(over.agents ?? {}) }
+      : undefined
   return {
     ...base,
     ...over,
@@ -65,6 +69,7 @@ export function mergeConfigJson(
       ...base.provider,
       ...over.provider,
     },
+    ...(agents ? { agents } : {}),
     ...(extraSkillRoots.length
       ? { extraSkillRoots }
       : { extraSkillRoots: undefined }),

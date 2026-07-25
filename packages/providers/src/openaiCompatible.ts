@@ -179,7 +179,11 @@ export function createOpenAICompatibleProvider(
       mapEffort(options?.effort, baseMaxTokens).maxTokens
     const body = buildOpenAICompatibleRequestBody(
       messages,
-      { model: config.model, maxTokens },
+      {
+        model:
+          (options?.model && options.model.trim()) || config.model,
+        maxTokens,
+      },
       { ...options, stream: true },
     )
 

@@ -56,15 +56,32 @@ export type BoloConfigJson = {
    * Subagent 全局策略（见 docs/SUBAGENT_SPEC.md v0）。
    * 缺省：enabled、maxConcurrent=3、defaultModel=inherit、maxSpawnDepth=0。
    */
-  agents?: {
-    enabled?: boolean
-    maxConcurrent?: number
-    defaultModel?: string
-    defaultEffort?: string
-    /** 子 agent 默认能否再 spawn；0=不能（默认） */
-    maxSpawnDepth?: number
-    overflow?: 'reject' | 'queue'
-  }
+  agents?: AgentsConfigJson
+}
+
+/** config.json → agents 段（可序列化） */
+export type AgentsConfigJson = {
+  enabled?: boolean
+  maxConcurrent?: number
+  defaultModel?: string
+  defaultEffort?: string
+  /** 子 agent 默认能否再 spawn；0=主可 spawn、子不可（默认） */
+  maxSpawnDepth?: number
+  overflow?: 'reject' | 'queue'
+}
+
+export const DEFAULT_AGENTS_CONFIG: Required<
+  Pick<
+    AgentsConfigJson,
+    'enabled' | 'maxConcurrent' | 'defaultModel' | 'maxSpawnDepth' | 'overflow'
+  >
+> &
+  AgentsConfigJson = {
+  enabled: true,
+  maxConcurrent: 3,
+  defaultModel: 'inherit',
+  maxSpawnDepth: 0,
+  overflow: 'reject',
 }
 
 export type McpFileJson = {

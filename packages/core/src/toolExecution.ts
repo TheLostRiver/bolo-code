@@ -147,10 +147,16 @@ export type RunToolUseContext = {
   parentMessages?: import('../../shared/src/index.ts').ChatMessage[]
   /** fork 时注入子 agent 的父 system 段 */
   parentSystemPromptSections?: readonly string[]
-  /** 父会话 model（Agent → 子 usage.byModel） */
+  /** 父会话 model（Agent → 子 usage.byModel / inherit） */
   model?: string
+  /** 父会话 effort */
+  parentEffort?: string
   /** 父会话 usage；子完成后 merge 回卷 */
   parentUsage?: import('./sessionUsage.ts').SessionUsage
+  /** 全局 agent 策略 */
+  agentPolicy?: import('./subagent.ts').AgentPolicy
+  /** 当前 loop spawnDepth（主=0） */
+  spawnDepth?: number
   /**
    * auto 模式分类器（Y2）。mode=auto 且规则层 ask 时调用。
    * 未注入则 auto 对非快路径 **deny**（fail-closed）。
@@ -721,6 +727,9 @@ export async function runToolUse(
               parentSystemPromptSections: ctx.parentSystemPromptSections,
               model: ctx.model,
               parentUsage: ctx.parentUsage,
+              effort: ctx.parentEffort,
+              agentPolicy: ctx.agentPolicy,
+              spawnDepth: ctx.spawnDepth ?? 0,
             }
           : undefined,
       },

@@ -55,8 +55,12 @@ export type RunToolsParams = {
   parentSystemPromptSections?: readonly string[]
   /** 父会话 model；Agent 子 usage.byModel */
   model?: string
+  /** 父会话 effort */
+  parentEffort?: string
   /** 父会话 usage；子 merge 回卷 */
   parentUsage?: import('./sessionUsage.ts').SessionUsage
+  agentPolicy?: import('./subagent.ts').AgentPolicy
+  spawnDepth?: number
   signal?: AbortSignal
   onEvent?: (e: ToolExecutionEvent) => void
 }
@@ -124,6 +128,9 @@ export async function runTools(params: RunToolsParams): Promise<RunToolsResult> 
     parentSystemPromptSections: params.parentSystemPromptSections,
     model: params.model,
     parentUsage: params.parentUsage,
+    parentEffort: params.parentEffort,
+    agentPolicy: params.agentPolicy,
+    spawnDepth: params.spawnDepth,
     signal: params.signal,
     onEvent: params.onEvent,
   }
