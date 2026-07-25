@@ -63,6 +63,7 @@ defaults
 - **Hooks**：数组合并（用户 + 项目 + 插件 contributes）  
 - **Skills 同 id**：bundled ← **extra**（可选）← user ← project ← plugin（见 [SKILLS.md](./SKILLS.md)）  
 - **Subagent 类型同名**（S7）：内置 ← 用户 `agents/*.md` ← 项目 `.bolo/agents/*.md`（见 [SUBAGENT.md](./SUBAGENT.md)）  
+- **Subagent 全局策略**（Spec v0）：`config.json` → `agents` 段（`enabled` / `maxConcurrent` / `defaultModel` / `defaultEffort` / `maxSpawnDepth`）；见 [SUBAGENT_SPEC.md](./SUBAGENT_SPEC.md)  
 - **Plugins（PL1+PL2）**：扫 user/project `plugins/<id>/bolo.plugin.json`；合并 skills（默认 `skills/`）、hooks、mcp、**commands**（默认 `commands/*.md`）；会话内 `/plugins reload` 热刷新；**无**市场/远程安装
 
 ## 3. `config.json` 示例
@@ -78,6 +79,14 @@ defaults
   "permissionMode": "default",
   "autoCompactEnabled": true,
   "contextWindowTokens": 128000,
+  "agents": {
+    "enabled": true,
+    "maxConcurrent": 3,
+    "defaultModel": "inherit",
+    "defaultEffort": "medium",
+    "maxSpawnDepth": 0,
+    "overflow": "reject"
+  },
   "extraSkillRoots": [],
   "foreignPluginRoots": []
 }
