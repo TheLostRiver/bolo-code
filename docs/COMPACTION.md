@@ -183,14 +183,14 @@ finalInstructions = userInstructions + "\n\n" + hookInstructions
 
 ### 2.6 后缀保留（messagesToKeep）
 
-参考支持「摘要前缀 + 最近消息原样」。  
-Bolo P0 可选策略：
+参考支持「摘要前缀 + 最近消息原样」。**C1 已实现按 user 轮次：**
 
-| 策略 | 说明 | 何时用 |
-|------|------|--------|
-| A. 全量摘要 | `messagesToKeep = []` | 实现最简单 |
-| B. 保留最近 K 个 **user 轮次** | 按 turn 边界切，不是按 raw message 条数 | 推荐 P0.5 |
-| C. 保留最近 N tokens | 需可靠 token 估计 | P1 |
+| 策略 | 说明 | 状态 |
+|------|------|------|
+| A. 全量摘要 | `keepRecentUserTurns: 0` | ✅ |
+| B. 保留最近 K 个 **user 轮次** | `splitMessagesForCompactKeep`；默认智能 keep（短会话不 keep） | ✅ **C1** |
+| C. keep 段 token 上限 | `keepMaxTokens` | ✅ 可选 |
+| 兼容 | `keepRecentMessageCount`（按条，deprecated） | ✅ |
 
 **禁止**：无摘要只保留最近 N 条。
 
@@ -428,8 +428,8 @@ type CompactSummarizer = (req: {
 
 | 缺口 | 阶段 | 说明 |
 |------|------|------|
-| keep 按 **user 轮次**（非 raw 条数） | **C1** | 续作质量；tool 对不可拆 |
-| auto 计数 **优先 session usage** | **C2** | 有 usage 用 usage，否则 estimate |
+| keep 按 **user 轮次**（非 raw 条数） | **C1 ✅** | `splitMessagesForCompactKeep`；tool 对不拆 |
+| auto 计数 **优先 session usage** | **C2 ✅** | `usageInputTokens`；prepare 读 lastCall |
 | tool 批后 **再判一次 auto** | **C3** | 每 turn ≤1；与熔断共用 |
 | post-compact **短段再注入** | **C4** | catalog/rules 提示，可关 |
 | `/context` 展示来源与策略 | **C5** | usage\|estimate · keep 配置 |
