@@ -7,6 +7,7 @@ export const HOOK_EVENTS = [
   'PreCompact',
   'PreToolUse',
   'SessionStart',
+  'SessionEnd',
   'SubagentStart',
   'SubagentStop',
   'UserPromptSubmit',
@@ -21,6 +22,12 @@ export const HOOK_EVENTS_WITHOUT_MATCHER = [
 ] as const satisfies readonly HookEvent[]
 
 export type SessionStartSource = 'startup' | 'resume' | 'clear' | 'compact'
+/** SessionEnd matcher；对齐 HC/Codex 常用 reason */
+export type SessionEndReason =
+  | 'clear'
+  | 'logout'
+  | 'prompt_input_exit'
+  | 'other'
 export type CompactTrigger = 'manual' | 'auto'
 export type PermissionDecision = 'allow' | 'deny' | 'ask'
 
@@ -73,6 +80,12 @@ export type SessionStartInput = HookBaseInput & {
   source: SessionStartSource
 }
 
+export type SessionEndInput = HookBaseInput & {
+  hook_event_name: 'SessionEnd'
+  reason: SessionEndReason | string
+  transcript_path?: string
+}
+
 export type UserPromptSubmitInput = HookBaseInput & {
   hook_event_name: 'UserPromptSubmit'
   prompt: string
@@ -100,6 +113,7 @@ export type AnyHookInput =
   | PreToolUseInput
   | PostToolUseInput
   | SessionStartInput
+  | SessionEndInput
   | UserPromptSubmitInput
   | StopInput
   | CompactHookInput

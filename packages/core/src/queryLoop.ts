@@ -165,6 +165,11 @@ export type QueryLoopParams = {
    * 默认 false。
    */
   persistReasoning?: boolean
+  /**
+   * Stop exit 2 续跑预算（本 queryLoop 调用内）。
+   * 默认 3；0 = 不续跑（仍 emit hook）。
+   */
+  maxStopContinuations?: number
   onEvent?: (e: QueryLoopEvent) => void
   signal?: AbortSignal
 }
@@ -219,6 +224,12 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
   let turnCount = 0
   /** 本 turn 内 PTL 重试计数；成功 callModel 后清零 */
   let ptlAttemptsThisTurn = 0
+  /** Stop exit 2 续跑已用次数（H1） */
+  let stopContinuations = 0
+  const maxStopContinuations =
+    params.maxStopContinuations === undefined
+      ? 3
+      : Math.max(0, Math.floor(params.maxStopContinuations))
 
   while (true) {
     if (params.signal?.aborted) {
@@ -505,7 +516,27 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
     if (toolBlocks.length === 0) {
       streamTools?.discard()
       emit(params, { type: 'phase', phase: 'stopping' })
-      await runStopHooks(params)
+      const stop = await runStopHooks(params)
+      // H1：exit 2 → 注入 continuation 再入 loop（有预算）
+      if (
+        stop.shouldContinue &&
+        stop.continuationText &&
+        stopContinuations < maxStopContinuations
+      ) {
+        stopContinuations += 1
+        params.messages.push({
+          role: 'user',
+          content: `[Stop hook continuation]\n${stop.continuationText}`,
+        })
+        emit(params, {
+          type: 'hook',
+          event: 'Stop',
+          exitCode: 2,
+          blocked: true,
+        })
+        emit(params, { type: 'phase', phase: 'running' })
+        continue
+      }
       const terminal: Terminal = { reason: 'completed' }
       emit(params, { type: 'phase', phase: 'ready' })
       emit(params, { type: 'done', terminal })
@@ -553,7 +584,10 @@ function tryPtlRecover(
   return { nextAttempts }
 }
 
-async function runStopHooks(params: QueryLoopParams): Promise<void> {
+async function runStopHooks(params: QueryLoopParams): Promise<{
+  shouldContinue: boolean
+  continuationText: string
+}> {
   const stop = await runHooks(
     'Stop',
     {
@@ -570,6 +604,12 @@ async function runStopHooks(params: QueryLoopParams): Promise<void> {
       type: 'hook',
       event: 'Stop',
       exitCode: r.exitCode,
+      blocked: r.blocked,
     })
+  }
+  const continuationText = (stop.continuationText || stop.blockReason || '').trim()
+  return {
+    shouldContinue: stop.blocked && continuationText.length > 0,
+    continuationText,
   }
 }

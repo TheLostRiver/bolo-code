@@ -441,7 +441,17 @@ async function cmdHelp(
   return { ok: true, message: formatHelp() }
 }
 
-function cmdClear(session: SlashSession, _args: string): SlashDispatchResult {
+async function cmdClear(
+  session: SlashSession,
+  _args: string,
+): Promise<SlashDispatchResult> {
+  // H0：/clear 前 SessionEnd(reason=clear)；不 ended、不关 MCP
+  try {
+    const { runSessionEndHooks } = await import('./index.ts')
+    await runSessionEndHooks(session as never, { reason: 'clear' })
+  } catch {
+    /* hook 失败不挡 clear */
+  }
   const n = session.messages.length
   session.messages.length = 0
   return {

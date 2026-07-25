@@ -16,6 +16,7 @@ const {
   createSessionFromWorkspace,
   submitUserInput,
   closeSessionMcp,
+  endSession,
   productionDeps,
   setPermissionMode,
 } = await import(
@@ -64,12 +65,16 @@ function createDesktopAskPermission() {
   }
 }
 
-async function destroySession() {
+async function destroySession(reason = 'other') {
   if (session) {
     try {
-      await closeSessionMcp(session)
+      await endSession(session, { reason, closeMcp: true })
     } catch {
-      /* ignore */
+      try {
+        await closeSessionMcp(session)
+      } catch {
+        /* ignore */
+      }
     }
     session = null
   }

@@ -1417,7 +1417,7 @@ export async function runSubagent(
         { role: 'user', content: params.prompt },
       ]
     : [{ role: 'user', content: params.prompt }]
-  const systemPromptSections =
+  let systemPromptSections =
     isFork &&
     params.parentSystemPromptSections &&
     params.parentSystemPromptSections.length > 0
@@ -1459,7 +1459,7 @@ export async function runSubagent(
     childUsage = createEmptySessionUsage()
   }
 
-  await runHooks(
+  const startHook = await runHooks(
     'SubagentStart',
     {
       hook_event_name: 'SubagentStart',
@@ -1473,80 +1473,149 @@ export async function runSubagent(
     params.hooks,
     { signal: params.signal },
   )
-
-  let terminal: Terminal
-  try {
-    terminal = await queryLoop({
-      sessionId: `${params.parentSessionId}:${agentId}`,
-      cwd,
-      hooks: params.hooks,
-      messages,
-      systemPromptSections,
-      deps: params.deps,
-      permissionMode,
-      askPermission: params.askPermission,
-      permissionRules: params.permissionRules,
-      maxToolResultChars: params.maxToolResultChars,
-      skills: params.skills,
-      tools: resolvedTools,
-      maxTurns,
-      maxPtlRetries: 0,
-      querySource: `subagent:${agentType}`,
-      signal: params.signal,
-      onEvent: params.onEvent,
-      usage: childUsage,
-      model: resolvedModel,
-      effortLevel: resolvedEffort,
-      agentDefinitions: params.agentDefinitions,
-      agentPolicy: policy,
-      spawnDepth,
-    })
-  } catch (e) {
-    const detail = e instanceof Error ? e.message : String(e)
-    terminal = { reason: 'error', detail }
+  // H3：exit 0 stdout 注入子代理 system 段
+  if (startHook.injectText?.trim()) {
+    systemPromptSections = [
+      ...systemPromptSections,
+      startHook.injectText.trim(),
+    ]
   }
 
-  const stats = finalizeSubagentStats({
+  let terminal: Terminal = { reason: 'completed' }
+  /** SubagentStop exit 2 续跑预算 */
+  let subStopContinuations = 0
+  const maxSubStopContinuations = 3
+
+  const runChildLoop = async (): Promise<Terminal> => {
+    try {
+      return await queryLoop({
+        sessionId: `${params.parentSessionId}:${agentId}`,
+        cwd,
+        hooks: params.hooks,
+        messages,
+        systemPromptSections,
+        deps: params.deps,
+        permissionMode,
+        askPermission: params.askPermission,
+        permissionRules: params.permissionRules,
+        maxToolResultChars: params.maxToolResultChars,
+        skills: params.skills,
+        tools: resolvedTools,
+        maxTurns,
+        maxPtlRetries: 0,
+        // 子 loop 内主 Stop 不续跑；由 SubagentStop 控制
+        maxStopContinuations: 0,
+        querySource: `subagent:${agentType}`,
+        signal: params.signal,
+        onEvent: params.onEvent,
+        usage: childUsage,
+        model: resolvedModel,
+        effortLevel: resolvedEffort,
+        agentDefinitions: params.agentDefinitions,
+        agentPolicy: policy,
+        spawnDepth,
+      })
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e)
+      return { reason: 'error', detail }
+    }
+  }
+
+  terminal = await runChildLoop()
+
+  // 父会话 usage 先不 merge；worktree 先不删——可能 SubagentStop 续跑
+  // 循环：跑完 → SubagentStop(含 stats) → exit2 则再跑 → 再 Stop…
+  let agentTranscriptPath: string | undefined
+  let summary = ''
+  let isError = false
+  let stats = finalizeSubagentStats({
     messages,
     startTimeMs,
     usage: childUsage,
   })
 
-  const summaryText = lastAssistantText(messages)
-  const failed =
-    terminal.reason === 'error' ||
-    terminal.reason === 'aborted' ||
-    terminal.reason === 'user_prompt_blocked'
-  const isError = failed || !summaryText
-  const summary = isError
-    ? summaryText ||
-      `Subagent ${agentType} ended: ${terminal.reason}${terminal.detail ? ` (${terminal.detail})` : ''}`
-    : summaryText
+  for (;;) {
+    stats = finalizeSubagentStats({
+      messages,
+      startTimeMs,
+      usage: childUsage,
+    })
+    const summaryText = lastAssistantText(messages)
+    const failed =
+      terminal.reason === 'error' ||
+      terminal.reason === 'aborted' ||
+      terminal.reason === 'user_prompt_blocked'
+    isError = failed || !summaryText
+    summary = isError
+      ? summaryText ||
+        `Subagent ${agentType} ended: ${terminal.reason}${terminal.detail ? ` (${terminal.detail})` : ''}`
+      : summaryText
 
-  let agentTranscriptPath: string | undefined
-  const sidePath = resolveSubagentTranscriptPath({
-    // 侧链写在父 cwd 的 sessions，避免 worktree 清理后丢失
-    cwd: params.cwd,
-    agentId,
-    writeTranscript: params.writeTranscript,
-  })
-  if (sidePath) {
-    try {
-      await writeSubagentTranscript({
-        filePath: sidePath,
-        parentSessionId: params.parentSessionId,
-        agentId,
-        agentType,
-        cwd,
-        messages,
-      })
-      agentTranscriptPath = sidePath
-    } catch {
-      // 侧链失败不阻断主结果；hook 不带 path
+    const sidePath = resolveSubagentTranscriptPath({
+      cwd: params.cwd,
+      agentId,
+      writeTranscript: params.writeTranscript,
+    })
+    if (sidePath) {
+      try {
+        await writeSubagentTranscript({
+          filePath: sidePath,
+          parentSessionId: params.parentSessionId,
+          agentId,
+          agentType,
+          cwd,
+          messages,
+        })
+        agentTranscriptPath = sidePath
+      } catch {
+        /* 侧链失败不阻断 */
+      }
     }
+
+    const stopHook = await runHooks(
+      'SubagentStop',
+      {
+        hook_event_name: 'SubagentStop',
+        session_id: params.parentSessionId,
+        cwd: params.cwd,
+        timestamp: nowIso(),
+        agent_id: agentId,
+        agent_type: agentType,
+        ...(agentTranscriptPath
+          ? { agent_transcript_path: agentTranscriptPath }
+          : {}),
+        ...(taskDescription ? { description: taskDescription } : {}),
+        total_duration_ms: stats.totalDurationMs,
+        total_tool_use_count: stats.totalToolUseCount,
+        total_tokens: stats.totalTokens,
+      },
+      params.hooks,
+      { signal: params.signal },
+    )
+
+    const cont = (
+      stopHook.continuationText ||
+      stopHook.blockReason ||
+      ''
+    ).trim()
+    if (
+      stopHook.blocked &&
+      cont &&
+      subStopContinuations < maxSubStopContinuations &&
+      terminal.reason === 'completed'
+    ) {
+      subStopContinuations += 1
+      messages.push({
+        role: 'user',
+        content: `[SubagentStop hook continuation]\n${cont}`,
+      })
+      terminal = await runChildLoop()
+      continue
+    }
+    break
   }
 
-  // 父会话 usage 回卷（同步与后台均可）
+  // 父会话 usage 回卷
   if (params.parentUsage && childUsage) {
     const { mergeSessionUsage } = await import('./sessionUsage.ts')
     mergeSessionUsage(params.parentUsage, childUsage)
@@ -1565,30 +1634,9 @@ export async function runSubagent(
         worktreePath,
       })
     } catch {
-      // 清理失败不阻断
+      /* 清理失败不阻断 */
     }
   }
-
-  await runHooks(
-    'SubagentStop',
-    {
-      hook_event_name: 'SubagentStop',
-      session_id: params.parentSessionId,
-      cwd: params.cwd,
-      timestamp: nowIso(),
-      agent_id: agentId,
-      agent_type: agentType,
-      ...(agentTranscriptPath
-        ? { agent_transcript_path: agentTranscriptPath }
-        : {}),
-      ...(taskDescription ? { description: taskDescription } : {}),
-      total_duration_ms: stats.totalDurationMs,
-      total_tool_use_count: stats.totalToolUseCount,
-      total_tokens: stats.totalTokens,
-    },
-    params.hooks,
-    { signal: params.signal },
-  )
 
   return {
     agentId,

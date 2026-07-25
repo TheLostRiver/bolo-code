@@ -140,6 +140,12 @@ export async function runNewSessionCli(
 
   if (prompt) {
     const turn = await runOnePrompt(session, prompt, { writeOut, writeErr })
+    try {
+      const { endSession } = await import('../../core/src/index.ts')
+      await endSession(session, { reason: 'other' })
+    } catch {
+      /* ignore */
+    }
     return { session, terminalReason: turn.terminalReason }
   }
 
@@ -151,5 +157,11 @@ export async function runNewSessionCli(
   writeErr(
     'Non-interactive terminal: pass a prompt, use --print with text, or --resume. See --help.\n',
   )
+  try {
+    const { endSession } = await import('../../core/src/index.ts')
+    await endSession(session, { reason: 'other' })
+  } catch {
+    /* ignore */
+  }
   return { session }
 }

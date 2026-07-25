@@ -31,10 +31,41 @@ const noMatcher = new Set<string>(HOOK_EVENTS_WITHOUT_MATCHER)
 export const DEFAULT_HOOK_TIMEOUT_SEC = 30
 export const MAX_HOOK_TIMEOUT_SEC = 600
 
+/**
+ * SessionEnd 默认更短（teardown headroom）。
+ * 对照 HC ~1500ms；Codex ~1–3s。可用 hook.timeout 覆盖，仍受 MAX 限制。
+ */
+export const DEFAULT_SESSION_END_TIMEOUT_SEC = 3
+export const MAX_SESSION_END_TIMEOUT_SEC = 30
+
 export function clampHookTimeoutSec(raw: unknown): number {
   const n = typeof raw === 'number' ? raw : Number(raw)
   if (!Number.isFinite(n) || n <= 0) return DEFAULT_HOOK_TIMEOUT_SEC
   return Math.min(MAX_HOOK_TIMEOUT_SEC, Math.max(1, Math.floor(n)))
+}
+
+export function clampSessionEndTimeoutSec(raw: unknown): number {
+  const n = typeof raw === 'number' ? raw : Number(raw)
+  if (!Number.isFinite(n) || n <= 0) return DEFAULT_SESSION_END_TIMEOUT_SEC
+  return Math.min(MAX_SESSION_END_TIMEOUT_SEC, Math.max(1, Math.floor(n)))
+}
+
+/** 某事件 command 的有效超时（秒） */
+export function effectiveHookTimeoutSec(
+  event: HookEvent,
+  hookTimeout: unknown,
+): number {
+  if (event === 'SessionEnd') {
+    if (hookTimeout == null || hookTimeout === '') {
+      return DEFAULT_SESSION_END_TIMEOUT_SEC
+    }
+    return clampSessionEndTimeoutSec(hookTimeout)
+  }
+  return clampHookTimeoutSec(
+    hookTimeout == null || hookTimeout === ''
+      ? DEFAULT_HOOK_TIMEOUT_SEC
+      : hookTimeout,
+  )
 }
 
 export function shouldIgnoreMatcher(event: HookEvent): boolean {
@@ -68,6 +99,8 @@ function matchValueFor(event: HookEvent, input: AnyHookInput): string | undefine
       return typeof rec.tool_name === 'string' ? rec.tool_name : undefined
     case 'SessionStart':
       return typeof rec.source === 'string' ? rec.source : undefined
+    case 'SessionEnd':
+      return typeof rec.reason === 'string' ? rec.reason : undefined
     case 'PreCompact':
     case 'PostCompact':
       return typeof rec.trigger === 'string' ? rec.trigger : undefined
@@ -223,8 +256,16 @@ export type AggregatedHookResult = {
   blocked: boolean
   blockReason: string
   permissionDecision?: PermissionDecision
-  /** UserPromptSubmit exit 0 stdout 可注入 */
+  /**
+   * exit 0 stdout 可注入（UserPromptSubmit / SessionStart / PreCompact /
+   * SubagentStart）
+   */
   injectText: string
+  /**
+   * Stop / SubagentStop exit 2：续跑提示（stderr 优先）
+   * PostToolUse exit 2：立即给模型的反馈
+   */
+  continuationText: string
   /** 是否因 AbortSignal 提前结束 */
   aborted: boolean
 }
@@ -232,6 +273,17 @@ export type AggregatedHookResult = {
 export type RunHooksOptions = {
   /** 会话/工具取消时中止后续 hook 与当前 command */
   signal?: AbortSignal
+  /**
+   * 覆盖默认超时（秒）。SessionEnd 调用方可传短超时；
+   * 仍会经 effectiveHookTimeoutSec / clamp。
+   */
+  defaultTimeoutSec?: number
+}
+
+function pickContinuationText(stderr: string, stdout: string): string {
+  const err = stderr.replace(/\nhook (timeout|aborted)\s*$/i, '').trim()
+  if (err) return err
+  return stdout.trim()
 }
 
 export async function runHooks(
@@ -247,6 +299,7 @@ export async function runHooks(
   let blockReason = ''
   let permissionDecision: PermissionDecision | undefined
   const injectParts: string[] = []
+  const continuationParts: string[] = []
   let aborted = false
   const signal = options?.signal
 
@@ -257,13 +310,12 @@ export async function runHooks(
         aborted = true
         break outer
       }
+      const timeoutSec = effectiveHookTimeoutSec(
+        event,
+        hook.timeout ?? options?.defaultTimeoutSec,
+      )
       const { exitCode, stdout, stderr, timedOut, aborted: hookAborted } =
-        await runCommandHook(
-          hook.command,
-          input,
-          hook.timeout ?? DEFAULT_HOOK_TIMEOUT_SEC,
-          signal,
-        )
+        await runCommandHook(hook.command, input, timeoutSec, signal)
       if (hookAborted) aborted = true
 
       const row: HookRunResult = {
@@ -291,6 +343,26 @@ export async function runHooks(
         blocked = true
         blockReason = stderr || 'PreCompact blocked'
       }
+      // Stop / SubagentStop exit 2：不结束对话，续跑
+      if (
+        (event === 'Stop' || event === 'SubagentStop') &&
+        exitCode === 2
+      ) {
+        row.blocked = true
+        blocked = true
+        const text =
+          pickContinuationText(stderr, stdout) ||
+          `${event} hook requested continuation`
+        blockReason = text
+        continuationParts.push(text)
+      }
+      // PostToolUse exit 2：立即给模型
+      if (event === 'PostToolUse' && exitCode === 2) {
+        const text =
+          pickContinuationText(stderr, stdout) ||
+          'PostToolUse hook feedback'
+        continuationParts.push(text)
+      }
       if (event === 'PermissionRequest' && exitCode === 0) {
         const d = parsePermissionDecision(stdout)
         if (d) {
@@ -302,7 +374,8 @@ export async function runHooks(
       if (
         (event === 'UserPromptSubmit' ||
           event === 'SessionStart' ||
-          event === 'PreCompact') &&
+          event === 'PreCompact' ||
+          event === 'SubagentStart') &&
         exitCode === 0 &&
         stdout.trim()
       ) {
@@ -318,6 +391,7 @@ export async function runHooks(
           blockReason,
           permissionDecision,
           injectText: injectParts.join('\n'),
+          continuationText: continuationParts.join('\n'),
           aborted,
         }
       }
@@ -330,6 +404,7 @@ export async function runHooks(
     blockReason,
     permissionDecision,
     injectText: injectParts.join('\n'),
+    continuationText: continuationParts.join('\n'),
     aborted,
   }
 }

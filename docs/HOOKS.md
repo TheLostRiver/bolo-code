@@ -305,7 +305,7 @@ PreToolUse → (PermissionRequest?) → tool body → PostToolUse
 | `timeout` | command 秒数；默认 **30**；上限 **600**（`clampHookTimeoutSec`） |
 | 超时 | kill 子进程；`exitCode=124`；stderr 含 `hook timeout`；`timedOut: true` |
 | AbortSignal | `runHooks(..., { signal })`；取消 → `exitCode=130`、`aborted: true` |
-| 接线 | Pre/Permission/Post Tool 与 Stop 传 signal；`submitPrompt({ signal })` 透传 |
+| 接线 | Pre/Permission/Post Tool 与 Stop 传 signal；`submitPrompt({ signal })` 透传；**SessionEnd** 默认超时 **3s**（上限 30；`effectiveHookTimeoutSec`） |
 
 对照 HC：hook timeout + parent abort；Bolo **无** async hook 注册表 / 遥测。
 
@@ -313,10 +313,10 @@ PreToolUse → (PermissionRequest?) → tool body → PostToolUse
 
 | 阶段 | 内容 | 状态 |
 |------|------|------|
-| **H0** | **SessionEnd** 类型 + 挂载 + 短超时 | 📋 必做 · 见 ROADMAP §7 |
-| **H1** | Stop / SubagentStop exit 2 续跑 | 📋 |
-| **H2** | PostToolUse exit 2 → 模型 | 📋 |
-| **H3** | SubagentStart stdout 注入 | 📋 |
+| **H0** | **SessionEnd** 类型 + 挂载 + 短超时 | ✅ |
+| **H1** | Stop / SubagentStop exit 2 续跑 | ✅ |
+| **H2** | PostToolUse exit 2 → 模型 | ✅ |
+| **H3** | SubagentStart stdout 注入 | ✅ |
 | **H4** | PreToolUse `updatedInput` | 📋 |
 | **H5** | `/hooks` 诊断增强 | 📋 |
 

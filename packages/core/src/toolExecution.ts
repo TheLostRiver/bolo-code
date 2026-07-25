@@ -1002,7 +1002,17 @@ export async function runToolUse(
     { signal: ctx.signal },
   )
   for (const r of post.results) {
-    emit(ctx, { type: 'hook', event: 'PostToolUse', exitCode: r.exitCode })
+    emit(ctx, {
+      type: 'hook',
+      event: 'PostToolUse',
+      exitCode: r.exitCode,
+      blocked: r.exitCode === 2,
+    })
+  }
+  // H2：exit 2 stderr → 立即并入 tool_result（模型可见）
+  const postFeedback = (post.continuationText || '').trim()
+  if (postFeedback) {
+    content = `${content}\n\n[PostToolUse hook]\n${postFeedback}`
   }
 
   return {

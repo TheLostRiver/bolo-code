@@ -45,6 +45,7 @@ import {
   nowIso,
   type ChatMessage,
   type HooksConfig,
+  type SessionEndReason,
   type SessionPhase,
   type SessionStartSource,
 } from '../../shared/src/index.ts'
@@ -100,6 +101,7 @@ import {
 } from './sessionPersist.ts'
 import {
   writeTranscriptAfterCompact,
+  getTranscriptWriteState,
 } from './sessionTranscript.ts'
 import type { SessionUsage } from './sessionUsage.ts'
 import {
@@ -1301,6 +1303,109 @@ export async function closeSessionMcp(session: BoloSession): Promise<void> {
   if (!session.mcpConnections?.length) return
   await closeMcpConnections(session.mcpConnections)
   session.mcpConnections = []
+}
+
+function resolveSessionTranscriptPath(session: BoloSession): string | undefined {
+  try {
+    const tw = getTranscriptWriteState(session)
+    if (tw?.filePath?.trim()) return tw.filePath.trim()
+  } catch {
+    /* ignore */
+  }
+  try {
+    const meta = getSessionPersistMeta(session)
+    if (meta?.filePath?.trim()) return meta.filePath.trim()
+  } catch {
+    /* ignore */
+  }
+  return undefined
+}
+
+export type EndSessionOptions = {
+  reason?: SessionEndReason | string
+  signal?: AbortSignal
+  /** 覆盖 SessionEnd 默认超时（秒） */
+  timeoutSec?: number
+  /** 结束后是否 close MCP（默认 true） */
+  closeMcp?: boolean
+}
+
+/**
+ * 仅跑 SessionEnd hooks（不改 phase、不关 MCP）。
+ * 用于 /clear：结束「当前对话段」但仍继续同一 session id。
+ */
+export async function runSessionEndHooks(
+  session: BoloSession,
+  options?: Omit<EndSessionOptions, 'closeMcp'>,
+): Promise<void> {
+  const reason = options?.reason ?? 'other'
+  try {
+    const tp = resolveSessionTranscriptPath(session)
+    const end = await runHooks(
+      'SessionEnd',
+      {
+        hook_event_name: 'SessionEnd',
+        session_id: session.id,
+        cwd: session.cwd,
+        timestamp: nowIso(),
+        reason,
+        ...(tp ? { transcript_path: tp } : {}),
+      },
+      session.hooks,
+      {
+        signal: options?.signal,
+        defaultTimeoutSec: options?.timeoutSec,
+      },
+    )
+    for (const r of end.results) {
+      emit(session, {
+        type: 'hook',
+        event: 'SessionEnd',
+        exitCode: r.exitCode,
+      })
+      if (r.exitCode !== 0 && r.stderr?.trim()) {
+        emit(session, {
+          type: 'error',
+          message: `SessionEnd hook: ${r.stderr.trim().slice(0, 500)}`,
+        })
+      }
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    emit(session, {
+      type: 'error',
+      message: `SessionEnd hooks failed: ${message}`,
+    })
+  }
+}
+
+/**
+ * H0：SessionEnd hooks → phase ended → 可选关 MCP。
+ * 对照 HC executeSessionEndHooks / Codex run_session_end：
+ * hook 失败不阻止 teardown；短超时。
+ */
+export async function endSession(
+  session: BoloSession,
+  options?: EndSessionOptions,
+): Promise<void> {
+  if (session.phase === 'ended') return
+
+  setPhase(session, 'stopping')
+  await runSessionEndHooks(session, options)
+
+  if (options?.closeMcp !== false) {
+    try {
+      await closeSessionMcp(session)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      emit(session, {
+        type: 'error',
+        message: `close MCP on endSession: ${message}`,
+      })
+    }
+  }
+
+  setPhase(session, 'ended')
 }
 
 /**

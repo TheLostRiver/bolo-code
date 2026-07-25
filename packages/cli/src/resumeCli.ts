@@ -647,6 +647,13 @@ export async function runRepl(
     }
   } finally {
     rl.close()
+    // H0：REPL 正常退出 → SessionEnd
+    try {
+      const { endSession } = await import('../../core/src/index.ts')
+      await endSession(session, { reason: 'prompt_input_exit' })
+    } catch {
+      /* teardown 失败不抛 */
+    }
   }
 }
 
@@ -704,6 +711,12 @@ export async function runResumeCli(
       writeErr,
     })
     result.terminalReason = turn.terminalReason
+    try {
+      const { endSession } = await import('../../core/src/index.ts')
+      await endSession(result.session, { reason: 'other' })
+    } catch {
+      /* ignore */
+    }
     return result
   }
 
@@ -712,6 +725,12 @@ export async function runResumeCli(
     return result
   }
 
-  // --print 且无 prompt：仅摘要
+  // --print 且无 prompt：仅摘要后结束
+  try {
+    const { endSession } = await import('../../core/src/index.ts')
+    await endSession(result.session, { reason: 'other' })
+  } catch {
+    /* ignore */
+  }
   return result
 }
