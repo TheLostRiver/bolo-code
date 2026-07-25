@@ -49,6 +49,9 @@ tmp_*.out
 scripts/_notes.out
 scripts/*.out
 
-# Local planning scratch (root task_plan/findings/progress 默认纳入版本，便于恢复)
+# Local planning scratch (agent session notes; not product docs)
+findings.md
+progress.md
+task_plan.md
 *.local.md
 .planning/.active_plan
