@@ -35,13 +35,13 @@
 | **多 Provider 热切** | **~92–96%** | P0–P4.1 + CX7 Desktop |
 | **Effort 方言** | **~92–95%** | E0–E9 |
 | **Provider UX** | **~95–98%** | CX0–CX8（ultrathink 默认 off） |
-| Durable Turn | DR0–DR2A + DR2B1 ✅ | admission · recovery · 单 runner · control intent contract |
+| Durable Turn | DR0–DR2B2 ✅ | admission · recovery · 单 runner · safe-boundary steer/interrupt |
 | Electron GUI | ~65–75% | 壳 + 流式 + 权限 + Settings + 多 provider |
 | 相对 HC 全家桶 UI | 另计 | 不设 100% |
 
 **已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Turn DR0–DR2A。
 
-**当前主线：** Durable Turn DR2B2 safe-boundary wiring；DR2B3 ask/CLI races、DR2C recovery projection、DR3 background/subagent、DR4 protocol 后续。
+**当前主线：** Durable Turn DR2B3 permission/diff/CLI races；DR2C recovery projection、DR3 background/subagent、DR4 protocol 后续。
 
 **非阻塞开放轨：** Compact §8.9 · U5 真·Ink/IDE · adaptive thinking · Desktop 体验打磨。
 

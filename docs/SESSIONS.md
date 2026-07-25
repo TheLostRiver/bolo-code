@@ -85,6 +85,23 @@ requestControl(controlId, kind, sessionId, expectedTurnId, ...)
 - interrupt 目前先产生 lease-local signal；DR2B2 接入 queryLoop 后才成为完整运行时动作。
 - controls 暂为进程内投影，不写 transcript；崩溃恢复与 compact 保留规则归 DR2C。
 
+#### DR2B2 queryLoop wiring
+
+`submitPrompt` 将 CLI/调用方的 turn signal 与 coordinator lease signal 合并。`requestControl(kind: "interrupt")` 命中 expected active turn 后，会沿同一 abort 链终止 provider、可取消工具和 permission/diff 等待。
+
+steer 只在以下 message-safe boundary promotion：
+
+| boundary | 行为 |
+|----------|------|
+| `before_provider` | 在 prepare/callModel 前追加 steering user message |
+| `after_tools` | assistant tool_calls 与全部 tool results 闭合后追加 |
+| `after_compact` | compact 尝试完成后追加 |
+| `before_stop` | final assistant 后追加，并继续当前 durable turn |
+
+`after_provider`、`before_tools`、`turn_terminal` 只用于观测/终态，不注入 steer。每次 promotion 发送结构化 `control` event；消息和 terminal 仍由 core 单一状态机维护。
+
+DR2B2 尚未提供 CLI 输入队列菜单，也未持久化 controls；permission/diff ask 的显式退出边界与 CLI control 入口属于 DR2B3，恢复投影属于 DR2C。
+
 ## 2. 快照格式（version 1，只读兼容）
 
 单文件 JSON（旧路径 / `writeJsonSnapshot`），字段包括：

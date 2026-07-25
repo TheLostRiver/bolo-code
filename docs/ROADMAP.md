@@ -31,11 +31,11 @@
 
 **已闭环主线：** headless 日用 → Diff · Hooks · Compact · Provider · Effort · **Provider UX CX0–CX8** · **CLI/Agent 可靠性 R0–R4**。
 
-**当前主线：** **Durable Turn DR2B2**（§13：把 DR2B1 control intent 接入 queryLoop safe boundary；DR2A/DR2B1 已完成）。
+**当前主线：** **Durable Turn DR2B3**（§13：permission/diff ask 退出边界与最小 CLI control；DR2A–DR2B2 已完成）。
 
 **开放轨：**
 
-Durable Turn DR0–DR2A 与 DR2B1 control contract 已落地，DR2B2–DR4 继续开放；非阻塞加深项为 Compact §8.9 · U5 · adaptive thinking · Desktop 体验打磨。
+Durable Turn DR0–DR2B2 已落地，DR2B3–DR4 继续开放；非阻塞加深项为 Compact §8.9 · U5 · adaptive thinking · Desktop 体验打磨。
 
 ---
 
@@ -198,7 +198,7 @@ apps/desktop       消费同一 DiffViewModel                 （U3）
 **一句话：**  
 主路径、Diff、Hooks、Compact、**多 Provider、Effort、Provider UX（含 CX8）、CLI/Agent 可靠性 R0–R4**日用已收口；Durable Turn 正在把“可恢复 transcript”升级为“可恢复执行”。
 
-**下一刀（当前主线）：** Durable Turn **DR2B2 safe-boundary wiring**；随后 DR2B3 ask/CLI races → DR2C recovery projection → DR3 background/subagent → DR4 protocol。
+**下一刀（当前主线）：** Durable Turn **DR2B3 ask/CLI races**；随后 DR2C recovery projection → DR3 background/subagent → DR4 protocol。
 
 **非阻塞加深：** Compact §8.9 · U5 · adaptive thinking · Desktop 体验打磨。
 
@@ -857,7 +857,7 @@ npx tsx scripts/test-worktree-safety.ts
 |------|------|------|
 | **DR0** | 稳定 `turnId` + `admitted/running/completed/error/aborted/interrupted` schema；append-only 投影、幂等与恢复规则 | ✅ |
 | **DR1** | UserPromptSubmit 归约后、provider 前写 admission/running；消息成功落盘后写 terminal；resume 识别未完成 turn | ✅ |
-| **DR2** | `SessionCoordinator`：同 session 单 runner、跨 session 并行、safe-boundary `queue/steer/interrupt` | DR2A/DR2B1 ✅ · DR2B2–DR2C 📋 |
+| **DR2** | `SessionCoordinator`：同 session 单 runner、跨 session 并行、safe-boundary `queue/steer/interrupt` | DR2A–DR2B2 ✅ · DR2B3–DR2C 📋 |
 | **DR3** | 后台 Subagent 任务/结果持久化；真正 queue；结果只在父 turn 安全边界 promotion | 📋 |
 | **DR4** | CLI 任务诊断与恢复动作；稳定 thread/turn 协议，按真实多客户端需求再接 app-server/RPC | 📋 |
 
@@ -901,7 +901,7 @@ UserPromptSubmit hook 成功并归约最终 prompt
 | 切片 | 核心交付 | 验收重点 | 预计提交 |
 |------|----------|----------|----------|
 | **DR2A · Session ownership ✅** | `packages/core` 提供 `SessionCoordinator`；同一 session 最多一个 active runner，不同 session 可并行 | 第二个同 session runner 不得进入 provider/tool；不同 session 不互相阻塞；所有 runner release 路径可证明 | core + tests；docs |
-| **DR2B · Safe-boundary control（B1 ✅）** | B1 定义 `queue/steer/interrupt` intent、状态与 expected turn；B2 接 provider/tool/compact/Stop 边界；B3 接 permission/diff ask 与 CLI | 控制请求只在边界生效；取消与 ask 面板 fail-closed；queued prompt 不丢、不重放 | core + tests；CLI consumer；docs |
+| **DR2B · Safe-boundary control（B1–B2 ✅）** | B1 定义 `queue/steer/interrupt` intent、状态与 expected turn；B2 接 provider/tool/compact/Stop 边界；B3 接 permission/diff ask 与 CLI | 控制请求只在边界生效；取消与 ask 面板 fail-closed；queued prompt 不丢、不重放 | core + tests；CLI consumer；docs |
 | **DR2C · Recovery projection** | coordinator 状态与 durable turn 投影对齐；进程内 control 终态映射到 transcript | crash fixture、duplicate `turnId`、terminal write failure、runner release 组合回归 | core + tests；docs |
 | **DR3A · Durable task schema** | background/subagent task 的 `admitted/running/completed/error/aborted/interrupted` append-only 记录与投影 | task/result 可恢复；未知执行状态只投影 interrupted；结果不自动注入父消息 | core/subagent + tests；docs |
 | **DR3B · Queue + promotion** | `overflow: queue` 接入 coordinator；结果先持久化，只在父 turn safe boundary promotion | 并发上限、FIFO/取消、父 turn 结束竞态、worktree dirty 成果保全 | core/subagent + tests；CLI status；docs |
@@ -927,6 +927,17 @@ UserPromptSubmit hook 成功并归约最终 prompt
 - pending/ready queue 可取消；未 promotion 的 steer 在 owner release 时 cancelled，绝不悄悄变成后续 turn。
 - interrupt 通过 owner-local signal 标记 `interrupt_signal`；DR2B2 才把该 signal 与现有 turn AbortSignal 合并并接入 queryLoop。
 - 当前 control 表是进程内状态，不写 transcript；DR2C 才定义恢复投影。默认 `npm test` 已纳入 `test-session-controls`。
+
+#### DR2B2 已落地契约
+
+- `submitPrompt` 合并 caller AbortSignal 与 runner lease signal，并在 terminal finally 移除 listener、释放 ownership。
+- `queryLoop` 通过 async safe-boundary callback 消费 coordinator 已 promotion 的 controls；callback 本身不得直接修改 messages。
+- steer 只在 `before_provider`、`after_tools`、`after_compact`、`before_stop` 进入消息链；`after_provider` / `before_tools` 只观测，禁止拆开 assistant tool_calls 与 tool results。
+- final assistant 后若在 `before_stop` promotion steer，则跳过 Stop/terminal，继续同一 durable turn 的下一次 provider call。
+- coordinator interrupt 会沿合并后的 signal 终止 provider/tool/permission 链，并归约成 `aborted` terminal；stale expected turn 仍不影响当前 runner。
+- 所有 terminal 路径经过 `turn_terminal` boundary；maxTurns 无剩余预算时不 promotion 新 steer。
+- QueryLoop/Session 发送结构化 `control` promotion event，供后续 CLI/Desktop 消费。
+- 默认 `npm test` 已纳入 `test-session-safe-boundary`，覆盖 final steer、tool pairing 与真实 provider interrupt。
 
 ### 13.5 DR2 状态机与安全边界
 
