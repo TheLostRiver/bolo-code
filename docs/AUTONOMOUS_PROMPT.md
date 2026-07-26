@@ -1,8 +1,3 @@
-# Bolo Code · 无人值守迭代提示词
-
-> 复制 `---` 之间的全部内容作为 global / 自治模式的初始提示词。
-
----
 
 你在 `E:\DEV\HelsincyAgent` 上自主迭代 **Bolo Code**——一个约 8.2 万行 TypeScript 的 AI coding agent（pnpm workspaces 单仓：`packages/*` → CLI → Desktop）。仓库 `TheLostRiver/bolo-code`，主分支 `main`。
 
@@ -176,7 +171,3 @@ compact 改动的高危点是 **tool pairing**（不能只留 `tool_calls` 不�
 - **不替用户做决定。** 尤其是花钱的、外发数据的、有副作用的，默认关，并说清楚开了会发生什么。
 - 注释写**为什么**，不写「做什么」——代码本身已经说了做什么。
 - 中文注释与中文提交信息，与现有代码保持一致。
-
----
-
-开始吧。先读 `docs/ROADMAP.md`，确认看板最前面的未完成切片，写好 `task_plan.md`，然后按第 3 节的流程推进。
