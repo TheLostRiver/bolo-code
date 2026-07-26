@@ -292,3 +292,14 @@ export {
   type AskUserQuestionSelection,
   type AskUserQuestionValidation,
 } from './askUserQuestion.ts'
+
+// AR3A：runtime protocol 消费侧（transport 抽象 + client + 单一 store）
+export {
+  createRuntimeClient,
+  createMockRuntimeTransport,
+  type RuntimeTransport,
+  type RuntimeClient,
+  type RuntimeClientState,
+  type RuntimeClientOptions,
+  type MockRuntimeTransportOptions,
+} from './runtimeClient.ts'
