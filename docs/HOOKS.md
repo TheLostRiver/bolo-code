@@ -198,7 +198,7 @@ type SessionEndInput = HookBaseInput & {
 - exit 0：成功；stdout 默认可不展示  
 - 其他 exit：stderr **仅用户**；**不得**因 hook 失败阻止进程/会话 teardown  
 - 超时：建议 **短于** 普通 hook（teardown headroom；对照 Codex ~1–3s 量级，实现写进 H0）  
-- 挂载：`/clear`、正常退出、登出、resume 替换旧会话前等（见 ROADMAP §7.5）；**禁止**只杀进程跳过  
+- 挂载：`/clear`、正常退出、登出、resume 替换旧会话前等（见 [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md) §H2.2）；**禁止**只杀进程跳过  
 
 ### 3.6 SubagentStart / SubagentStop
 

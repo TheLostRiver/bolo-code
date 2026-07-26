@@ -1,13 +1,13 @@
 # Bolo Code 整体路线图
 
-> **原则：** 日用主路径已收口 ≠ 相对 HC/Codex UI 密度 100%。无 stub 冒充完成。  
-> **永不：** 遥测 · Claude/Codex **官方市场 API**。  
-> **进度真源：** 本文 §0 / 各轨表格。  
+> **原则：** 日用主路径已收口 ≠ 相对 HC/Codex UI 密度 100%。无 stub 冒充完成。
+> **永不：** 遥测 · Claude/Codex **官方市场 API**。
+> **进度真源：** 本文 **§0（唯一状态表）** + §13.11 看板。已完成轨的切片明细与落地契约 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)（只读存档）。
 > **使用手册：** [USAGE.md](./USAGE.md) · **Agent 交接：** [AGENT_HANDOFF.md](./AGENT_HANDOFF.md) · 仓库入口 [README.md](../README.md)
 
 ---
 
-## 0. 一句话进度
+## 0. 一句话进度（唯一状态真源）
 
 | 层 | 粗估 | 说明 |
 |----|------|------|
@@ -18,24 +18,22 @@
 | **Rules / Creators** | **~75–85%** | 日用齐 |
 | **成本与缓存** | **~94–97%** | /cost 日用近满 |
 | **文件 Diff · 日用契约** | **~95%+** | **D0–D7 已收口**；见 [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) |
-| **文件 Diff · 交互 UI** | **~90–95%** | **U0–U4 已落地**（VM · 面板 · 审批 · cell · 行号/主题/轻量语法）；U5 真·Ink/IDE 可选 |
+| **文件 Diff · 交互 UI** | **~90–95%** | **U0–U4 已落地**；U5 真·Ink/IDE 可选（AR4 证据门控） |
 | **斜杠** | **~80–88%** | 日用 + polish |
 | **CLI TUI（壳）** | **~70–80%** | 文本框布局/picker/主题；active Ctrl-C 取消本轮；**非**真 React Ink |
-| **Electron GUI** | **~65–75%** | 壳 + 流式 + 权限 + 设置 + **多 provider（CX7）** |
-| **Hooks · 日用契约** | **~96–98%** | **H0–H5 已落地**（SessionEnd · exit 语义 · updatedInput · `/hooks recent`）；trust/UI 菜单后置 |
-| **Compact · 日用管道** | **~92–95%** | **C0–C5 已落地**；后置 partial/remote/真 tokenizer（§8.9） |
-| **Provider · 多实例热切** | **~92–96%** | **P0–P4.1 + CX7 Desktop**；preset · 错误 · resume（见 §11） |
-| **Effort · 推理强度方言** | **~92–95%** | **E0–E9** 已落地；按模型轻表裁档归 **CX2**；adaptive thinking 后置 |
-| **Provider UX · 便利层** | **~95–98%** | **CX0–CX8 已落地**（含 ultrathink 默认 off）· [PROVIDER_UX.md](./PROVIDER_UX.md) |
+| **Electron GUI** | **~65–75%** | 壳 + 流式 + 权限 + 设置 + 多 provider（CX7） |
+| **Hooks · 日用契约** | **~96–98%** | **H0–H5 已落地**（SessionEnd · exit 语义 · updatedInput · `/hooks recent`） |
+| **Compact · 日用管道** | **~92–95%** | **C0–C5 已落地**；深化中：**AR2A0a/A0b（当前）**→ A1 watermark → A2 safe rewrite（§13.10.2） |
+| **Provider · 多实例热切** | **~92–96%** | **P0–P4.1 + CX7 Desktop** |
+| **Effort · 推理强度方言** | **~92–95%** | **E0–E9 已落地**；adaptive thinking 归 AR4 |
+| **Provider UX · 便利层** | **~95–98%** | **CX0–CX8 已落地**（ultrathink 默认 off）· [PROVIDER_UX.md](./PROVIDER_UX.md) |
 | **产品整体（相对 HC）** | **~74–88%** | 日用高；UI 全家桶另计 |
 
-**已闭环主线：** headless 日用 → Diff · Hooks · Compact · Provider · Effort · **Provider UX CX0–CX8** · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX**。
+**已闭环主线：** headless 日用 → Diff（D0–D7 / U0–U4）· Hooks（H0–H5）· Compact（C0–C5）· Provider（P0–P4.1）· Effort（E0–E9）· Provider UX（CX0–CX8）· 可靠性（R0–R4）· **Durable Runtime（DR0–DR4）** · **Autonomous Road AR1 CLI/TUI runtime UX**。切片明细 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
 
-**当前主线：** **Autonomous Road AR2A1**（§13.10–§13.11）：先定义 Compact partial range / stable watermark 的纯契约与保留边界，尚不接 provider。
+**当前主线：** **AR2A0a · 混合 usage 锚定 token 计数**（§13.10.2）：锚定最近 API 真实 input tokens + 只估算其后追加消息，修复"usage 整体替换估算"导致的 auto compact 迟触发。随后 **AR2A0b**（工具输出中段截断 + 防重摘要标记）→ **AR2A1**（range/watermark 纯契约）。
 
-**开放轨：**
-
-Durable Runtime DR0–DR4 已收口；现在按 §13.10–§13.11 的 AR1–AR5 顺序推进 CLI/TUI、Compact、Desktop 与发布硬化。
+**非阻塞开放项：** U5 真·Ink/IDE · adaptive thinking · Desktop 打磨（均按 AR3/AR4 排期与证据门控）。
 
 ---
 
@@ -46,17 +44,15 @@ Durable Runtime DR0–DR4 已收口；现在按 §13.10–§13.11 的 AR1–AR5 
   textDiff · meta · preview · fileDiffLog · /diff · git · resume · ANSI 摘要
   → 模型链干净；CLI/Desktop 能看懂改了啥
 
-轨 B · 交互 UI 密度（规划 · 目标日用 UI ~90%+ / 全家桶不设 100%）
+轨 B · 交互 UI 密度（U0–U4 ✅ · U5 可选）
   可滚动 Diff 面板 · 权限内嵌 structured 预览 · 写后历史 cell
   → 对齐 HC DiffDialog / FileEditToolDiff · Codex diff_render 语义
-  → 技术选型：优先「无重依赖」终端组件；可选真 Ink；Desktop 面板
 ```
 
 | | 轨 A 日用 | 轨 B UI |
 |--|-----------|---------|
 | 目标 | 工作流正确、可查、可 resume | 浏览体验接近 HC/Codex |
-| 现状 | D0–D7 ✅ | **U0–U4 ✅**；U5 真·Ink / IDE 可选 |
-| 对标 | HC 工具结果 + Codex patch 摘要 | HC Ink 组件 + Codex ratatui |
+| 现状 | D0–D7 ✅ | U0–U4 ✅；U5 真·Ink / IDE 可选 |
 | 不做 | — | 遥测 · 官方市场 · 必抄 React/Rust |
 
 ---
@@ -74,83 +70,18 @@ Durable Runtime DR0–DR4 已收口；现在按 §13.10–§13.11 的 AR1–AR5 
 
 ---
 
-## 3. 文件 Diff · 轨 B（Ink / ratatui 语义 · **规划**）
+## 3. 文件 Diff · 轨 B（U0–U4 ✅ · U5 可选）
 
-> **命名：** 文档称「Ink/ratatui 全家桶」= **对标体验**，不是必须引入 `ink` 或 `ratatui` crate。  
-> Bolo 默认路径：**TypeScript 终端组件 + 复用 D 轨契约**；Desktop 共用同一 view-model。
+| 阶段 | 交付 | 状态 |
+|------|------|------|
+| U0 | 规格 + `DiffViewModel` | ✅ |
+| U1 | 终端 Diff 面板（`/diff` 可滚列表） | ✅ |
+| U2 | 权限预览面板（ask 多文件 + hunk 可滚） | ✅ |
+| U3 | 写后 History cell；Desktop `<details>` 复用 | ✅ |
+| U4 | 行号 · 主题色 · 轻量语法高亮 | ✅ |
+| U5 | 可选真·Ink / IDE / merge-base | 📋 AR4 证据门控 |
 
-### 3.1 对标什么
-
-| HC (Ink) | Codex (ratatui) | Bolo U 轨应对 |
-|----------|-----------------|---------------|
-| `DiffDialog` + `useTurnDiffs` | history `new_patch_event` + pager | 可滚动会话/turn diff 面板 |
-| `FileEditToolDiff` 权限内嵌 | apply_patch approval + 文件列表 | ask 内嵌 structured 预览（可滚） |
-| `StructuredDiff` / 语法高亮 | `diff_render` 行号·折叠·语法 | 行级渲染器（先 ANSI 增强，后高亮） |
-| `FileEditToolUpdatedMessage` | patch apply 历史 cell | 写后 transcript 风格 cell |
-| `useDiffInIDE` | — | **后置 / 可选** |
-| git merge-base / PR | — | **后置**（D5 已有 HEAD 级） |
-
-### 3.2 架构（职责）
-
-```text
-packages/tools     已有：hunk / preview / ansi / git     （不变）
-packages/core      已有：fileDiffLog / events / slash     （+ view-model 导出）
-packages/cli/tui   新增：diffView · diffPane · 键位        （U 轨主战场）
-apps/desktop       消费同一 DiffViewModel                 （U3）
-```
-
-**禁止：** 在 UI 里重算 diff 语义；只消费 `fileDiffLog` / `preview` / `meta` / git helper。
-
-### 3.3 阶段 U0–U5
-
-| 阶段 | 交付 | 相对「交互 UI」 | 状态 |
-|------|------|-----------------|------|
-| **U0** | 规格 + `DiffViewModel`（log/preview→可渲染行） | 契约 | ✅ |
-| **U1** | **终端 Diff 面板**：`/diff` 可滚列表；j/k；Enter 展开；q 退出 | ~60–70% | ✅ |
-| **U2** | **权限预览面板**：ask 多文件 + hunk 可滚；y/a/N | ~75–85% | ✅ |
-| **U3** | **写后 History cell**；Desktop `<details>` 复用 | ~85–90% | ✅ |
-| **U4** | 行号 · 主题色 · 轻量语法高亮（无 tree-sitter） | ~90–95% | ✅ |
-| **U5** | 可选真·Ink / IDE / merge-base | 全家桶尾声 | 📋 |
-
-### 3.4 U1/U2 行为（验收）
-
-```text
-用户: /diff
-  → TTY 全屏/半屏面板（非一次性 dump）
-  → 文件列表 + 总 +N/−M
-  → 选中文件显示 structuredPatch / 或提示 /diff git
-  → q / Esc 回到 REPL
-非 TTY: 纯文本 /diff
-
-权限 ask（Edit/Write/apply_patch 且有 preview.files）:
-  → 同一面板 mode=approve
-  → jk 浏览 · Enter 看 hunk · y allow · a always · n/q deny
-  → BOLO_PERM_DIFF_PANEL=0 回落文本 [y/a/N]
-```
-
-### 3.5 技术选型（建议默认）
-
-| 方案 | 优点 | 缺点 | 建议 |
-|------|------|------|------|
-| **A. 自研 TTY pane**（readline/raw mode，类似 arrowPicker） | 无新依赖；与现 cli 一致 | 能力上限低于 Ink | **U1–U3 默认** |
-| **B. 引入 React Ink** | 对齐 HC 生态 | 依赖重；Electron 已占 GUI | U5 可选 |
-| **C. 只做 Desktop 面板** | 实现快 | CLI 用户无感 | 与 A 并行 U3，不替代 CLI |
-| **D. 嵌 ratatui/Rust** | 对齐 Codex | 双语构建复杂 | **不做** |
-
-### 3.6 明确不做（U 轨内）
-
-- 遥测 / LOC counter  
-- 必抄 HC `StructuredDiff` native 模块  
-- 必引入 ratatui  
-- 把大 patch 写入模型 message  
-
-### 3.7 文档入口
-
-| 文档 | 角色 |
-|------|------|
-| 本文件 §3 | U 轨总规划 |
-| [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) | D 轨完成态 + U 轨切片 |
-| [TUI.md](./TUI.md) | CLI 壳 + U 轨挂载点 |
+对标、架构、选型与验收细节 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md) §H1 · 契约真源 [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) · UI 挂载 [TUI.md](./TUI.md)。
 
 ---
 
@@ -158,49 +89,23 @@ apps/desktop       消费同一 DiffViewModel                 （U3）
 
 | 目标 | 状态 |
 |------|------|
-| Headless Core | ✅ |
-| CLI 可日用 | ✅ |
-| Skill/MCP/Plugin/Subagent | ✅ |
-| Electron 可用壳 | ✅（CX7 多 provider；非 HC 密度） |
-| Diff 日用契约 D0–D7 | ✅ |
-| Diff 交互 UI U0–U4 | ✅（U5 可选） |
-| Hooks 日用 11 事件 + exit 语义 | ✅ **H0–H5** |
-| Compact 日用管道打磨 | ✅ **C0–C5**（后置见 §8.9） |
-| **多 Provider 热切** | ✅ **P0–P4.1**（§9）；Desktop **CX7** |
-| **Effort 方言** | ✅ **E0–E9**（§10） |
-| **Provider UX** | ✅ **CX0–CX8**（§11；ultrathink 默认 off） |
-| **CLI / Agent 可靠性** | ✅ **R0–R4**（§12；流式终态 · runtime · 取消 · worktree · 门禁） |
-| **Durable Runtime** | ✅ **DR0–DR4**（§13） |
-| 无遥测 | ✅ |
+| Headless Core · CLI 可日用 · Skill/MCP/Plugin/Subagent · Electron 壳 | ✅ |
+| Diff 日用 D0–D7 · 交互 UI U0–U4 | ✅ |
+| Hooks H0–H5 · Compact C0–C5 · Provider P0–P4.1 · Effort E0–E9 · Provider UX CX0–CX8 | ✅ |
+| CLI / Agent 可靠性 R0–R4 · Durable Runtime DR0–DR4 · AR1 runtime UX | ✅ |
+| **AR2 Compact depth（A0a/A0b → A1/A2 → B → C）** | 🔄 当前 |
+| AR3 Desktop shell · AR4 证据深水 · AR5 release hardening | 📋 |
+| 无遥测 | ✅ 永不 |
 
 ---
 
-## 5. 总览表（汇报）
+## 5. 总览（汇报口径）
 
-| 里程碑 | 状态 | 一句话 |
-|--------|------|--------|
-| M0–M2 | ✅ | headless 主路径 |
-| M-Loop / Tool / Compact / Slash | ✅ | 日用 |
-| M-Subagent / Cost / MCP / JSONL | ✅ | 日用 |
-| M-TUI（文本壳） | ✅ | 布局/picker/主题；非真 Ink |
-| M4 Electron | ✅ | 壳 + 流式 + 权限 + Settings + 多 provider |
-| **M-Diff-A（D0–D7）** | ✅ | 日用文件 diff 契约 |
-| **M-Diff-B（U0–U4）** | ✅ U0–U4 | 交互 diff UI 主路径收口；U5 可选 |
-| **M-Hooks（H0–H5）** | ✅ H0–H5 | SessionEnd + exit + updatedInput + `/hooks recent` |
-| **M-Compact（C0–C5）** | ✅ C0–C5 | keep · usage · mid-turn · reinject · /context；后置 §8.9 |
-| **M-Provider（P0–P4.1）** | ✅ | 多 provider + `/provider` 热切 + picker；见 §9 |
-| **M-Effort（E0–E9）** | ✅ | 方言引擎 · choosable · 门控 · TTY · doctor |
-| **M-Provider-UX（CX0–CX8）** | ✅ | preset · caps · errors · resume · Desktop · ultrathink |
-| **M-Reliability（R0–R4）** | ✅ | provider fail-closed · new/resume 同构 · Ctrl-C · worktree 保全 · 默认门禁 |
-| **M-Durable-Runtime（DR0–DR4）** | ✅ | admission + recovery + single runner + durable control/task + background FIFO/promotion + protocol closeout |
-| 官方市场 / 遥测 | 🚫 | 永不 |
+状态真源见 **§0**；里程碑逐项明细已并入 §0 与 [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
 
-**一句话：**  
-主路径、Diff、Hooks、Compact、**多 Provider、Effort、Provider UX（含 CX8）、CLI/Agent 可靠性 R0–R4、Durable Runtime DR0–DR4、AR1 CLI/TUI runtime UX**已收口；当前进入 Compact 深度与上下文边界优化。
+**一句话：** 主路径、Diff、Hooks、Compact、多 Provider、Effort、Provider UX、可靠性 R0–R4、Durable Runtime DR0–DR4、AR1 runtime UX 已收口；当前进入 **AR2 Compact 深化**（上下文正确性先于节省率）。
 
-**下一刀（当前主线）：** **AR2A1 range/watermark**：先用固定 message/transcript fixture 定义 partial range、stable watermark、保留区间与拒绝原因，证明 tool pair、lifecycle、resolution 的保留边界后再考虑接入 rewrite/provider。
-
-**非阻塞加深：** Compact §8.9 · U5 · adaptive thinking · Desktop 体验打磨。
+**下一刀（当前主线）：** **AR2A0a 混合 token 计数** → AR2A0b 中段截断/防重摘要 → AR2A1 range/watermark 契约（见 §13.10.2）。
 
 ---
 
@@ -209,12 +114,13 @@ apps/desktop       消费同一 DiffViewModel                 （U3）
 | 文档 | 用途 |
 |------|------|
 | 本文件 | **进度真源** · 总路线 + 各轨水位 |
+| [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md) | **已完成轨存档**（切片明细 · 落地契约） |
 | [USAGE.md](./USAGE.md) | **使用手册**（安装 · Provider · **Agent 配置**） |
 | [AGENT_HANDOFF.md](./AGENT_HANDOFF.md) | **交接手册**（架构 · 入口 · 反模式） |
 | [PROVIDERS.md](./PROVIDERS.md) | Provider 协议与多实例 |
 | [PROVIDER_UX.md](./PROVIDER_UX.md) | CX 便利层（preset · caps · ultrathink） |
 | [EFFORT.md](./EFFORT.md) / [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md) | Effort 方言 |
-| [COMPACTION.md](./COMPACTION.md) | Compact 契约；§8.9 后置 |
+| [COMPACTION.md](./COMPACTION.md) | Compact **实现真源** |
 | [HOOKS.md](./HOOKS.md) | Hook 契约 |
 | [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) | Diff 契约与阶段 |
 | [TUI.md](./TUI.md) | CLI TUI 壳与 U 挂载 |
@@ -227,863 +133,105 @@ apps/desktop       消费同一 DiffViewModel                 （U3）
 
 ---
 
-## 7. Hooks 轨（H0–H5 · **规划 · SessionEnd 必做**）
+## 7. Hooks 轨（H0–H5 ✅ 已收口）
 
-> **口径：** 日用 = 契约事件齐全 + 主路径接线 + exit 语义可依赖。  
-> **不对齐 100%：** HC ~26 事件全家桶 · http/prompt/agent handler · trust/managed · Ink HooksConfigMenu · 遥测。  
-> **对标：** Codex `HOOK_EVENT_NAMES` **11 事件**（Bolo 原 10 + **SessionEnd**）；HC 共享核心语义。
+日用 **~96–98%**：11 事件（Codex 口径原 10 + SessionEnd）· Stop/SubagentStop/PostToolUse exit 2 语义 · SubagentStart 注入 · PreToolUse `updatedInput` · `/hooks recent` 诊断。trust/managed/TUI 菜单后置（不对齐日用口径）。
 
-### 7.1 现状水位（评估后）
-
-| 项 | 状态 |
-|----|------|
-| 原 10 事件名 + `runHooks` 挂点 | ✅ 已接线 |
-| command + timeout/abort + 配置合并 + `/hooks` | ✅ |
-| **SessionEnd** | ✅ **H0** — `endSession` / `runSessionEndHooks`；`/clear` · REPL 退出 · Desktop destroy |
-| Stop / SubagentStop **exit 2 续跑** | ✅ **H1**（预算默认 3） |
-| PostToolUse **exit 2 → 模型** | ✅ **H2**（并入 tool_result） |
-| SubagentStart **stdout 注入子上下文** | ✅ **H3** |
-| PreToolUse **updatedInput** | ✅ **H4**（schema 校验；失败忽略改写） |
-| `/hooks recent` 诊断 | ✅ **H5**（ring · 无遥测） |
-| trust / managed / TUI browser | 后置（不对齐日用 95%） |
-
-**粗估：** 日用 **~96–98%**（11 事件 + exit + rewrite + 诊断）；vs Codex 产品壳（trust/UI）另计。
-
-### 7.2 目标与验收（H 轨完成定义）
-
-1. **SessionEnd** 在会话真正结束路径触发（clear / 退出 / logout 等 reason），失败不拖垮进程  
-2. Stop exit 2：stderr（或约定字段）可见于模型并**可续一轮**（对齐契约「继续对话」）  
-3. SubagentStop exit 2：stderr 给子代理并**继续跑**（非默默忽略）  
-4. PostToolUse exit 2：stderr **立即进入模型可见链**（非仅用户侧 emit）  
-5. SubagentStart exit 0 stdout 可注入子代理上下文  
-6. 单测覆盖 SessionEnd + 上述 exit 路径；无遥测  
-7. `docs/HOOKS.md` 为真源；`HOOK_EVENTS` 含 SessionEnd
-
-### 7.3 架构（职责不变）
-
-```text
-packages/shared     HOOK_EVENTS + 输入类型（+ SessionEnd）
-packages/hooks      runHooks / matcher / command 归约（+ 事件分支）
-packages/core       挂载点：endSession / queryLoop Stop / tool Post / subagent
-packages/cli        可选：hook 失败/timeout 更可读（H5）
-apps/desktop        会话关闭时走同一 endSession（勿只杀进程跳过 hook）
-```
-
-**禁止：** tool 内私自跑 hook；结束路径绕过 `SessionEnd`；把 hook 全文灌进无关 message。
-
-### 7.4 阶段切片（建议实施顺序）
-
-| 阶段 | 交付 | 优先级 | 状态 |
-|------|------|--------|------|
-| **H0** | **SessionEnd 必做**：契约 + 类型 + `endSession`/`close` 挂载 + reason matcher + 短超时 | P0 | ✅ |
-| **H1** | **Stop / SubagentStop exit 2 续跑**：stderr→模型/子代理 + 再入 loop（有预算/防死循环） | P0 | ✅ |
-| **H2** | **PostToolUse exit 2 → 模型可见**（并进 tool_result） | P0 | ✅ |
-| **H3** | **SubagentStart injectText** 进子 `systemPromptSections` | P1 | ✅ |
-| **H4** | **PreToolUse `updatedInput`**（JSON 改写 tool_input；失败则忽略改写） | P2 | ✅ |
-| **H5** | `/hooks recent` · `/hooks failures` 诊断 ring | P2 | ✅ |
-| 后置 | SessionEnd 以外的 HC 扩事件 · http/prompt/agent · trust/managed · FileChanged | — | 🚫 非本轨 |
-
-**顺序硬约束：** **先 H0（SessionEnd）**，再 H1→H2（exit 语义），再 H3–H5。  
-不在 H0 完成前扩散 Notification / Elicitation 等。
-
-### 7.5 H0 · SessionEnd（契约草案）
-
-```ts
-// matcher: reason
-type SessionEndReason =
-  | 'clear'
-  | 'logout'
-  | 'prompt_input_exit'
-  | 'other'
-// 实现可增：'resume' 切换前结束旧会话 等；先对齐 HC 常用子集
-
-type SessionEndInput = HookBaseInput & {
-  hook_event_name: 'SessionEnd'
-  reason: SessionEndReason | string
-  transcript_path?: string
-}
-
-// 语义（对照 Codex/HC）：
-// - exit 0：成功；stdout 默认可不展示
-// - 其他：stderr 仅用户；**不**因 hook 失败阻止进程退出
-// - 超时：短于普通 hook（建议默认 ~3s，上限更严）；teardown 必须有 headroom
-```
-
-挂载点（实现时选齐，禁止只写类型）：
-
-| 时机 | reason 例 |
-|------|-----------|
-| `/clear` 或清空会话 | `clear` |
-| CLI/Desktop 正常退出 | `prompt_input_exit` / `other` |
-| 登出（若有） | `logout` |
-| resume 替换旧会话前 | `other` 或显式 `resume`（若采用） |
-
-### 7.6 H1–H2 · exit 语义（要点）
-
-```text
-Stop exit 2
-  → 收集 continuation 文本（stderr 优先，或 JSON decision）
-  → 注入为对模型可见的续跑输入
-  → 再入 query（max 续跑次数，防 hook 互刷）
-
-SubagentStop exit 2
-  → 同类，作用域=子 loop，不抬升父权限
-
-PostToolUse exit 2
-  → stderr 立即对模型可见（transcript / 下轮 tool 反馈约定写进 HOOKS.md）
-  → 不默默吞掉
-```
-
-### 7.7 明确不做（H 轨内）
-
-- 遥测 / analytics  
-- HC 全量 26 事件一次做完  
-- Codex hook **trust** 与 managed-hooks-only 企业层（可另开轨）  
-- 真·Ink HooksConfigMenu  
-- `type: http|prompt|agent`（仍仅 command；字段可预留）
-
-### 7.8 测试与提交
-
-| 测试 | 覆盖 |
-|------|------|
-| `scripts/test-hooks-*.ts`（扩或新建） | SessionEnd 触发与 reason matcher |
-| | Stop/SubagentStop exit2 续跑预算 |
-| | PostToolUse exit2 模型可见 |
-| | 超时/abort 回归（已有 s8） |
-
-提交建议：`feat: hooks H0 SessionEnd` → `feat: hooks H1-H2 exit semantics` → `feat: hooks H3-H5 inject and UX`；只 stage 本轨。
-
-### 7.9 文档入口
-
-| 文档 | 角色 |
-|------|------|
-| 本文件 §7 | H 轨总规划与顺序 |
-| [HOOKS.md](./HOOKS.md) | 事件/exit/挂载 **实现真源** |
-| [ENGINEERING_PRINCIPLES.md](./ENGINEERING_PRINCIPLES.md) | 扩事件须先改 HOOKS |
-| [AGENT_LOOP.md](./AGENT_LOOP.md) | loop 与 Stop 交叉（实现时同步） |
+- 切片明细与契约草案 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md) §H2
+- **实现真源：[HOOKS.md](./HOOKS.md)**（扩事件须先改此文档）
 
 ---
 
-## 8. Compact 轨（C0–C5 · **日用已收口**）
+## 8. Compact 轨（C0–C5 ✅ · 深化中 → AR2）
 
-> **口径：** 日用 = 摘要真管道 + 阈值/熔断可依赖 + 续作质量（keep）+ 触发时机（usage/mid-turn）+ 压后上下文不丢关键段。  
-> **不对齐 100%：** HC partial / session-memory / cached API edits / reactive 全家 · Codex remote compact / window id / 换模触发。  
-> **对标：** HC `compactConversation` + auto/snip/micro/PTL 语义；Codex 仅借「阈值与 mid-turn 意图」，不抄 remote。  
-> **状态：** **C0–C5 ✅ 已落地**（~92–95% 日用）。下文保留为契约与**后置清单**；**不阻塞 P 轨**。
+日用 **~92–95%**：full/snip/micro/auto/PTL 管道 · keep 按 user 轮次（C1）· usage 阈值（C2）· mid-turn ≤1（C3）· post-compact 再注入（C4）· `/context` 诊断（C5）· `compact_boundary` JSONL/resume。
 
-### 8.1 现状水位（评估后）
+- 切片明细、契约草案与验收 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md) §H3
+- **实现真源：[COMPACTION.md](./COMPACTION.md)**
 
-| 项 | 状态 |
+### 8.9 后置项去向（已移交 / 明确不做）
+
+> C0–C5 无欠债。原"后置清单"已全部归位如下，**不要**在本节重复排期。
+
+| 项 | 去向 |
 |----|------|
-| Full compact + Pre/Post hooks + 禁止 slice 冒充 | ✅ |
-| Auto 阈值（chars 启发）+ 熔断 + env + `/autocompact` | ✅ |
-| Snip 最小 + micro content-clear + prepare 链 | ✅ |
-| PTL 截断重试（loop + summarizer 副本） | ✅ |
-| jsonl `compact_boundary` + resume R1 | ✅ |
-| **messagesToKeep 按 user 轮次 / token** | ✅ **C1** — `splitMessagesForCompactKeep`；默认智能 keep |
-| **auto 阈值接 session usage（有则用）** | ✅ **C2** — `usageInputTokens` / `getUsageInputTokens` |
-| **工具环中途接近阈值再 full 一次** | ✅ **C3** — `tryMidTurnCompact` · 每 outer turn ≤1 |
-| **post-compact 最小再注入**（技能 catalog） | ✅ **C4** — `postCompactReinjection`（可关） |
-| **`/context` 来源与策略** | ✅ **C5** — pressure source · keep · last compact |
-| partial / remote / session memory / 真 tokenizer | 后置 |
-
-**粗估：** 日用 **~92–95%**（C0–C5）；vs HC 全家桶 / Codex 窗口机另计。
-
-### 8.2 目标与验收（C 轨完成定义）
-
-1. Full compact 默认 **按 user 轮次** 保留尾部（可配）；禁止无摘要只 keep  
-2. Auto 阈值：**优先**最近 API `input`/`total` usage（若 session 有），否则回落 `estimateTokens`  
-3. 主 loop 在 **tool 批之后、下一 callModel 前** 可再判一次 auto（mid-turn 最小，有预算防连打）  
-4. compact 成功后可选再注入 **短** skill catalog / path-rules 提示（不灌全文、不拆 cache-stable 前缀策略）  
-5. `/context` 展示：阈值来源（usage vs estimate）、keep 策略、上次 compact 摘要长度  
-6. 单测绿；失败不毁 messages；**无遥测**  
-7. `docs/COMPACTION.md` 为真源
-
-### 8.3 架构（职责）
-
-```text
-packages/compact     纯：keep 切分 · 阈值 · pressure · full/snip/micro/PTL
-packages/core        挂：prepare 链 · compactSession · queryLoop mid 判 · 再注入
-packages/cli         /context · /compact 文案消费 pressure + 策略说明
-apps/desktop         可选展示 compact 状态（不大改壳）
-```
-
-**禁止：** core 内 `slice(-N)` 冒充 full；无 summarizer silent truncate；把大 transcript 塞回 model message；遥测。
-
-### 8.4 阶段切片（实施顺序）
-
-| 阶段 | 交付 | 优先级 | 状态 |
-|------|------|--------|------|
-| **C0** | 规格对齐：本 § + COMPACTION 日用缺口表；验收清单 | P0 | ✅ |
-| **C1** | **messagesToKeep 按 user 轮次**（可选 token 上限）；manual/auto 默认可配 | P0 | ✅ |
-| **C2** | **usage 感知阈值**：`shouldAutoCompact` 可读 last usage；无 usage 则启发 | P0 | ✅ |
-| **C3** | **mid-turn 一次**：tool drain 后若超阈值且未本 turn compact → 试 auto full | P1 | ✅ |
-| **C4** | **post-compact 再注入最小**：catalog 短段；可关 | P1 | ✅ |
-| **C5** | `/context`·`/compact` 诊断加深 + 回归测 + 水位 ~92–95% | P2 | ✅ |
-| 后置 | partial · remote · session memory · 真 tokenizer · cache_edits API | — | 🚫 非本轨 |
-
-**顺序硬约束：** **C0 文档 → C1 keep → C2 usage → C3 mid-turn → C4 再注入 → C5 UX/测**。  
-不在 C1/C2 完成前做 partial/remote。
-
-### 8.5 C1 · keep 轮次（契约草案）
-
-```ts
-// packages/compact — 纯函数
-type KeepTailOptions = {
-  /** 保留最近 N 个 user 开启的 turn（含其后 assistant/tool）；默认建议 2–4 */
-  keepRecentUserTurns?: number
-  /** 可选：keep 段 token 上限，超出从 keep 头再裁 */
-  keepMaxTokens?: number
-}
-
-/** 切点须在 user 边界，不拆开 tool_use/tool_result 对 */
-function splitMessagesForCompactKeep(
-  messages: ChatMessage[],
-  opts?: KeepTailOptions,
-): { toSummarize: ChatMessage[]; messagesToKeep: ChatMessage[] }
-```
-
-- `runFullCompact` / `compactSession` 默认走轮次 keep（或显式 `keepRecentUserTurns`）  
-- 旧 `keepRecentMessageCount`：**兼容**，文档标 deprecated  
-- 安全：tool_use 与对应 tool 结果不得分到 summarize/keep 两侧
-
-### 8.6 C2 · usage 阈值
-
-```ts
-shouldAutoCompact({
-  tokenCount,           // 启发
-  usageInputTokens?,    // 最近成功 call 的 input/total（sessionUsage）
-  contextWindowTokens,
-  enabled,
-  consecutiveFailures,
-  querySource,
-  env?,
-})
-// 有效计数 = usageInputTokens ?? tokenCount
-```
-
-- 有 provider usage 时 auto 更贴真实窗  
-- `/context` 标明 `pressure source: usage | estimate`
-
-### 8.7 C3 · mid-turn（最小）
-
-```text
-queryLoop:
-  … tool drain …
-  if auto on && shouldAutoCompact && !compactedThisTurn
-    → compactSession(auto) 一次
-    → 写回 messages；标记 compactedThisTurn
-  → 下一轮 callModel
-```
-
-- 与 turn 初 prepare 的 auto **共用熔断**  
-- 每 turn 最多 **一次** mid full（防死循环）  
-- 失败：保持 messages，继续（同现 auto）
-
-### 8.8 C4 · 再注入（最小）
-
-compact 成功且非 override system 时：
-
-- 可选刷新 **短** skill catalog 段（可复用 `replaceSkillCatalogSection`）  
-- 不强制重跑全量 memory 正文  
-- 开关：`postCompactReinjection?: boolean`（与现 system 装配一致即可）
-
-### 8.9 明确不做 / 后置（C 轨日用外 · **未完成清单**）
-
-> 以下**不是** C0–C5 欠债，而是对照 HC/Codex 的可选加深；**默认不排进当前 AR1 主线**（选择以 §13.10–§13.11 为准）。若单独开刀再立 C6+ 或独立轨。
-
-| 项 | 来源 | 说明 | 建议 |
-|----|------|------|------|
-| **partial compact** | HC | 按索引 up_to/from 只摘要一段 | 后置；长会话成本优化 |
-| **session memory compact** | HC 实验 | 用会话记忆代替再调 LLM | 后置；依赖 memory 轨成熟度 |
-| **remote compaction** | Codex | 服务端 compact / v2 | 🚫 不追；Bolo 本地管道 |
-| **window_id / auto_compact_window 记账** | Codex | 多窗状态机 | 后置；日用非必须 |
-| **真 tokenizer** | 两边 | 替换 chars/4 启发 | 后置；C2 usage 已缓解 |
-| **cache_edits API** | HC cached MC | 厂商缓存编辑 | 🚫；本地 content-clear 即可 |
-| **path-rules 再注入** | C4 验收曾写 | 现仅 skill catalog | 可选小步；不阻塞 |
-| **mid-turn 与 prepare 共享 consecutiveFailures** | 健壮性 | 现 mid 阈值用 failures=0 | 可选 polish |
-| **`/compact` 显式 `--keep-turns N`** | UX | 契约字段已有，slash 可透传 | 可选小步 |
-
-**禁止误判：** 不要把上表当成「C 轨没做完」；日用验收见 §8.2（已满足）。
-
-### 8.10 测试与提交
-
-| 测试 | 覆盖 |
-|------|------|
-| `test-compact` / `test-compact-c-track` | keep · usage · mid · reinject · /context |
-| 回归 | `test-auto-compact` · `test-ptl-retry` · `test-snip` · `test-microcompact` · `test-context-slash` |
-
-已提交切片（历史）：C0 docs → C1 keep → C2 usage → C3–C5 mid/reinject/context。
-
-只 stage 本轨；**勿提交 `.bolo-tmp/`**。
-
-### 8.11 文档入口
-
-| 文档 | 角色 |
-|------|------|
-| 本文件 §8 | C 轨总规划与**后置清单** |
-| [COMPACTION.md](./COMPACTION.md) | 管道/阈值/**实现真源** |
-| [AGENT_LOOP.md](./AGENT_LOOP.md) | prepare / mid-turn 交叉 |
-| [PROMPT_CACHE.md](./PROMPT_CACHE.md) | 稳定前缀 vs 再注入 |
+| 混合 token 计数（usage 锚定 + 尾部估算） | → **AR2A0a（当前主线）** |
+| 工具输出中段截断 · 防重摘要标记 | → **AR2A0b** |
+| partial compact / watermark | → **AR2A1 / AR2A2** |
+| 真 tokenizer / budget | → **AR2B1 / AR2B2**（A0a 落地后重估必要性） |
+| remote compaction / session-memory | → **AR2C** ADR（默认不实施） |
+| cache_edits API（HC cached MC） | 🚫 不做；本地 content-clear 即可 |
+| path-rules 再注入 · mid-turn 共享 consecutiveFailures · `/compact --keep-turns N` | 可选小步 polish；不排期、不阻塞 |
 
 ---
 
-## 9. Provider 轨（P0–P5 · **P0–P4.1 + CX7 已落地**）
+## 9. Provider 轨（P0–P4.1 + CX7 ✅ 已收口）
 
-> **用户痛点（已解）：** 曾只有单个 `config.provider`；现已支持 **`providers` 表 + 运行中热切**。  
-> **目标：** 配置里同时登记多个 provider；agent 运行中 `/provider` / `/model` 热切，无需关闭进程。  
-> **对标（语义，不抄实现/遥测）：** Codex model_providers · HC 运行时选模。  
-> **Bolo 原则：** key 仍优先环境变量；**不**写遥测；**不**接官方市场。  
-> **便利层：** preset / caps / resume / ultrathink 见 §11 · [PROVIDER_UX.md](./PROVIDER_UX.md)
+多后端热切 **~92–96%**：`providers` 表 + `defaultProvider` · `/provider` list/use/TTY picker · `switchSessionProvider` 热切不重启 · 缺 key fail-closed · resume `providerId` + effort clamp（CX6）· Desktop 多后端（CX7）。
 
-### 9.1 现状水位
-
-| 项 | 状态 |
-|----|------|
-| 单 `provider.kind` + env 推断 | ✅ |
-| 协议：openai-compatible / openai-responses / anthropic / mock | ✅ |
-| `/model` · provider-qualified 糖 | ✅ |
-| `/effort` · `/thinking` · `/ultrathink` | ✅ |
-| **多 provider 配置表** | ✅ `providers` + `defaultProvider` |
-| **运行时切换 provider** | ✅ `switchSessionProvider` · `/provider use` · TTY picker |
-| **缺 key 拒绝切换 + 可行动错误** | ✅ CX3 |
-| **resume `providerId` + effort clamp** | ✅ CX6 |
-| **Desktop 多后端** | ✅ **CX7**（原 P5） |
-
-**粗估：** 多后端热切 **~92–96%**；Provider UX（含 CX8）**~95–98%**。
-
-### 9.2 目标与验收（P 轨完成定义）
-
-1. `config.json` 可声明 **`providers` 映射**（≥2 个命名后端），并指定 **`defaultProvider`**（或 `activeProvider`）  
-2. **兼容**：仅写旧字段 `provider: { kind, ... }` 仍可用（视为隐式 id=`default`）  
-3. 会话启动时装载**全部**（或 lazy）provider 描述；**当前**只绑定一个 `LlmProvider` 实例  
-4. **运行中** `/provider` 列出 id/kind/model；`/provider use <id>` **热切**：换 `session.provider` + 重挂 `deps.callModel`，**不重启**  
-5. `/model`：无参显示当前；有参可 `model` 或 `provider/model`；切模可触发 **prompt-cache break**（本地）  
-6. Key：**不**强制写入项目配置；支持 `apiKeyEnv: "DEEPSEEK_API_KEY"` 或沿用全局 env 回落  
-7. 切换失败（缺 key / 非法 kind）→ **明确错误**，保持旧 provider  
-8. 单测 + `/doctor` 可见当前 provider；**无遥测**  
-9. 文档：`PROVIDERS.md` + `CONFIG.md` 为真源  
-
-### 9.3 架构（职责）
-
-```text
-packages/config     providers[] 解析 · 与旧 provider 兼容 · 不实例化网络
-packages/providers  工厂：id → LlmProvider；createFromProfile(profile)
-packages/core       session.providerId · switchProvider · /provider /model
-packages/cli        启动打印当前；REPL 热切
-apps/desktop        设置里选 active（✅ CX7）
-```
-
-```mermaid
-flowchart LR
-  CFG["config.providers + defaultProvider"] --> REG[ProviderRegistry]
-  REG --> ACTIVE[session.provider + deps.callModel]
-  SLASH["/provider use · /model"] --> SWITCH[switchSessionProvider]
-  SWITCH --> ACTIVE
-  SWITCH --> PCB[promptCache break 可选]
-```
-
-**禁止：** 把多个 apiKey 打进 transcript/日志；切换时静默吞错；为热切引入遥测。
-
-### 9.4 配置形状（草案）
-
-```jsonc
-// ~/.bolo/config.json 或项目 .bolo/config.json（后写覆盖）
-{
-  "version": 1,
-  // —— 新：多实例 ——
-  "defaultProvider": "work",
-  "providers": {
-    "work": {
-      "kind": "openai-compatible",
-      "baseUrl": "https://api.openai.com/v1",
-      "model": "gpt-4o-mini",
-      "apiKeyEnv": "OPENAI_API_KEY"   // 推荐：只写 env 名
-    },
-    "deepseek": {
-      "kind": "openai-compatible",
-      "baseUrl": "https://api.deepseek.com",
-      "model": "deepseek-chat",
-      "apiKeyEnv": "DEEPSEEK_API_KEY"
-    },
-    "claude": {
-      "kind": "anthropic",
-      "model": "claude-sonnet-4-20250514",
-      "apiKeyEnv": "ANTHROPIC_API_KEY",
-      "maxTokens": 8192
-    }
-  },
-  // —— 旧：单 provider 仍支持（无 providers 时）——
-  // "provider": { "kind": "openai-compatible", "model": "..." }
-}
-```
-
-```ts
-type ProviderProfileJson = {
-  kind: 'mock' | 'openai-compatible' | 'openai-responses' | 'anthropic'
-  /** 显示名；缺省用 map key */
-  label?: string
-  baseUrl?: string
-  model?: string
-  /** 不推荐明文；优先 apiKeyEnv */
-  apiKey?: string
-  apiKeyEnv?: string
-  timeoutMs?: number
-  maxTokens?: number
-}
-
-type BoloConfigJson = {
-  // …
-  /** @deprecated 单后端；与 providers 共存时：作为 providers.default 的浅合并源或忽略 */
-  provider?: ProviderProfileJson
-  /** 命名后端表 */
-  providers?: Record<string, ProviderProfileJson>
-  /** 启动默认 id；缺省：providers 第一项或 "default" */
-  defaultProvider?: string
-}
-```
-
-**合并规则（建议）：**
-
-1. 若仅有 `provider` → 合成 `providers = { default: provider }`，`defaultProvider = default`  
-2. 若仅有 `providers` → 用 `defaultProvider` 或 Object.keys[0]  
-3. 两者都有 → `providers` 为主；可选把旧 `provider` 填进缺 id 的 `default`  
-4. env `BOLO_PROVIDER` / keys：**覆盖 active 的 kind/key**（启动时）；热切后以会话选择为准，除非 `/provider reset-env`（可选后置）
-
-### 9.5 运行时 API（草案）
-
-```ts
-// packages/core
-type ProviderRegistry = {
-  profiles: Record<string, ProviderProfileJson>
-  activeId: string
-}
-
-function listSessionProviders(session): Array<{ id, kind, model, label, isActive }>
-function switchSessionProvider(session, id: string, opts?: { model?: string }): { ok, reason? }
-function switchSessionModel(session, model: string): { ok, reason? }
-// 内部：createProviderFromProfile → session.provider = … → session.deps = productionDeps(…)
-//       session.model = profile.model；notePromptCache break
-```
-
-**Slash：**
-
-| 命令 | 行为 |
-|------|------|
-| `/provider` | **TTY**：箭头选后端并热切；非 TTY：文本列表 |
-| `/provider list` | 仅文本列表 |
-| `/provider use <id>` | 热切到该后端（保留对话 messages） |
-| `/provider use <id> <model>` | 切后端并指定模型 |
-| `/model` | 显示 `providerId` + model |
-| `/model <name>` | 仅改当前后端 model |
-| `/model <id>/<name>` | 可选糖：等价 use + model（P2） |
-
-### 9.6 阶段切片（实施顺序）
-
-| 阶段 | 交付 | 优先级 | 状态 |
-|------|------|--------|------|
-| **P0** | 规格：本 § + PROVIDERS/CONFIG 草案；兼容矩阵 | P0 | ✅ |
-| **P1** | `providers` + `defaultProvider` 加载；旧 `provider` 兼容；Registry 类型 | P0 | ✅ |
-| **P2** | `switchSessionProvider` + 重挂 deps；`/provider` list/use | P0 | ✅ |
-| **P3** | `/model` 增强 + cache break + `/doctor` 显示 active | P1 | ✅ |
-| **P4** | CLI 启动摘要 · 错误信息（缺 key）· 单测 | P1 | ✅ |
-| **P4.1** | TTY `/provider` 箭头选择器（不必记 id） | P1 | ✅ |
-| **P5** | Desktop 设置选 provider（最小下拉） | P2 | ✅ **并入 CX7** |
-| 后置 | 远程拉模型列表 · 官方市场 · 按 turn 自动 failover 路由 | — | 🚫 非本轨默认 |
-
-**顺序：** P0–P4.1 ✅ → Desktop 经 **CX7** ✅ → 便利层 **CX0–CX8** ✅。
-
-**日用水位：** 多后端热切 **~92–96%**；UX 便利 **~95–98%**（见 §11）。
-
-### 9.7 与 Compact / 会话交叉
-
-| 交叉 | 行为 |
-|------|------|
-| 热切 provider | **不**自动 compact；可提示「上下文仍在，仅换后端」 |
-| prompt cache | 切换 kind/base/model → **cache-break**（已有 promptCache 观测） |
-| subagent | 默认 **继承** 父 active provider；agent 定义 `model:` 仍可覆盖**模型名**（P2 不强制子换后端） |
-| compact summarizer | 随 `session.provider` 重绑（`createCompactSummarizerFromProvider`） |
-| resume | 快照可存 `providerId`（P3+）；缺省用 defaultProvider |
-
-### 9.8 明确不做（P 轨内）
-
-- 遥测 / 用量上报到第三方  
-- Claude/Codex **官方市场**拉模型  
-- 无配置的「扫描全网 key」  
-- 自动在 provider 间 **failover 重试同一 turn**（可后置）  
-- 把 apiKey 写入 jsonl transcript  
-
-### 9.9 测试与提交
-
-| 测试 | 覆盖 |
-|------|------|
-| `test-provider-unit` 扩 / `test-multi-provider` | 双 profile 加载 · 兼容旧 provider |
-| | switch 后 callModel 走新 base（mock 双 id） |
-| | 缺 key 失败且不破坏旧实例 |
-| | `/provider` `/model` slash |
-| 回归 | 现有 fromEnv · smoke-turn |
-
-提交建议：
-
-1. `docs: plan multi-provider P-track`（本规划）  
-2. `feat: config providers map and defaultProvider`  
-3. `feat: runtime switchSessionProvider and /provider`  
-4. `feat: /model provider-aware and doctor`  
-5. `test+docs: multi-provider waterline`
-
-只 stage 本轨；**勿提交 `.bolo-tmp/`**；**勿把真实 apiKey 写进仓库**。
-
-### 9.10 文档入口
-
-| 文档 | 角色 |
-|------|------|
-| 本文件 §9 | P 轨总规划 |
-| [PROVIDERS.md](./PROVIDERS.md) | 协议 + **多实例配置真源** |
-| [CONFIG.md](./CONFIG.md) | 文件布局与合并 |
-| [PROMPT_CACHE.md](./PROMPT_CACHE.md) | 切换时 cache-break |
+- 切片明细、配置形状与合并规则存档 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md) §H4
+- **配置/协议真源：[PROVIDERS.md](./PROVIDERS.md) · [CONFIG.md](./CONFIG.md)**
+- 明确不做：遥测上报 · 官方市场拉模型 · 同 turn 自动 failover · apiKey 入 transcript
 
 ---
 
-## 10. Effort 轨（E0–E5 闭环 · E6+ 优化）
+## 10. Effort 轨（E0–E9 ✅ 已收口）
 
-> **E0–E5：** 通用 dialect 引擎 + deepseek / openai-responses / anthropic 真·wire。契约 [EFFORT.md](./EFFORT.md)。  
-> **E6+：** 按方言/模型约束可选档、少 400、TTY 选档。设计 [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md)。  
-> **原则：** 表驱动；禁止每品牌永久 TS 适配器；无遥测。
+方言引擎 **~92–95%**：`resolveEffortWire` 表驱动 · deepseek / openai-responses / anthropic-output 真 wire · `providers.*.effort.dialect` 配置 · choosable/门控（E6–E7）· TTY 选择器（E8）· doctor（E9）。原则：**表驱动，禁止每品牌永久 TS 适配器**。
 
-### 10.1 原则（摘录）
+- 切片明细 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md) §H5
+- **契约真源：[EFFORT.md](./EFFORT.md) · [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md)**
+- 后置：adaptive thinking（AR4 证据门控）
 
-```text
-用户意图字符串  →  dialect 表折叠  →  有限 wire shape 打进 body
-禁止：每品牌永久 TS 适配器；禁止只扩枚举不写 wire
-```
+---
 
-### 10.2 阶段
+## 11. Provider UX 轨（CX0–CX8 ✅ 已收口）
+
+**~95–98%**：preset（CX1）· ModelCapability 轻表（CX2）· `explainProviderError`（CX3）· 状态行/tip（CX4）· `/model` 建议（CX5）· resume clamp（CX6）· Desktop（CX7）· ultrathink tip/turn 默认 off（CX8）。
+
+**真源：[PROVIDER_UX.md](./PROVIDER_UX.md)**。
+
+---
+
+## 12. CLI / Agent 可靠性轨（R0–R4 ✅ 已收口）
 
 | 阶段 | 交付 | 状态 |
 |------|------|------|
-| **E0** | 规格：EFFORT.md + 本 § | ✅ |
-| **E1** | `resolveEffortWire` · body patch · 纯函数单测 | ✅ |
-| **E2** | builtin `deepseek-chat` + compatible 接线；`/effort` 超集与预览 | ✅ |
-| **E3** | builtin `openai-responses` → `reasoning.effort` | ✅ |
-| **E4** | `providers.*.effort.dialect` 配置 / 内联 | ✅ |
-| **E5** | anthropic-output：`output_config.effort` + beta · detect · 单测 | ✅ |
-| **E6** | EffortCapabilityView · strict choosable | ✅ |
-| **E7** | Anthropic max 轻门控 | ✅ |
-| **E8** | TTY `/effort` 箭头选择器 | ✅ |
-| **E9** | doctor 一行 + 文档水位 | ✅ |
-| 后置 | adaptive thinking 联动 · pro mode · Desktop · OAI 按模型裁档 | 🚫 |
+| R0 | provider partial-output 报错 → terminal `error`；不持久化截断历史；闭流后才调度工具 | ✅ |
+| R1 | new/resume 共用 workspace runtime 装配；`apiKeyEnv` 不被 env 探测覆盖 | ✅ |
+| R2 | AbortSignal 贯通 submit→queryLoop；active Ctrl-C 取消本轮；ask/diff 取消 fail-closed | ✅ |
+| R3 | subagent worktree 从 repo root 创建；dirty/untracked 成果保全，绝对路径可见 | ✅ |
+| R4 | strict typecheck；model-retry/cli-events/subagent/worktree-safety 入默认门禁 | ✅ |
 
-**顺序：** E0–E9 主路径完成。
-
-### 10.3 文档入口
-
-| 文档 | 角色 |
-|------|------|
-| [EFFORT.md](./EFFORT.md) | **E0–E5 实现契约**（含 §5.3 Anthropic） |
-| [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md) | **E6+ 优化设计**（业界对照 + 阶段） |
-| [REFERENCES.md](./REFERENCES.md) | HC / Codex / OpenCode / Pi effort 摘要 |
-| [PROVIDERS.md](./PROVIDERS.md) | 与 kind / 多实例交叉 |
-| [CONFIG.md](./CONFIG.md) | `effort.dialect` 配置位 |
-| [PROVIDER_UX.md](./PROVIDER_UX.md) | **CX 便利层**（preset · caps · resume · 错误解释） |
+回归入口：`npm test` · `npm run typecheck` · `scripts/test-model-retry|cli-events|cli-resume|worktree-safety.ts`。
 
 ---
 
-## 11. Provider UX 轨（CX · 最好用 / 最稳）
+## 13. Durable Runtime（DR0–DR4 ✅）与 Autonomous Road（AR · 进行中）
 
-> **真源：** [PROVIDER_UX.md](./PROVIDER_UX.md)  
-> **定调：** 健壮 · 可测 · 日用方便；**不**绑 AI SDK、**不**全量 model 生成流水线。  
-> **已定决策：** Preset 先做 · 轻量 caps · resume `providerId`+clamp · ultrathink **默认 off（CX8 已落地 tip/turn）**。
-
-| 阶段 | 交付 | 状态 |
-|------|------|------|
-| **CX0** | 规格本文 + 路线挂链 | ✅ 文档 |
-| **CX1** | `/provider add` preset 表 | ✅ |
-| **CX6** | resume `providerId` + 统一 effort clamp | ✅ |
-| **CX3** | `explainProviderError` | ✅ |
-| **CX2** | ModelCapability 轻表 ∩ dialect | ✅ |
-| **CX4** | 状态行 / 热切 tip | ✅ |
-| **CX5** | `/model` 建议列表 | ✅ |
-| **CX7** | Desktop 对齐（P5） | ✅ |
-| **CX8** | ultrathink tip/turn（默认 off） | ✅ |
-
-**顺序：** `CX0–CX8` 主路径已落地。
-
----
-
-## 12. CLI / Agent 可靠性轨（R0–R4 · P0 已收口）
-
-> **口径：** 本轨修正确性与可恢复性，不用新增功能数量虚抬 §0 百分比。
-> **原则：** provider 未确认成功前不产生本地工具副作用；取消必须贯穿整轮；隔离失败不得静默回落。
-
-| 阶段 | 交付 | 状态 |
-|------|------|------|
-| **R0** | provider 在 partial text / reasoning / tool call 后报错时返回 terminal `error`；不持久化截断 assistant/tool history；成功闭流后才调度工具 | ✅ |
-| **R1** | `createSessionFromWorkspace` / `resumeSessionFromWorkspace` 共用 provider、hooks、skills、plugins、agent policy、compact、MCP 装配；自定义 `apiKeyEnv` 不被通用 env 探测覆盖 | ✅ |
-| **R2** | `submitUserInput → submitPrompt → queryLoop` 贯通 `AbortSignal`；REPL 每 turn 独立 controller；active Ctrl-C 取消本轮，idle Ctrl-C 退出；权限与 diff pane 取消时 fail-closed | ✅ |
-| **R3** | subagent worktree 从 Git repo root 创建且拒绝跨仓库复用；仅在 clean 时非 force 删除；modified/untracked/ignored、复用目录、清理失败均返回绝对路径并保留；请求隔离但创建失败时模型调用为 0 | ✅ |
-| **R4** | 恢复 strict typecheck；`model-retry`、`cli-events`、`subagent`、`worktree-safety` 纳入默认 `npm test` | ✅ |
-
-### 12.1 可靠性验收
-
-- provider partial-output error 不得变成 `completed`，也不得执行已收到的 tool call
-- PTL 只在 provider 尚无 text / reasoning / tool 输出时重试
-- new / resume 使用同一 workspace runtime 语义
-- turn 取消不会卡在权限文本问答或 diff 审批面板
-- worktree 中的 modified / untracked / ignored 成果默认可恢复，保留原因对调用方可见
-- `npm test` 与 `npm run typecheck` 均为绿色门禁
-
-### 12.2 回归入口
-
-```bash
-npm test
-npm run typecheck
-npx tsx scripts/test-model-retry.ts
-npx tsx scripts/test-cli-events.ts
-npx tsx scripts/test-cli-resume.ts
-npx tsx scripts/test-worktree-safety.ts
-```
-
----
-
-## 13. Durable Runtime 轨（DR0–DR4 ✅）
-
-> **目标：** 把“turn 结束后保存 transcript”升级为“输入先 admission、执行有生命周期、崩溃后可识别未完成工作”。
->
-> **边界：** 首批复用 append-only JSONL；不上 SQLite，不先建 daemon/app-server；未知工具副作用绝不自动重放。
->
+> **目标：** 把"turn 结束后保存 transcript"升级为"输入先 admission、执行有生命周期、崩溃后可识别未完成工作"。
+> **边界：** 复用 append-only JSONL；不上 SQLite / daemon / RPC；未知工具副作用绝不自动重放。
 > **依赖方向：** 先改 `packages/*` 契约，再让 CLI/Desktop 消费；前端不得维护第二套 turn 状态。
 
 | 阶段 | 交付 | 状态 |
 |------|------|------|
-| **DR0** | 稳定 `turnId` + `admitted/running/completed/error/aborted/interrupted` schema；append-only 投影、幂等与恢复规则 | ✅ |
-| **DR1** | UserPromptSubmit 归约后、provider 前写 admission/running；消息成功落盘后写 terminal；resume 识别未完成 turn | ✅ |
-| **DR2** | `SessionCoordinator`：同 session 单 runner、跨 session 并行、safe-boundary `queue/steer/interrupt` | ✅ DR2A–DR2C3 |
-| **DR3** | 后台 Subagent 任务/结果持久化；真正 queue；结果只在父 turn 安全边界 promotion | ✅ DR3A–DR3B |
-| **DR4** | CLI 任务诊断与恢复动作；稳定 thread/turn 协议，按真实多客户端需求再接 app-server/RPC | ✅ DR4A–DR4C |
+| **DR0–DR1** | 稳定 `turnId` + lifecycle schema · admission 先于 provider · resume 识别 interrupted | ✅ |
+| **DR2** | `SessionCoordinator` 单 runner · safe-boundary queue/steer/interrupt · control 持久化/恢复/crash 收口 | ✅ DR2A–DR2C3 |
+| **DR3** | durable task/result · overflow FIFO · 父 turn 安全边界 promotion | ✅ DR3A–DR3B |
+| **DR4** | runtime protocol v1 · CLI 诊断/恢复（discard/retry-safe）· closeout | ✅ DR4A–DR4C |
 
-### 13.1 DR0–DR1 契约
+各切片落地契约详情 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md) §H6。
 
-```text
-UserPromptSubmit hook 成功并归约最终 prompt
-  → append turn(admitted, turnId, prompt)
-  → append turn(running, turnId)
-  → messages.push(user)
-  → queryLoop
-  → save messages
-  → append turn(completed | error | aborted, terminalReason)
-```
-
-- hook blocked：不 admission；沿用 `user_prompt_blocked`
-- 同一 `turnId` 已存在：不得再次调用 provider/tool，返回明确 error
-- transcript 中最后状态为 admitted/running：resume 投影为 `interrupted`
-- terminal 必须晚于消息成功落盘；若 terminal 写入失败，恢复时宁可显示 interrupted
-- `max_turns` 等非成功终态映射为 error，并保留原 `terminalReason`
-- in-memory embedding 可显式不落盘；CLI/workspace 持久化主路径必须满足上述顺序
-
-### 13.2 DR0–DR1 验收
-
-- provider 在被调用时，磁盘已经存在同一 `turnId` 的 admitted + running
-- completed/error/aborted 均有最后状态，prompt 只在 admitted 保存一次
-- 相同 `turnId` 重复 submit 的 provider 调用次数为 0
-- 只有 admitted/running 的崩溃 fixture 在 resume 后显示 interrupted，且不自动执行
-- compact rewrite 不擦除 turn lifecycle
-- `npm test` 默认包含 durable turn 回归；`npm run typecheck` 绿色
-
-### 13.3 DR2–DR4 顺序约束
-
-1. DR2 先统一同 session runner 与 safe boundary，再暴露真正 queue/steer
-2. DR3 后台 agent 只能通过 coordinator 回写，禁止异步直接 `messages.push`
-3. DR4 的 app-server/RPC 是协议消费者，不反向侵入 core
-4. 在 DR2 前不宣称崩溃后自动继续；在工具幂等契约完善前不自动重放 interrupted turn
-
-### 13.4 实施切片（按顺序）
-
-| 切片 | 核心交付 | 验收重点 | 预计提交 |
-|------|----------|----------|----------|
-| **DR2A · Session ownership ✅** | `packages/core` 提供 `SessionCoordinator`；同一 session 最多一个 active runner，不同 session 可并行 | 第二个同 session runner 不得进入 provider/tool；不同 session 不互相阻塞；所有 runner release 路径可证明 | core + tests；docs |
-| **DR2B · Safe-boundary control（B1–B3 ✅）** | B1 定义 `queue/steer/interrupt` intent、状态与 expected turn；B2 接 provider/tool/compact/Stop 边界；B3 接 permission/diff ask 与 CLI | 控制请求只在边界生效；取消与 ask 面板 fail-closed；queued prompt 不丢、不重放 | core + tests；CLI consumer；docs |
-| **DR2C · Recovery projection（C1–C3 ✅）** | C1 定义 control append-only schema/projection；C2 接 session/coordinator lifecycle 持久化；C3 收口 crash/rewrite/failure 竞态 | crash fixture、duplicate control/turn id、terminal write failure、runner release、compact rewrite 组合回归 | core + tests；docs |
-| **DR3A · Durable task schema ✅** | background/subagent task 的 `admitted/running/completed/error/aborted/interrupted` append-only 记录与投影 | task/result 可恢复；未知执行状态只投影 interrupted；结果不自动注入父消息 | core/subagent + tests；docs |
-| **DR3B · Queue + promotion ✅** | `overflow: queue` 接入 coordinator；结果先持久化，只在父 turn safe boundary promotion | 并发上限、FIFO/取消、父 turn 结束竞态、worktree dirty 成果保全 | core/subagent + tests；CLI status；docs |
-| **DR4A · Runtime protocol ✅** | transport-neutral 的 session/turn/task snapshot 与 command/result schema；版本与 feature negotiation | 序列化 round-trip、未知字段兼容、非法状态迁移 fail-closed | shared/core + tests；docs |
-| **DR4B · CLI diagnostics（B1–B2 ✅）** | B1 list/inspect/interrupt/cancel protocol executor；B2 append-only discard/retry-safe，明确区分“查看”“丢弃”“显式重试” | 默认永不 replay；危险动作有明确目标与结果；new/resume 共用协议投影 | core contract；CLI + tests；docs |
-| **DR4C · Protocol closeout ✅** | 用真实 CLI consumer 反馈收紧协议；没有第二客户端需求，因此不引入 app-server/RPC | core 不依赖传输层；兼容旧 transcript；端到端 crash/restart 回归 | protocol + consumer；docs |
-
-#### DR2A 已落地契约
-
-- 默认 `SessionCoordinator` 是进程级 runtime domain，按稳定 `sessionId` 分槽；两个 `BoloSession` 对象只要 id 相同也共享 ownership。
-- `tryAcquire` 在 `submitPrompt` 第一个 `await` 前同步完成；忙碌时返回 `session runner busy`，不运行 hook/provider/tool，不 admission，不修改 messages，也不覆盖 active phase。
-- lease 用不可伪造 token 释放且 `release()` 幂等；normal、hook blocked、provider error、abort、durable admission failure 均由最外层 `finally` 回收。
-- 不同 session 使用独立 slot，可真正并行；这不是全局串行锁。
-- DR2A 只承诺单进程 ownership。跨进程/daemon 锁、queue/steer/interrupt、active abort controller 归 DR2B–DR4，不提前伪装完成。
-- 默认 `npm test` 已纳入 `test-session-coordinator`。
-
-#### DR2B1 已落地契约
-
-- `steer` / `interrupt` 必须携带 `expectedTurnId`，并与当前 active owner 精确一致；无 active、缺 expected、stale expected 均稳定拒绝。
-- `controlId` 是幂等键：同 payload 重试返回原记录且不重复入队；同 id 不同 payload 返回 `control_id_conflict`。
-- control 状态为 `pending | ready | promoted | cancelled`；快照只暴露纯数据，不泄漏 AbortController。
-- `queue` 在 active turn 期间保持 pending，owner release 的 terminal boundary 后才 ready；session idle 时只能 FIFO `takeNextQueued`，取出即 promoted。
-- pending/ready queue 可取消；未 promotion 的 steer 在 owner release 时 cancelled，绝不悄悄变成后续 turn。
-- interrupt 通过 owner-local signal 标记 `interrupt_signal`；DR2B2 才把该 signal 与现有 turn AbortSignal 合并并接入 queryLoop。
-- B1 的裸 coordinator 表仍可作为显式 in-memory embedding；产品 request/cancel/promote/take/release 已由 DR2C2 session wrapper 写入 transcript。默认 `npm test` 已纳入 `test-session-controls`。
-
-#### DR2B2 已落地契约
-
-- `submitPrompt` 合并 caller AbortSignal 与 runner lease signal，并在 terminal finally 移除 listener、释放 ownership。
-- `queryLoop` 通过 async safe-boundary callback 消费 coordinator 已 promotion 的 controls；callback 本身不得直接修改 messages。
-- steer 只在 `before_provider`、`after_tools`、`after_compact`、`before_stop` 进入消息链；`after_provider` / `before_tools` 只观测，禁止拆开 assistant tool_calls 与 tool results。
-- final assistant 后若在 `before_stop` promotion steer，则跳过 Stop/terminal，继续同一 durable turn 的下一次 provider call。
-- coordinator interrupt 会沿合并后的 signal 终止 provider/tool/permission 链，并归约成 `aborted` terminal；stale expected turn 仍不影响当前 runner。
-- 所有 terminal 路径经过 `turn_terminal` boundary；maxTurns 无剩余预算时不 promotion 新 steer。
-- QueryLoop/Session 发送结构化 `control` promotion event，供后续 CLI/Desktop 消费。
-- 默认 `npm test` 已纳入 `test-session-safe-boundary`，覆盖 final steer、tool pairing 与真实 provider interrupt。
-
-#### DR2B3 已落地契约
-
-- `AskPermissionFn` 接收 core 合并后的 turn/runner signal；即使自定义 UI 不监听 signal，core 也会用 abort race 按 deny 收口，interrupt 不会把 runner 永久挂在 ask。
-- permission 决策返回或被取消后访问 `after_permission`；带结构化文件 preview 时再访问 `after_diff_approval`。两者只观察 coordinator，不 promotion steer，保证 assistant tool_calls 与 tool results 配对完整。
-- `/turn status|steer|interrupt|queue|cancel` 直接消费 core coordinator；expected active turn、幂等与状态转换仍只由 core 判断。
-- CLI REPL 在询问下一次人工输入前 FIFO 取得一条 ready queue；使用 control 中原有 `turnId/prompt/querySource` admission，取出即 promoted，绝不重放。
-- Ctrl-C 优先针对 snapshot 中的真实 active turn 提交 interrupt intent；只在 ownership 前的极短窗口或本地 slash 面板回退 AbortController。
-- 默认 `npm test` 已纳入 `test-session-permission-boundary` 与 `test-turn-cli`，覆盖 ask/interrupt、diff cancel、ask-time steer pairing、queue/cancel/drain/turnId。
-
-#### DR2C1 已落地契约
-
-- transcript 新增并列 `control` entry，记录 control/session/turn refs、kind/state、prompt/querySource、boundary、timestamp/detail；不保存 signal、controller 或其它进程句柄。
-- `projectDurableControls` 按 controlId last-wins：重启时 `pending/ready` 只投影为带 `interruptedFrom` 的 diagnostic `interrupted`，不会自动重新入队；`promoted/cancelled` 保留为已发生事实。
-- parser 对坏行/未知状态 fail-closed；旧 transcript 无 control 时保持可读。
-- compact/shrink rewrite 保留完整 control lifecycle，与 turn/title/note/file_diff 一样不进入模型 messages。
-- 默认 `npm test` 已纳入 `test-session-control-recovery`；产品 lifecycle wiring 已由 DR2C2 接到该 schema。
-
-#### DR2C2 已落地契约
-
-- `appendSessionControlState` 与 session-level runtime wrappers 覆盖产品 request、cancel、safe-boundary promotion、CLI queue take、Ctrl-C interrupt 与 runner release；裸 coordinator API继续保留纯内存语义。
-- accepted queue/steer 必须先写 transcript 才返回；写失败立即 fail-closed cancelled，不会进入消息或执行队列。
-- interrupt signal 已应用但落盘失败时不会伪装成拒绝；调用方收到明确 persistence warning，runner 仍沿 abort 链退出。
-- promotion/take 只有 durable state 写成功才把 steer/prompt 交给消息链或 CLI 执行；写失败时返回空结果并保留可诊断 warning。
-- lease `releaseWithBarrier` 在 terminal transitions 落盘期间保持 session busy，并拒绝新 control 为 `turn_releasing`；barrier 成败都释放 owner，未审计 ready queue 会转为 cancelled。
-- `BoloSession.durableControls` 在 resume 时由 transcript 恢复；pending/ready 仍只变为 interrupted diagnostic，绝不自动重建 coordinator queue。
-- 默认 `npm test` 已纳入 `test-session-control-persistence`，覆盖 append 顺序、duplicate、release barrier、resume 与持久化失败。
-
-#### DR2C3 已落地契约
-
-- 同一 transcript 的 append、首次 meta ensure、message batch 与 compact/shrink rewrite 共享按绝对路径串行的进程内 write barrier；不同 session 文件不互相阻塞。
-- barrier 前一写失败不会毒化后续队列；所有路径在 finally 解锁，不会把 session 永久卡在持久化等待。
-- rewrite 在读取旧 lifecycle 到原子 rename 的完整窗口持有 barrier，期间到达的 control append 会等待并在 rewrite 后追加，不再被覆盖。
-- 截断 JSONL 尾行与未知/冲突 duplicate 行继续 fail-closed 跳过；已确认的 pending/ready 恢复为 interrupted，不自动重放。
-- `test-session-control-crash` 覆盖确定性 append-vs-rewrite 竞态、32 路并发追加、单次 EIO 恢复、截断尾行与冲突 controlId；与 C1/C2/release failure 测试共同完成 DR2C 验收。
-- 该 barrier 仍是单进程文件写正确性，不冒充跨进程锁；跨进程/daemon 只有真实需求后才另立协议。
-
-#### DR3A 已落地契约
-
-- transcript 新增并列 `task` lifecycle 与 `task_result` entry；`taskId` 使用 background `agentId`，与父 `turnId` 分离，并通过可选 `parentTurnId` 建立关联。
-- createSession 为 background store 绑定 session-level durable lifecycle：worker 启动前先顺序写 `admitted → running`；完成时先写 `task_result`，再写 `completed | error | aborted` terminal。
-- completed/error/aborted 没有先行 result 时，投影 fail-closed 跳过 terminal；result 或 terminal 写失败时绝不伪造成功，磁盘保留 running，重启按 interrupted 诊断。
-- resume 投影 `session.durableTasks`，把 admitted/running 保守恢复为带 `interruptedFrom` 的 interrupted；`/bg` 可区分 done/error/aborted/interrupted，但不会重启 worker。
-- background Promise 不再异步 `messages.push(system)`；durable result 只进入 transcript/store。父消息 promotion 明确留给 DR3B 的 safe boundary。
-- compact/shrink rewrite 保留 task/result entries；旧 transcript 无 task 时继续可读。默认 `npm test` 已纳入 task crash、result write EIO、父 turn 关联、旧 transcript、rewrite 与旧 subagent 回归。
-
-#### DR3B 已落地契约
-
-- `agents.overflow: "queue"` 在 cap 满时真正建立 FIFO：先 durable `admitted` 并显示 QUEUED，取得 slot 时同步保留 ownership、durable 写 `running`，成功后才启动 worker。
-- 可执行 start closure 与 drain barrier 只存在于 store 的 WeakMap runtime；公开 store 只暴露 queued ids/状态。resume 把 admitted/running 恢复 interrupted，绝不重建 queue 或自动执行。
-- 每个 terminal 都在 finally pump queue；单 store drain barrier 与 slot reservation 防止并发完成超 cap，也关闭 cancel-vs-start 竞态。
-- `/bg status` 展示 queued/running/done/error/aborted/interrupted；`/bg cancel <taskId>` 只取消 queued。取消先从 executable FIFO 移除，再写 result→aborted；写失败显示 warning，磁盘 admitted 在重启后仍为 interrupted。
-- durable terminal 成功后 background worker 只把 task id 放入 delivery FIFO。queryLoop 作为唯一消息 owner，在 `before_provider`、`after_tools`、`after_compact`、`before_stop` 推送结构化 `<background_task_result>` user message 并发出 `background_result` event。
-- result 在父 turn terminal 后才完成时不会异步改 messages；它等待下一 turn `before_provider`。同进程 delivery 只消费一次；重启后仅 `/bg` 诊断，不猜测是否应重复 delivery。
-- 默认 `npm test` 已纳入 FIFO、cap、queued cancel、cancel EIO、restart diagnostic、cancel-vs-start、parent terminal race 与 single-delivery；R3 worktree dirty 成果保全继续通过。
-
-#### DR4A 已落地契约
-
-- `packages/shared` 提供 runtime protocol v1 的纯 JSON 类型、常量、hello/feature negotiation 与 snapshot/command/result parser；协议不绑定 stdio、IPC、HTTP、daemon 或 RPC。
-- snapshot 统一 `session + runner + turns + controls + tasks` view-model。`packages/core` builder 只读取 durable records、coordinator public snapshot 与 background 纯数据 entry，显式复制字段；provider、tool、AbortController、Promise、lease、callback、queue closure 不会跨边界。
-- durable 与 live 状态按 id 合并：live control 覆盖旧 durable 副本；live task 可把 admitted 显示为 queued，并保留 completed result。候选 snapshot 会再次经过 shared parser 自校验。
-- object 的新增未知字段会被忽略并规范化返回；未知 protocolVersion、kind/action、生命周期枚举、跨 session 记录、重复实体 id 均 fail-closed。
-- DR4A 初始 v1 command 只定义已有 core 语义证明的 `runtime.inspect | turn.interrupt | control.cancel | task.cancel`；后续动作必须保持同一 expected-state/fail-closed 规则，且不宣称远程 server。
-- 默认 `npm test` 已纳入 runtime protocol round-trip、未知字段、feature negotiation、非法 expectedState、跨 session/duplicate、result envelope 与运行时对象泄漏回归。
-
-#### DR4B1 已落地契约
-
-- `executeRuntimeCommand` 是 transport-neutral executor：先构建同一 v1 snapshot 核对 session/target/expectedState，再复用 durable `requestSessionControl`、`cancelSessionControl` 与 queued background cancel。
-- `requestId` 直接作为 interrupt control 的幂等 id；同请求重复不会多发 signal/control，不同 payload 冲突稳定返回 `state_conflict`。
-- action 已生效但持久化或后置 snapshot 有问题时返回 `ok: true + warnings`，不把已发 interrupt/已取消项误报为未执行。
-- `/runtime list|json|inspect [turn|control|task]` 只消费 protocol snapshot；`/runtime interrupt <turnId>` 与 `/runtime cancel <control|task> <id>` 只构造/执行 protocol command，不读取 coordinator 私有状态。
-- target 消失、expectedState 变化、running/queued/pending/ready 竞态都 fail-closed。DR4B1 不 replay interrupted work，也没有实现 discard/retry-safe。
-- 默认 `npm test` 已纳入 executor、slash actions、幂等/stale target、旧 `/turn`/`/bg` 与 protocol warning result 回归。
-
-#### DR4B2 已落地契约
-
-- transcript 新增 append-only `resolution` entry；`discard` 只记录人工确认，不删除 turn/control/task 历史。resume、parser 与 compact rewrite 都保留 resolution，旧 transcript 不需要迁移。
-- runtime v1 新增 `runtime.discard | runtime.retry-safe`、nested resolution view 与 `not_retry_safe`。target 必须显式携带 `sessionId + entity + entityId + expectedState=interrupted`。
-- retry-safe 只接受 `interruptedFrom=admitted` 且保留 prompt 的 turn，或原状态为 pending/ready 的 queue control；running turn、steer 与 background task 一律拒绝，绝不自动 replay。
-- retry-safe 先以 requestId 稳定派生新的 control/turn，写 replacement admitted 后进入 ready FIFO；原 ID 永不复活。预留 turn 只有在同 prompt 的 queue 已 promoted 时才能进入 `submitPrompt`。
-- 同 requestId/payload 幂等；同一 entity 的不同 resolution 冲突。若 queue 已接受而 resolution 后写失败，result 保持 accepted + warning；marker 阻止换 requestId 重复排队，原 requestId 可只补齐审计。
-- `/runtime discard <turn|control|task> <id>` 与 `/runtime retry-safe <turn|control|task> <id>` 只组装 protocol command。默认 `npm test` 已纳入 provenance、resume/rewrite、safe/unsafe eligibility、重复请求、持久化失败与 slash 回归。
-
-#### DR4C 已落地契约
-
-- 默认门禁新增 `test-runtime-closeout`，把真实 crash → resume → `/runtime retry-safe` → CLI FIFO drain → `runOnePrompt` 单次执行 → 再次 resume 串成端到端回归；provider 只调用一次。
-- retry-safe 后若尚未消费就再次重启，replacement turn/control 只恢复为 admitted/ready provenance 的 interrupted 诊断；coordinator queue 为空，原 resolution 与 replacement 仍可分别 inspect。
-- new 与 resume 的 `/runtime json|inspect` 都经同一个 core protocol projection；DR4A 旧 v1 snapshot 缺少 DR4B optional 字段与新 feature 时仍可解析，未知 lifecycle/action 继续拒绝。
-- transcript resolution 只在引用同 session、同 kind/id、最终为 interrupted 的可投影实体时恢复；retry-safe 还必须引用同 session replacement turn。orphan、跨 session、kind mismatch、completed target 与非法 replacement 行 fail-closed 跳过，不再毒化全部 runtime 诊断。
-- `buildRuntimeSnapshot` 对程序内非法 source 的严格 invariant 没有放宽。当前没有第二客户端需求，因此没有引入 SQLite、daemon、app-server 或 RPC。
-
-### 13.5 DR2 状态机与安全边界
+### 13.5 Safe boundary（现行语义，AR 各轨继续遵守）
 
 ```text
-idle
-  └─ submit(turnId) ─→ admitted ─→ running
-                                  ├─ boundary: promote queued control
-                                  ├─ boundary: provider/tool/ask handoff
-                                  └─ terminal ─→ completed | error | aborted
-
-同 session:
-  active runner = 0..1
-  queued controls = ordered append-only intent
-
-跨 session:
-  各自 coordinator slot 独立；仅共享显式全局并发限制
+idle → submit(turnId) → admitted → running
+                         ├─ boundary: promote queued control
+                         ├─ boundary: provider/tool/ask handoff
+                         └─ terminal → completed | error | aborted
 ```
 
-第一版 safe boundary 只承诺以下位置：
-
-1. provider 调用开始前与完整响应归约后
-2. 每个 tool call 的 `PreToolUse` 前与 `PostToolUse` 后
-3. permission ask / diff approval 返回或被取消后
-4. compact 完成、失败或决定跳过后
-5. turn terminal 落盘前
-
-不得把 token chunk、半个 tool call、正在写文件、正在改 worktree 当成 safe boundary。`steer` 第一版是“在下一安全边界追加归约后的用户意图”，不是修改已发出的 HTTP 请求或篡改当前 assistant message。
-
-### 13.6 DR3 持久化与 promotion 规则
-
-- background task 与 turn 使用不同 id/type，不能复用 `turnId` 冒充父 turn。
-- task admission 必须包含父 session/turn、agent type、isolation 与最小恢复元数据；不得保存密钥。
-- task result 先写 durable record，再进入 completed；写结果失败时不得向父 turn 宣称成功。
-- 子任务、定时器、事件回调均不得直接修改 `session.messages`；只能提交 coordinator intent。
-- 父 turn 不存在、已 terminal 或无安全边界时，结果保持 pending/persisted，由 CLI 显示，绝不静默丢弃。
-- worktree cleanup 继续遵循 R3：只有确认 clean 才自动删除，dirty/reused/cleanup failure 都保留绝对路径。
-
-### 13.7 DR4 协议边界与非目标
-
-协议先服务本地 CLI 与 Desktop，共享最小稳定字段：
-
-```text
-Protocol v1 = protocolVersion + kind + advertised features
-SessionView = sessionId + cwd + phase + runner + turns + controls + tasks
-TurnRef     = sessionId + turnId
-TaskRef     = sessionId + taskId (+ parentTurnId)
-Command     = requestId + action + target ref + expectedState
-Result      = requestId + action + ok + snapshot | stable diagnostic
-```
-
-DR4 仍然不是以下内容：
-
-- 不承诺网络 daemon、远程多租户、云同步或官方市场。
-- 不为“以后也许需要”引入 SQLite、消息队列或 RPC 框架。
-- 不允许客户端自己推导第二套状态机；CLI/Desktop 只消费 core 投影。
-- 不提供“自动继续所有 interrupted work”；只有被证明幂等且用户显式请求的 retry-safe 动作才可重试。
+Safe boundary 只承诺：provider 调用前/完整响应归约后 · 每个 tool 的 PreToolUse 前 / PostToolUse 后 · ask/diff 返回或取消后 · compact 完成/失败/跳过后 · terminal 落盘前。不得把 token chunk、半个 tool call、正在写文件当成 safe boundary。
 
 ### 13.8 固定质量门禁与自治规则
 
@@ -1096,173 +244,107 @@ DR4 仍然不是以下内容：
 5. 代码/测试与文档分批 commit；push 后确认远端 commit。
 6. ROADMAP、专题文档、AGENT_HANDOFF 与人类可见行为保持同一水位。
 
-自主迭代时遇到以下情况必须停止扩张并保留可接手状态：
+自主迭代遇到以下情况必须停止扩张并保留可接手状态：同一根因三种方案仍失败 · 需要 SQLite/daemon/RPC/外部服务 · 必须覆盖无法确认归属的脏文件 · 发现数据丢失/权限放宽/自动副作用重放/worktree 成果丢失风险 · push 遇到认证或非快进冲突。
 
-- 同一根因连续三种方案仍失败。
-- 需要引入 SQLite、daemon、app-server/RPC 或外部服务。
-- 必须覆盖、清理或提交无法确认归属的既有脏文件。
-- 发现数据丢失、权限放宽、自动副作用重放或 worktree 成果丢失风险。
-- push 遇到认证、保护规则或无法安全解决的非快进冲突。
+### 13.9 DR0–DR4 总体验收（已达成，回归由默认门禁维持）
 
-### 13.9 DR0–DR4 总体验收
+同 session 至多一个 runner · 跨 session 并行不串状态 · control 只在 safe boundary promotion · crash 后可区分 completed/失败/取消/interrupted · duplicate 幂等 0 次 provider 调用 · background 结果不越父 turn 边界 · CLI 默认不 replay · 旧 JSONL 可读、rewrite 不擦 lifecycle。
 
-- 任意时刻同一 session 至多一个 provider/tool runner。
-- 跨 session 并行不共享可变 messages，也不串错 turn/task 事件。
-- queue/steer/interrupt 只在文档化 safe boundary promotion。
-- crash 后能区分 completed、明确失败、明确取消与未知 interrupted。
-- duplicate idempotency key 的 provider/tool 调用次数为 0。
-- background 结果可恢复、可诊断、不会越过父 turn 边界写消息。
-- CLI 能列出安全动作；默认动作不自动 replay。
-- 旧 JSON/JSONL 会话仍可读取，compact rewrite 不擦除 lifecycle/task/resolution 记录。
-- `npm test` 与 `npm run typecheck` 为默认绿色门禁。
+### 13.10 Autonomous Road（AR1–AR5）
 
-### 13.10 Durable Runtime 之后
-
-DR0–DR4 收口后进入 Autonomous Road（AR）。一次只推进一个可独立验收的切片；顺序是可靠性与可操作性优先，再做上下文效率和 UI 密度。
+一次只推进一个可独立验收的切片；可靠性与可操作性优先，再做上下文效率和 UI 密度。
 
 | 阶段 | 准入条件 | 交付切片 | 完成定义 |
 |------|----------|----------|----------|
-| **AR1 · CLI/TUI runtime UX** | DR4 protocol 已稳定，CLI 不再读取 coordinator 私有结构 | AR1A turn/task list + inspect；AR1B queue edit/remove + safe actions；AR1C 文本/TTY pager 与可选 `--json` 自动化输出 | new/resume/print 共用 core view-model；非 TTY 不等待输入；默认不 replay；CLI 竞态与快照测试进入 `npm test` |
-| **AR2 · Compact depth** | Durable lifecycle 不再改写 transcript 基本形状 | AR2A partial range/watermark；AR2B provider-aware tokenizer budget；AR2C remote/session-memory 仅在本地契约证明收益后评估 | 旧 transcript 可读；tool pairing/lifecycle 不被 compact 擦除；token/cost 回归可量化；失败回退现有 C0–C5 |
-| **AR3 · Desktop product shell** | DR4 view-model 至少被 CLI 稳定消费一个阶段 | AR3A protocol client/store；AR3B session/turn/task 导航；AR3C markdown/tool/diff/approval cards；AR3D composer queue/steer/interrupt；AR3E provider/effort/settings；AR3F crash/restart、键盘与性能收口 | 采用 Codex App 风格的信息架构与克制视觉；renderer 不重算权限、diff、turn/task 状态；mock + 真 core IPC 冒烟；Windows 打包主路径可复现 |
-| **AR4 · Evidence-driven depth** | AR1–AR3 暴露真实痛点或可测收益 | U5 真 Ink/IDE bridge、adaptive thinking、hook trust UI、远程模型列表分别独立立项；无证据则记录“不实施”理由关闭 | 每项有用户场景、基准或兼容需求；禁止仅为对齐 HC/Codex 代码量引入重依赖 |
-| **AR5 · Release hardening** | 所有已选择产品轨完成 | 迁移/兼容矩阵、崩溃与磁盘故障 fixture、安装/升级/卸载、跨平台 smoke、性能预算、安全审计、文档与 release checklist | clean clone 可安装；默认门禁全绿；无密钥/遥测；已知限制和恢复步骤可由人类文档独立执行 |
+| **AR1 · CLI/TUI runtime UX** ✅ | DR4 protocol 稳定 | AR1A query · AR1B safe actions/queue edit · AR1C pager/automation | ✅ 全部收口；详情 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md) §H7 |
+| **AR2 · Compact depth（当前）** | Durable lifecycle 不再改写 transcript 基本形状 | **A0a/A0b 借鉴增强 → A1/A2 watermark → B tokenizer/budget → C remote ADR**（§13.10.2） | 旧 transcript 可读；tool pairing/lifecycle 不被 compact 擦除；token/cost 回归可量化；失败回退 C0–C5 |
+| **AR3 · Desktop product shell** | DR4 view-model 被 CLI 稳定消费一个阶段 | AR3A client/store → AR3B 导航 → AR3C cards → AR3D composer → AR3E settings → AR3F hardening | Codex App 风格信息架构；renderer 不重算状态；mock + 真 core IPC 冒烟；Windows 打包可复现 |
+| **AR4 · Evidence-driven depth** | AR1–AR3 暴露真实痛点或可测收益 | U5 Ink/IDE · adaptive thinking · hook trust UI · 远程模型列表——逐项 `implement / defer / reject` | 每项有场景/基准/兼容证据；无证据则书面关闭 |
+| **AR5 · Release hardening** | 所有已选产品轨完成 | 迁移/兼容矩阵 · 故障注入 · 安装生命周期 · release gate | clean clone 可安装；默认门禁全绿；无密钥/遥测；恢复手册可独立执行 |
 
-#### 13.10.1 AR1 · CLI/TUI runtime UX 细化
+#### 13.10.2 AR2 · Compact depth（上下文正确性先于节省率）
 
-| 切片 | packages-first 契约 | 人类可见结果 | 专项验收 | 状态 |
-|------|---------------------|--------------|----------|------|
-| **AR1A · query** | `RuntimeSnapshot → runtime.list/runtime.inspect` 纯 view-model；记录深拷贝；CLI 独立 consumer | `bolo runtime list [entity] --resume … [--json]`、`runtime inspect …`；`--continue` 可用；不显示 banner/summary | 参数顺序、missing/load/not-found、JSON 单 payload、真实 bin、无 provider call、`/runtime` 共用 selector | ✅ `4c3db76` |
-| **AR1B1 · action discovery** | 只由 snapshot/target/state 推导 `availableActions`；每个动作携带 expected state，不读取 coordinator 私有结构 | inspect/list 能告诉用户“现在可安全做什么”；非法动作在执行前可解释 | completed/interrupted/pending/ready/running/queued 矩阵；旧 snapshot additive 兼容 | ✅ `673df59` |
-| **AR1B2 · queue remove/edit** | remove 复用 durable cancel；edit 是“cancel 旧 control + append 新 queue/turn”，新 ID、旧历史保留，禁止原地改 prompt | protocol executor 与同进程 `/runtime edit\|remove` 可替换/删除尚未开始的 live queue；running/promoted/interrupted 默认拒绝 | FIFO、duplicate request、stale expected state、cancel 成功/new append 失败的 partial-accept warning | ✅ `3643530` |
-| **AR1B3 · command closeout** | query/command 共享稳定 result/error envelope；accepted + warning 不诱导换 requestId 重试 | text/JSON 都能区分 usage、rejected、accepted-with-warning | persistence failure、restart 后非 executable queue、并发 target 变化、exit 0/1/2 | ✅ `9f9a9f8` |
-| **AR1C1 · text/pager** | renderer 输入仅为 AR1 view-model；分页状态不进入 core/session | 大列表可分页/筛选；窄屏、NO_COLOR、非 TTY 不挂起 | 0/1/N 行、窄终端、重定向、Ctrl-C/EOF | ✅ `89309e6` / `136ac2e` / `30ea8ea` |
-| **AR1C2 · automation closeout** | JSON schema/排序/错误码稳定；原 `/runtime json` 保持 protocol snapshot 兼容 | 脚本无需清洗 ANSI/banner/summary；help/USAGE 完整 | golden snapshot、stdout/stderr 分离、参数排列、旧会话 | ✅ `d26aef4` / `58e0d66` |
+**借鉴调研结论（2026-07 · HC = Claude Code 语义 · Codex = OpenAI Codex CLI 语义；只借鉴语义与失败模式，不抄路径/遥测）：**
 
-AR1C 内部执行顺序与提交边界：
-
-| 子切片 | 先落契约 / 测试 | 后接消费层 | 完成定义 | 建议代码提交 |
-|--------|-----------------|------------|----------|--------------|
-| **AR1C1a · pure renderer** | `RuntimeQueryView → RuntimeTextPage` 纯函数；columns/page/pageSize/color/filter 均显式输入 | 顶层 runtime text 与 slash runtime 复用同一行格式 | 0/1/N、turn/control/task、inspect、窄屏、NO_COLOR golden；不修改输入 view | `feat(cli): render paged runtime views` |
-| **AR1C1b · pager model** | page clamp、next/previous/quit key reducer；分页状态只存在 consumer 内 | TTY driver 复用现有 raw-mode/read-key primitive | next/prev、q/Esc/Ctrl-C/EOF；无条目与单页不进入等待；异常时恢复 raw mode | `feat(cli): page interactive runtime views` |
-| **AR1C1c · CLI integration** | 可注入 isTty/columns/rows/readKey/writeOut，保证可测 | `bolo runtime list|inspect` 仅在 text + TTY + 多页时启 pager；pipe/JSON 一次性输出 | 非 TTY 永不读 stdin；退出码与 AR1A/B 不变；真实 bin 与 pipe 回归 | 与 C1b 同批或独立小提交 |
-| **AR1C2a · automation schema** | 稳定 query success/error envelope、字段顺序与 entity 排序；保留 protocol v1 snapshot | `--json` stdout 单 payload，诊断只进 stderr | golden、旧 transcript、unknown additive fields、missing/not-found/load failure | `fix(cli): stabilize runtime automation output` |
-| **AR1C2b · surface closeout** | parser/help matrix 与兼容 fixture | help、USAGE、AGENT_HANDOFF、ROADMAP 同步 | `--resume/--continue/--json/--request-id` 排列；new/resume 不加载 provider；默认 `npm test` 纳入全部专项 | `docs: close autonomous runtime UX` |
-
-AR1C 明确非目标：
-
-- 不把 page、filter、cursor、terminal columns 写入 session、snapshot、protocol 或 JSONL。
-- 不为 pager 引入 Ink/React/ratatui；若现有 TypeScript primitive 无法通过验收，再按 AR4 独立举证。
-- 不改变 interrupted 默认只诊断、不 replay 的语义；renderer 不根据按钮可见性自行执行动作。
-- 不让 JSON/pipe 路径输出 ANSI、clear-screen、banner、provider warning 或人类摘要。
-
-AR1A–AR1C2 已完成。AR1C 的落地契约如下：
-
-- 纯 renderer 位于 `packages/core/src/runtimeTextView.ts`，CLI 与 `/runtime list` 共用 `RuntimeQueryView → RuntimeTextPage`，不复制 selector/formatter。
-- pager 位于 `packages/cli/src/tui/runtimePager.ts`；page 只存在当前调用栈，只有 text + stdin/stdout 双 TTY + 多页才读键。`n/j/↓/→` 与 `p/k/↑/←` 翻页，`q/Esc/EOF` 正常退出，`Ctrl-C` exit 130，reader error exit 1，所有终态恢复 raw mode。
-- pipe 与 `--json` 永不读 stdin，均一次性输出完整结果且不带 ANSI/banner；JSON success 保持原始 query view，failure 固定为 `{ok:false,code,detail}`，JSON usage failure 也只向 stdout 写单 payload 并 exit 2。
-- 默认 `npm test` 已纳入 runtime query/action/queue/command、renderer、pager、automation 全部专项；参数排列、help、旧 snapshot 与真实 bin 兼容均有回归。
-
-#### AR1B2 已落地契约
-
-- protocol v1 additive 增加 `commands.replace` / `control.replace`。target 必须携带 `controlId + expectedState=pending|ready`，replacement 必须提供非空 prompt；success 可返回 `replacedControlId/controlId/turnId`。
-- `availableActions` 只为 pending/ready queue 显示 `control.replace`，并声明 `requiredInput=["prompt"]`；steer 仍只有 cancel，promoted/interrupted/terminal 不显示 edit。
-- executor 先完成 kind/state/runner/ID 冲突 preflight：pending queue 必须仍关联当前 active turn，ready queue 必须仍处于 idle session。
-- edit 先 append-only cancel 旧 control，再以 requestId 稳定派生新 control/turn 并追加到 FIFO 尾部；旧 prompt/history 保留，不伪装维持原队列位置。
-- 完整成功后同 requestId 返回同一 replacement；不同 requestId 或 stale/promoted target 返回 state conflict。cancel 已生效但新 admission 失败时保持 `ok:true + warnings` 且不返回 replacement，避免诱导危险重试。
-- `/runtime edit <controlId> <prompt>` 与 `/runtime remove <controlId>` 只操作当前进程的 executable queue。顶层 `bolo runtime list|inspect --resume …` 仍是只读查询；进程退出后 pending/ready 已恢复为 interrupted，不伪装跨进程 live edit。
-- 默认 `npm test` 已纳入 `test-runtime-queue-edit`，覆盖 ready/pending、FIFO、duplicate/conflict、stale/steer、slash、result round-trip 与 replacement admission EIO。
-
-#### AR1B3 已落地契约
-
-- 顶层 CLI additive 支持 `bolo runtime discard|retry-safe <turn|control|task> <id> --resume <session>|--continue [--json]`，只接恢复后仍有明确协议语义的 actions；不暴露跨进程 interrupt/cancel/edit/remove。
-- query 与 command 都在 provider/banner/summary 之前分流，恢复事件与 key warning 使用 no-op sink；JSON 成功/拒绝/load failure 均保持 stdout 单 payload，text accepted 走 stdout、rejected 走 stderr。
-- command JSON 直接使用 protocol `runtime.result`；accepted/accepted-with-warning exit 0，load/target/state/persistence rejected exit 1，参数/组合/缺 session exit 2。
-- CLI 默认按 `sessionId/action/entity/entityId` 稳定派生 requestId，也支持 `--request-id <id>` 显式覆盖；ID 遵守 protocol 长度与控制字符约束。warning 后默认重试复用同 ID，不会无意建立另一 replacement。
-- 顶层 retry-safe 只 durable-admit queue，不调用 provider；result 必带 consumer warning，说明非交互进程退出后 replacement 会在下次 resume 变为 interrupted diagnostic，不宣称已经执行。
-- `test-runtime-cli-command` 覆盖 parser/help、稳定/显式 requestId、discard 幂等、changed target、not-retry-safe、persistence failure、partial warning、不同 ID 冲突、同 ID 修复、restart non-executable 与真实 bin exit 0/1/2。
-
-#### 13.10.2 AR2–AR5 细化
-
-##### AR2 · Compact depth（上下文正确性先于节省率）
+- **HC：** `tokenCountWithEstimation` 锚定最近带真实 API usage 的消息、只估算其后增量（×4/3 保守垫）→ A0a。`lastSummarizedMessageId` watermark + partial compact `up_to`/`from` 双向 → A1/A2。摘要 9 段结构 + `<analysis>` 剥离（Bolo 已有）。PTL 重试 + 3 连败熔断（Bolo 已有）。cache_edits 微压缩 → 🚫 不做。
+- **Codex：** 工具输出**中段截断**（保头保尾 + `original ~N tokens, M lines` 标注，默认 ~10k bytes）→ A0b。`SUMMARY_PREFIX` + `is_summary_message` 防重摘要 → A0b。`CompactedItem` 内嵌 replacement_history + window_number/UUIDv7 链 → A1 契约参考。软/硬双阈值 + fallback buffer → B2 参考。remote compaction → 🚫 不追。
+- **Bolo 现状差距：** token 计数纯启发式（chars/4，dense/2），`usageInputTokens` 存在时整体替换估算 → API 响应后新追加 tool result 对阈值不可见，auto compact 迟触发；工具输出截断 head-only；二次 compact 会把旧 summary 当普通历史重新叙述。
 
 | 切片 | 准入 / packages-first 交付 | 集成与验收 | 完成或停止门槛 |
 |------|---------------------------|------------|----------------|
-| **AR2A1 · range/watermark** | AR1 完成；定义 partial range、stable watermark、保留区间与拒绝原因的纯类型/纯函数 | 仅用固定 message/transcript fixture 验证边界、幂等、空范围、重复 compact；尚不接 provider | 契约无法表达 tool pair、lifecycle 或 resolution 保留时停止集成，先修契约 |
+| **AR2A0a · 混合 token 计数（当前）** | `UsageAnchor`（anchorInputTokens + anchoredMessageCount + role/toolCall 指纹）· `hybridTokenCount` 纯函数 · `shouldAutoCompact`/`resolveAutoCompactTokenCount` opt-in 扩展 | sessionUsage 记 `messageCountAtCall`；deps/queryLoop 传锚；`/context` 显示 `pressure source: hybrid`；锚失效（snip/compact 改头）→ 回退全量估算 | 旧 usage/estimate 路径与既有测试语义不变；micro 改写不毁锚；否则回退 |
+| **AR2A0b · 中段截断 + 防重摘要** | `truncateMiddle`（保头尾 + 原始 tokens/行数标注 + 幂等）· 表驱动 per-tool 预算 · `COMPACT_SUMMARY_MARKER` / `isCompactSummaryMessage` · re-compact 合并提示 | toolExecution 执行边界升级（spill 全量落盘不动）；microcompact 复用同 util；二次 compact 注入 merge 提示 | 截断只在产出时应用一次，绝不回溯改写历史消息；spill 文件保持完整 |
+| **AR2A1 · range/watermark** | 定义 partial range、stable watermark、保留区间与拒绝原因的纯类型/纯函数（参考 HC `lastSummarizedMessageId` 与 Codex window 链语义） | 仅用固定 message/transcript fixture 验证边界、幂等、空范围、重复 compact；尚不接 provider | 契约无法表达 tool pair、lifecycle 或 resolution 保留时停止集成，先修契约 |
 | **AR2A2 · safe rewrite** | A1 全绿；把 range 接入现有 C0–C5 compact/rewrite barrier | tool call/result 不拆对；durable turn/control/task/resolution 不丢；旧 transcript 可读；写失败完整回退 | 任一 fixture 出现不可恢复丢失、半写或自动 replay，立即回退并停止本刀 |
-| **AR2B1 · tokenizer registry** | A2 稳定；在 providers/shared 契约层定义 provider/model→tokenizer/budget，unknown 使用保守 fallback | renderer/core 不出现 provider 分支；mock 与至少两类方言 fixture；预算错误 fail-closed | 若必须联网或引入不可审计 native 依赖，只保留接口与 fallback，不引入实现 |
-| **AR2B2 · measurable budget** | B1 可复现；建立固定中英文本、tool/diff、长 JSON 语料 | 记录 token 偏差、compact 后成本、延迟与峰值内存；设回归阈值并进默认或分层门禁 | 没有相对当前估算的稳定收益，不替换默认算法，只保留基准结论 |
-| **AR2C · remote decision** | A/B 已证明本地瓶颈且有真实跨会话需求 | 写 ADR：local-only、remote/session-memory 之一；列隐私、离线、兼容与失败回退 | 需要新服务、遥测或不透明存储时默认“不实施”，关闭而非永久挂起 |
+| **AR2B1 · tokenizer registry** | A2 稳定；**先重估必要性**（A0a 已显著提升精度）；若仍需要：providers/shared 契约层 provider/model→tokenizer/budget，unknown 保守 fallback | renderer/core 不出现 provider 分支；mock 与至少两类方言 fixture；预算错误 fail-closed | 若必须联网或引入不可审计 native 依赖，只保留接口与 fallback，不引入实现 |
+| **AR2B2 · measurable budget** | B1 可复现；固定中英文本、tool/diff、长 JSON 语料 | 记录 token 偏差、compact 后成本、延迟与峰值内存；设回归阈值 | 没有相对当前估算的稳定收益，不替换默认算法，只保留基准结论 |
+| **AR2C · remote decision** | A/B 已证明本地瓶颈且有真实跨会话需求 | 写 ADR：local-only、remote/session-memory 之一；列隐私、离线、兼容与失败回退 | 需要新服务、遥测或不透明存储时默认"不实施"，关闭而非永久挂起 |
 
-AR2 提交顺序：A1 契约/测试 → A2 接线 → B1 registry → B2 benchmark/阈值 → C 决策文档。每刀都必须能单独回滚到 C0–C5，不以“压缩率更高”交换 transcript 可恢复性。
+AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 registry（重估后）→ B2 benchmark → C 决策文档**。每刀都必须能单独回滚到 C0–C5，不以"压缩率更高"交换 transcript 可恢复性。
 
 ##### AR3 · Codex App 风格 Desktop（薄 renderer）
 
 | 切片 | packages-first / IPC 契约 | Codex App 风格人类结果 | 专项门禁 |
 |------|---------------------------|------------------------|----------|
-| **AR3A · client/store** | protocol version negotiation、snapshot/query/command client、单一 normalized store；mock 与真 core adapter 同接口 | 启动后能看到 session 状态，断线/不兼容有明确空态，不把 core 对象泄到 renderer | protocol round-trip、unknown fields、stale command、IPC timeout/reconnect；store 不产生第二状态机 |
-| **AR3B · navigation/recovery** | session/turn/control/task selector 与 selection route 纯模型 | 左侧 session 导航、主区 turn timeline、任务/控制诊断抽屉；interrupted 明确 inspect/discard/retry-safe | 大会话、旧 transcript、missing target、crash/restart；默认不 replay |
-| **AR3C · content cards** | markdown/tool/diff/approval view-model 继续来自 packages；卡片只负责呈现 | 克制的 Codex App 信息密度：消息流、tool 状态、diff、approval、错误与复制 | unsafe HTML、超长输出、折叠、键盘/屏幕阅读标签；权限与 diff 不在 renderer 重算 |
-| **AR3D · composer/runtime actions** | composer intent→queue/steer/interrupt/command；携带 expected state/requestId | active turn 时清楚选择排队、修正或中断；partial acceptance/warning 可恢复 | double submit、stale target、offline、cancel/replace race；按钮可见性不等于授权 |
-| **AR3E · settings** | provider/model/effort/capabilities/config schema 共用 packages | provider/model/effort 可搜索与切换，能力/缺 key/重启需求可解释 | secret 不回传 renderer/transcript；切换失败保留旧值；mock/真配置兼容 |
-| **AR3F · hardening/package** | telemetry-free perf counters 仅本地测试；窗口/会话恢复边界；打包配置 | crash 后可重新打开并诊断；键盘主路径；Windows 安装包可复现 | cold/warm start、10k events、内存、renderer crash、Windows package/smoke；macOS/Linux 能运行脚本 smoke 或明确 CI 前置 |
+| **AR3A · client/store** | protocol negotiation、snapshot/query/command client、单一 normalized store；mock 与真 core adapter 同接口 | 启动后能看到 session 状态，断线/不兼容有明确空态 | protocol round-trip、unknown fields、stale command、IPC timeout/reconnect |
+| **AR3B · navigation/recovery** | session/turn/control/task selector 与 selection route 纯模型 | 左侧 session 导航、主区 turn timeline、诊断抽屉；interrupted 可 inspect/discard/retry-safe | 大会话、旧 transcript、missing target、crash/restart；默认不 replay |
+| **AR3C · content cards** | markdown/tool/diff/approval view-model 继续来自 packages | 克制的信息密度：消息流、tool 状态、diff、approval、错误与复制 | unsafe HTML、超长输出、折叠、键盘/屏幕阅读；权限与 diff 不在 renderer 重算 |
+| **AR3D · composer/runtime actions** | composer intent→queue/steer/interrupt/command；携带 expected state/requestId | active turn 时可排队、修正或中断；partial acceptance/warning 可恢复 | double submit、stale target、offline、cancel/replace race |
+| **AR3E · settings** | provider/model/effort/capabilities/config schema 共用 packages | provider/model/effort 可搜索与切换，能力/缺 key 可解释 | secret 不回传 renderer/transcript；切换失败保留旧值 |
+| **AR3F · hardening/package** | telemetry-free perf counters 仅本地测试；打包配置 | crash 后可重新打开并诊断；Windows 安装包可复现 | cold/warm start、10k events、内存、renderer crash、Windows package/smoke |
 
-AR3 视觉原则：深浅主题都保持高对比、窄侧栏 + 单一主时间线 + 右侧按需诊断，避免仪表盘堆叠；先完成信息架构和状态正确性，再做动效与装饰。每个切片先落 packages/IPC fixture，后改 `apps/desktop`。
+视觉原则：高对比、窄侧栏 + 单一主时间线 + 右侧按需诊断；先信息架构和状态正确性，再动效装饰。每切片先落 packages/IPC fixture，后改 `apps/desktop`。
 
-##### AR4 · Evidence-driven depth（逐项准入，不设“大包”）
+##### AR4 · Evidence-driven depth（逐项准入，不设"大包"）
 
 | 候选 | 最低证据 | 获准后最小交付 | 无证据时的关闭方式 |
 |------|----------|----------------|--------------------|
-| **U5 Ink / IDE bridge** | AR1 pager 的可复现能力缺口，或 IDE 跳转能明显减少 diff 操作步骤 | 独立 spike + 依赖/启动/包体基准；默认路径仍可回落自研 TTY | 记录现有 pane 已满足验收，标记“不实施” |
-| **Adaptive thinking** | 固定语料显示静态 effort 在质量/成本上有稳定劣势 | provider-neutral policy + 可关闭配置 + 回归 corpus | 证据不稳定或 provider 专有时不进入默认 |
-| **Hook trust UI** | 用户确有多 workspace 信任切换需求，且 CLI 文本无法安全表达 | trust 状态契约、来源展示、最小选择 UI、fail-closed | 继续使用现有配置/文档，记录不扩 UI |
-| **远程模型列表** | 静态模型表造成真实兼容故障，且 provider 有稳定 API/缓存语义 | 可缓存 adapter、离线 fallback、超时/鉴权测试 | API 不稳定、需遥测/官方市场或离线退化差则关闭 |
+| **U5 Ink / IDE bridge** | AR1 pager 的可复现能力缺口，或 IDE 跳转明显减少 diff 操作步骤 | 独立 spike + 依赖/启动/包体基准 | 记录现有 pane 已满足验收，标记"不实施" |
+| **Adaptive thinking** | 固定语料显示静态 effort 有稳定劣势 | provider-neutral policy + 可关闭配置 + 回归 corpus | 证据不稳定或 provider 专有时不进入默认 |
+| **Hook trust UI** | 多 workspace 信任切换需求且 CLI 文本无法安全表达 | trust 契约、来源展示、最小 UI、fail-closed | 继续用现有配置/文档 |
+| **远程模型列表** | 静态模型表造成真实兼容故障且 provider API 稳定 | 可缓存 adapter、离线 fallback、超时/鉴权测试 | API 不稳定或需遥测/官方市场则关闭 |
 
-每个候选独立形成 `implement / defer / reject` 决策，带证据链接、风险、回滚和重新开启条件。`defer` 必须有明确外部前置，不允许用它掩盖没有完成定义的永久待办。
+每个候选独立形成 `implement / defer / reject` 决策，带证据、风险、回滚和重开条件。
 
 ##### AR5 · Release hardening（冻结后只修可靠性）
 
-| 切片 | 核心交付 | 关键 fixture / smoke | 完成定义 |
-|------|----------|----------------------|----------|
-| **AR5A · migration/compat** | session/config/protocol 版本矩阵、forward-additive/旧版读取、migration dry-run 与备份策略 | 最近支持版本 × 当前版本；unknown field/event；中断迁移；重复运行 | 旧数据可读或给出无损导出/恢复步骤；迁移幂等，失败不覆盖源 |
-| **AR5B · fault injection** | append/rewrite/config/cache 的故障注入 seam | 磁盘满、EACCES、部分写、rename 失败、进程崩溃、并发 resume、时钟异常 | 不伪造成功、不丢原文件、不自动 replay；错误含可操作恢复信息 |
-| **AR5C · install lifecycle** | clean clone、install/build/package、upgrade/uninstall 脚本与产物清单 | Windows 主门禁；macOS/Linux CI smoke；路径含空格/非 ASCII；无全局依赖 | 安装、升级、卸载均可复现；用户数据保留策略明确；产物不含密钥/临时文件 |
-| **AR5D · release gate** | 性能预算、安全审计、SBOM/许可证、已知限制、恢复手册、release checklist | CLI startup、10k-event resume、compact、Desktop cold start；依赖/secret/permission scan | 默认门禁与 release smoke 全绿；文档可由未参与开发的人独立执行；版本 tag 前 checkpoint 已 push |
+| 切片 | 核心交付 | 完成定义 |
+|------|----------|----------|
+| **AR5A · migration/compat** | session/config/protocol 版本矩阵、旧版读取、migration dry-run 与备份 | 旧数据可读或无损导出；迁移幂等，失败不覆盖源 |
+| **AR5B · fault injection** | append/rewrite/config/cache 故障注入（磁盘满、EACCES、部分写、崩溃、并发 resume） | 不伪造成功、不丢原文件、不自动 replay；错误含可操作恢复信息 |
+| **AR5C · install lifecycle** | clean clone、install/build/package、upgrade/uninstall | 安装/升级/卸载可复现；产物不含密钥/临时文件 |
+| **AR5D · release gate** | 性能预算、安全审计、SBOM、已知限制、恢复手册、checklist | 门禁与 release smoke 全绿；文档可由未参与者独立执行 |
 
 固定选择规则：
 
-1. 每次从最前面的未完成阶段选择一个最小切片；不得同时铺 CLI、Compact、Desktop 三个大工程。
+1. 每次从最前面的未完成阶段选一个最小切片；不同时铺 CLI、Compact、Desktop 三个大工程。
 2. 先更新 `packages/*` schema/view-model 与失败测试，再接 CLI/Desktop；renderer 不持有第二状态机。
 3. 每切片代码/测试与文档分批 commit/push；ROADMAP 水位只在验收全绿后前移。
 4. 对标 HC/Codex/OpenCode/Pi 只借鉴语义、失败模式和测试；不复制重量级目录、依赖或本机路径。
-5. AR4 属于条件触发项：若缺少真实需求，必须以书面取舍关闭，而不是留下永久“待办”。
-6. 每个切片开始时把准入证据和预计触碰路径写入 PWF；结束时记录专项、typecheck、完整测试、scoped diff 和远端 commit。
-7. 一个代码提交只承载一个可描述的行为变化；文档水位独立提交。每次 commit 后立即 push，并核对 `HEAD == origin/main`。
-8. 若用户既有脏文件与切片重叠，优先通过新增模块、窄补丁或依赖倒置避让；无法证明归属时触发 §13.8 停止条件。
+5. AR4 属条件触发项：缺少真实需求必须书面关闭，而不是留永久"待办"。
+6. 每切片开始把准入证据和预计触碰路径写入 PWF；结束记录专项、typecheck、完整测试、scoped diff 和远端 commit。
+7. 一个代码提交只承载一个可描述的行为变化；文档水位独立提交。commit 后立即 push 并核对 `HEAD == origin/main`。
+8. 若用户既有脏文件与切片重叠，优先新增模块/窄补丁/依赖倒置避让；无法证明归属时触发 §13.8 停止条件。
 
 ### 13.11 无人值守执行看板
 
-> 这是“下一刀怎么选”的执行索引；状态真源仍是本节阶段表。每个切片只有在代码/测试批与文档批都 push 后才可标 ✅。
+> "下一刀怎么选"的执行索引；状态真源仍是 §0 与本节阶段表。每个切片只有代码/测试批与文档批都 push 后才可标 ✅。
 
 | 顺序 | 切片 | packages-first 交付 | 消费层 / 人类结果 | 必过专项门禁 | 状态 |
 |------|------|---------------------|-------------------|--------------|------|
-| 1 | **DR2C3** | transcript append 串行化/失败模型、duplicate/restart closeout | `/turn` warning 与 SESSIONS 恢复说明 | crash + concurrent append + terminal failure + compact/rewrite | ✅ |
-| 2 | **DR3A** | durable task schema/projection、result-before-terminal | `/bg` 能区分 running/interrupted/completed | task crash + result write failure + old transcript | ✅ |
-| 3 | **DR3B** | coordinator overflow queue、parent-boundary promotion | queue/cancel/status；dirty worktree 结果可找回 | FIFO + concurrency cap + parent terminal race + R3 | ✅ |
-| 4 | **DR4A** | versioned runtime snapshot/command/result schema | CLI/Desktop 共用 view-model | round-trip + unknown fields + illegal transition | ✅ |
-| 5 | **DR4B** | B1 protocol executor；B2 append-only recovery resolution | list/inspect/interrupt/cancel/discard/retry-safe | target/state races；default no replay | ✅ |
-| 6 | **DR4C** | 真实 consumer 反馈与兼容收紧 | new/resume 共用协议投影 | crash/restart E2E + old transcript | ✅ |
-| 7 | **AR1A** | runtime list/inspect query view-model | resume/continue + text/纯 JSON | real bin + no banner/provider + old session | ✅ `4c3db76` |
-| 8 | **AR1B1–B3** | action discovery + append-only queue replace/remove | 只显示并执行 expected-state 安全动作 | state matrix + persistence/race/restart | ✅ B1–B3 |
-| 9 | **AR1C1–C2** | renderer/pager + automation schema closeout | 大列表、窄屏、pipe/JSON 均可用 | TTY + non-TTY + golden snapshots | ✅ |
-| 10 | **AR2A–C** | compact range/watermark/token budget | 可量化上下文成本与稳定回退 | lifecycle/tool pairing + token/cost baseline | **当前（AR2A1）** |
-| 11 | **AR3A–F** | protocol client/store；无 renderer 状态机 | Codex App 风格 Desktop 完整主路径 | mock/core IPC + crash/restart + Windows package | 📋 |
-| 12 | **AR4** | 逐项 evidence gate | 有证据实施；无证据书面关闭 | 场景/基准/兼容证据 | 📋 |
-| 13 | **AR5A–D** | compatibility/security/release contracts | clean clone 安装、升级、恢复手册 | full test + cross-platform smoke + security audit | 📋 |
+| 1–6 | **DR2C3–DR4C** | durable runtime 收口 | `/turn` `/bg` `/runtime` 全链 | crash/竞态/E2E | ✅ 存档 §H6 |
+| 7–9 | **AR1A–AR1C2** | runtime query/action/renderer/pager/automation | CLI 全链 | golden + 真实 bin | ✅ 存档 §H7 |
+| 10 | **AR2A0a · 混合 token 计数** | `UsageAnchor` + `hybridTokenCount` + opt-in 阈值 | `/context` hybrid 来源；auto compact 不再迟触发 | 锚失效回退 + 旧路径回归 | **当前** |
+| 11 | **AR2A0b · 中段截断/防重摘要** | `truncateMiddle` + 预算表 + summary marker | 工具长输出保头尾；re-compact 不重新叙述 | 幂等 + spill 完整 + cache 稳定 | 📋 |
+| 12 | **AR2A1–A2 · watermark/safe rewrite** | range/watermark 纯契约 → rewrite 接线 | partial compact 主路径 | tool pairing + lifecycle 保留 | 📋 |
+| 13 | **AR2B–C · tokenizer/benchmark/ADR** | registry（重估）+ 语料基准 + remote 决策 | 可量化 token/cost | 偏差阈值 + fail-closed | 📋 |
+| 14 | **AR3A–F** | protocol client/store；无 renderer 状态机 | Codex App 风格 Desktop | mock/core IPC + crash/restart + Windows package | 📋 |
+| 15 | **AR4** | 逐项 evidence gate | 有证据实施；无证据书面关闭 | 场景/基准/兼容证据 | 📋 |
+| 16 | **AR5A–D** | compatibility/security/release contracts | clean clone 安装、升级、恢复手册 | full test + cross-platform smoke + security audit | 📋 |
 
 固定 checkpoint：
 
 1. 红灯测试/契约 → 实现 → 定向测试 → typecheck → 完整 `npm test` → scoped `diff --check`。
 2. 代码与测试单独 commit/push；再同步 ROADMAP、专题文档、AGENT_HANDOFF、USAGE/README 并 commit/push。
 3. push 后核对 `HEAD == origin/main`；只从看板最前面的未完成安全切片继续。
-4. 触发 §13.8 停止条件时，更新本看板的 blocker、保留可恢复工作区，不扩大权限或架构范围。
+4. 触发 §13.8 停止条件时，更新本看板 blocker、保留可恢复工作区，不扩大权限或架构范围。

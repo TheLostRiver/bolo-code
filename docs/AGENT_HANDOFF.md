@@ -33,7 +33,7 @@ Bolo Code = Headless Agent Runtime (packages/*)
 | 顺序 | 文档 | 用途 |
 |------|------|------|
 | 1 | **本文** | 心智模型 + 进度 + 改码规矩 |
-| 2 | [ROADMAP.md](./ROADMAP.md) | **进度真源** · 各轨水位 · 开放项 |
+| 2 | [ROADMAP.md](./ROADMAP.md) | **进度真源** · 各轨水位 · 开放项（已完成轨详情 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)） |
 | 3 | [ARCHITECTURE.md](./ARCHITECTURE.md) | 分层 · 模块禁止项 |
 | 4 | [ENGINEERING_PRINCIPLES.md](./ENGINEERING_PRINCIPLES.md) | 先借鉴再实现 · tool 管道顺序 |
 | 5 | [USAGE.md](./USAGE.md) | 人类用法 · **含 Agent/Subagent 配置** |
@@ -113,7 +113,7 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | 文件 Diff 日用 | ~95%+ | **D0–D7** |
 | 文件 Diff UI | ~90–95% | **U0–U4**；U5 真 Ink/IDE 可选 |
 | Hooks 日用 | ~96–98% | **H0–H5**（含 SessionEnd） |
-| Compact 日用 | ~92–95% | **C0–C5**；§8.9 后置 |
+| Compact 日用 | ~92–95% | **C0–C5**；深化中 **AR2A0a/A0b → A1/A2**（ROADMAP §13.10.2） |
 | 多 Provider 热切 | ~92–96% | **P0–P4.1 + CX7 Desktop** |
 | Effort 方言 | ~92–95% | **E0–E9** |
 | Provider UX | ~95–98% | **CX0–CX8**（ultrathink 默认 off） |
@@ -123,7 +123,7 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 
 **已闭环：** Diff · Hooks · Compact · Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX**。
 
-**当前主线：** Autonomous Road **AR2A1 range/watermark**：先用固定 fixture 定义 Compact partial range、stable watermark、保留区间与拒绝原因；证明 tool pair、lifecycle、resolution 边界前不接 rewrite/provider。
+**当前主线：** Autonomous Road **AR2A0a 混合 token 计数**（借鉴 HC `tokenCountWithEstimation` 语义）：锚定最近 API 真实 input tokens + 只估算其后追加消息，修复 usage 整体替换估算导致的 auto compact 迟触发。随后 **AR2A0b**（工具输出中段截断 + 防重摘要标记，借鉴 Codex）→ **AR2A1 range/watermark** 纯契约。见 ROADMAP §13.10.2。
 
 **其它开放轨（非阻塞）：**
 
@@ -134,7 +134,7 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | adaptive thinking | 与 effort 深联动 |
 | Desktop 打磨 | effort UI · session list · markdown/tool cards 等 |
 
-Durable Runtime 的长期执行顺序以 [ROADMAP.md](./ROADMAP.md) §13.4–§13.11 为准：
+Durable Runtime 与 Autonomous Road 的长期执行顺序以 [ROADMAP.md](./ROADMAP.md) §13.10–§13.11 为准（已完成切片详情存档于 [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)）：
 
 ```text
 DR2A 单 session runner ✅
@@ -156,7 +156,9 @@ DR2A 单 session runner ✅
 → AR1B3 command closeout ✅
 → AR1C1 text/pager ✅
 → AR1C2 automation closeout ✅
-→ AR2A1 range/watermark（当前）
+→ AR2A0a 混合 token 计数（当前）
+→ AR2A0b 中段截断 + 防重摘要
+→ AR2A1 range/watermark
 → AR2A2–C Compact depth
 → AR3 Codex App 风格 Desktop
 → AR4 证据驱动深水项
@@ -185,7 +187,7 @@ DR2A 单 session runner ✅
 | §10 | Effort |
 | §11 | Provider UX（CX） |
 | §12 | CLI / Agent 可靠性（R0–R4） |
-| §13 | Durable Turn（DR0–DR4） |
+| §13 | Durable Runtime（DR0–DR4）+ Autonomous Road（AR1–AR5 · §13.10–§13.11） |
 
 历史切片命名（实现时仍会在 commit/message 出现）：
 
