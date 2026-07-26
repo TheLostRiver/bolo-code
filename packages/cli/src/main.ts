@@ -89,6 +89,13 @@ async function main(): Promise<void> {
     process.exit(0)
   }
 
+  // ── bolo search：给无 hosted 搜索的端点配 MCP 搜索后端 ──
+  // 放在 parseArgs 之后、其它路径之前：它不开会话、不需要 provider。
+  if (argv[0] === 'search') {
+    const { runSearchCli } = await import('./searchCli.ts')
+    process.exit(await runSearchCli(argv.slice(1)))
+  }
+
   const cwd = args.cwd ?? process.cwd()
   const isTty = process.stdin.isTTY === true
 
