@@ -9,6 +9,10 @@ import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { getBoloHomeDir } from '../../config/src/paths.ts'
 import {
+  detectWebSearchDialectId,
+  resolveWebSearchPlan,
+} from '../../providers/src/index.ts'
+import {
   ensureAllLayouts,
   ensureProjectLayout,
 } from '../../config/src/ensure.ts'
@@ -111,6 +115,8 @@ export type SlashSession = {
   permissionRules?: SessionPermissionRules
   model?: string
   effortLevel?: string
+  /** Web search 意图（on|off|auto）；/websearch 读写 */
+  webSearch?: import('../../providers/src/index.ts').WebSearchIntent
   /**
    * CX8 ultrathink 会话覆盖（off|tip|turn）；默认 off。
    */
@@ -2927,6 +2933,58 @@ function cmdThinking(session: SlashSession, args: string): SlashDispatchResult {
   }
 }
 
+function cmdWebSearch(
+  session: SlashSession,
+  args: string,
+): SlashDispatchResult {
+  const raw = args.trim().toLowerCase()
+  const current = session.webSearch ?? 'auto'
+
+  const dialectId = detectWebSearchDialectId({
+    kind: session.providerProfile?.kind,
+    baseUrl: session.providerProfile?.baseUrl,
+    model: session.model,
+  })
+
+  if (!raw) {
+    const plan = resolveWebSearchPlan(dialectId, current, {
+      model: session.model,
+    })
+    // 未配置不是故障；说清现状 + 一步怎么开
+    const status = plan.enabled
+      ? `on via ${plan.dialect.label}`
+      : dialectId === 'off'
+        ? `not set up on this endpoint — add a search MCP server to enable it`
+        : `off (${plan.dialect.label})`
+    return {
+      ok: true,
+      message: `websearch: intent=${current} · ${status}
+Usage: /websearch [on|off|auto]`,
+    }
+  }
+
+  if (raw !== 'on' && raw !== 'off' && raw !== 'auto') {
+    return {
+      ok: false,
+      message: `Invalid web search mode "${args.trim()}". Usage: /websearch [on|off|auto]`,
+    }
+  }
+
+  session.webSearch = raw
+  const plan = resolveWebSearchPlan(dialectId, raw, { model: session.model })
+  if (raw === 'on' && !plan.enabled) {
+    // 用户明确要开、这条线路给不了：说明原因，而不是假装设置成功了
+    return {
+      ok: true,
+      message: `websearch: intent=on, but ${plan.unsupportedReason ?? 'this endpoint has no hosted web search'}`,
+    }
+  }
+  return {
+    ok: true,
+    message: `websearch set to ${raw}${plan.enabled ? ` (${plan.dialect.label})` : ''}`,
+  }
+}
+
 function cmdPlan(session: SlashSession, _args: string): SlashDispatchResult {
   session.permissionMode = 'plan'
   return { ok: true, message: 'permissionMode set to plan' }
@@ -3748,6 +3806,13 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     usage: '[on|off] | persist [on|off]',
     group: 'model',
     run: cmdThinking,
+  },
+  {
+    name: 'websearch',
+    summary: 'Show or set web search mode',
+    usage: '[on|off|auto]',
+    group: 'model',
+    run: cmdWebSearch,
   },
   {
     name: 'plan',

@@ -952,6 +952,12 @@ export type BoloSession = {
    */
   effortLevel?: string
   /**
+   * Web search 意图（on|off|auto）。缺省 `auto`：hosted 两轨据此默认开
+   * （搜索在用户已在对话的 provider 侧执行，无新增第三方接收方），
+   * 其余轨由方言表各自判断。厂商 wire 片段不在这里，在 webSearchDialect 表。
+   */
+  webSearch?: import('../../providers/src/index.ts').WebSearchIntent
+  /**
    * CX8 ultrathink 模式（会话覆盖；默认 off）。
    * 见 packages/core/src/ultrathink.ts · docs/PROVIDER_UX.md
    */
@@ -1274,6 +1280,7 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
     promptCacheState:
       opts.promptCacheState ?? createPromptCacheSessionState(),
     sessionStartedAtMs: Date.now(),
+    webSearch: 'auto',
     todos: [],
     backgroundShells: createBackgroundShellStore(),
     fileDiffLog: [],
@@ -2280,6 +2287,7 @@ async function runOwnedPrompt(
       usage: session.usage,
       model: session.model,
       effortLevel: turnEffort,
+      webSearch: session.webSearch,
       promptCacheState: session.promptCacheState,
       persistReasoning: session.persistReasoning === true,
       midTurnAutoCompact: true,

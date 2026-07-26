@@ -222,6 +222,8 @@ export type QueryLoopParams = {
    * 会话 effort 档位（/effort）；透传 callModel → provider max_tokens 映射。
    */
   effortLevel?: string
+  /** 会话 webSearch 意图；透传 callModel → provider options */
+  webSearch?: import('../../providers/src/index.ts').WebSearchIntent
   /**
    * 本地 prompt-cache 布局/TTL 观测（F-C6）；callModel 成功后 touch。
    */
@@ -544,6 +546,7 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
           tools,
           model: params.model,
           effort: params.effortLevel,
+          webSearch: params.webSearch,
           onModelRetry: (info: ModelRetryInfo) => {
             emit(params, {
               type: 'model_retry',

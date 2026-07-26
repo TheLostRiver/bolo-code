@@ -37,6 +37,8 @@ export type CallModelFn = (req: {
   model?: string
   /** session.effortLevel；透传 provider mapEffort → max_tokens */
   effort?: string
+  /** session.webSearch 意图；厂商 wire 片段由 webSearchDialect 表决定 */
+  webSearch?: import('../../providers/src/index.ts').WebSearchIntent
   maxTokens?: number
   /** wrapCallModelWithRetry 退避前回调 */
   onModelRetry?: (info: ModelRetryInfo) => void
@@ -76,6 +78,7 @@ export function createCallModelFromProvider(
     disableTools,
     model,
     effort,
+    webSearch,
     maxTokens,
   }) {
     yield* provider.completeStream(messages, {
@@ -84,6 +87,7 @@ export function createCallModelFromProvider(
       disableTools,
       model,
       effort,
+      webSearch,
       maxTokens,
     })
   }
