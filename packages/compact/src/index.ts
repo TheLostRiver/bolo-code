@@ -672,6 +672,15 @@ export function shouldAutoCompact(opts: {
    * C2：最近一次（或会话）API input tokens；有则**优先**于 tokenCount 做阈值判断。
    */
   usageInputTokens?: number
+  /**
+   * AR2A0a（opt-in）：usage 锚 + 当前 messages；两者齐备时用混合计数
+   * （anchor input + 锚后尾部估算），优先于 usageInputTokens / tokenCount。
+   * 锚失效则回退 estimateTokens(messages)。
+   */
+  anchor?: UsageAnchor
+  messages?: ChatMessage[]
+  /** 尾部估算是否 ×4/3 保守垫（建议 true） */
+  pad?: boolean
   contextWindowTokens: number
   enabled: boolean
   consecutiveFailures: number
@@ -687,6 +696,14 @@ export function shouldAutoCompact(opts: {
   if (opts.querySource === 'session_memory') return false
   const maxFail = opts.maxConsecutiveFailures ?? DEFAULT_MAX_AUTOCOMPACT_FAILURES
   if (opts.consecutiveFailures >= maxFail) return false
+  if (opts.anchor && opts.messages) {
+    const h = hybridTokenCount({
+      messages: opts.messages,
+      anchor: opts.anchor,
+      pad: opts.pad,
+    })
+    return h.tokenCount >= getAutoCompactThreshold(opts.contextWindowTokens)
+  }
   const usage =
     opts.usageInputTokens != null &&
     Number.isFinite(opts.usageInputTokens) &&
@@ -697,11 +714,28 @@ export function shouldAutoCompact(opts: {
   return effective >= getAutoCompactThreshold(opts.contextWindowTokens)
 }
 
-/** C2：压力展示用 — usage 优先 */
+/** C2：压力展示用 — usage 优先；AR2A0a：可选 anchor → hybrid */
 export function resolveAutoCompactTokenCount(opts: {
   estimateTokens: number
   usageInputTokens?: number
-}): { tokenCount: number; source: 'usage' | 'estimate' } {
+  /** AR2A0a：usage 锚（与 messages 一起给时优先于 usageInputTokens） */
+  anchor?: UsageAnchor
+  messages?: ChatMessage[]
+  pad?: boolean
+}): { tokenCount: number; source: 'usage' | 'estimate' | 'hybrid' } {
+  if (opts.anchor && opts.messages) {
+    const h = hybridTokenCount({
+      messages: opts.messages,
+      anchor: opts.anchor,
+      pad: opts.pad,
+    })
+    if (h.source !== 'estimate') return h
+    // 锚失效 → 沿用调用方给的 estimateTokens（可能含 system 段，比 messages 更全）
+    return {
+      tokenCount: Math.max(0, Math.floor(opts.estimateTokens)),
+      source: 'estimate',
+    }
+  }
   const usage =
     opts.usageInputTokens != null &&
     Number.isFinite(opts.usageInputTokens) &&
@@ -713,6 +747,80 @@ export function resolveAutoCompactTokenCount(opts: {
     tokenCount: Math.max(0, Math.floor(opts.estimateTokens)),
     source: 'estimate',
   }
+}
+
+// ── AR2A0a：混合 usage 锚定 token 计数（借鉴 HC tokenCountWithEstimation 语义）──
+
+/**
+ * 尾部增量估算的保守垫（对照参考实现 ×4/3）：
+ * 宁可略早触发 auto compact，也不因低估而撞窗。
+ */
+export const CONSERVATIVE_ESTIMATE_PAD = 4 / 3
+
+/**
+ * usage 锚：最近一次 API 调用的真实 input tokens + 当时的消息数快照。
+ * 锚之后追加的消息用启发式估算，两者相加即「混合计数」。
+ */
+export type UsageAnchor = {
+  /** 最近一次成功 API call 的 input tokens（provider 报告，非估算） */
+  anchorInputTokens: number
+  /** 该 call 发起时 session.messages 的长度 */
+  anchoredMessageCount: number
+  /** fingerprintMessagePrefix 结果；缺省则只做长度校验 */
+  fingerprint?: string
+}
+
+/**
+ * 前缀形状指纹：只看 role + tool_calls 数量，**不看内容**。
+ * - microcompact 只清正文 → 指纹不变，锚仍有效（头部 input 已被 API 计过）
+ * - snip / full compact 改写头部（角色序列变化或变短）→ 指纹失配 → 锚失效
+ */
+export function fingerprintMessagePrefix(
+  messages: readonly ChatMessage[],
+  count: number,
+): string {
+  const n = Math.max(0, Math.min(Math.floor(count), messages.length))
+  const parts: string[] = []
+  for (let i = 0; i < n; i++) {
+    const m = messages[i]!
+    parts.push(`${m.role}:${m.tool_calls?.length ?? 0}`)
+  }
+  return hashStablePrefix(parts.join('|'))
+}
+
+/**
+ * 混合计数：anchor input（真实）+ 锚后尾部估算（可选 ×4/3 垫）。
+ * 锚无效（超长 / 指纹失配 / 非法值）→ 回退全量 estimateTokens。
+ */
+export function hybridTokenCount(opts: {
+  messages: ChatMessage[]
+  anchor?: UsageAnchor
+  pad?: boolean
+}): { tokenCount: number; source: 'hybrid' | 'estimate' | 'usage' } {
+  const { messages, anchor } = opts
+  const fallback = () => ({
+    tokenCount: estimateTokens(messages),
+    source: 'estimate' as const,
+  })
+  if (!anchor) return fallback()
+  const count = Math.floor(anchor.anchoredMessageCount)
+  const input = Math.floor(anchor.anchorInputTokens)
+  if (!Number.isFinite(input) || input <= 0) return fallback()
+  if (!Number.isFinite(count) || count <= 0 || count > messages.length) {
+    return fallback()
+  }
+  if (
+    anchor.fingerprint != null &&
+    anchor.fingerprint !== fingerprintMessagePrefix(messages, count)
+  ) {
+    return fallback()
+  }
+  if (count === messages.length) {
+    return { tokenCount: input, source: 'usage' }
+  }
+  let tail = estimateTokens(messages.slice(count))
+  if (opts.pad) tail = Math.ceil(tail * CONSERVATIVE_ESTIMATE_PAD)
+  return { tokenCount: input + tail, source: 'hybrid' }
 }
 
 // ── PTL（prompt too long）识别 + 截断重试（对照 HC compact.ts / errors.ts）──
