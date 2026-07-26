@@ -294,7 +294,11 @@ async function send() {
 
 window.bolo.onEvent((e) => {
   if (!e || typeof e !== 'object') return
-  if (e.type === 'text_delta' && e.text) {
+  // core 发的是 `text`，此处曾写成 `text_delta` —— 那个事件名全仓不存在，
+  // 分支从未执行过。桌面端的「流式」一直是假的：气泡不增量更新，
+  // 靠 turn 结束后 reloadMessages() 全量重拉掩盖。
+  // 名字对不上不会报错，只会静默失效，故由 test-desktop-event-contract.ts 守住。
+  if (e.type === 'text' && e.text) {
     const el = ensureStreamBubble()
     streamBuf += e.text
     el.textContent = streamBuf
