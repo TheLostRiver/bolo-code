@@ -33,7 +33,7 @@
 
 **已闭环主线：** headless 日用 → Diff（D0–D7 / U0–U4）· Hooks（H0–H5）· Compact（C0–C5）· Provider（P0–P4.1）· Effort（E0–E9）· Provider UX（CX0–CX8）· 可靠性（R0–R4）· **Durable Runtime（DR0–DR4）** · **Autonomous Road AR1 CLI/TUI runtime UX**。切片明细 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
 
-**当前主线：** **AR3 · Codex App 风格 Desktop**（§13.10.2 · 看板第 18 位）。AR-T1/AR-T2/AR-T3a/AR-T3b/AR-T3+ · **AR2 全段（A0a/A0b/A1/A2/B1/B2/C）** 与 **AR5C-early 分发**（§15）已收口。
+**当前主线：** **AR5A–D · Release hardening**（§13.10.2 · 看板第 20 位）。AR3 代码面 A–F 已交付（NSIS 受阻、视觉未肉眼验证，见 [DESKTOP_DESIGN](./DESKTOP_DESIGN.md) §7b/§7c）；AR4 四条已书面关闭。AR-T1/AR-T2/AR-T3a/AR-T3b/AR-T3+ · **AR2 全段（A0a/A0b/A1/A2/B1/B2/C）** 与 **AR5C-early 分发**（§15）已收口。
 
 **已插队并收口：** **AR-T · Agent 能力面**（§14）。准入证据：基础设施深度（DR0–DR4 + AR1）已远超能力广度——彼时 agent 无法跨步骤记住计划，也无法启动任何活过一次工具调用的进程。AR2 压缩深化顺延，A0a/A0b 成果不受影响。
 
@@ -131,6 +131,7 @@
 | [COMPACTION.md](./COMPACTION.md) | Compact **实现真源** |
 | [DESKTOP_DESIGN.md](./DESKTOP_DESIGN.md) | **AR3 设计方案**（信息架构 · 交互 · 视觉 · 不做什么） |
 | [ADR_COMPACT_REMOTE.md](./ADR_COMPACT_REMOTE.md) | **AR2C 决定**：compaction 保持 local-only（含重开条件） |
+| [ADR_AR4_EVIDENCE_GATE.md](./ADR_AR4_EVIDENCE_GATE.md) | **AR4 决定**：四个候选逐条书面关闭（含证据与重开条件） |
 | [TOOLS.md](./TOOLS.md) | **内置工具契约**（TodoWrite · 后台 shell） |
 | [RELEASE.md](./RELEASE.md) | **发布契约**（构建 · tarball · 门禁 · 发布流程） |
 | [HOOKS.md](./HOOKS.md) | Hook 契约 |
@@ -378,8 +379,8 @@ AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 regis
 | 16 | **AR2A1–A2 · watermark/safe rewrite** | range/watermark 纯契约 ✅ · 契约作为验证者接线 ✅ | compact 安全面收口 | tool pairing + lifecycle 保留 | ✅ 四条验收全过（`3e918ea` · `948061c` · `b5c7112`）；**中段压缩按证据门控显式不启用**，理由见 §13.10.2 |
 | 17 | **AR2B–C · tokenizer/benchmark/ADR** | 启发式修正 ✅ + 语料基准 ✅ + remote ADR ✅ | 可量化 token/cost | 偏差阈值 + fail-closed | ✅ B1 不引入 tokenizer（`661fc7d`）· B2 基准（`28f70fc`）· C 决定 local-only |
 | 18 | **AR3A–F** | A ✅ client/store · B ✅ 会话列表+timeline 视图模型与 IPC · C ✅ 卡片+三栏外壳；D/E/F 待做 | Codex App 风格 Desktop（[设计方案](./DESKTOP_DESIGN.md)） | mock/core IPC + crash/restart + Windows package | **当前**。A–F 代码面均已交付且 **应用真跑得起来**（`test-desktop-launch.ts` 启动真实 Electron 并确认 renderer 挂载）。⛔ **Windows NSIS 安装包受阻**，根因与已排除项见 DESKTOP_DESIGN §7c；⚠️ 窗口**视觉呈现**仍未肉眼验证（§7b），不要未开窗就改成 ✅ |
-| 19 | **AR4** | 逐项 evidence gate | 有证据实施；无证据书面关闭 | 场景/基准/兼容证据 | 📋 |
-| 20 | **AR5A–D**（AR5C 已提前完成） | compatibility/security/release contracts | clean clone 安装、升级、恢复手册 | full test + cross-platform smoke + security audit | 📋 |
+| 19 | **AR4** | 逐项 evidence gate | 有证据实施；无证据书面关闭 | 场景/基准/兼容证据 | ✅ **四条全部书面关闭**（含重开条件）→ [ADR_AR4_EVIDENCE_GATE.md](./ADR_AR4_EVIDENCE_GATE.md) |
+| 20 | **AR5A–D**（AR5C 已提前完成） | compatibility/security/release contracts | clean clone 安装、升级、恢复手册 | full test + cross-platform smoke + security audit | **当前** |
 
 固定 checkpoint：
 
