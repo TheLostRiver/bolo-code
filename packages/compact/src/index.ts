@@ -18,6 +18,8 @@ export type CompactBoundaryMessage = {
     preCompactTokenCount: number
     postCompactTokenCount: number
     timestamp: string
+    /** AR2A0b：本次摘要合并了历史中的旧 summary（本地可观测，非遥测） */
+    mergedPriorSummary?: boolean
   }
 }
 
@@ -142,6 +144,90 @@ export function estimateSystemSectionsTokens(
   return n
 }
 
+// ── AR2A0b：工具输出中段截断（借鉴 Codex truncate_middle 语义；无遥测）──
+
+/**
+ * 中段截断标注前缀；truncateMiddle 用它保证幂等
+ *（已截断文本再进截断层不叠加二次标注）。
+ */
+export const MIDDLE_TRUNCATION_MARKER = '…[truncated middle:'
+
+/** 进模型上下文的单条工具输出默认预算（对照 Codex 默认 ~10k bytes） */
+export const DEFAULT_TOOL_OUTPUT_BUDGET_BYTES = 10_000
+
+/**
+ * per-tool 输出预算表（表驱动；禁止厂商/工具 if-else 分支散落各处）。
+ * 未列出的工具走 DEFAULT_TOOL_OUTPUT_BUDGET_BYTES。
+ */
+export const TOOL_OUTPUT_BUDGET_BYTES: Readonly<Record<string, number>> = {
+  Bash: 16_000,
+  Read: 40_000,
+  Grep: 12_000,
+  WebFetch: 8_000,
+}
+
+/** 预算解析：显式覆盖 > per-tool 表 > 默认 */
+export function toolOutputBudgetBytes(
+  toolName?: string,
+  override?: number,
+): number {
+  if (override != null && Number.isFinite(override) && override > 0) {
+    return Math.floor(override)
+  }
+  if (toolName && TOOL_OUTPUT_BUDGET_BYTES[toolName] != null) {
+    return TOOL_OUTPUT_BUDGET_BYTES[toolName]!
+  }
+  return DEFAULT_TOOL_OUTPUT_BUDGET_BYTES
+}
+
+export type MiddleTruncateResult = {
+  text: string
+  truncated: boolean
+  originalChars: number
+  originalLines: number
+  estimatedOriginalTokens: number
+  omittedChars: number
+}
+
+/**
+ * 中段截断：保头（默认 60%）保尾（40%），中间以一行标注原始规模。
+ * - 对照 Codex `truncate_middle`：错误提示/日志通常头尾都关键（尾部常含真正的失败原因）
+ * - 幂等：文本已含 MIDDLE_TRUNCATION_MARKER 时 no-op（防二次截断叠标注）
+ * - 只在产出时应用一次，绝不回溯改写历史消息（prompt cache 稳定性）
+ */
+export function truncateMiddle(
+  text: string,
+  opts?: { maxChars?: number; headFraction?: number },
+): MiddleTruncateResult {
+  const originalChars = text.length
+  const originalLines = originalChars === 0 ? 0 : text.split('\n').length
+  const estimatedOriginalTokens = estimateTextTokens(text)
+  const base: Omit<MiddleTruncateResult, 'text' | 'truncated' | 'omittedChars'> =
+    { originalChars, originalLines, estimatedOriginalTokens }
+  const maxChars = Math.max(
+    0,
+    Math.floor(opts?.maxChars ?? DEFAULT_TOOL_OUTPUT_BUDGET_BYTES),
+  )
+  if (originalChars <= maxChars || text.includes(MIDDLE_TRUNCATION_MARKER)) {
+    return { ...base, text, truncated: false, omittedChars: 0 }
+  }
+  const headFraction = Math.min(
+    0.95,
+    Math.max(0.05, opts?.headFraction ?? 0.6),
+  )
+  const headChars = Math.floor(maxChars * headFraction)
+  const tailChars = Math.max(0, maxChars - headChars)
+  const marker = `\n${MIDDLE_TRUNCATION_MARKER} original ~${estimatedOriginalTokens} tokens, ${originalLines} lines (${originalChars} chars); head+tail kept; full result not stored in transcript]…\n`
+  const head = text.slice(0, headChars)
+  const tail = tailChars > 0 ? text.slice(-tailChars) : ''
+  return {
+    ...base,
+    text: head + marker + tail,
+    truncated: true,
+    omittedChars: originalChars - headChars - tailChars,
+  }
+}
+
 /**
  * 去掉 analysis 草稿，提取 summary 正文
  * 对齐 formatCompactSummary
@@ -202,12 +288,29 @@ Example shape:
   return prompt
 }
 
+/**
+ * AR2A0b：compact summary user-message 的稳定前缀标记（对照 Codex SUMMARY_PREFIX /
+ * is_summary_message 语义）。是既有 summary 开头字面量的前缀 — 零输出变化。
+ * 用于二次 compact 时识别旧 summary，注入合并提示而非重新叙述。
+ */
+export const COMPACT_SUMMARY_MARKER =
+  'This session is being continued from a previous conversation'
+
+/** 该消息是否为 compact 产生的 summary user-message */
+export function isCompactSummaryMessage(m: ChatMessage): boolean {
+  return m.role === 'user' && m.content.startsWith(COMPACT_SUMMARY_MARKER)
+}
+
+/** 历史含旧 summary 时并入 compact prompt 的合并提示（可测常量） */
+export const COMPACT_MERGE_PRIOR_SUMMARY_HINT =
+  'An earlier compact summary is already present in the conversation below. MERGE its facts into the new summary; do not re-narrate it or duplicate it as a separate section.'
+
 export function getCompactUserSummaryMessage(
   summary: string,
   opts?: { suppressFollowUpQuestions?: boolean; recentMessagesPreserved?: boolean },
 ): string {
   const formatted = formatCompactSummary(summary)
-  let base = `This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier portion of the conversation.\n\n${formatted}`
+  let base = `${COMPACT_SUMMARY_MARKER} that ran out of context. The summary below covers the earlier portion of the conversation.\n\n${formatted}`
   if (opts?.recentMessagesPreserved) {
     base += `\n\nRecent messages are preserved verbatim.`
   }
@@ -437,11 +540,6 @@ export async function runFullCompact(
   }
 
   const preCompactTokenCount = estimateTokens(input.messages)
-  const instructions = mergeHookInstructions(
-    input.customInstructions,
-    input.hookInstructions,
-  )
-  const compactPrompt = getCompactPrompt(instructions)
   const maxPtl =
     input.maxPtlRetries === undefined
       ? DEFAULT_MAX_PTL_RETRIES
@@ -471,6 +569,20 @@ export async function runFullCompact(
       messagesUnchanged: true,
     }
   }
+
+  // AR2A0b：待摘要前缀里已有旧 summary → 注入合并提示（防重叙述/重复段落）。
+  // 只看 toSummarize：留在 keep 尾部的 summary 不会进 summarizer，无需提示。
+  const hasPriorSummary = split.toSummarize.some(isCompactSummaryMessage)
+  const instructions = mergeHookInstructions(
+    input.customInstructions,
+    hasPriorSummary
+      ? mergeHookInstructions(
+          input.hookInstructions,
+          COMPACT_MERGE_PRIOR_SUMMARY_HINT,
+        )
+      : input.hookInstructions,
+  )
+  const compactPrompt = getCompactPrompt(instructions)
 
   // 对照 HC compactConversation：summarizer 命中 PTL 时截断最旧 API 轮次再试
   let messagesToSummarize = split.toSummarize
@@ -536,6 +648,7 @@ export async function runFullCompact(
       preCompactTokenCount,
       postCompactTokenCount,
       timestamp: new Date().toISOString(),
+      ...(hasPriorSummary ? { mergedPriorSummary: true } : {}),
     },
   }
 
@@ -1240,8 +1353,8 @@ function isClearedPlaceholder(content: string): boolean {
 
 function truncateToolContent(content: string, maxChars: number): string {
   if (maxChars <= 0 || content.length <= maxChars) return content
-  const head = content.slice(0, maxChars)
-  return `${head}\n\n…[tool result truncated: ${content.length} chars → ${maxChars}]`
+  // AR2A0b：与 exec 层同一中段截断语义（保头保尾 + 原始规模标注；幂等）
+  return truncateMiddle(content, { maxChars }).text
 }
 
 /**
