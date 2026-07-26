@@ -142,15 +142,21 @@ Codex App 的一手资料**没拿到**：OpenAI 官方发布页 WebFetch 返回 
 | 事件名对齐 | ✅ `test-desktop-event-contract.ts` |
 | renderer 不注入 HTML | ✅ `test-timeline-cards.ts` 含抽取器自检 |
 | JS/HTML/CSS 语法 | ✅ `node --check` |
-| **真实 Electron 窗口里的呈现** | ❌ **未验证** |
+| 打包产物自包含 | ✅ `test-desktop-bundle.ts`（无 tsx/`.ts` 残留 · electron external · 资源齐全） |
+| **应用真的能启动、renderer 真的挂上** | ✅ `test-desktop-launch.ts` —— **真跑一次 Electron** |
+| **窗口里的视觉呈现** | ❌ **仍未验证** |
+| **Windows 安装包（NSIS）** | ❌ **未做** |
 
-**未验证的具体是什么**：布局在真实窗口里的实际观感、Windows 上主题切换与
-maximize 后的渲染稳定性、焦点环与键盘走查、长会话下的滚动性能。
+`test-desktop-launch.ts` 关掉了「白屏」那一类：它启动真实 Electron，
+在页面里确认三栏容器挂上、`window.bolo` 存在（**即 preload 路径没写错**）、
+样式表真的加载了。实证过它抓得住——把 preload 指向一个不存在的文件，立刻变红，
+而那正是静态断言**抓不到**的场景（路径写法合法、文件不存在）。
 
-这些自动化测试覆盖不到——与 `AskUserQuestion` 的真 TTY 交互是同一类缺口。
-Codex App 恰恰在 Windows 渲染上栽过一串（§3），所以这条不能靠推断带过。
+**仍然没验的是「好不好看、好不好用」**：布局的实际观感、Windows 上主题切换与
+maximize 后的渲染稳定性、焦点环与键盘走查、长会话滚动性能。
+自动化测不了这些，与 `AskUserQuestion` 的真 TTY 交互是同一类缺口。
 
-> **不要在没有真正打开过窗口的情况下把这一行改成 ✅。**
+> **不要在没有真正肉眼看过窗口的情况下把「视觉呈现」那一行改成 ✅。**
 
 ## 8. 不做
 

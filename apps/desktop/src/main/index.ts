@@ -262,6 +262,48 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null
   })
+
+  // BOLO_DESKTOP_SMOKE=1：启动一次、确认 renderer 真的挂上了、然后退出。
+  //
+  // 这条能抓住静态断言抓不到的一类问题：preload/renderer 路径写错时**构建不报错**，
+  // 只在窗口打开那一刻白屏。让它在门禁里真跑一次，比断言字符串可靠得多。
+  if (process.env.BOLO_DESKTOP_SMOKE === '1') {
+    const fail = (why: string) => {
+      process.stderr.write(`desktop smoke failed: ${why}
+`)
+      app.exit(1)
+    }
+    mainWindow.webContents.on('did-fail-load', (_e, code, desc, url) => {
+      fail(`did-fail-load ${code} ${desc} ${url}`)
+    })
+    mainWindow.webContents.on('did-finish-load', () => {
+      void mainWindow?.webContents
+        .executeJavaScript(
+          // 三样都查：DOM 挂上了、preload 桥接可用、样式表真的加载了。
+          // 只查 DOM 会漏掉「preload 路径错」和「CSS 404」这两种白屏成因。
+          `JSON.stringify({
+             log: !!document.getElementById('log'),
+             sidebar: !!document.getElementById('session-list'),
+             bridge: typeof window.bolo === 'object' && window.bolo !== null,
+             styled: getComputedStyle(document.body).display !== '',
+             sheets: document.styleSheets.length,
+           })`,
+        )
+        .then((raw: string) => {
+          const r = JSON.parse(raw) as Record<string, unknown>
+          const missing = Object.entries(r)
+            .filter(([k, v]) => (k === 'sheets' ? v === 0 : v !== true))
+            .map(([k]) => k)
+          if (missing.length) return fail(`renderer incomplete: ${missing.join(', ')}`)
+          process.stdout.write(`desktop smoke ok: ${raw}
+`)
+          app.exit(0)
+        })
+        .catch((e: unknown) => fail(String(e)))
+    })
+    // 兜底：卡住也必须退出，否则门禁会挂死
+    setTimeout(() => fail('timed out waiting for the window to load'), 30_000)
+  }
 }
 
 function registerIpc() {
