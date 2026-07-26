@@ -22,12 +22,23 @@ import {
   type RuntimeCommandResult,
 } from '../../shared/src/index.ts'
 import { resumeFromIdOrPath } from './resumeCli.ts'
+import {
+  runRuntimePager,
+  type RuntimePagerKey,
+} from './tui/runtimePager.ts'
+import { resolveTuiTheme } from './tui/theme.ts'
 
 export type RuntimeQueryCliOptions = {
   idOrPath: string
   query: RuntimeQuery
   cwd?: string
   json?: boolean
+  isTty?: boolean
+  columns?: number
+  rows?: number
+  env?: NodeJS.ProcessEnv
+  readKey?: () => Promise<RuntimePagerKey>
+  signal?: AbortSignal
   /** 测试专用：避免依赖本机 provider 配置。 */
   forceMock?: boolean
   writeOut?: (text: string) => void
@@ -35,12 +46,16 @@ export type RuntimeQueryCliOptions = {
 }
 
 export type RuntimeQueryCliResult = {
-  exitCode: 0 | 1
+  exitCode: 0 | 1 | 130
 }
 
 type RuntimeCliError = {
   ok: false
-  code: 'load_failed' | 'invalid_query' | 'not_found'
+  code:
+    | 'load_failed'
+    | 'invalid_query'
+    | 'not_found'
+    | 'pager_failed'
   detail: string
 }
 
@@ -112,12 +127,53 @@ export async function runRuntimeQueryCli(
       return { exitCode: 1 }
     }
 
-    writeOut(
-      json
-        ? `${JSON.stringify(result.view)}\n`
-        : `${formatRuntimeQueryView(result.view)}\n`,
-    )
-    return { exitCode: 0 }
+    if (json) {
+      writeOut(`${JSON.stringify(result.view)}\n`)
+      return { exitCode: 0 }
+    }
+
+    const isTty =
+      options.isTty ??
+      (process.stdin.isTTY === true &&
+        process.stdout.isTTY === true)
+    if (!isTty) {
+      writeOut(`${formatRuntimeQueryView(result.view)}\n`)
+      return { exitCode: 0 }
+    }
+
+    try {
+      const pager = await runRuntimePager({
+        view: result.view,
+        isTty: true,
+        columns: options.columns,
+        rows: options.rows,
+        color: resolveTuiTheme({
+          env: options.env ?? process.env,
+        }).ansi,
+        readKey: options.readKey,
+        writeOut,
+        signal: options.signal,
+      })
+      if (!pager.ok) {
+        // isTty=true 时不应命中；保留 fail-safe 一次性输出。
+        writeOut(`${formatRuntimeQueryView(result.view)}\n`)
+        return { exitCode: 0 }
+      }
+      return {
+        exitCode: pager.reason === 'interrupt' ? 130 : 0,
+      }
+    } catch (error) {
+      writeFailure(
+        {
+          ok: false,
+          code: 'pager_failed',
+          detail:
+            error instanceof Error ? error.message : String(error),
+        },
+        { json: false, writeOut, writeErr },
+      )
+      return { exitCode: 1 }
+    }
   } finally {
     await endSession(resumed.session, { reason: 'other' })
   }

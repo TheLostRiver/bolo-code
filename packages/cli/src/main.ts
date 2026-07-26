@@ -115,6 +115,10 @@ async function main(): Promise<void> {
           cwd,
           query: args.runtimeQuery,
           json: args.json,
+          isTty: isTty && process.stdout.isTTY === true,
+          columns: process.stdout.columns,
+          rows: process.stdout.rows,
+          env: process.env,
         })
       : await runRuntimeCommandCli({
           idOrPath,

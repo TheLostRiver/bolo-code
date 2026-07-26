@@ -28,6 +28,7 @@ import {
   parseArgs,
 } from '../packages/cli/src/parseArgs.ts'
 import { runRuntimeQueryCli } from '../packages/cli/src/runtimeCli.ts'
+import type { RuntimePagerKey } from '../packages/cli/src/tui/runtimePager.ts'
 
 const inMemory = await createSession({
   cwd: process.cwd(),
@@ -256,6 +257,174 @@ try {
     prompt: 'latest project runtime query',
   })
 
+  const pagerTranscript = path.join(root, 'runtime_cli_pager.jsonl')
+  const pagerSeed = await createSession({
+    cwd: root,
+    sessionId: 'runtime_cli_pager',
+    systemPrompt: false,
+  })
+  await ensureTranscriptFile(
+    pagerTranscript,
+    metaInputFromSession(pagerSeed),
+  )
+  for (let index = 1; index <= 7; index += 1) {
+    const turnId = `turn_pager_${index}`
+    await appendTurnEntry(pagerTranscript, {
+      sessionId: pagerSeed.id,
+      turnId,
+      state: 'admitted',
+      prompt: `pager prompt ${index}`,
+    })
+    await appendTurnEntry(pagerTranscript, {
+      sessionId: pagerSeed.id,
+      turnId,
+      state: 'completed',
+      terminalReason: 'completed',
+    })
+  }
+
+  let nonTtyReads = 0
+  const nonTtyOut: string[] = []
+  const nonTtyText = await runRuntimeQueryCli({
+    idOrPath: pagerTranscript,
+    cwd: root,
+    forceMock: true,
+    query: { action: 'list', entity: 'turn' },
+    isTty: false,
+    columns: 32,
+    rows: 8,
+    env: { NO_COLOR: '1' },
+    readKey: async () => {
+      nonTtyReads += 1
+      throw new Error('non-TTY runtime query must never read stdin')
+    },
+    writeOut: (text: string) => nonTtyOut.push(text),
+    writeErr: () => undefined,
+  })
+  assert.equal(nonTtyText.exitCode, 0)
+  assert.equal(nonTtyReads, 0)
+  assert.match(nonTtyOut.join(''), /turn_pager_1/)
+  assert.match(nonTtyOut.join(''), /turn_pager_7/)
+  assert.equal(nonTtyOut.join('').includes('\u001b[2J'), false)
+
+  const ttyKeys: RuntimePagerKey[] = [
+    'next',
+    'previous',
+    'quit',
+  ]
+  let ttyKeyIndex = 0
+  const ttyOut: string[] = []
+  const ttyText = await runRuntimeQueryCli({
+    idOrPath: pagerTranscript,
+    cwd: root,
+    forceMock: true,
+    query: { action: 'list', entity: 'turn' },
+    isTty: true,
+    columns: 48,
+    rows: 8,
+    env: { NO_COLOR: '1' },
+    readKey: async () => ttyKeys[ttyKeyIndex++] ?? 'eof',
+    writeOut: (text: string) => ttyOut.push(text),
+    writeErr: () => undefined,
+  })
+  assert.equal(ttyText.exitCode, 0)
+  assert.equal(ttyKeyIndex, ttyKeys.length)
+  assert.match(ttyOut.join(''), /page 1\/4/i)
+  assert.match(ttyOut.join(''), /page 2\/4/i)
+  assert.match(ttyOut.join(''), /\u001b\[2J/)
+  assert.equal(
+    /\u001b\[[0-9;]*m/.test(ttyOut.join('')),
+    false,
+    'NO_COLOR disables SGR while pager control sequences remain',
+  )
+
+  let inspectReads = 0
+  const inspectOut: string[] = []
+  const inspectedText = await runRuntimeQueryCli({
+    idOrPath: pagerTranscript,
+    cwd: root,
+    forceMock: true,
+    query: {
+      action: 'inspect',
+      entity: 'turn',
+      entityId: 'turn_pager_1',
+    },
+    isTty: true,
+    columns: 48,
+    rows: 8,
+    env: { NO_COLOR: '1' },
+    readKey: async () => {
+      inspectReads += 1
+      return 'quit'
+    },
+    writeOut: (text: string) => inspectOut.push(text),
+    writeErr: () => undefined,
+  })
+  assert.equal(inspectedText.exitCode, 0)
+  assert.equal(inspectReads, 1)
+  assert.match(inspectOut.join(''), /turn_pager_1/)
+  assert.match(inspectOut.join(''), /page 1\//i)
+
+  const colorOut: string[] = []
+  const colorText = await runRuntimeQueryCli({
+    idOrPath: pagerTranscript,
+    cwd: root,
+    forceMock: true,
+    query: { action: 'list', entity: 'turn' },
+    isTty: true,
+    columns: 48,
+    rows: 8,
+    env: {},
+    readKey: async () => 'quit',
+    writeOut: (text: string) => colorOut.push(text),
+    writeErr: () => undefined,
+  })
+  assert.equal(colorText.exitCode, 0)
+  assert.match(colorOut.join(''), /\u001b\[[0-9;]*m/)
+
+  let ctrlCReads = 0
+  const ctrlC = await runRuntimeQueryCli({
+    idOrPath: pagerTranscript,
+    cwd: root,
+    forceMock: true,
+    query: { action: 'list', entity: 'turn' },
+    isTty: true,
+    columns: 48,
+    rows: 8,
+    env: { NO_COLOR: '1' },
+    readKey: async () => {
+      ctrlCReads += 1
+      return 'ctrl-c'
+    },
+    writeOut: () => undefined,
+    writeErr: () => undefined,
+  })
+  assert.equal(ctrlCReads, 1)
+  assert.equal(ctrlC.exitCode, 130)
+
+  const pagerFailureErr: string[] = []
+  const pagerFailure = await runRuntimeQueryCli({
+    idOrPath: pagerTranscript,
+    cwd: root,
+    forceMock: true,
+    query: { action: 'list', entity: 'turn' },
+    isTty: true,
+    columns: 48,
+    rows: 8,
+    env: { NO_COLOR: '1' },
+    readKey: async () => {
+      throw new Error('injected pager input failure')
+    },
+    writeOut: () => undefined,
+    writeErr: (text: string) => pagerFailureErr.push(text),
+  })
+  assert.equal(pagerFailure.exitCode, 1)
+  assert.match(pagerFailureErr.join(''), /pager_failed/)
+  assert.match(
+    pagerFailureErr.join(''),
+    /injected pager input failure/,
+  )
+
   const out: string[] = []
   const err: string[] = []
   const direct = await runRuntimeQueryCli({
@@ -303,6 +472,37 @@ try {
   const configDir = path.join(root, 'config')
   await fs.mkdir(configDir, { recursive: true })
   const executable = path.resolve('packages/cli/bin/bolo.js')
+  const pipedText = spawnSync(
+    process.execPath,
+    [
+      executable,
+      'runtime',
+      'list',
+      'turn',
+      '--resume',
+      pagerTranscript,
+      '--cwd',
+      root,
+    ],
+    {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        BOLO_PROVIDER: 'mock',
+        BOLO_CONFIG_DIR: configDir,
+        COLUMNS: '24',
+        NO_COLOR: '1',
+      },
+    },
+  )
+  assert.equal(pipedText.status, 0, pipedText.stderr)
+  assert.equal(pipedText.stderr, '')
+  assert.match(pipedText.stdout, /turn_pager_1/)
+  assert.match(pipedText.stdout, /turn_pager_7/)
+  assert.equal(pipedText.stdout.includes('\u001b[2J'), false)
+  assert.equal(/\u001b\[[0-9;]*m/.test(pipedText.stdout), false)
+
   const spawned = spawnSync(
     process.execPath,
     [
