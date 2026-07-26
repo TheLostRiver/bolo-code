@@ -181,14 +181,15 @@ export async function spawnBackgroundShell(
     }
   }
 
-  child.stdout?.on('data', (c: Buffer) => {
+  // rt.exited 之后流已经 end；kill→SIGKILL 的排空窗口里仍会来 late data，
+  // 不守卫就是 write-after-end。
+  const sink = (c: Buffer) => {
+    if (rt.exited) return
     bump(c)
     stream.write(c)
-  })
-  child.stderr?.on('data', (c: Buffer) => {
-    bump(c)
-    stream.write(c)
-  })
+  }
+  child.stdout?.on('data', sink)
+  child.stderr?.on('data', sink)
 
   const finish = (code: number | null) => {
     if (rt.exited) return
@@ -209,6 +210,29 @@ export async function spawnBackgroundShell(
     }
     void rt.cleanup?.().catch(() => {})
   }
+
+  /**
+   * 落盘 sink 失败（ENOSPC / write-after-end / 句柄被回收）。
+   *
+   * 两件事都必须做，只做一件都是 bug：
+   * 1. 接住 'error'。没有监听器它就是未捕获异常，而全仓没有 process 级兜底 ——
+   *    那等于杀掉整个会话、其它后台 shell 与未落盘的在途 turn。
+   * 2. 连带杀掉进程。只标终态不杀进程会留下孤儿：输出已经没人接，
+   *    而 killBackgroundShell 见到终态会 no-op，于是这个进程再也杀不掉。
+   *
+   * 顺序：先 finish 定终态（status=failed，表明是 I/O 故障而非用户 kill），
+   * 再按捕获的 pid 收进程树。
+   */
+  const failOnSinkError = () => {
+    if (rt.exited) return
+    const pid = rt.pid
+    finish(null)
+    if (pid !== undefined) void killProcessTree(pid).catch(() => {})
+  }
+
+  // 挂在 finish 定义之后：createWriteStream 到这里没有 await，
+  // 流的异步 error 只可能在监听器就位后触发，不存在预注册窗口。
+  stream.on('error', failOnSinkError)
 
   child.on('error', () => finish(null))
   child.on('exit', (code) => finish(code))
@@ -386,6 +410,17 @@ export async function cleanupShellOutputDir(
   // 只删我们自己造的目录，且必须在 .bolo-tmp 之下
   if (!dir.includes(`${path.sep}.bolo-tmp${path.sep}`)) return
   await fs.rm(dir, { recursive: true, force: true }).catch(() => {})
+}
+
+/**
+ * 测试用：拿到某个 shell 的落盘流，用来注入真实的 I/O 失败。
+ * 产品代码不得使用——运行时句柄故意不放进纯数据 store。
+ */
+export function _getShellOutputStreamForTest(
+  store: BackgroundShellStore,
+  shellId: string,
+): WriteStream | undefined {
+  return runtimeMap(store).get(shellId)?.stream
 }
 
 /** 测试用：确认某 pid 是否还活着 */

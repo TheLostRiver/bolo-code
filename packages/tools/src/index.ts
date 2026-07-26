@@ -57,6 +57,7 @@ export {
   cleanupShellOutputDir,
   resolveShellOutputDir,
   isProcessAlive,
+  _getShellOutputStreamForTest,
   MAX_SHELL_OUTPUT_READ_BYTES,
   type SpawnBackgroundShellOptions,
   type SpawnBackgroundShellResult,
