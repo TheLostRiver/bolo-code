@@ -113,7 +113,7 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | 文件 Diff 日用 | ~95%+ | **D0–D7** |
 | 文件 Diff UI | ~90–95% | **U0–U4**；U5 真 Ink/IDE 可选 |
 | Hooks 日用 | ~96–98% | **H0–H5**（含 SessionEnd） |
-| Compact 日用 | ~92–95% | **C0–C5**；深化中 **AR2A0a/A0b → A1/A2**（ROADMAP §13.10.2） |
+| Compact 日用 | ~93–96% | **C0–C5 + AR2A0a/A0b**（hybrid 计数 · 中段截断 · 防重摘要）；当前 **AR2A1**（ROADMAP §13.10.2） |
 | 多 Provider 热切 | ~92–96% | **P0–P4.1 + CX7 Desktop** |
 | Effort 方言 | ~92–95% | **E0–E9** |
 | Provider UX | ~95–98% | **CX0–CX8**（ultrathink 默认 off） |
@@ -123,7 +123,7 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 
 **已闭环：** Diff · Hooks · Compact · Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX**。
 
-**当前主线：** Autonomous Road **AR2A0a 混合 token 计数**（借鉴 HC `tokenCountWithEstimation` 语义）：锚定最近 API 真实 input tokens + 只估算其后追加消息，修复 usage 整体替换估算导致的 auto compact 迟触发。随后 **AR2A0b**（工具输出中段截断 + 防重摘要标记，借鉴 Codex）→ **AR2A1 range/watermark** 纯契约。见 ROADMAP §13.10.2。
+**当前主线：** Autonomous Road **AR2A1 range/watermark 纯契约**：用固定 fixture 定义 partial range、stable watermark、保留区间与拒绝原因；证明 tool pair、lifecycle、resolution 边界前不接 rewrite/provider。（AR2A0a 混合 usage 锚定计数、AR2A0b 中段截断 + 防重摘要已落地。）见 ROADMAP §13.10.2。
 
 **其它开放轨（非阻塞）：**
 
@@ -156,9 +156,9 @@ DR2A 单 session runner ✅
 → AR1B3 command closeout ✅
 → AR1C1 text/pager ✅
 → AR1C2 automation closeout ✅
-→ AR2A0a 混合 token 计数（当前）
-→ AR2A0b 中段截断 + 防重摘要
-→ AR2A1 range/watermark
+→ AR2A0a 混合 token 计数 ✅
+→ AR2A0b 中段截断 + 防重摘要 ✅
+→ AR2A1 range/watermark（当前）
 → AR2A2–C Compact depth
 → AR3 Codex App 风格 Desktop
 → AR4 证据驱动深水项
@@ -361,6 +361,8 @@ cd apps/desktop && npm install && set BOLO_DESKTOP_MOCK=1 && npm start
 | AR1B3 | 顶层 `runtime discard\|retry-safe` · 稳定/显式 requestId · text/JSON envelope · exit 0/1/2 · restart non-executable warning |
 | AR1C1 | 共享纯 text renderer · 窄屏/NO_COLOR · 双 TTY 多页 pager · next/previous/q/Esc/Ctrl-C/EOF · raw-mode 恢复 |
 | AR1C2 | pipe/JSON 永不读 stdin · query success 原始 view · failure 单 payload · usage exit 2 · automation/help/参数排列默认回归 |
+| AR2A0a | `UsageAnchor`/`hybridTokenCount` 混合 usage 锚定计数 · `messageCountAtCall`/形状指纹 · deps/mid-turn/`/context` hybrid 接线 · 旧路径不变 |
+| AR2A0b | `truncateMiddle` 中段截断（幂等 + 原始规模标注）· per-tool 预算表 · exec/micro 共用 · `COMPACT_SUMMARY_MARKER` 防重摘要合并提示 |
 
 最新 commit 以 `git log` 为准。
 

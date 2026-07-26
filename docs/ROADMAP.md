@@ -23,7 +23,7 @@
 | **CLI TUI（壳）** | **~70–80%** | 文本框布局/picker/主题；active Ctrl-C 取消本轮；**非**真 React Ink |
 | **Electron GUI** | **~65–75%** | 壳 + 流式 + 权限 + 设置 + 多 provider（CX7） |
 | **Hooks · 日用契约** | **~96–98%** | **H0–H5 已落地**（SessionEnd · exit 语义 · updatedInput · `/hooks recent`） |
-| **Compact · 日用管道** | **~92–95%** | **C0–C5 已落地**；深化中：**AR2A0a/A0b（当前）**→ A1 watermark → A2 safe rewrite（§13.10.2） |
+| **Compact · 日用管道** | **~93–96%** | **C0–C5 + AR2A0a/A0b 已落地**（hybrid 计数 · 中段截断 · 防重摘要）；当前 **AR2A1 watermark** → A2 safe rewrite（§13.10.2） |
 | **Provider · 多实例热切** | **~92–96%** | **P0–P4.1 + CX7 Desktop** |
 | **Effort · 推理强度方言** | **~92–95%** | **E0–E9 已落地**；adaptive thinking 归 AR4 |
 | **Provider UX · 便利层** | **~95–98%** | **CX0–CX8 已落地**（ultrathink 默认 off）· [PROVIDER_UX.md](./PROVIDER_UX.md) |
@@ -31,7 +31,7 @@
 
 **已闭环主线：** headless 日用 → Diff（D0–D7 / U0–U4）· Hooks（H0–H5）· Compact（C0–C5）· Provider（P0–P4.1）· Effort（E0–E9）· Provider UX（CX0–CX8）· 可靠性（R0–R4）· **Durable Runtime（DR0–DR4）** · **Autonomous Road AR1 CLI/TUI runtime UX**。切片明细 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
 
-**当前主线：** **AR2A0a · 混合 usage 锚定 token 计数**（§13.10.2）：锚定最近 API 真实 input tokens + 只估算其后追加消息，修复"usage 整体替换估算"导致的 auto compact 迟触发。随后 **AR2A0b**（工具输出中段截断 + 防重摘要标记）→ **AR2A1**（range/watermark 纯契约）。
+**当前主线：** **AR2A1 · range/watermark 纯契约**（§13.10.2）：用固定 message/transcript fixture 定义 partial range、stable watermark、保留区间与拒绝原因；证明 tool pair、lifecycle、resolution 保留边界前不接 rewrite/provider。（AR2A0a 混合计数、AR2A0b 中段截断/防重摘要已落地。）
 
 **非阻塞开放项：** U5 真·Ink/IDE · adaptive thinking · Desktop 打磨（均按 AR3/AR4 排期与证据门控）。
 
@@ -105,7 +105,7 @@
 
 **一句话：** 主路径、Diff、Hooks、Compact、多 Provider、Effort、Provider UX、可靠性 R0–R4、Durable Runtime DR0–DR4、AR1 runtime UX 已收口；当前进入 **AR2 Compact 深化**（上下文正确性先于节省率）。
 
-**下一刀（当前主线）：** **AR2A0a 混合 token 计数** → AR2A0b 中段截断/防重摘要 → AR2A1 range/watermark 契约（见 §13.10.2）。
+**下一刀（当前主线）：** **AR2A1 range/watermark 纯契约**（A0a/A0b ✅ 已落地）→ AR2A2 safe rewrite（见 §13.10.2）。
 
 ---
 
@@ -155,8 +155,8 @@
 
 | 项 | 去向 |
 |----|------|
-| 混合 token 计数（usage 锚定 + 尾部估算） | → **AR2A0a（当前主线）** |
-| 工具输出中段截断 · 防重摘要标记 | → **AR2A0b** |
+| 混合 token 计数（usage 锚定 + 尾部估算） | ✅ **AR2A0a 已落地** |
+| 工具输出中段截断 · 防重摘要标记 | ✅ **AR2A0b 已落地** |
 | partial compact / watermark | → **AR2A1 / AR2A2** |
 | 真 tokenizer / budget | → **AR2B1 / AR2B2**（A0a 落地后重估必要性） |
 | remote compaction / session-memory | → **AR2C** ADR（默认不实施） |
@@ -272,9 +272,9 @@ Safe boundary 只承诺：provider 调用前/完整响应归约后 · 每个 too
 
 | 切片 | 准入 / packages-first 交付 | 集成与验收 | 完成或停止门槛 |
 |------|---------------------------|------------|----------------|
-| **AR2A0a · 混合 token 计数（当前）** | `UsageAnchor`（anchorInputTokens + anchoredMessageCount + role/toolCall 指纹）· `hybridTokenCount` 纯函数 · `shouldAutoCompact`/`resolveAutoCompactTokenCount` opt-in 扩展 | sessionUsage 记 `messageCountAtCall`；deps/queryLoop 传锚；`/context` 显示 `pressure source: hybrid`；锚失效（snip/compact 改头）→ 回退全量估算 | 旧 usage/estimate 路径与既有测试语义不变；micro 改写不毁锚；否则回退 |
-| **AR2A0b · 中段截断 + 防重摘要** | `truncateMiddle`（保头尾 + 原始 tokens/行数标注 + 幂等）· 表驱动 per-tool 预算 · `COMPACT_SUMMARY_MARKER` / `isCompactSummaryMessage` · re-compact 合并提示 | toolExecution 执行边界升级（spill 全量落盘不动）；microcompact 复用同 util；二次 compact 注入 merge 提示 | 截断只在产出时应用一次，绝不回溯改写历史消息；spill 文件保持完整 |
-| **AR2A1 · range/watermark** | 定义 partial range、stable watermark、保留区间与拒绝原因的纯类型/纯函数（参考 HC `lastSummarizedMessageId` 与 Codex window 链语义） | 仅用固定 message/transcript fixture 验证边界、幂等、空范围、重复 compact；尚不接 provider | 契约无法表达 tool pair、lifecycle 或 resolution 保留时停止集成，先修契约 |
+| **AR2A0a · 混合 token 计数** ✅ | `UsageAnchor` + `hybridTokenCount` 纯函数 · `shouldAutoCompact`/`resolveAutoCompactTokenCount` opt-in 扩展 | sessionUsage 记 `messageCountAtCall`/指纹；deps/queryLoop/mid-turn 传锚；`/context` `pressure source: hybrid`；锚失效回退全量估算 | ✅ 旧 usage/estimate 路径不变；micro 改写不毁锚 |
+| **AR2A0b · 中段截断 + 防重摘要** ✅ | `truncateMiddle`（保头尾 + 原始规模标注 + 幂等）· per-tool 预算表 · `COMPACT_SUMMARY_MARKER` / merge 提示 | toolExecution exec 边界 + microcompact 共用；spill 全量落盘不动；boundary `mergedPriorSummary` | ✅ 截断只在产出时一次，不回溯改写历史 |
+| **AR2A1 · range/watermark（当前）** | 定义 partial range、stable watermark、保留区间与拒绝原因的纯类型/纯函数（参考 HC `lastSummarizedMessageId` 与 Codex window 链语义） | 仅用固定 message/transcript fixture 验证边界、幂等、空范围、重复 compact；尚不接 provider | 契约无法表达 tool pair、lifecycle 或 resolution 保留时停止集成，先修契约 |
 | **AR2A2 · safe rewrite** | A1 全绿；把 range 接入现有 C0–C5 compact/rewrite barrier | tool call/result 不拆对；durable turn/control/task/resolution 不丢；旧 transcript 可读；写失败完整回退 | 任一 fixture 出现不可恢复丢失、半写或自动 replay，立即回退并停止本刀 |
 | **AR2B1 · tokenizer registry** | A2 稳定；**先重估必要性**（A0a 已显著提升精度）；若仍需要：providers/shared 契约层 provider/model→tokenizer/budget，unknown 保守 fallback | renderer/core 不出现 provider 分支；mock 与至少两类方言 fixture；预算错误 fail-closed | 若必须联网或引入不可审计 native 依赖，只保留接口与 fallback，不引入实现 |
 | **AR2B2 · measurable budget** | B1 可复现；固定中英文本、tool/diff、长 JSON 语料 | 记录 token 偏差、compact 后成本、延迟与峰值内存；设回归阈值 | 没有相对当前估算的稳定收益，不替换默认算法，只保留基准结论 |
@@ -334,9 +334,9 @@ AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 regis
 |------|------|---------------------|-------------------|--------------|------|
 | 1–6 | **DR2C3–DR4C** | durable runtime 收口 | `/turn` `/bg` `/runtime` 全链 | crash/竞态/E2E | ✅ 存档 §H6 |
 | 7–9 | **AR1A–AR1C2** | runtime query/action/renderer/pager/automation | CLI 全链 | golden + 真实 bin | ✅ 存档 §H7 |
-| 10 | **AR2A0a · 混合 token 计数** | `UsageAnchor` + `hybridTokenCount` + opt-in 阈值 | `/context` hybrid 来源；auto compact 不再迟触发 | 锚失效回退 + 旧路径回归 | **当前** |
-| 11 | **AR2A0b · 中段截断/防重摘要** | `truncateMiddle` + 预算表 + summary marker | 工具长输出保头尾；re-compact 不重新叙述 | 幂等 + spill 完整 + cache 稳定 | 📋 |
-| 12 | **AR2A1–A2 · watermark/safe rewrite** | range/watermark 纯契约 → rewrite 接线 | partial compact 主路径 | tool pairing + lifecycle 保留 | 📋 |
+| 10 | **AR2A0a · 混合 token 计数** | `UsageAnchor` + `hybridTokenCount` + opt-in 阈值 | `/context` hybrid 来源；auto compact 不再迟触发 | 锚失效回退 + 旧路径回归 | ✅ |
+| 11 | **AR2A0b · 中段截断/防重摘要** | `truncateMiddle` + 预算表 + summary marker | 工具长输出保头尾；re-compact 不重新叙述 | 幂等 + spill 完整 + cache 稳定 | ✅ |
+| 12 | **AR2A1–A2 · watermark/safe rewrite** | range/watermark 纯契约 → rewrite 接线 | partial compact 主路径 | tool pairing + lifecycle 保留 | **当前（AR2A1）** |
 | 13 | **AR2B–C · tokenizer/benchmark/ADR** | registry（重估）+ 语料基准 + remote 决策 | 可量化 token/cost | 偏差阈值 + fail-closed | 📋 |
 | 14 | **AR3A–F** | protocol client/store；无 renderer 状态机 | Codex App 风格 Desktop | mock/core IPC + crash/restart + Windows package | 📋 |
 | 15 | **AR4** | 逐项 evidence gate | 有证据实施；无证据书面关闭 | 场景/基准/兼容证据 | 📋 |

@@ -194,6 +194,11 @@ finalInstructions = userInstructions + "\n\n" + hookInstructions
 
 **禁止**：无摘要只保留最近 N 条。
 
+**AR2A0b · 防重摘要（已接线，借鉴 Codex `SUMMARY_PREFIX` / `is_summary_message`）：**
+
+- summary user-message 以稳定字面量开头：`COMPACT_SUMMARY_MARKER`（既有输出前缀，零变化）；`isCompactSummaryMessage` 可检测
+- 二次 compact 时若旧 summary 落在**待摘要前缀**（keep 尾部不算），`runFullCompact` 经 instructions 通道注入 `COMPACT_MERGE_PRIOR_SUMMARY_HINT`（合并事实、勿重新叙述），并在 boundary `compactMetadata.mergedPriorSummary: true` 留本地可观测标记（非遥测）
+
 ---
 
 ## 3. Auto Compact 策略（对照 autoCompact.ts）
@@ -233,7 +238,21 @@ DEFAULT_MAX_AUTOCOMPACT_FAILURES = 3
 | system sections | `estimateSystemSectionsTokens`（`/context` 合计压力） |
 
 与 `/context`、`shouldAutoCompact`、full compact boundary 元数据共用 `estimateTokens` 族。  
-**不做** 真 tokenizer / 计费 API。
+**不做** 真 tokenizer / 计费 API（是否引入 tokenizer registry 由 AR2B1 在 A0a 落地后重估）。
+
+**AR2A0a · 混合 usage 锚定计数（已接线，借鉴 HC `tokenCountWithEstimation` 语义）：**
+
+```
+UsageAnchor = { anchorInputTokens, anchoredMessageCount, fingerprint? }
+hybridTokenCount = anchor input（provider 真实 usage）
+                 + estimateTokens(锚后追加的消息) × 4/3 保守垫
+```
+
+- 锚在 queryLoop 累计 provider 真实 usage 时记录：`lastCall.messageCountAtCall` + `messagePrefixFingerprint`（role+toolCall 形状指纹，**不含内容**）
+- microcompact 只改正文 → 指纹不变，锚仍有效；snip / full compact 改写头部 → 指纹失配或长度收缩 → 锚失效，回退全量估算
+- 修复的缺口：旧 C2 语义 `usageInputTokens ?? estimate` 会让 API 响应后新追加的 tool result 对阈值不可见 → auto compact 迟触发
+- 消费方：`createAutoCompactPrepare.getUsageAnchor` · `tryMidTurnCompact` · `/context`（`pressure source: hybrid`，显示 anchor + tail 拆分）
+- 估算 usage（无 provider usage 的 call）不建锚；旧会话无快照字段 → 回退 C2 路径，行为不变
 
 ### 3.3 熔断
 
@@ -331,6 +350,21 @@ type MicrocompactResult = {
 
 **不做**：cached cache_edits API、GrowthBook 开关、time-based 远程配置。
 
+### 4.4 工具输出中段截断（AR2A0b · exec 边界 + micro 共用）
+
+借鉴 Codex `truncate_middle` 语义：长输出**保头（60%）保尾**，中间一行标注原始规模——尾部常含真正的失败原因/结果，head-only 会丢掉。
+
+```
+truncateMiddle(text, { maxChars, headFraction=0.6 })
+  → head + "…[truncated middle: original ~N tokens, M lines (C chars); head+tail kept; …]…" + tail
+```
+
+- **预算表驱动**（`toolOutputBudgetBytes`）：显式覆盖（`ctx.maxToolResultChars`）> per-tool 表（Bash 16k · Read 40k · Grep 12k · WebFetch 8k）> 默认 10k；禁止工具/厂商 if-else 散落
+- **幂等**：已含标注的文本不再二次截断（exec → micro 两层不叠标注）
+- **只在产出时应用一次**，绝不回溯改写历史消息（prompt cache 前缀稳定）
+- spill 不变：完整输出仍写 `.bolo/sessions/tool-results/`，`[full result: path]` 指向完整数据
+- 应用层：`toolExecution.truncateToolResultOutput`（exec 边界）与 microcompact `truncateToolContent` 共用同一 util；单测 `test-truncate-middle`
+
 ---
 
 ## 5. 与 Session / Transcript 的关系
@@ -422,7 +456,9 @@ type CompactSummarizer = (req: {
 | **已接线** | **F-CP-CACHED-MC** `cachedMicrocompactMessages`（content-clear + cacheFriendly 标记；无 API cache_edits） |
 | **已接线** | **F-CP-SNIP-UUID** 边界 `snip_id=` 可解析（非完整 SnipTool 回放） |
 | **C 轨（✅ C0–C5）** | keep 轮次 · usage 阈值 · mid-turn · catalog 再注入 · `/context` 诊断；日用 **~92–95%**；见 [ROADMAP.md §8](./ROADMAP.md) |
-| **OUT / 限制** | 真 tokenizer · 完整 SnipTool UUID 链 · 厂商 cache_edits API · partial/remote/session-memory（非 C 轨） |
+| **已接线（AR2A0a）** | 混合 usage 锚定计数：`UsageAnchor` · `hybridTokenCount` · `messageCountAtCall`/指纹 · `/context` hybrid 来源；`test-compact`/`test-auto-compact`/`test-context-slash` |
+| **已接线（AR2A0b）** | 中段截断 `truncateMiddle` + per-tool 预算表 + `COMPACT_SUMMARY_MARKER` 防重摘要合并提示；`test-truncate-middle`/`test-tool-calling` |
+| **OUT / 限制** | 完整 SnipTool UUID 链 · 厂商 cache_edits API · remote/session-memory；partial/watermark → AR2A1/A2 · tokenizer registry → AR2B（见 [ROADMAP.md §13.10.2](./ROADMAP.md)） |
 
 ### C 轨日用缺口（相对已接线主路径）
 

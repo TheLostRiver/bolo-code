@@ -31,7 +31,7 @@
 | Subagent | ~89–95% | `config.agents` + `agents/*.md` · durable task/result · overflow FIFO/cancel · safe delivery · worktree 保全 |
 | 文件 Diff 日用 | ~95%+ | D0–D7 · U0–U4 |
 | Hooks 日用 | ~96–98% | H0–H5（含 SessionEnd） |
-| Compact 日用 | ~92–95% | C0–C5；深化中 AR2A0a/A0b → A1/A2 |
+| Compact 日用 | ~93–96% | C0–C5 + AR2A0a/A0b（hybrid 计数 · 中段截断 · 防重摘要） |
 | **多 Provider 热切** | **~92–96%** | P0–P4.1 + CX7 Desktop |
 | **Effort 方言** | **~92–95%** | E0–E9 |
 | **Provider UX** | **~95–98%** | CX0–CX8（ultrathink 默认 off） |
@@ -41,7 +41,7 @@
 
 **已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Runtime DR0–DR4 · **Autonomous Road AR1 CLI/TUI runtime UX**。
 
-**当前主线：** Autonomous Road **AR2A0a 混合 token 计数**：锚定最近 API 真实 usage + 只估算尾部增量（借鉴 HC 语义），修复 auto compact 迟触发；随后 **AR2A0b** 工具输出中段截断 + 防重摘要（借鉴 Codex 语义）→ **AR2A1** range/watermark 纯契约。
+**当前主线：** Autonomous Road **AR2A1 range/watermark 纯契约**（AR2A0a 混合 usage 锚定计数、AR2A0b 中段截断 + 防重摘要已落地）。
 
 **非阻塞开放轨：** Compact §8.9 · U5 真·Ink/IDE · adaptive thinking · Desktop 体验打磨。
 
