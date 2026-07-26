@@ -10,7 +10,7 @@ import {
   type BoloSession,
   type SessionEvent,
 } from '../../core/src/index.ts'
-import { createCliProvider } from './provider.ts'
+import { createCliProvider, isExplicitMockProvider } from './provider.ts'
 import { createTtyAskPermission } from './tui/askPermissionTty.ts'
 import { renderWelcomeBanner } from './tui/banner.ts'
 import { formatSessionStatusLine } from './tui/statusLine.ts'
@@ -87,7 +87,7 @@ export async function runNewSessionCli(
     const forced = createCliProvider({ forceMock: true })
     session.provider = forced.provider
     session.deps = productionDeps(forced.provider)
-  } else if (workspace.providerMissingKey) {
+  } else if (workspace.providerMissingKey && !isExplicitMockProvider()) {
     const delayedFailure = createCliProvider()
     session.provider = delayedFailure.provider
     session.deps = productionDeps(delayedFailure.provider)

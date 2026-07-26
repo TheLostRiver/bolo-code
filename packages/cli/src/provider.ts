@@ -14,6 +14,14 @@ import {
 const NO_KEY_MSG =
   'No LLM API key configured. Set BOLO_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY, or set BOLO_PROVIDER=mock for offline mock.'
 
+/**
+ * 用户是否显式选了 mock（`BOLO_PROVIDER=mock`）。
+ * 显式选 mock 就是不打算用真 key，此时再警告缺 key 只会吓到新用户。
+ */
+export function isExplicitMockProvider(): boolean {
+  return envExplicitMock()
+}
+
 function envExplicitMock(): boolean {
   const v = process.env.BOLO_PROVIDER?.toLowerCase().trim()
   return v === 'mock'
