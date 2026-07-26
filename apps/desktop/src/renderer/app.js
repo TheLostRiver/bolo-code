@@ -16,6 +16,12 @@ const setProvider = document.getElementById('set-provider')
 const setPreset = document.getElementById('set-preset')
 const setEffort = document.getElementById('set-effort')
 const hdrProvider = document.getElementById('hdr-provider')
+const sessionListEl = document.getElementById('session-list')
+const sidePanel = document.getElementById('side-panel')
+const panelBody = document.getElementById('panel-body')
+const btnPanel = document.getElementById('btn-panel')
+const btnPanelClose = document.getElementById('btn-panel-close')
+const btnTheme = document.getElementById('btn-theme')
 
 let streamEl = null
 let streamBuf = ''
@@ -24,6 +30,139 @@ let lastProviders = []
 /** @type {{ id: string, label?: string }[]} */
 let lastPresets = []
 let fillingProviderSelect = false
+
+/**
+ * 会话侧栏。
+ *
+ * 排序、状态、标题回退**全部由 packages 的 buildSessionListView 决定**，
+ * 这里只把它给的行放进 DOM —— 薄壳纪律：renderer 不重算业务状态。
+ * 尤其「等待审批」置顶这件事不能在这层再排一次，否则两处规则会漂移。
+ */
+async function refreshSessions() {
+  if (!sessionListEl || !window.bolo?.listSessions) return
+  let entries = []
+  try {
+    entries = await window.bolo.listSessions()
+  } catch {
+    return // 取不到就保持上一次的列表，不清空成「一个会话都没有」
+  }
+  sessionListEl.replaceChildren()
+  for (const e of entries) {
+    const li = document.createElement('li')
+    li.className = 'session-item'
+    li.tabIndex = 0
+    li.setAttribute('role', 'option')
+    if (e.active) li.setAttribute('aria-current', 'true')
+
+    const title = document.createElement('span')
+    title.className = 'session-title'
+    title.textContent = e.title
+    li.appendChild(title)
+
+    const meta = document.createElement('div')
+    meta.className = 'session-meta'
+    const badge = document.createElement('span')
+    badge.className = 'badge'
+    badge.dataset.status = e.status
+    badge.textContent = e.status.replace(/_/g, ' ')
+    meta.appendChild(badge)
+    const count = document.createElement('span')
+    count.textContent = `${e.messageCount} msg`
+    meta.appendChild(count)
+    li.appendChild(meta)
+
+    sessionListEl.appendChild(li)
+  }
+}
+
+/**
+ * 卡片渲染。
+ *
+ * 折叠与否、截断与否、状态是什么，**都由 packages 的 buildTimelineCards
+ * 已经算好**（主进程经 bolo:getTimeline 下发）。这里只呈现。
+ *
+ * 全程用 textContent：模型输出是不可信内容，绝不当 HTML 注入。
+ * 这条由 scripts/test-timeline-cards.ts 守着。
+ */
+function renderCard(card) {
+  const el = document.createElement('article')
+  el.className = 'card'
+  el.dataset.kind = card.kind
+  if (card.status) el.dataset.status = card.status
+
+  const head = document.createElement('div')
+  head.className = 'card-title'
+  const kind = document.createElement('span')
+  kind.className = 'card-kind'
+  kind.textContent = card.kind
+  head.appendChild(kind)
+  const title = document.createElement('span')
+  title.textContent = card.title
+  head.appendChild(title)
+  el.appendChild(head)
+
+  if (card.body) {
+    const body = document.createElement('pre')
+    body.className = 'card-body'
+    body.textContent = card.body
+    // 折叠的卡先不显示正文，但保留在 DOM 里，展开无需再取数
+    body.hidden = card.collapsed
+    el.appendChild(body)
+
+    if (card.collapsed) {
+      const toggle = document.createElement('button')
+      toggle.type = 'button'
+      toggle.className = 'disclosure'
+      toggle.textContent = 'show output'
+      toggle.setAttribute('aria-expanded', 'false')
+      toggle.addEventListener('click', () => {
+        const nowHidden = !body.hidden
+        body.hidden = nowHidden
+        toggle.textContent = nowHidden ? 'show output' : 'hide output'
+        toggle.setAttribute('aria-expanded', String(!nowHidden))
+      })
+      el.appendChild(toggle)
+    }
+
+    // 截断了就要说 —— 悄悄截会被读成「它就返回了这么多」
+    if (card.truncated) {
+      const note = document.createElement('div')
+      note.className = 'truncated-note'
+      note.textContent = 'output truncated (head and tail kept)'
+      el.appendChild(note)
+    }
+  }
+
+  return el
+}
+
+/**
+ * 从结构化 timeline 重建历史。
+ *
+ * 与旧的 reloadMessages 的区别不是「更详细」而是**语义不同**：
+ * 那个走 listMessages，把历史拍平成截断字符串，工具调用与 diff 一律丢失。
+ */
+async function reloadTimeline() {
+  if (!window.bolo?.getTimeline) return false
+  let r
+  try {
+    r = await window.bolo.getTimeline()
+  } catch {
+    return false
+  }
+  if (!r?.ok) {
+    // 读不出来 ≠ 没有历史。清空成空白会让用户以为记录丢了。
+    if (r?.code === 'unreadable') {
+      appendMsg('system', `history could not be read: ${r.detail ?? 'unknown'}`)
+    }
+    return false
+  }
+  const cards = (r.cards ?? []).slice()
+  logEl.replaceChildren()
+  for (const c of cards) logEl.appendChild(renderCard(c))
+  logEl.scrollTop = logEl.scrollHeight
+  return true
+}
 
 function appendMsg(role, text) {
   const div = document.createElement('div')
@@ -277,7 +416,10 @@ async function send() {
     if (r.type === 'slash' && r.message) {
       appendMsg('system', r.message)
     } else if (r.type === 'prompt' || r.type === 'turn') {
-      await reloadMessages()
+      // 优先走结构化 timeline；取不到才退回旧的扁平重拉，
+      // 免得一处出问题就整段历史消失
+      if (!(await reloadTimeline())) await reloadMessages()
+      await refreshSessions()
     } else if (r.message) {
       appendMsg('system', String(r.message))
     }
@@ -389,6 +531,37 @@ document.getElementById('perm-always')?.addEventListener('click', () =>
 document.getElementById('perm-deny')?.addEventListener('click', () =>
   respondPerm('deny'),
 )
+// 主题：light / dark 双一等公民。记住选择，别每次启动都回默认。
+btnTheme?.addEventListener('click', () => {
+  const root = document.documentElement
+  const next = root.dataset.theme === 'dark' ? 'light' : 'dark'
+  root.dataset.theme = next
+  try {
+    localStorage.setItem('bolo.theme', next)
+  } catch {
+    /* 存不了就只影响本次会话，不该因此报错 */
+  }
+})
+try {
+  const saved = localStorage.getItem('bolo.theme')
+  if (saved === 'dark' || saved === 'light') {
+    document.documentElement.dataset.theme = saved
+  } else if (window.matchMedia?.('(prefers-color-scheme: dark)').matches) {
+    document.documentElement.dataset.theme = 'dark'
+  }
+} catch {
+  /* ignore */
+}
+
+// 右栏按需 toggle：常驻会把中间对话挤窄
+function setPanel(open) {
+  if (!sidePanel || !btnPanel) return
+  sidePanel.hidden = !open
+  btnPanel.setAttribute('aria-expanded', String(open))
+}
+btnPanel?.addEventListener('click', () => setPanel(sidePanel?.hidden === true))
+btnPanelClose?.addEventListener('click', () => setPanel(false))
+
 document.getElementById('btn-settings')?.addEventListener('click', () =>
   void openSettings(),
 )
@@ -421,7 +594,9 @@ promptEl.addEventListener('keydown', (ev) => {
 void (async () => {
   await refreshStatus()
   await refreshProviders()
-  await reloadMessages()
+  await refreshSessions()
+  // 结构化 timeline 取不到才退回扁平重拉：一处出问题不该让整段历史消失
+  if (!(await reloadTimeline())) await reloadMessages()
   appendMsg(
     'system',
     'Bolo desktop — streaming, permissions, multi-provider (CX7). /help works.',

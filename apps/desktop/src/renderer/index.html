@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="light">
   <head>
     <meta charset="UTF-8" />
     <meta
@@ -10,17 +10,82 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <header class="top">
-      <div class="brand">BOLO</div>
-      <div class="top-actions">
-        <label class="provider-pick" title="Active provider">
-          <select id="hdr-provider" aria-label="Provider"></select>
-        </label>
-        <button type="button" id="btn-settings" class="ghost">Settings</button>
-        <div id="status" class="status">loading…</div>
-      </div>
-    </header>
-    <main id="log" class="log" aria-live="polite"></main>
+    <!--
+      三栏骨架（docs/DESKTOP_DESIGN.md §2.1）：
+        左 = 会话列表   中 = 当前会话时间线   右 = 按需 toggle 的产物面板
+
+      右栏刻意**不常驻**：常驻会把中间对话挤窄，而对话才是主体。
+    -->
+    <div class="app">
+      <aside class="sidebar" aria-label="Sessions">
+        <div class="sidebar-head">
+          <span class="brand">BOLO</span>
+          <button
+            type="button"
+            id="btn-new-session"
+            class="ghost icon"
+            title="New session"
+            aria-label="New session"
+          >
+            +
+          </button>
+        </div>
+        <!-- 列表项由 packages 的 buildSessionListView 决定内容与排序 -->
+        <ul id="session-list" class="session-list" aria-label="Session list"></ul>
+      </aside>
+
+      <section class="center">
+        <header class="top">
+          <div class="top-actions">
+            <label class="provider-pick" title="Active provider">
+              <select id="hdr-provider" aria-label="Provider"></select>
+            </label>
+            <button type="button" id="btn-theme" class="ghost" aria-label="Toggle theme">
+              Theme
+            </button>
+            <button
+              type="button"
+              id="btn-panel"
+              class="ghost"
+              aria-expanded="false"
+              aria-controls="side-panel"
+            >
+              Details
+            </button>
+            <button type="button" id="btn-settings" class="ghost">Settings</button>
+          </div>
+          <div id="status" class="status">loading…</div>
+        </header>
+
+        <main id="log" class="log" aria-live="polite" aria-label="Conversation"></main>
+
+        <footer class="input-bar">
+          <!--
+            composer 在运行中**不锁**（docs/DESKTOP_DESIGN.md §2.4）。
+            queue 与 steer 要成为两个显式动作 —— 那是 AR3D 的事，
+            这里先把「运行中仍可输入」立住。
+          -->
+          <input
+            id="prompt"
+            type="text"
+            placeholder="Message or /help …"
+            autocomplete="off"
+          />
+          <button id="send" type="button">Send</button>
+        </footer>
+      </section>
+
+      <aside id="side-panel" class="panel" hidden aria-label="Details">
+        <div class="panel-head">
+          <span>Details</span>
+          <button type="button" id="btn-panel-close" class="ghost icon" aria-label="Close">
+            ×
+          </button>
+        </div>
+        <div id="panel-body" class="panel-body"></div>
+      </aside>
+    </div>
+
     <div id="perm" class="perm" hidden>
       <div class="perm-card">
         <pre id="perm-text"></pre>
@@ -31,6 +96,7 @@
         </div>
       </div>
     </div>
+
     <div id="settings" class="perm" hidden>
       <div class="perm-card settings-card">
         <h3>Session settings</h3>
@@ -73,15 +139,7 @@
         </div>
       </div>
     </div>
-    <footer class="input-bar">
-      <input
-        id="prompt"
-        type="text"
-        placeholder="Message or /help …"
-        autocomplete="off"
-      />
-      <button id="send" type="button">Send</button>
-    </footer>
+
     <script type="module" src="./app.js"></script>
   </body>
 </html>

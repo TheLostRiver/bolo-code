@@ -31,6 +31,9 @@ const {
 } = await import(
   pathToFileURL(path.join(repoRoot, 'packages/core/src/index.ts')).href
 )
+const { buildTimelineCards } = await import(
+  pathToFileURL(path.join(repoRoot, 'packages/shared/src/index.ts')).href
+)
 const {
   createMockProvider,
   detectEffortDialectId,
@@ -402,11 +405,19 @@ function registerIpc() {
     const meta = getSessionPersistMeta(s)
     if (!meta?.filePath) {
       // 还没落盘的新会话：不是错误，也不是「读不出来」
-      return { ok: true, turns: [], usedCompactBoundary: false }
+      return { ok: true, cards: [], usedCompactBoundary: false }
     }
     // 三种情况在这里就分开了，renderer 不必自己猜：
     // not_found（还没写）/ unreadable（有文件但读不出）/ ok 且零 turn（真空）
-    return await loadSessionTimeline(meta.filePath)
+    const r = await loadSessionTimeline(meta.filePath)
+    if (!r.ok) return r
+    // renderer 是原生 JS，导入不了 TS 包 —— 折叠/截断/状态在这里算好再下发，
+    // 壳只负责把纯文本放进 DOM
+    return {
+      ok: true,
+      usedCompactBoundary: r.usedCompactBoundary,
+      cards: buildTimelineCards({ turns: r.turns }),
+    }
   })
 
   // AR3B：会话列表。运行时状态来自当前会话的快照，
