@@ -199,8 +199,11 @@ controlId + sessionId + kind + state + timestamp
 - AR1B2 为 pending/ready queue additive 显示 `control.replace + requiredInput=["prompt"]`；steer 仍只可 cancel。`control.replace` 先 preflight，再 durable cancel 旧 control、以 requestId 稳定派生新 control/turn 并追加 FIFO 尾部；旧 prompt/lifecycle 不改写。
 - `/runtime edit <controlId> <prompt>` 与 `/runtime remove <controlId>` 只操作当前进程 live coordinator。cancel 已生效但 replacement admission 失败时返回 accepted + warning 且无 replacement；同 requestId 完整成功幂等，不同请求/stale target 冲突。
 - 顶层 `bolo runtime list|inspect --resume …` 仍是只读诊断。进程退出后 pending/ready 只恢复 interrupted，coordinator 不重建 executable queue，因此不支持跨进程原地 edit/remove。
+- AR1B3 顶层 CLI 只增加恢复后仍有意义的 `runtime discard|retry-safe`。默认 requestId 按 session/action/entity/id 稳定派生，也可用 `--request-id` 覆盖；protocol result 与 exit 0/1/2 区分 accepted、rejected、usage。
+- 顶层 retry-safe 不调用 provider或 drain queue；result 添加 non-interactive warning。进程退出后 replacement turn/control 在下次 resume 分别恢复为 admitted/ready provenance 的 interrupted，coordinator 仍为空。
+- JSON command output 是一个 `runtime.result`；load failure 是一个 `{ok:false,code:"load_failed",detail}`。resume banner、provider key warning 与 SessionEnd event 不污染 stdout。
 
-DR0–DR4、AR1A 与 AR1B1–B2 已收口；当前主线为 AR1B3 command closeout。
+DR0–DR4、AR1A 与 AR1B1–B3 已收口；当前主线为 AR1C1 text/pager。
 
 ## 2. 快照格式（version 1，只读兼容）
 

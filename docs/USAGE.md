@@ -150,11 +150,15 @@ npx bolo --continue
 npx bolo runtime list --resume <id>
 npx bolo runtime list task --continue --json
 npx bolo runtime inspect turn <turnId> --resume <id> --json
+npx bolo runtime discard turn <turnId> --resume <id> --json
+npx bolo runtime retry-safe control <controlId> --continue --json
 ```
 
 REPL 中，模型或工具正在运行时按 `Ctrl-C` 会针对 coordinator 当前 active turn 请求 interrupt 并返回提示符；空闲提示符下按 `Ctrl-C` 才退出。若取消发生在权限问答或 diff 审批面板，core 默认按拒绝处理。
 
 `bolo runtime list|inspect` 必须显式给 `--resume <id|path>` 或 `--continue`，不会进入 picker、创建新会话或调用 provider。每个 item 的 `availableActions` 由当前 snapshot 纯推导，并携带执行所需 expected state；空数组表示当前不应尝试动作。`--json` 成功时 stdout 只有一个 view payload；load/not-found 等查询失败也只有一个 `{ "ok": false, "code": "...", "detail": "..." }` payload。成功 exit 0，查询/加载失败 exit 1，参数使用错误 exit 2。
+
+顶层 `runtime discard|retry-safe` 使用同一 resume/continue 隔离路径，只执行恢复后仍有明确语义的 append-only action。command JSON 是一个 protocol `runtime.result`；accepted（含 warning）exit 0，rejected/load failure exit 1，usage exit 2。requestId 默认按 session/action/target 稳定派生，也可用 `--request-id <id>` 覆盖。顶层 retry-safe 只 admission、不调用模型；命令退出后 replacement 在再次 resume 时是 interrupted diagnostic，不会自动执行。
 
 ### 3.2 Desktop（Electron）
 
@@ -427,6 +431,8 @@ CLI：
 - `/runtime edit <controlId> <prompt>` 不会原地改旧 prompt：它先 cancel 旧 control，再用稳定新 control/turn ID 把 replacement 追加到 FIFO 尾部；`/runtime remove` 复用同一 durable cancel。running/promoted/interrupted 或 stale expected state 均拒绝。
 - edit 若已取消旧项但新 admission 失败，会返回 accepted + warning 且不带 replacement；不要换 requestId 重试。完整成功后的同 requestId 可安全取得同一 replacement。
 - edit/remove 只针对当前进程仍 executable 的 live queue。顶层 `bolo runtime list|inspect --resume …` 是只读查询；重启后原 pending/ready queue 已投影为 interrupted，不存在可跨进程原地编辑的 live queue。
+- 顶层 `bolo runtime discard|retry-safe ... --resume|--continue` 只执行恢复 actions。默认稳定 requestId 让 accepted-with-warning 后的重试复用同一 replacement；换用不同 ID 会 state-conflict。`--request-id` 只用于显式幂等控制。
+- 顶层 retry-safe result 会明确 warning：它不调用 provider，也不消费新 queue；进程退出后 replacement 只供 inspect/再次显式处置。要在同进程执行 queue，使用交互 REPL 的 `/runtime retry-safe`，让 REPL 在下一轮 FIFO drain。
 - interrupted turn/control/task 可用 `/runtime inspect` 查看、用 `/runtime discard` 追加确认。discard 不删除 lifecycle，只把 resolution 嵌入后续 snapshot。
 - `/runtime retry-safe` 仅接受崩溃前还在 admitted 的 turn，或 pending/ready queue control；它会创建新的 durable turn/control 并进入 FIFO，不复活旧 ID。running turn、steer 与 background task 都返回 `not_retry_safe`。
 - retry-safe 只表示“重新排队”，不会在命令内调用模型。若返回 accepted + warning，说明新 queue 可能已生效，不要换 requestId 重试；同 requestId 可安全补齐缺失的 resolution 审计。
@@ -467,6 +473,7 @@ npm run test:runtime-protocol
 npm run test:runtime-closeout
 npm run test:runtime-cli-query
 npm run test:runtime-queue-edit
+npm run test:runtime-cli-command
 npx tsx scripts/test-slash.ts
 npx tsx scripts/test-multi-provider.ts
 npx tsx scripts/test-ultrathink.ts

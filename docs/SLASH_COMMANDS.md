@@ -92,7 +92,9 @@ REPL 额外：`/exit` `/quit` 由 CLI 处理（退出循环，不进总线）。
 - AR1A 顶层 `bolo runtime list|inspect --resume … [--json]` 与斜杠共用 shared selector；顶层查询不调用 provider、不显示 banner，JSON stdout 只有一个 payload。
 - AR1B1 的 list/inspect 结果含 snapshot-only `availableActions`；每个 action 带 expected-state target。斜杠 inspect 保留旧 record 顶层 JSON，只 additive 增加 actions。
 - AR1B2 的 pending/ready queue actions 另含 `control.replace` 与 `requiredInput=["prompt"]`；steer 不可 replace。edit 使用稳定 replacement IDs、保留旧 control/prompt，并在 cancel 已生效而新 admission 失败时返回 accepted + warning。
-- `/runtime edit|remove` 只操作当前进程 live queue；顶层 resume runtime 命令仍为只读 query，重启后 interrupted control 不会重建为可编辑 queue。
+- `/runtime edit|remove` 只操作当前进程 live queue；顶层 `list|inspect` 仍为只读 query，顶层 recovery command 也不会把重启后的 interrupted control 重建为可编辑 live queue。
+- 顶层 `bolo runtime discard|retry-safe <entity> <id> --resume|--continue [--json]` 复用同一 executor；默认 requestId 稳定派生，`--request-id` 可显式覆盖。accepted/accepted-with-warning/rejected/usage 分别使用 exit 0/0/1/2。
+- 顶层 retry-safe 不调用 provider或执行 queue；进程退出后 replacement 在下次 resume 只显示 interrupted diagnostic。交互式执行仍走同进程 `/runtime retry-safe` + REPL FIFO drain。
 - 模块：`packages/core/src/slash.ts`；导出见 `@bolo/core`。
 
 ## 插件 slash（PL2 最小）

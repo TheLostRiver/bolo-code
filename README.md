@@ -41,7 +41,7 @@
 
 **已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Runtime DR0–DR4。
 
-**当前主线：** Autonomous Road **AR1B3**：runtime command/result 失败窗口收口；AR1A query 与 AR1B1–B2 safe actions/queue edit 已完成。
+**当前主线：** Autonomous Road **AR1C1**：runtime text renderer/pager 与非 TTY 收口；AR1A–AR1B3 已完成。
 
 **非阻塞开放轨：** Compact §8.9 · U5 真·Ink/IDE · adaptive thinking · Desktop 体验打磨。
 
@@ -99,6 +99,8 @@ npx bolo --list
 npx bolo --resume <id>
 npx bolo runtime list --resume <id>
 npx bolo runtime list task --continue --json
+npx bolo runtime discard turn <turnId> --resume <id> --json
+npx bolo runtime retry-safe control <controlId> --continue --json
 ```
 
 ### 常用斜杠
@@ -114,6 +116,7 @@ npx bolo runtime list task --continue --json
 | `/runtime interrupt <turnId>` · `/runtime cancel <control\|task> <id>` | expected-state 安全动作；竞态 fail-closed |
 | `/runtime edit <controlId> <prompt>` · `/runtime remove <controlId>` | 同进程 live queue 的 append-only 替换/删除；旧历史保留 |
 | `/runtime discard <turn\|control\|task> <id>` · `/runtime retry-safe <turn\|control\|task> <id>` | interrupted 人工处置；只重排可证明未开始的输入 |
+| `bolo runtime discard\|retry-safe … --resume\|--continue [--json]` | 顶层 recovery actions；稳定 requestId、单 payload、exit 0/1/2；retry-safe 不自动执行 |
 | `/diff` · `/compact` · `/context` · `/cost` | Diff · 压缩 · 费用 |
 | `/permissions` · `/hooks` · `/doctor` | 权限 · Hooks · 诊断 |
 
