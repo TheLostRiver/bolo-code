@@ -1126,13 +1126,16 @@ function runtimeResultMessage(result: RuntimeCommandResult): string {
 }
 
 function formatRuntimeQueryItem(item: RuntimeListItem): string {
+  const actions = item.availableActions.length
+    ? item.availableActions.map((action) => action.action).join(',')
+    : 'none'
   if (item.entity === 'turn') {
-    return `  ${item.entityId} · ${item.record.state}`
+    return `  ${item.entityId} · ${item.record.state} · actions=${actions}`
   }
   if (item.entity === 'control') {
-    return `  ${item.entityId} · ${item.record.kind}/${item.record.state}`
+    return `  ${item.entityId} · ${item.record.kind}/${item.record.state} · actions=${actions}`
   }
-  return `  ${item.entityId} · ${item.record.agentType}/${item.record.state}`
+  return `  ${item.entityId} · ${item.record.agentType}/${item.record.state} · actions=${actions}`
 }
 
 function formatRuntimeList(view: RuntimeListView): string {
@@ -1235,7 +1238,14 @@ async function cmdRuntime(
     }
     return {
       ok: true,
-      message: JSON.stringify(queried.view.item.record, null, 2),
+      message: JSON.stringify(
+        {
+          ...queried.view.item.record,
+          availableActions: queried.view.item.availableActions,
+        },
+        null,
+        2,
+      ),
     }
   }
   if (action === 'interrupt') {

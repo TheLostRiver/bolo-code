@@ -338,6 +338,10 @@ try {
   assert.equal(spawnedJson.kind, 'runtime.inspect')
   assert.equal(spawnedJson.entity, 'turn')
   assert.equal(spawnedJson.item.entityId, 'turn_cli_interrupted')
+  assert.deepEqual(
+    spawnedJson.item.availableActions.map((action) => action.action),
+    ['runtime.discard', 'runtime.retry-safe'],
+  )
 
   const continued = spawnSync(
     process.execPath,

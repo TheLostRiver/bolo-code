@@ -183,6 +183,7 @@ export {
   queryRuntimeSnapshot,
   type RuntimeQueryEntity,
   type RuntimeQuery,
+  type RuntimeAvailableAction,
   type RuntimeTurnListItem,
   type RuntimeControlListItem,
   type RuntimeTaskListItem,

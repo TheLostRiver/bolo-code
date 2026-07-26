@@ -1,6 +1,7 @@
 import {
   RUNTIME_PROTOCOL_VERSION,
   type RuntimeControlView,
+  type RuntimeCommand,
   type RuntimeRunnerView,
   type RuntimeSessionPhase,
   type RuntimeSnapshot,
@@ -28,22 +29,37 @@ export type RuntimeQuery =
       entityId: string
     }
 
+type RuntimeActionCommand = Exclude<
+  RuntimeCommand,
+  { action: 'runtime.inspect' }
+>
+
+type RuntimeCommandIntent<T> = T extends RuntimeCommand
+  ? Pick<T, 'action' | 'target'>
+  : never
+
+export type RuntimeAvailableAction =
+  RuntimeCommandIntent<RuntimeActionCommand>
+
 export type RuntimeTurnListItem = {
   entity: 'turn'
   entityId: string
   record: RuntimeTurnView
+  availableActions: RuntimeAvailableAction[]
 }
 
 export type RuntimeControlListItem = {
   entity: 'control'
   entityId: string
   record: RuntimeControlView
+  availableActions: RuntimeAvailableAction[]
 }
 
 export type RuntimeTaskListItem = {
   entity: 'task'
   entityId: string
   record: RuntimeTaskView
+  availableActions: RuntimeAvailableAction[]
 }
 
 export type RuntimeListItem =
@@ -94,12 +110,58 @@ export function isRuntimeQueryEntity(
 }
 
 function listItems(snapshot: RuntimeSnapshot): RuntimeListItem[] {
+  const sessionId = snapshot.session.sessionId
+  const runner = snapshot.session.runner
   return [
     ...snapshot.session.turns.map(
       (record): RuntimeTurnListItem => ({
         entity: 'turn',
         entityId: record.turnId,
         record: structuredClone(record),
+        availableActions: (() => {
+          const actions: RuntimeAvailableAction[] = []
+          if (
+            record.state === 'running' &&
+            runner.state === 'running' &&
+            runner.active.turnId === record.turnId
+          ) {
+            actions.push({
+              action: 'turn.interrupt',
+              target: {
+                sessionId,
+                turnId: record.turnId,
+                expectedState: 'running',
+              },
+            })
+          }
+          if (record.state === 'interrupted' && !record.resolution) {
+            actions.push({
+              action: 'runtime.discard',
+              target: {
+                sessionId,
+                entity: 'turn',
+                entityId: record.turnId,
+                expectedState: 'interrupted',
+              },
+            })
+            if (
+              runner.state === 'idle' &&
+              record.interruptedFrom === 'admitted' &&
+              Boolean(record.prompt?.trim())
+            ) {
+              actions.push({
+                action: 'runtime.retry-safe',
+                target: {
+                  sessionId,
+                  entity: 'turn',
+                  entityId: record.turnId,
+                  expectedState: 'interrupted',
+                },
+              })
+            }
+          }
+          return actions
+        })(),
       }),
     ),
     ...snapshot.session.controls.map(
@@ -107,6 +169,48 @@ function listItems(snapshot: RuntimeSnapshot): RuntimeListItem[] {
         entity: 'control',
         entityId: record.controlId,
         record: structuredClone(record),
+        availableActions: (() => {
+          const actions: RuntimeAvailableAction[] = []
+          if (record.state === 'pending' || record.state === 'ready') {
+            actions.push({
+              action: 'control.cancel',
+              target: {
+                sessionId,
+                controlId: record.controlId,
+                expectedState: record.state,
+              },
+            })
+          }
+          if (record.state === 'interrupted' && !record.resolution) {
+            actions.push({
+              action: 'runtime.discard',
+              target: {
+                sessionId,
+                entity: 'control',
+                entityId: record.controlId,
+                expectedState: 'interrupted',
+              },
+            })
+            if (
+              runner.state === 'idle' &&
+              record.kind === 'queue' &&
+              (record.interruptedFrom === 'pending' ||
+                record.interruptedFrom === 'ready') &&
+              Boolean(record.prompt?.trim())
+            ) {
+              actions.push({
+                action: 'runtime.retry-safe',
+                target: {
+                  sessionId,
+                  entity: 'control',
+                  entityId: record.controlId,
+                  expectedState: 'interrupted',
+                },
+              })
+            }
+          }
+          return actions
+        })(),
       }),
     ),
     ...snapshot.session.tasks.map(
@@ -114,6 +218,31 @@ function listItems(snapshot: RuntimeSnapshot): RuntimeListItem[] {
         entity: 'task',
         entityId: record.taskId,
         record: structuredClone(record),
+        availableActions: (() => {
+          const actions: RuntimeAvailableAction[] = []
+          if (record.state === 'queued') {
+            actions.push({
+              action: 'task.cancel',
+              target: {
+                sessionId,
+                taskId: record.taskId,
+                expectedState: 'queued',
+              },
+            })
+          }
+          if (record.state === 'interrupted' && !record.resolution) {
+            actions.push({
+              action: 'runtime.discard',
+              target: {
+                sessionId,
+                entity: 'task',
+                entityId: record.taskId,
+                expectedState: 'interrupted',
+              },
+            })
+          }
+          return actions
+        })(),
       }),
     ),
   ]

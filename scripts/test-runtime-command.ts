@@ -235,6 +235,7 @@ assert.equal(taskList.type, 'slash')
 if (taskList.type === 'slash') {
   assert.match(taskList.message, /task entities \(1\)/)
   assert.match(taskList.message, /task_queued/)
+  assert.match(taskList.message, /actions=task\.cancel/)
 }
 const inspectTask = await submitUserInput(
   session,
@@ -244,6 +245,7 @@ assert.equal(inspectTask.type, 'slash')
 if (inspectTask.type === 'slash') {
   assert.match(inspectTask.message, /"taskId": "task_queued"/)
   assert.match(inspectTask.message, /"state": "queued"/)
+  assert.match(inspectTask.message, /"action": "task.cancel"/)
 }
 const json = await submitUserInput(session, '/runtime json')
 assert.equal(json.type, 'slash')

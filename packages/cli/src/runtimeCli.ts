@@ -44,13 +44,16 @@ function formatRunner(view: RuntimeListView): string {
 }
 
 function formatListItem(item: RuntimeListItem): string {
+  const actions = item.availableActions.length
+    ? item.availableActions.map((action) => action.action).join(',')
+    : 'none'
   if (item.entity === 'turn') {
-    return `  turn ${item.entityId} · ${item.record.state}`
+    return `  turn ${item.entityId} · ${item.record.state} · actions=${actions}`
   }
   if (item.entity === 'control') {
-    return `  control ${item.entityId} · ${item.record.kind}/${item.record.state}`
+    return `  control ${item.entityId} · ${item.record.kind}/${item.record.state} · actions=${actions}`
   }
-  return `  task ${item.entityId} · ${item.record.agentType}/${item.record.state}`
+  return `  task ${item.entityId} · ${item.record.agentType}/${item.record.state} · actions=${actions}`
 }
 
 export function formatRuntimeQueryView(view: RuntimeQueryView): string {
@@ -59,7 +62,7 @@ export function formatRuntimeQueryView(view: RuntimeQueryView): string {
       `Runtime protocol v${view.protocolVersion}`,
       `session: ${view.sessionId}`,
       `${view.entity}: ${view.item.entityId}`,
-      JSON.stringify(view.item.record, null, 2),
+      JSON.stringify(view.item, null, 2),
     ].join('\n')
   }
 
