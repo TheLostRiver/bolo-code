@@ -184,6 +184,59 @@ async function main() {
     }
   }
 
+  // ── 3) 中止必须是**窄的**：坏行不算「读不出来」 ──
+  // 上面的修复让读取失败中止整个 rewrite。若中止范围过宽——比如一行损坏就
+  // 拒绝重写——会把「偶发坏行」的会话变成永远压不动，那是拿一个问题换另一个。
+  // 解析是逐行 try/continue，坏行本就该被跳过；这里钉死这个行为。
+  {
+    const file = path.join(root, 'corrupt.jsonl')
+    await buildTranscript(file)
+    await fs.appendFile(file, '{ this is not json\n', 'utf8')
+    await fs.appendFile(file, '\n', 'utf8')
+
+    await rewriteTranscriptFromMessages(file, fakeSession(), {
+      compactBoundarySummary: 'summary text',
+    })
+    const after = await countDurable(file)
+    assert(
+      after.turn === 1 && after.control === 1 && after.task === 1,
+      `one malformed line must not block the rewrite or lose durable entries: ${JSON.stringify(after)}`,
+    )
+  }
+
+  // ── 4) 旧 transcript 可读：没有 durable 条目的历史文件照样能重写 ──
+  // AR2A2 验收要求「旧 transcript 可读」。老会话只有 meta + message，
+  // 保留列表天然为空——这与「读不出来」是两回事，不得被当成失败。
+  {
+    const file = path.join(root, 'legacy.jsonl')
+    await ensureTranscriptFile(file, {
+      sessionId: SESSION_ID,
+      cwd: process.cwd(),
+    })
+    await fs.appendFile(
+      file,
+      JSON.stringify({
+        type: 'message',
+        sessionId: SESSION_ID,
+        timestamp: new Date(0).toISOString(),
+        message: { role: 'user', content: 'legacy' },
+      }) + '\n',
+      'utf8',
+    )
+    await rewriteTranscriptFromMessages(file, fakeSession(), {
+      compactBoundarySummary: 'summary text',
+    })
+    const after = await countDurable(file)
+    assert(
+      after.meta === 1 && after.compact_boundary === 1,
+      `a legacy transcript with no durable entries still rewrites cleanly: ${JSON.stringify(after)}`,
+    )
+    assert(
+      (after.turn ?? 0) === 0,
+      'nothing is fabricated for a transcript that never had durable entries',
+    )
+  }
+
   await fs.rm(root, { recursive: true, force: true }).catch(() => {})
   console.log('PASS: transcript rewrite preserves durable entries')
 }
