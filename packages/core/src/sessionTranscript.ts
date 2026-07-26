@@ -1238,12 +1238,45 @@ export async function rewriteTranscriptFromMessages(
   )
 }
 
+/**
+ * 重写前读取旧 transcript，以便把 durable 条目接到新文件里。
+ *
+ * **必须区分「文件不存在」与「文件在但读不出来」。**
+ *
+ * 前者是首次写入的正常情形，保留列表为空是对的。后者——`loadTranscriptFile`
+ * 在 `st.size > 32MiB` 时直接抛，损坏或 EACCES 同样会抛——意味着我们**不知道
+ * 旧文件里有什么**。此时若继续重写，就会用一个不含 turn/control/task/resolution
+ * 的新文件覆盖掉原件，造成**静默的永久丢失**：断点续跑与 recovery 全靠这些条目，
+ * 而整个过程不报任何错。
+ *
+ * 长会话堆到 32MiB 并非极端情况（大 tool 输出很容易），所以这条路径必须
+ * 中止整个 rewrite 而不是降级——原文件保持不动，报错至少能诊断。
+ */
+async function loadTranscriptForPreservation(
+  filePath: string,
+): Promise<TranscriptEntry[]> {
+  try {
+    const { entries } = await loadTranscriptFile(filePath)
+    return entries
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException)?.code === 'ENOENT') return []
+    const msg = e instanceof Error ? e.message : String(e)
+    throw new Error(
+      `refusing to rewrite ${filePath}: the existing transcript could not be read, so durable entries (turn/control/task/resolution) and the title cannot be preserved — rewriting anyway would silently destroy them. Original file left untouched. Cause: ${msg}`,
+    )
+  }
+}
+
 async function rewriteTranscriptFromMessagesUnlocked(
   filePath: string,
   session: PersistableSession,
   opts?: RewriteTranscriptOptions,
 ): Promise<void> {
   await fs.mkdir(path.dirname(filePath), { recursive: true })
+
+  // 一次读取供全部保留逻辑复用（原实现对同一文件最多重复读 5 次，
+  // 且每次的失败都被单独吞掉）
+  const existingEntries = await loadTranscriptForPreservation(filePath)
 
   let preservedTitle: string | undefined
   let preservedNotes: Array<{ text: string; kind?: string }> = []
@@ -1277,8 +1310,8 @@ async function rewriteTranscriptFromMessagesUnlocked(
       })
       .filter((n): n is { text: string; kind?: string } => n != null)
   } else {
-    try {
-      const { entries } = await loadTranscriptFile(filePath)
+    {
+      const entries = existingEntries
       if (!(opts && 'title' in opts && opts.title !== undefined)) {
         preservedTitle = titleFromTranscriptEntries(entries)
       }
@@ -1320,36 +1353,30 @@ async function rewriteTranscriptFromMessagesUnlocked(
             entry.type === 'resolution',
         )
         .map((entry) => ({ ...entry }))
-    } catch {
-      /* 新文件或不可读 */
     }
   }
   if (preservedTurns.length === 0) {
-    try {
-      const { entries } = await loadTranscriptFile(filePath)
+    {
+      const entries = existingEntries
       preservedTurns = entries
         .filter((entry): entry is TranscriptTurnEntry => entry.type === 'turn')
         .map((entry) => ({ ...entry }))
-    } catch {
-      /* 新文件或不可读 */
     }
   }
   if (preservedControls.length === 0) {
-    try {
-      const { entries } = await loadTranscriptFile(filePath)
+    {
+      const entries = existingEntries
       preservedControls = entries
         .filter(
           (entry): entry is TranscriptControlEntry =>
             entry.type === 'control',
         )
         .map((entry) => ({ ...entry }))
-    } catch {
-      /* 新文件或不可读 */
     }
   }
   if (preservedTasks.length === 0) {
-    try {
-      const { entries } = await loadTranscriptFile(filePath)
+    {
+      const entries = existingEntries
       preservedTasks = entries
         .filter(
           (
@@ -1358,21 +1385,17 @@ async function rewriteTranscriptFromMessagesUnlocked(
             entry.type === 'task' || entry.type === 'task_result',
         )
         .map((entry) => ({ ...entry }))
-    } catch {
-      /* 新文件或不可读 */
     }
   }
   if (preservedResolutions.length === 0) {
-    try {
-      const { entries } = await loadTranscriptFile(filePath)
+    {
+      const entries = existingEntries
       preservedResolutions = entries
         .filter(
           (entry): entry is TranscriptResolutionEntry =>
             entry.type === 'resolution',
         )
         .map((entry) => ({ ...entry }))
-    } catch {
-      /* 新文件或不可读 */
     }
   }
 
