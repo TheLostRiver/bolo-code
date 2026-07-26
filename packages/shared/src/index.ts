@@ -303,3 +303,12 @@ export {
   type RuntimeClientOptions,
   type MockRuntimeTransportOptions,
 } from './runtimeClient.ts'
+
+// AR3B：会话列表视图模型（盘上列表 + 运行时状态 → 侧栏可扫读的行）
+export {
+  buildSessionListView,
+  type SessionListSource,
+  type SessionListStatus,
+  type SessionListEntry,
+  type BuildSessionListViewOptions,
+} from './sessionListView.ts'
