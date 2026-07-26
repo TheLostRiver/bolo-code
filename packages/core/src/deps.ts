@@ -10,6 +10,7 @@
 
 import {
   estimateTokens,
+  estimateSystemSectionsTokens,
   microcompactMessages,
   shouldAutoCompact,
   snipMessagesIfNeeded,
@@ -167,12 +168,27 @@ export function createAutoCompactPrepare(opts: {
    * 锚 + 当前 messages 走混合计数（anchor input + 尾部估算 ×4/3）。
    */
   getUsageAnchor?: () => UsageAnchor | undefined
+  /**
+   * C3：权威 system 段。**只加在估算分支上**。
+   *
+   * anchor / usage 两条路走的是服务端真实 input tokens，本就含 system；
+   * 再加一遍会把阈值判断压低、导致过早压缩。估算分支只数 messages，
+   * 不补 system 就会偏小——典型是 resume 大会话后立刻发言（本进程还没有
+   * 任何 usage），判定「不用压缩」后请求超窗，落到有损的 PTL 截头重试。
+   */
+  getSystemPromptSections?: () => readonly string[] | undefined
 }): PrepareMessagesFn {
   let failures = 0
   return async ({ messages, querySource }) => {
     if (!opts.enabled) return { messages }
     // snip 后 messages 已变短；Bolo 用内容启发式，无需再扣 snipTokensFreed
-    const tokenCount = estimateTokens(messages as CompactChatMessage[])
+    const sections = opts.getSystemPromptSections?.()
+    const systemTokens =
+      sections && sections.length > 0
+        ? estimateSystemSectionsTokens(sections)
+        : 0
+    const tokenCount =
+      estimateTokens(messages as CompactChatMessage[]) + systemTokens
     const anchor = opts.getUsageAnchor?.()
     const usageInputTokens = anchor ? undefined : opts.getUsageInputTokens?.()
     if (

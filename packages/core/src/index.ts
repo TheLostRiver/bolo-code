@@ -2729,6 +2729,8 @@ export function wireSessionPrepareMessages(
           contextWindowTokens: session.contextWindowTokens,
           // AR2A0a：有锚走混合计数；无锚（旧会话/估算 usage）回退 C2 usage 路径
           getUsageAnchor: () => getSessionUsageAnchor(session),
+          // C3：只在估算分支生效；anchor/usage 走服务端真实计数，本就含 system
+          getSystemPromptSections: () => session.systemPromptSections,
           getUsageInputTokens: () => {
             const u = session.usage
             if (!u) return undefined
