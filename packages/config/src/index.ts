@@ -92,6 +92,7 @@ export {
 
 export {
   BUILTIN_SEARCH_PRESETS,
+  describeSearchPresetPrivacy,
   describeWebSearchStatus,
   enableSearchPresetInMcpFile,
   getSearchPreset,
@@ -99,6 +100,7 @@ export {
   type EnableSearchPresetResult,
   type SearchPreset,
   type SearchPresetAuth,
+  type SearchPresetPrivacy,
   type WebSearchStatus,
   type WebSearchStatusInput,
 } from './searchPresets.ts'

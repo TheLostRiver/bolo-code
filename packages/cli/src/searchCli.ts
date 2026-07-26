@@ -14,6 +14,7 @@
 import path from 'node:path'
 import {
   BUILTIN_SEARCH_PRESETS,
+  describeSearchPresetPrivacy,
   enableSearchPresetInMcpFile,
   getSearchPreset,
   listSearchPresets,
@@ -60,6 +61,9 @@ export async function runSearchCli(
         ? `needs ${p.requiresKeyEnv}`
         : 'no key needed'
       writeOut(`  ${p.id.padEnd(10)} ${p.label}  [${key}]\n`)
+      // 「查询去哪」必须在**启用之前**就看得到——决策发生在敲命令那一刻，
+      // 只写在文档里等于没写。
+      writeOut(`             ${describeSearchPresetPrivacy(p)}\n`)
       if (p.notes) writeOut(`             ${p.notes}\n`)
     }
     return 0
@@ -94,10 +98,18 @@ export async function runSearchCli(
         ? `updated "${r.serverName}" in ${mcpJsonPath}\n`
         : `added "${r.serverName}" to ${mcpJsonPath}\n`,
     )
+    // 即使 list 没看过，启用这一刻也要知道查询会去哪
+    writeOut(`${describeSearchPresetPrivacy(preset)}\n`)
     if (preset.requiresKeyEnv) {
       // 密钥不落盘，所以必须明确告诉用户还差这一步，否则连接时才发现
       writeOut(
         `set ${preset.requiresKeyEnv} in your environment — the key is referenced, never written to the config\n`,
+      )
+    }
+    if (preset.allowTools?.length) {
+      // 少注册工具是个静默的决定，必须说出来，否则用户会以为 server 只有这些
+      writeOut(
+        `registering only: ${preset.allowTools.join(', ')} — edit mcp.json if you want this server's other tools\n`,
       )
     }
     if (preset.notes) writeOut(`${preset.notes}\n`)

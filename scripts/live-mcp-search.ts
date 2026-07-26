@@ -86,6 +86,8 @@ async function main() {
 
   try {
     // ── 4) 真列工具 ──
+    // 注意区分两个层面：client.listTools() 是 server 真正提供的**全部**工具；
+    // server.tools / conn.tools 是经 allowTools 过滤后、模型真正看得见的那部分。
     console.log('4) tools/list')
     const toolDefs = await server.client.listTools()
     assert(toolDefs.length > 0, 'server exposes at least one tool')
@@ -117,6 +119,24 @@ async function main() {
       'tool has a description — the model needs it to decide when to call',
     )
     ok(`model sees "${registered!.name}"`)
+
+    // preset 的 allowTools 必须对**真实 server** 生效：Exa 确实提供
+    // web_fetch_exa，但 `search enable` 不该把它交给模型——实测中模型会拿它
+    // 顶掉本地 WebFetch，于是抓取也一并出了机器。
+    assert(
+      toolDefs.some((t) => /fetch/i.test(t.name)),
+      'sanity: the live server really does offer a fetch tool, so this is a real filter',
+    )
+    const visible = conn.tools.map((t) => t.name)
+    assert(
+      !visible.some((n) => /fetch/i.test(n)),
+      `allowTools drops the remote fetch tool on the live server: ${visible.join(', ')}`,
+    )
+    assert(
+      !server.tools.some((t) => /fetch/i.test(t.name)),
+      `filtered cache excludes it too: ${server.tools.map((t) => t.name).join(', ')}`,
+    )
+    ok(`remote fetch tool withheld · model-visible: ${visible.join(', ')}`)
 
     // ── 6) 真调用，真查询 ──
     // 用一个答案会随时间变的查询：如果返回的是模型/缓存里的老东西而不是

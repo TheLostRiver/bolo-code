@@ -18,6 +18,21 @@ import path from 'node:path'
 
 export type SearchPresetAuth = 'none' | 'header'
 
+/**
+ * 查询实际去哪 —— **机器可读**，不是散文。
+ *
+ * 之所以要有这个字段：这里曾经出过一条假承诺。searxng 的 notes 写着
+ * "Nothing leaves your network if you run SearXNG yourself"，而事实是
+ * SearXNG 自己没有索引，它是元搜索代理，自托管后查询字符串仍会由你的服务器
+ * 转发给上游引擎。散文没人守得住，字段可以被测试守住。
+ *
+ * - `vendor`：查询发给该服务商（如 Exa）
+ * - `upstream-engines`：自托管聚合器，但查询仍到达 Google/Bing 等上游引擎；
+ *   自托管隐藏的是**你的 IP 与 cookie，不是查询内容**
+ * - `local-only`：查询不出你自己掌控的范围（需自有索引，如 YaCy intranet）
+ */
+export type SearchPresetPrivacy = 'vendor' | 'upstream-engines' | 'local-only'
+
 export type SearchPreset = {
   id: string
   /** 写进 mcp.json 的 server 名 */
@@ -28,10 +43,21 @@ export type SearchPreset = {
    * 承诺一个做不到的模式等于给用户挖坑。
    */
   auth: SearchPresetAuth
+  /** 查询去哪。必填——不允许新增一个不说清去向的后端。 */
+  privacy: SearchPresetPrivacy
   /** 需要的环境变量名；缺省表示无需 key */
   requiresKeyEnv?: string
   /** 写进配置的 headers（值只能是 `${ENV}` 引用，不能是真值） */
   headers?: Record<string, string>
+  /**
+   * 只注册这些工具。
+   *
+   * 活体实测发现的问题：Exa 的 MCP server 一次列出搜索**和远程抓取**两个工具，
+   * 模型转头就用远程抓取替代了 Bolo 本地的 WebFetch —— 用户敲的是
+   * `search enable`，却连抓取也一并出了机器。他没要求这个。
+   * 想要那个工具的人可以自己往 mcp.json 里加。
+   */
+  allowTools?: string[]
   label: string
   notes?: string
 }
@@ -42,31 +68,52 @@ export const BUILTIN_SEARCH_PRESETS: readonly SearchPreset[] = [
     serverName: 'exa-search',
     url: 'https://mcp.exa.ai/mcp',
     auth: 'none',
+    privacy: 'vendor',
+    // 只要搜索。Exa 还会列出一个远程抓取工具，那个工具会把「你在读哪个 URL」
+    // 也告诉 Exa，且会顶掉 Bolo 本地的 WebFetch——不是 `search enable` 该带来的东西。
+    allowTools: ['web_search_exa'],
     label: 'Exa (no key; rate limited by IP)',
     notes:
-      'Queries leave your machine and go to Exa. Free tier is IP rate limited.',
+      'Queries go to Exa. Their privacy policy says query data trains and fine-tunes their models. Free tier is IP rate limited. Registers the search tool only.',
   },
   {
     id: 'exa-key',
     serverName: 'exa-search',
     url: 'https://mcp.exa.ai/mcp',
     auth: 'header',
+    privacy: 'vendor',
     requiresKeyEnv: 'EXA_API_KEY',
     headers: { 'x-api-key': '${EXA_API_KEY}' },
+    allowTools: ['web_search_exa'],
     label: 'Exa (with API key; higher limits)',
-    notes: 'Set EXA_API_KEY in your environment. The key is never written to disk.',
+    notes:
+      'Queries go to Exa; same policy as the keyless tier. Set EXA_API_KEY in your environment — the key is never written to disk.',
   },
   {
     id: 'searxng',
     serverName: 'searxng-search',
-    // 自托管：用户改成自己的实例地址
+    // 占位地址。指向的必须是**桥**，不是 SearXNG 本身——见 notes。
     url: 'http://127.0.0.1:8080/mcp',
     auth: 'none',
-    label: 'SearXNG (self-hosted; edit the url to your instance)',
+    // 不是 local-only：SearXNG 没有自己的索引，它把查询转给上游引擎。
+    privacy: 'upstream-engines',
+    label: 'SearXNG (self-hosted; point the url at your MCP bridge)',
     notes:
-      'Nothing leaves your network if you run SearXNG yourself. Point url at your instance.',
+      'SearXNG does not speak MCP — run a SearXNG-to-MCP bridge and point url at it. Self-hosting hides your IP and cookies from upstream engines; it does not hide the query itself, which SearXNG still forwards to Google, Bing, DuckDuckGo and friends.',
   },
 ]
+
+/** 面向用户的一行「查询去哪」——list / enable 共用，避免两处措辞漂移 */
+export function describeSearchPresetPrivacy(p: SearchPreset): string {
+  switch (p.privacy) {
+    case 'vendor':
+      return 'queries leave your machine and go to this vendor'
+    case 'upstream-engines':
+      return 'queries leave your network and reach upstream engines (self-hosting hides your IP, not the query)'
+    case 'local-only':
+      return 'queries stay within infrastructure you control'
+  }
+}
 
 export function listSearchPresets(): SearchPreset[] {
   return [...BUILTIN_SEARCH_PRESETS]
@@ -122,6 +169,9 @@ export async function enableSearchPresetInMcpFile(
     type: 'http',
     url: preset.url,
     ...(preset.headers ? { headers: { ...preset.headers } } : {}),
+    ...(preset.allowTools?.length
+      ? { allowTools: [...preset.allowTools] }
+      : {}),
   }
 
   const next = { ...existing, mcpServers: servers }
