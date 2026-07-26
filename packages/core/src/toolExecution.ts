@@ -26,6 +26,10 @@ import {
   type AutoClassifyInput,
 } from '../../permissions/src/index.ts'
 import { runHooks } from '../../hooks/src/index.ts'
+import {
+  truncateMiddle,
+  toolOutputBudgetBytes,
+} from '../../compact/src/index.ts'
 import { nowIso, type ChatMessage, type HooksConfig } from '../../shared/src/index.ts'
 import type { LoadedSkill } from '../../skills/src/index.ts'
 import {
@@ -44,25 +48,16 @@ import type { SessionSafeBoundary } from './sessionCoordinator.ts'
 export const DEFAULT_MAX_TOOL_RESULT_CHARS = 50_000
 
 /**
- * 超长 tool 输出截断；对照 HC maxResultSizeChars 语义（无遥测）。
- * 后缀说明完整结果未进 transcript。
+ * 超长 tool 输出截断（AR2A0b：中段截断，保头保尾）。
+ * 委托 compact truncateMiddle：标注原始 tokens/行数，幂等；
+ * 完整结果经 spill 落盘，模型上下文只保留头尾切片。
  */
 export function truncateToolResultOutput(
   output: string,
   maxChars: number = DEFAULT_MAX_TOOL_RESULT_CHARS,
 ): { text: string; truncated: boolean; omittedChars: number } {
-  const limit = Math.max(0, maxChars)
-  if (output.length <= limit) {
-    return { text: output, truncated: false, omittedChars: 0 }
-  }
-  const omitted = output.length - limit
-  return {
-    text:
-      output.slice(0, limit) +
-      `\n…(truncated ${omitted} chars; full result not stored in transcript)`,
-    truncated: true,
-    omittedChars: omitted,
-  }
+  const r = truncateMiddle(output, { maxChars: Math.max(0, maxChars) })
+  return { text: r.text, truncated: r.truncated, omittedChars: r.omittedChars }
 }
 
 async function maybeSpillTruncatedToolResult(opts: {
@@ -917,8 +912,9 @@ export async function runToolUse(
       ? formatToolUseError(result.output)
       : result.output
 
-  // --- tool_result 字符预算（C6）---
-  const maxChars = ctx.maxToolResultChars ?? DEFAULT_MAX_TOOL_RESULT_CHARS
+  // --- tool_result 字符预算（C6 + AR2A0b per-tool 表驱动）---
+  // 优先级：显式 ctx.maxToolResultChars > per-tool 预算表 > 默认 10k
+  const maxChars = toolOutputBudgetBytes(name, ctx.maxToolResultChars)
   const trunc = truncateToolResultOutput(content, maxChars)
   if (trunc.truncated) {
     let note = trunc.text
