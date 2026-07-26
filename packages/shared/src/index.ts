@@ -330,3 +330,15 @@ export {
   type TimelineCardStatus,
   type BuildTimelineCardsOptions,
 } from './timelineCards.ts'
+
+// AR3D：composer 意图 → 会话控制请求（queue/steer 显式化，不靠默认态）
+export {
+  buildComposerActions,
+  composerIntentToControl,
+  type ComposerAction,
+  type ComposerActionOption,
+  type ComposerRunnerState,
+  type ComposerControlRequest,
+  type ComposerIntentInput,
+  type ComposerIntentResult,
+} from './composerIntent.ts'

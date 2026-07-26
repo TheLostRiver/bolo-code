@@ -10,10 +10,10 @@ import {
   type TodoItem,
 } from '../../shared/src/index.ts'
 
-const DIM = '[2m'
-const GREEN = '[32m'
-const CYAN = '[36m'
-const RESET = '[0m'
+const DIM = '\u001b[2m'
+const GREEN = '\u001b[32m'
+const CYAN = '\u001b[36m'
+const RESET = '\u001b[0m'
 
 export type FormatTodoCellOptions = {
   /** 展开时列出全部条目；折叠时只出一行汇总 */
