@@ -109,6 +109,31 @@ export function explainProviderError(
     return lines.join('\n')
   }
 
+  // model 找不到 —— **必须排在 5xx 之前**。
+  //
+  // 中转/网关常把配置错误包在语义不符的状态码里：实测见过
+  // `HTTP 503 + {"code":"model_not_found","message":"…无可用渠道…"}`。
+  // 只看状态码就会回「这是上游问题，不是你的配置」，把人往反方向指——
+  // 比不给提示更糟。body 优先于 status。
+  if (
+    // 「无可用渠道」是中转的常见说法，独立成条：它表示这个 model 在该端点
+    // 没有可路由的通道，属于配置/选型问题，不是临时故障
+    /model_not_found|model.{0,20}(not found|does not exist|not available)|no available channel|无可用渠道/i.test(
+      raw,
+    )
+  ) {
+    lines.push(
+      `hint: the endpoint does not have model${ctx.model ? ` "${ctx.model}"` : ''} — despite the status code, this is a configuration problem, not an outage`,
+    )
+    lines.push(
+      'hint: check the model name with /model, or list what this endpoint offers (GET /models)',
+    )
+    if (ctx.providerId) {
+      lines.push(`hint: or switch backend with /provider use <other>`)
+    }
+    return lines.join('\n')
+  }
+
   // 上游 5xx：不是用户的错，明说，免得他去乱改配置
   if (status !== undefined && status >= 500 && status < 600) {
     lines.push(
