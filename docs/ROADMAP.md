@@ -440,8 +440,13 @@ AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 regis
 | 开关 | `/websearch [on\|off\|auto]`；会话缺省 auto，**provider 层缺省 off** |
 | 兜底 | 未知块 → `provider_notice` → CLI warning（防「搜了、付费了、屏幕空白」） |
 
-**活体验证（第三方中转，比官方端点更严格）：** anthropic ✅ · openai-responses ✅ · 两者**零告警**，
-原调研标 UNCERTAIN 的 wire format 全部证实。compatible/MCP 仍仅契约验证。
+**活体验证：** anthropic ✅ · openai-responses ✅（均经第三方中转，比官方端点更严格，两者**零告警**）·
+openai-compatible ✅（DeepSeek 官方 API，确认**无** hosted 搜索且不 400）· openrouter-plugin ✅（免费模型零余额）。
+原调研标 UNCERTAIN 的 wire format 全部证实。仅 `mcp-external` 尚未接真实 server 跑过。
+
+**实测决定的门控：** DeepSeek 对 `tools[{type:'web_search'}]` **硬 400**，
+但对 body 顶层未知字段 `plugins` **静默忽略** —— 后者更危险（用户以为开着实际没有），
+故 OpenRouter 增强必须硬门控 baseUrl。
 
 **只有真跑才发现的两个缺陷：** 引用逐句重复（渲染层按 turn 去重）；
 中转 `HTTP 503` 包着 `model_not_found`（错误解释改为 **body 优先于 status**）。
@@ -453,7 +458,7 @@ AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 regis
 | 候选 | 现状 | 备注 |
 |------|------|------|
 | **`bolo search enable`** | preset 逻辑已就位，CLI 子命令未接 | 见 TOOLS.md §3 |
-| **OpenRouter plugin** | 方言表有行，`openaiCompatible.ts` 未接 `bodyPatch` | 需 baseUrl 硬门控 |
+| **`mcp-external` 活体验证** | 契约与 preset 已就位，未接真实搜索 MCP server 跑过 | 需一个 Exa/SearXNG 端点 |
 | **AskUserQuestion** | 无 | 结构化澄清；与 CLI picker / Desktop 对话框对接 |
 | **前台命令自动后台化** | 无 | 参考实现有阻塞预算超时自动转后台；语义复杂，暂不做 |
 | **LSP** | 无 | 体量大，归 AR4 证据门控 |

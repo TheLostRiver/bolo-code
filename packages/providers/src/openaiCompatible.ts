@@ -5,6 +5,10 @@
  */
 
 import { parseRetryAfterMs } from './retryAfter.ts'
+import {
+  detectWebSearchDialectId,
+  resolveWebSearchPlan,
+} from './webSearchDialect.ts'
 import type { ChatMessage } from '../../shared/src/index.ts'
 import type { ToolSpec } from '../../tools/src/index.ts'
 import { toolsToOpenAI as toolsToOpenAIImpl } from '../../tools/src/providerSchema.ts'
@@ -183,6 +187,22 @@ export function buildOpenAICompatibleRequestBody(
   const cacheKey = resolveOpenAIPromptCacheKey(messages, config.model, options)
   if (cacheKey) body.prompt_cache_key = cacheKey
 
+  // OpenRouter web plugin（openai-compatible 轨里唯一的 hosted 搜索）。
+  // 严格按 baseUrl 门控：DeepSeek 实测证明未知 body 字段会被**静默忽略**，
+  // 广撒只会让用户以为搜索开着。缺省 off——官方文档明写即使免费模型也另行计费。
+  const searchPlan = resolveWebSearchPlan(
+    detectWebSearchDialectId({
+      kind: 'openai-compatible',
+      baseUrl: config.baseUrl,
+      model: config.model,
+    }),
+    options?.webSearch ?? 'off',
+    { model: config.model },
+  )
+  if (searchPlan.enabled && searchPlan.bodyPatch) {
+    Object.assign(body, searchPlan.bodyPatch)
+  }
+
   // E 轨：按方言写入 reasoning_effort 等（纯表驱动）
   const dialectRaw =
     config.effortDialect ??
@@ -359,6 +379,16 @@ export function createOpenAICompatibleProvider(
             }
           }
 
+          // 引用可能挂在 delta 上（流式）或 message 上（末帧）。
+          // 两处都看：漏掉就等于用户付了搜索的钱却看不到来源。
+          const anns =
+            (delta as { annotations?: unknown } | undefined)?.annotations ??
+            (json.choices?.[0] as { message?: { annotations?: unknown } })
+              ?.message?.annotations
+          for (const ev of parseOpenAIAnnotations(anns)) {
+            yield ev
+          }
+
           if (delta?.tool_calls) {
             for (const tc of delta.tool_calls) {
               const idx = tc.index ?? 0
@@ -454,4 +484,49 @@ export function createOpenAICompatibleProvider(
     completeStream: streamChat,
     completeText,
   }
+}
+
+/**
+ * OpenAI Chat Completions 的 `annotations[]` → web_search 引用事件。
+ *
+ * 形状与 OpenAI Responses **不同**：这里是嵌套的
+ * `{ type:'url_citation', url_citation:{ url, title, ... } }`，
+ * Responses 那侧是扁平的 `annotation.url`（已活体验证）。照搬会解析不出来。
+ *
+ * 同时容忍扁平写法：万一上游改形状，宁可多认一种，也不要静默丢引用。
+ */
+export function parseOpenAIAnnotations(
+  annotations: unknown,
+): ProviderStreamEvent[] {
+  if (!Array.isArray(annotations)) return []
+  const out: ProviderStreamEvent[] = []
+  for (const raw of annotations) {
+    if (!raw || typeof raw !== 'object') continue
+    const a = raw as Record<string, unknown>
+    if (a.type !== 'url_citation') continue
+    const nested =
+      a.url_citation && typeof a.url_citation === 'object'
+        ? (a.url_citation as Record<string, unknown>)
+        : undefined
+    const url =
+      typeof nested?.url === 'string'
+        ? nested.url
+        : typeof a.url === 'string'
+          ? a.url
+          : undefined
+    if (!url) continue
+    const title =
+      typeof nested?.title === 'string'
+        ? nested.title
+        : typeof a.title === 'string'
+          ? a.title
+          : undefined
+    out.push({
+      type: 'web_search',
+      phase: 'citation',
+      url,
+      ...(title ? { title } : {}),
+    })
+  }
+  return out
 }
