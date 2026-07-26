@@ -1,0 +1,67 @@
+# AR3F · Windows 安装包（NSIS）
+#
+# 只打**产物**，不打源码。`files` 是白名单而非黑名单——
+# 用排除法迟早会漏掉点什么，而多打进去的东西一旦是 dev 依赖或源码，
+# 就等于把仓库结构随安装包发出去了。
+#
+# 红线复核：`dependencies` 保持 `{}`，所以 asar 里除了产物什么都没有。
+# electron-builder 自身只是构建期工具（devDependency），同 esbuild 的先例。
+
+# electron-builder 需要**固定**版本才能下对应平台的二进制；
+# package.json 里是范围 `^33.2.0`，它解析不了。
+#
+# 两条路里选了写 electronVersion，而不是把 devDependency 钉成固定版本——
+# 为了迁就构建工具去改依赖声明是本末倒置，而且钉死后 npm 就不会再拿补丁修复了。
+# 这里的值必须与实际安装的一致，否则打出来的壳与开发时跑的不是同一个 Electron。
+electronVersion: 33.4.11
+
+appId: com.helsincy.bolo
+productName: Bolo Code
+copyright: Bolo Code
+
+# 不做原生模块重建，也不让它去收集生产依赖树。
+#
+# 根 package.json 声明的是 `packageManager: pnpm@9.15.0`，而本仓库实际用
+# **npm** 安装（只有 package-lock.json，没有 pnpm-lock.yaml）——那个字段是陈旧的。
+# electron-builder 会照它去跑 pnpm 收集依赖，输出不是 JSON，于是报
+# 「No JSON content found in output」。
+#
+# 这里不改根 package.json 的声明（影响面超出打包这一刀），而是从源头绕开：
+# `dependencies` 本就是 `{}`，压根没有生产依赖要收；`files` 又是白名单，
+# node_modules 根本不进 asar。收集这一步对本项目纯属多余。
+npmRebuild: false
+nodeGypRebuild: false
+buildDependenciesFromSource: false
+
+directories:
+  output: release
+  buildResources: build
+
+# 白名单：只有这三样进 asar。
+# 注意 package.json 必须在——Electron 靠它找 main 入口。
+files:
+  - dist/**/*
+  - package.json
+
+# 不做代码签名：没有证书，签不了就别假装签了。
+# 用户会看到 SmartScreen 警告，这是事实，写进 RELEASE 文档而不是掩盖。
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  # artifactName 里带版本，避免不同版本的安装包同名互相覆盖
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+nsis:
+  oneClick: false
+  # 允许用户选安装位置：一键装到 AppData 对开发者工具来说很不友好
+  allowToChangeInstallationDirectory: true
+  perMachine: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  # 卸载时不留残渣
+  deleteAppDataOnUninstall: false
+
+# 不发布到任何地方：发布是人的决定，不是构建的副作用
+publish: null

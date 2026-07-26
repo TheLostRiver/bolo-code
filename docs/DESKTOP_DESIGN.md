@@ -145,7 +145,7 @@ Codex App 的一手资料**没拿到**：OpenAI 官方发布页 WebFetch 返回 
 | 打包产物自包含 | ✅ `test-desktop-bundle.ts`（无 tsx/`.ts` 残留 · electron external · 资源齐全） |
 | **应用真的能启动、renderer 真的挂上** | ✅ `test-desktop-launch.ts` —— **真跑一次 Electron** |
 | **窗口里的视觉呈现** | ❌ **仍未验证** |
-| **Windows 安装包（NSIS）** | ❌ **未做** |
+| **Windows 安装包（NSIS）** | ⛔ **受阻**——见 §7c |
 
 `test-desktop-launch.ts` 关掉了「白屏」那一类：它启动真实 Electron，
 在页面里确认三栏容器挂上、`window.bolo` 存在（**即 preload 路径没写错**）、
@@ -157,6 +157,38 @@ maximize 后的渲染稳定性、焦点环与键盘走查、长会话滚动性�
 自动化测不了这些，与 `AskUserQuestion` 的真 TTY 交互是同一类缺口。
 
 > **不要在没有真正肉眼看过窗口的情况下把「视觉呈现」那一行改成 ✅。**
+
+## 7c. NSIS 安装包受阻（记录，供接手者不必重走）
+
+`electron-builder@26.15.3` 已进 devDependencies，配置已写
+（`apps/desktop/electron-builder.yml`），`npm run package` 仍失败于：
+
+```
+⨯ No JSON content found in output   failedTask=build
+  at PnpmNodeModulesCollector.extractJsonFromPollutedOutput
+```
+
+**已排除的（不必重试）：**
+
+| 排查 | 结果 |
+|---|---|
+| electron 版本是范围而非固定值 | ✅ 已修：配置里写 `electronVersion: 33.4.11` |
+| 根 `packageManager: pnpm@9.15.0` 与实际不符 | ✅ 已定位——**无 `pnpm-lock.yaml`、无 `pnpm-workspace.yaml`**，根用的是 npm 风格 `workspaces` 字段且有 `package-lock.json`。已在 `apps/desktop/package.json` 就近声明 `npm@11.17.0`（不动根声明，影响面超出本刀） |
+| `npmRebuild` / `nodeGypRebuild` / `buildDependenciesFromSource` 关掉 | ❌ 无效，依赖收集是无条件跑的 |
+| collector 实际执行的命令本身坏了 | ❌ 手动跑均正常：`npm prefix -w` 返回仓库根；`npm list -a --include prod --include optional --omit dev --json --long --silent --loglevel=error` 从 `apps/desktop` 与仓库根都输出干净 JSON（12.5 KB / 22 KB，首字符均为 `{`） |
+
+**剩余假设（未验证）：** electron-builder **spawn 这些命令的方式**（环境变量 / shell /
+编码）与手动执行不同。注意 `extractJsonFromPollutedOutput` 有「找第一个 `{`」的兜底，
+它仍然报错说明拿到的输出**是空的**——即 spawn 出来的进程没产出任何东西。
+下一步应从这里查，而不是再去改配置。
+
+**已确认打包并未真正成功**：`release/win-unpacked/resources/` 是空的，
+即只下载了 Electron 外壳，应用文件从未被拷入。失败产物已清理。
+
+> 机器上 `~/.npmrc` 有 `allow-scripts=oh-my-codex` 策略。安装时确有
+> 3 个包的 install script 被拦（electron / esbuild / electron-winstaller）。
+> 这**可能**相关，但**未证实**——且放行第三方安装脚本属于机器级安全决定，
+> 不应由自治流程替所有者做。
 
 ## 8. 不做
 

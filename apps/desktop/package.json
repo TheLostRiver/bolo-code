@@ -9,9 +9,11 @@
     "build": "node --import tsx/esm ../../scripts/build-desktop.ts",
     "start": "npm run build && electron .",
     "dev": "npm run build && cross-env BOLO_DESKTOP_MOCK=1 electron .",
-    "test:smoke": "node --import tsx/esm scripts/smoke-ipc.mjs"
+    "test:smoke": "node --import tsx/esm scripts/smoke-ipc.mjs",
+    "package": "npm run build && electron-builder --config electron-builder.yml --win"
   },
   "devDependencies": {
     "electron": "^33.2.0"
-  }
+  },
+  "packageManager": "npm@11.17.0"
 }

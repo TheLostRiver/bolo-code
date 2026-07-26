@@ -377,7 +377,7 @@ AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 regis
 | 15 | **AR-T3+ · 能力面续刀** | `bolo search enable` · OpenRouter plugin · AskUserQuestion（逐项） | 见 §14.5 | 每项独立红灯 + 全量门禁 | ✅（AskUserQuestion 真 TTY 交互未验） |
 | 16 | **AR2A1–A2 · watermark/safe rewrite** | range/watermark 纯契约 ✅ · 契约作为验证者接线 ✅ | compact 安全面收口 | tool pairing + lifecycle 保留 | ✅ 四条验收全过（`3e918ea` · `948061c` · `b5c7112`）；**中段压缩按证据门控显式不启用**，理由见 §13.10.2 |
 | 17 | **AR2B–C · tokenizer/benchmark/ADR** | 启发式修正 ✅ + 语料基准 ✅ + remote ADR ✅ | 可量化 token/cost | 偏差阈值 + fail-closed | ✅ B1 不引入 tokenizer（`661fc7d`）· B2 基准（`28f70fc`）· C 决定 local-only |
-| 18 | **AR3A–F** | A ✅ client/store · B ✅ 会话列表+timeline 视图模型与 IPC · C ✅ 卡片+三栏外壳；D/E/F 待做 | Codex App 风格 Desktop（[设计方案](./DESKTOP_DESIGN.md)） | mock/core IPC + crash/restart + Windows package | **当前**。⚠️ **真实 Electron 窗口里的呈现未验证**——见 DESKTOP_DESIGN §7b，不要未开窗就改成 ✅ |
+| 18 | **AR3A–F** | A ✅ client/store · B ✅ 会话列表+timeline 视图模型与 IPC · C ✅ 卡片+三栏外壳；D/E/F 待做 | Codex App 风格 Desktop（[设计方案](./DESKTOP_DESIGN.md)） | mock/core IPC + crash/restart + Windows package | **当前**。A–F 代码面均已交付且 **应用真跑得起来**（`test-desktop-launch.ts` 启动真实 Electron 并确认 renderer 挂载）。⛔ **Windows NSIS 安装包受阻**，根因与已排除项见 DESKTOP_DESIGN §7c；⚠️ 窗口**视觉呈现**仍未肉眼验证（§7b），不要未开窗就改成 ✅ |
 | 19 | **AR4** | 逐项 evidence gate | 有证据实施；无证据书面关闭 | 场景/基准/兼容证据 | 📋 |
 | 20 | **AR5A–D**（AR5C 已提前完成） | compatibility/security/release contracts | clean clone 安装、升级、恢复手册 | full test + cross-platform smoke + security audit | 📋 |
 
