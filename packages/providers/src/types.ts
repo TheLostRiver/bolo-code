@@ -43,6 +43,17 @@ export type ProviderStreamEvent =
   | { type: 'tool_call'; id: string; name: string; arguments: string }
   | { type: 'usage'; usage: ProviderUsage }
   | { type: 'done' }
+  /**
+   * 流里出现了本客户端不认识的内容块 / delta。
+   *
+   * 存在的理由：各家的流解析都是**白名单**（防止服务端块被误当本地工具执行），
+   * 但白名单没有兜底就等于静默丢弃——provider 侧新加的块（如服务端搜索的
+   * `server_tool_use` / `web_search_tool_result`）会让用户付了钱、拿不到结果、
+   * 且完全看不出发生过什么。报错可以诊断，静默不能。
+   *
+   * 这是**诊断信号**，不是错误：不终止本轮，也不写进 ChatMessage。
+   */
+  | { type: 'provider_notice'; kind: 'unknown_block'; detail: string }
   | {
       type: 'error'
       message: string

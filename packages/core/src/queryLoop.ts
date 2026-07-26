@@ -73,6 +73,12 @@ export type QueryLoopEvent =
   | { type: 'reasoning'; text: string }
   | { type: 'hook'; event: string; exitCode: number; blocked?: boolean }
   | { type: 'error'; message: string }
+  /**
+   * 非致命诊断：本轮继续，但有些东西值得说。
+   * 目前来源是 provider 流里不认识的内容块——静默丢弃会让用户
+   * 「付了钱、没结果、查不出原因」。CLI printer 已有 warn 渲染。
+   */
+  | { type: 'warning'; message: string }
   | {
       type: 'ptl_retry'
       attempt: number
@@ -574,6 +580,13 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
               cacheReadInputTokens: ev.usage?.cacheReadInputTokens,
               cacheCreationInputTokens: ev.usage?.cacheCreationInputTokens,
             }
+          } else if (ev.type === 'provider_notice') {
+            // provider 流里出现本客户端不认识的块。不是错误，不终止本轮，
+            // 但必须让用户看见——否则「搜索跑了、花了钱、结果没了」查不出来。
+            emit(params, {
+              type: 'warning',
+              message: ev.detail,
+            })
           } else if (ev.type === 'error') {
             modelError = ev.message
             break

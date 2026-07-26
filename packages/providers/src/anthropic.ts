@@ -169,21 +169,49 @@ function normalizeBaseUrl(base?: string): string {
 export function eventsFromAnthropicSseEvent(
   evt: {
     type?: string
+    /** 块序号；本函数不用，但真实事件带着它 */
+    index?: number
+    // 上游会加新字段与新块类型，所以这里只声明用到的、其余放开。
+    // 收窄到「刚好够用」会让调用方没法把真实事件原样传进来。
     content_block?: {
       type?: string
       thinking?: string
       text?: string
+      [key: string]: unknown
     }
     delta?: {
       type?: string
       text?: string
       thinking?: string
+      [key: string]: unknown
     }
+    [key: string]: unknown
   },
-  state?: { inThinking?: boolean },
+  state?: {
+    inThinking?: boolean
+    /** 已提示过的未知块/delta 类型；同类型只说一次，避免刷屏 */
+    noticedUnknown?: Set<string>
+  },
 ): ProviderStreamEvent[] {
   const out: ProviderStreamEvent[] = []
   const st = state ?? {}
+
+  /**
+   * 未知块只留痕、不解释。
+   * 白名单不放宽（服务端块绝不能被当本地工具执行），但也不能静默吞掉。
+   */
+  const noticeUnknown = (what: string, type: string) => {
+    if (!type) return
+    const seen = (st.noticedUnknown ??= new Set<string>())
+    const key = `${what}:${type}`
+    if (seen.has(key)) return
+    seen.add(key)
+    out.push({
+      type: 'provider_notice',
+      kind: 'unknown_block',
+      detail: `unhandled anthropic ${what} "${type}" — this client did not surface its content`,
+    })
+  }
 
   switch (evt.type) {
     case 'content_block_start': {
@@ -202,6 +230,8 @@ export function eventsFromAnthropicSseEvent(
           st.inThinking = false
           out.push({ type: 'reasoning_end' })
         }
+      } else if (block?.type) {
+        noticeUnknown('content block', block.type)
       }
       break
     }
@@ -217,6 +247,9 @@ export function eventsFromAnthropicSseEvent(
           out.push({ type: 'reasoning_end' })
         }
         out.push({ type: 'text_delta', text: d.text })
+      } else if (d.type && d.type !== 'input_json_delta') {
+        // input_json_delta 由外层 tool 累加器消费，不算未处理
+        noticeUnknown('content delta', d.type)
       }
       break
     }
