@@ -123,7 +123,7 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 
 **已闭环：** Diff · Hooks · Compact · Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4**。
 
-**当前主线：** Autonomous Road **AR1A CLI/TUI runtime UX**：稳定 turn/task list 与 inspect 契约。
+**当前主线：** Autonomous Road **AR1B1 CLI/TUI runtime actions**：从 snapshot 纯推导 available actions。AR1A list/inspect/纯 `--json` 已完成。
 
 **其它开放轨（非阻塞）：**
 
@@ -151,7 +151,9 @@ DR2A 单 session runner ✅
 → DR4B1 executor + CLI diagnostics ✅
 → DR4B2 discard/retry-safe ✅
 → DR4C closeout ✅
-→ AR1 CLI/TUI runtime UX（当前 AR1A）
+→ AR1A runtime query ✅
+→ AR1B safe actions + queue remove/edit（当前 AR1B1）
+→ AR1C pager/automation closeout
 → AR2 Compact depth
 → AR3 Codex App 风格 Desktop
 → AR4 证据驱动深水项
@@ -272,7 +274,7 @@ npx tsx scripts/test-file-diff.ts
 npx tsx scripts/test-config.ts
 ```
 
-`npm test` 已覆盖 R0–R4 与 Durable Runtime DR0–DR4 的关键回归（含 `test-runtime-closeout`）；其它新轨仍以对应 `test-*` 脚本为准。
+`npm test` 已覆盖 R0–R4、Durable Runtime DR0–DR4 与 AR1A（`test-runtime-cli-query`）；其它新轨仍以对应 `test-*` 脚本为准。
 
 ### 7.3 Git
 
@@ -345,6 +347,7 @@ cd apps/desktop && npm install && set BOLO_DESKTOP_MOCK=1 && npm start
 | DR4B1 | expected-state executor · `/runtime` list/inspect/json/interrupt/cancel · warning/竞态 fail-closed |
 | DR4B2 | append-only `resolution` · admitted/queue-only retry-safe · 新 turn/control id · `/runtime discard/retry-safe` · accepted+warning failure window |
 | DR4C | 真实 CLI crash/restart E2E · replacement 单次消费/重启不 replay · 旧 v1/JSONL 兼容 · 坏 resolution 引用 fail-closed |
+| AR1A | shared list/inspect query view-model · 顶层 `runtime` 子命令 · resume/continue · 单 payload JSON · `/runtime` 共用 selector |
 
 最新 commit 以 `git log` 为准。
 

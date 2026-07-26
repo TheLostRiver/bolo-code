@@ -31,7 +31,7 @@
 
 **已闭环主线：** headless 日用 → Diff · Hooks · Compact · Provider · Effort · **Provider UX CX0–CX8** · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4**。
 
-**当前主线：** **Autonomous Road AR1A**（§13.10–§13.11：CLI/TUI runtime turn/task list 与 inspect 契约）。
+**当前主线：** **Autonomous Road AR1B1**（§13.10–§13.11：由 runtime snapshot 纯推导安全动作，再接 queue remove/edit）。AR1A 已完成。
 
 **开放轨：**
 
@@ -198,7 +198,7 @@ apps/desktop       消费同一 DiffViewModel                 （U3）
 **一句话：**  
 主路径、Diff、Hooks、Compact、**多 Provider、Effort、Provider UX（含 CX8）、CLI/Agent 可靠性 R0–R4、Durable Runtime DR0–DR4**已收口；当前从协议正确性进入 CLI 可操作性优化。
 
-**下一刀（当前主线）：** **AR1A CLI/TUI runtime UX**：稳定 turn/task list 与 inspect 契约，再进入 queue edit/remove 与 pager/自动化输出。
+**下一刀（当前主线）：** **AR1B1 CLI/TUI runtime actions**：由共享 snapshot 纯推导 available actions，并让顶层 CLI 只暴露 expected-state 安全动作；AR1A 的 list/inspect/纯 `--json` 已完成。
 
 **非阻塞加深：** Compact §8.9 · U5 · adaptive thinking · Desktop 体验打磨。
 
@@ -1128,6 +1128,26 @@ DR0–DR4 收口后进入 Autonomous Road（AR）。一次只推进一个可独�
 | **AR4 · Evidence-driven depth** | AR1–AR3 暴露真实痛点或可测收益 | U5 真 Ink/IDE bridge、adaptive thinking、hook trust UI、远程模型列表分别独立立项；无证据则记录“不实施”理由关闭 | 每项有用户场景、基准或兼容需求；禁止仅为对齐 HC/Codex 代码量引入重依赖 |
 | **AR5 · Release hardening** | 所有已选择产品轨完成 | 迁移/兼容矩阵、崩溃与磁盘故障 fixture、安装/升级/卸载、跨平台 smoke、性能预算、安全审计、文档与 release checklist | clean clone 可安装；默认门禁全绿；无密钥/遥测；已知限制和恢复步骤可由人类文档独立执行 |
 
+#### 13.10.1 AR1 · CLI/TUI runtime UX 细化
+
+| 切片 | packages-first 契约 | 人类可见结果 | 专项验收 | 状态 |
+|------|---------------------|--------------|----------|------|
+| **AR1A · query** | `RuntimeSnapshot → runtime.list/runtime.inspect` 纯 view-model；记录深拷贝；CLI 独立 consumer | `bolo runtime list [entity] --resume … [--json]`、`runtime inspect …`；`--continue` 可用；不显示 banner/summary | 参数顺序、missing/load/not-found、JSON 单 payload、真实 bin、无 provider call、`/runtime` 共用 selector | ✅ `4c3db76` |
+| **AR1B1 · action discovery** | 只由 snapshot/target/state 推导 `availableActions`；每个动作携带 expected state，不读取 coordinator 私有结构 | inspect/list 能告诉用户“现在可安全做什么”；非法动作在执行前可解释 | completed/interrupted/pending/ready/running/queued 矩阵；旧 snapshot additive 兼容 | **当前** |
+| **AR1B2 · queue remove/edit** | remove 复用 durable cancel；edit 是“cancel 旧 control + append 新 queue/turn”，新 ID、旧历史保留，禁止原地改 prompt | 顶层 CLI 与 `/runtime` 可删除或替换尚未开始的 queue；running/promoted/interrupted 默认拒绝 | FIFO、duplicate request、stale expected state、cancel 成功/new append 失败的 partial-accept warning | 📋 |
+| **AR1B3 · command closeout** | query/command 共享稳定 result/error envelope；accepted + warning 不诱导换 requestId 重试 | text/JSON 都能区分 usage、rejected、accepted-with-warning | persistence failure、restart 后非 executable queue、并发 target 变化、exit 0/1/2 | 📋 |
+| **AR1C1 · text/pager** | renderer 输入仅为 AR1 view-model；分页状态不进入 core/session | 大列表可分页/筛选；窄屏、NO_COLOR、非 TTY 不挂起 | 0/1/N 行、窄终端、重定向、Ctrl-C/EOF | 📋 |
+| **AR1C2 · automation closeout** | JSON schema/排序/错误码稳定；原 `/runtime json` 保持 protocol snapshot 兼容 | 脚本无需清洗 ANSI/banner/summary；help/USAGE 完整 | golden snapshot、stdout/stderr 分离、参数排列、旧会话 | 📋 |
+
+#### 13.10.2 AR2–AR5 细化
+
+| 轨 | 顺序与交付 | 开工证据 | 完成/停止门槛 |
+|----|------------|----------|---------------|
+| **AR2 · Compact depth** | A1 range/watermark 纯契约 → A2 tool pairing/lifecycle/旧 transcript 兼容 → B1 provider-aware tokenizer registry → B2 固定语料 token/cost/latency 基准 → C remote/session-memory 决策 | AR1 收口；现有 C0–C5 基线可复现；新算法能在固定语料证明收益 | 任何失败可回退 C0–C5；不得擦除 lifecycle/resolution；remote 无明确收益或需服务端时书面关闭 |
+| **AR3 · Desktop shell** | A protocol client/store → B session/turn/control/task 导航 → C markdown/tool/diff/approval cards → D composer queue/steer/interrupt → E provider/effort/settings → F crash/keyboard/perf/package | AR1 view-model/command 至少稳定一个阶段；core IPC mock 与真 core fixture 可用 | renderer 不重算状态机/权限/diff；Windows 打包可复现；每刀先 packages 契约后 Electron |
+| **AR4 · Evidence depth** | 分别评估 U5 Ink/IDE bridge、adaptive thinking、hook trust UI、远程模型列表；每项独立决策 | 至少一个可复现用户场景、兼容缺口或量化基准 | 证据不足默认写“不实施”并关闭；禁止为对齐代码量引依赖、遥测或官方市场 API |
+| **AR5 · Release hardening** | A migration/compat matrix → B 磁盘满/部分写/崩溃/权限 fixture → C install/upgrade/uninstall + 三平台 smoke → D perf/security/docs/release checklist | 已选择的 AR1–AR4 全部关闭或完成；版本边界已冻结 | clean clone 可安装/升级/恢复；默认门禁全绿；无密钥、遥测、隐式 replay；已知限制可由文档独立操作 |
+
 固定选择规则：
 
 1. 每次从最前面的未完成阶段选择一个最小切片；不得同时铺 CLI、Compact、Desktop 三个大工程。
@@ -1148,11 +1168,13 @@ DR0–DR4 收口后进入 Autonomous Road（AR）。一次只推进一个可独�
 | 4 | **DR4A** | versioned runtime snapshot/command/result schema | CLI/Desktop 共用 view-model | round-trip + unknown fields + illegal transition | ✅ |
 | 5 | **DR4B** | B1 protocol executor；B2 append-only recovery resolution | list/inspect/interrupt/cancel/discard/retry-safe | target/state races；default no replay | ✅ |
 | 6 | **DR4C** | 真实 consumer 反馈与兼容收紧 | new/resume 共用协议投影 | crash/restart E2E + old transcript | ✅ |
-| 7 | **AR1A–C** | CLI runtime query/command contracts | list/inspect/queue edit/pager/`--json` | TTY + non-TTY + race snapshots | **当前（AR1A）** |
-| 8 | **AR2A–C** | compact range/watermark/token budget | 可量化上下文成本与稳定回退 | lifecycle/tool pairing + token/cost baseline | 📋 |
-| 9 | **AR3A–F** | protocol client/store；无 renderer 状态机 | Codex App 风格 Desktop 完整主路径 | mock/core IPC + crash/restart + Windows package | 📋 |
-| 10 | **AR4** | 逐项 evidence gate | 有证据实施；无证据书面关闭 | 场景/基准/兼容证据 | 📋 |
-| 11 | **AR5** | compatibility/security/release contracts | clean clone 安装、升级、恢复手册 | full test + cross-platform smoke + security audit | 📋 |
+| 7 | **AR1A** | runtime list/inspect query view-model | resume/continue + text/纯 JSON | real bin + no banner/provider + old session | ✅ `4c3db76` |
+| 8 | **AR1B1–B3** | action discovery + append-only queue replace/remove | 只显示并执行 expected-state 安全动作 | state matrix + persistence/race/restart | **当前（AR1B1）** |
+| 9 | **AR1C1–C2** | renderer/pager + automation schema closeout | 大列表、窄屏、pipe/JSON 均可用 | TTY + non-TTY + golden snapshots | 📋 |
+| 10 | **AR2A–C** | compact range/watermark/token budget | 可量化上下文成本与稳定回退 | lifecycle/tool pairing + token/cost baseline | 📋 |
+| 11 | **AR3A–F** | protocol client/store；无 renderer 状态机 | Codex App 风格 Desktop 完整主路径 | mock/core IPC + crash/restart + Windows package | 📋 |
+| 12 | **AR4** | 逐项 evidence gate | 有证据实施；无证据书面关闭 | 场景/基准/兼容证据 | 📋 |
+| 13 | **AR5A–D** | compatibility/security/release contracts | clean clone 安装、升级、恢复手册 | full test + cross-platform smoke + security audit | 📋 |
 
 固定 checkpoint：
 

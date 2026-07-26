@@ -189,7 +189,14 @@ controlId + sessionId + kind + state + timestamp
 - 外部 JSONL 的引用过滤不放宽 core invariant：手工构造的非法 runtime source 仍由 snapshot builder/parser 明确拒绝。
 - 这仍不是 daemon/RPC；当前没有第二客户端需求，不引入 app-server 或传输框架。
 
-DR0–DR4 已收口；当前主线为 AR1A CLI/TUI runtime UX。
+### 1.7 Runtime Query CLI（AR1A）
+
+- `packages/shared/src/runtimeQuery.ts` 把已验证 snapshot 投影为稳定 `runtime.list` / `runtime.inspect` view；turn/control/task 记录深拷贝，不把 consumer 修改反写到 snapshot。
+- `bolo runtime list [turn|control|task] --resume <id|path> [--json]` 与 `bolo runtime inspect <entity> <id> --resume … [--json]` 只恢复既有会话、构建 snapshot、查询并 teardown；不会调用 provider、显示 resume banner 或隐式创建会话。
+- `--continue` 可替代 `--resume`；bare `--resume` picker 不用于机器查询。JSON stdout 始终是一个完整 payload，成功/查询失败 exit 0/1，参数使用错误 exit 2。
+- `/runtime list [entity]` 与 `/runtime inspect entity id` 使用同一 selector；`/runtime json` 继续输出原始 protocol snapshot，保持 DR4 自动化兼容。
+
+DR0–DR4 与 AR1A 已收口；当前主线为 AR1B1 runtime safe actions。
 
 ## 2. 快照格式（version 1，只读兼容）
 
@@ -318,6 +325,11 @@ npx bolo --resume <id> "位置参数也会当作 prompt"
 
 # 指定解析 project sessions 的 cwd
 npx bolo --resume <id> --cwd /path/to/project
+
+# 只读 runtime query（不会调用模型）
+npx bolo runtime list --resume <id>
+npx bolo runtime list task --continue --json
+npx bolo runtime inspect turn <turnId> --resume <id> --json
 ```
 
 也可：`npx tsx packages/cli/src/main.ts --resume` 或 `--resume <id>`。
@@ -331,6 +343,7 @@ npx bolo --resume <id> --cwd /path/to/project
 | **`--continue` / `-c`（RS9）** | `listProjectSessions` 第一条（最新）→ `resumeSession`；空列表 exit 1 |
 | **`--list` / `-l`** | 非交互打印 `listProjectSessions`（title 优先于 preview 展示） |
 | **`--migrate-session` / `migrate-session`** | 包装 `migrateSessionToJsonl`；`--force` / `--delete-json` |
+| **`runtime list|inspect`（AR1A）** | 必须显式 `--resume <id|path>` 或 `--continue`；共用 shared query view；无 banner/provider call；`--json` stdout 为单 payload |
 | 另有 prompt（`-p` / 位置参数 / 管道 stdin） | `submitPrompt` 一轮并打印助手文本；默认 autoSave |
 | TTY 且无 prompt、无 `--print` | 极简 readline 循环（`bolo>` → submit → 打印；空行或 `/exit` 退出） |
 | `--print` 且无 prompt | 仅摘要后退出 |

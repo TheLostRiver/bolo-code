@@ -29,7 +29,7 @@
 | `/turn status` | 显示当前进程 coordinator `idle/running`、active turn 与 live control 历史（pending/ready/promoted/cancelled） |
 | `/turn steer <text>` · `/turn interrupt` | 自动携带 snapshot 的 expected active turn；stale/no-active 由 core fail-closed |
 | `/turn queue <text>` · `/turn cancel <controlId>` | active 时 pending、idle 时 ready；REPL FIFO drain；pending/ready 可取消；durable 写成功后才交给执行器 |
-| `/runtime list` · `/runtime json` · `/runtime inspect [turn\|control\|task] [id]` | protocol v1 共用 session/runner/turn/control/task snapshot；`json` 为纯 JSON |
+| `/runtime list [turn\|control\|task]` · `/runtime inspect <turn\|control\|task> <id>` · `/runtime json` | list/inspect 共用 AR1A query selector；`json` 保留 protocol v1 原 snapshot |
 | `/runtime interrupt <turnId>` · `/runtime cancel <control\|task> <id>` | 先核对 snapshot expected state，再调用 durable executor；stale target fail-closed |
 | `/runtime discard <turn\|control\|task> <id>` | 为 interrupted entity 追加 resolution；保留原 lifecycle |
 | `/runtime retry-safe <turn\|control\|task> <id>` | 仅 admitted-only turn / pending-ready queue 可重排为新 turn；其它工作拒绝 |
@@ -88,6 +88,7 @@ REPL 额外：`/exit` `/quit` 由 CLI 处理（退出循环，不进总线）。
 - background result 只在 queryLoop 安全边界注入父消息；父 turn 已结束时延至下一 turn。同进程只 delivery 一次，resume 不自动重复注入。
 - `/runtime` 是 DR4 protocol consumer，不维护第二套状态机；action 已生效但持久化/后置 snapshot 出现问题时显示 accepted + warning，避免错误重试。
 - DR4B2 在同一 protocol executor 上增加 append-only discard/retry-safe；running turn、steer、background task 和副作用不明工作不允许 retry。
+- AR1A 顶层 `bolo runtime list|inspect --resume … [--json]` 与斜杠共用 shared selector；顶层查询不调用 provider、不显示 banner，JSON stdout 只有一个 payload。
 - 模块：`packages/core/src/slash.ts`；导出见 `@bolo/core`。
 
 ## 插件 slash（PL2 最小）

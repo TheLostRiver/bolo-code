@@ -41,7 +41,7 @@
 
 **已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Runtime DR0–DR4。
 
-**当前主线：** Autonomous Road **AR1A**：稳定 CLI/TUI 的 runtime turn/task list 与 inspect 契约；随后按 AR1–AR5 推进可操作性、Compact、Desktop 与发布硬化。
+**当前主线：** Autonomous Road **AR1B1**：从 snapshot 纯推导 runtime available actions；AR1A 的 list/inspect、resume/continue 与纯 `--json` 已完成。
 
 **非阻塞开放轨：** Compact §8.9 · U5 真·Ink/IDE · adaptive thinking · Desktop 体验打磨。
 
@@ -97,6 +97,8 @@ npx bolo
 npx bolo -p "hello"
 npx bolo --list
 npx bolo --resume <id>
+npx bolo runtime list --resume <id>
+npx bolo runtime list task --continue --json
 ```
 
 ### 常用斜杠
@@ -108,7 +110,7 @@ npx bolo --resume <id>
 | `/model` · `/effort` · `/ultrathink` | 模型 · 推理强度 · CX8 糖 |
 | `/agents` · `/bg` · `/bg cancel <taskId>` | Subagent 后台 FIFO/status；只取消 queued；resume 后含 interrupted 诊断 |
 | `/turn status` · `/turn queue` · `/turn interrupt` | turn/control 状态与安全控制 |
-| `/runtime list` · `/runtime inspect …` · `/runtime json` | protocol v1 的 turn/control/task 共用诊断视图 |
+| `/runtime list [entity]` · `/runtime inspect <entity> <id>` · `/runtime json` | AR1A 共用 query view；顶层 `bolo runtime … --json` 为单 payload |
 | `/runtime interrupt <turnId>` · `/runtime cancel <control\|task> <id>` | expected-state 安全动作；竞态 fail-closed |
 | `/runtime discard <turn\|control\|task> <id>` · `/runtime retry-safe <turn\|control\|task> <id>` | interrupted 人工处置；只重排可证明未开始的输入 |
 | `/diff` · `/compact` · `/context` · `/cost` | Diff · 压缩 · 费用 |
