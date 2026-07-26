@@ -2377,7 +2377,11 @@ async function loadSessionOrTranscript(
     sessionsDir?: string
     filePath?: string
   },
-): Promise<{ path: string; snapshot: SessionSnapshot }> {
+): Promise<{
+  path: string
+  snapshot: SessionSnapshot
+  recovered?: import('./sessionPersist.ts').SessionRecoveryNote
+}> {
   return loadSession(idOrPath, options)
 }
 
@@ -2387,8 +2391,14 @@ async function loadSessionOrTranscript(
  */
 export async function resumeSession(
   opts: ResumeSessionOptions,
-): Promise<{ session: BoloSession; snapshot: SessionSnapshot; path: string }> {
-  const { path: filePath, snapshot } = await loadSessionOrTranscript(
+): Promise<{
+  session: BoloSession
+  snapshot: SessionSnapshot
+  path: string
+  /** 快照损坏但从 transcript 救回时填；CLI 应当告知用户 */
+  recovered?: import('./sessionPersist.ts').SessionRecoveryNote
+}> {
+  const { path: filePath, snapshot, recovered } = await loadSessionOrTranscript(
     opts.idOrPath,
     {
       scope: opts.scope,
@@ -2543,7 +2553,12 @@ export async function resumeSession(
     scope: opts.scope ?? 'project',
   })
 
-  return { session, snapshot, path: filePath }
+  return {
+    session,
+    snapshot,
+    path: filePath,
+    ...(recovered ? { recovered } : {}),
+  }
 }
 
 export type ResumeSessionFromWorkspaceOptions = ResumeSessionOptions & {
@@ -2572,6 +2587,8 @@ export async function resumeSessionFromWorkspace(
   path: string
   workspace: ResolvedWorkspace
   mcp?: ConnectMcpResult
+  /** 快照损坏但从 transcript 救回时填；CLI 应当告知用户 */
+  recovered?: import('./sessionPersist.ts').SessionRecoveryNote
 }> {
   let workspaceCwd = opts.cwd
   if (!workspaceCwd) {

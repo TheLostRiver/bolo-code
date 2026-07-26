@@ -22,7 +22,7 @@ import {
   type SessionSnapshot,
 } from '../../core/src/index.ts'
 import type { ChatMessage } from '../../shared/src/index.ts'
-import { createCliProvider } from './provider.ts'
+import { createCliProvider, isExplicitMockProvider } from './provider.ts'
 import { createTtyAskPermission } from './tui/askPermissionTty.ts'
 import { renderWelcomeBanner } from './tui/banner.ts'
 import {
@@ -475,6 +475,7 @@ export async function resumeFromIdOrPath(
     snapshot,
     path: filePath,
     workspace,
+    recovered,
   } = await resumeSessionFromWorkspace({
     idOrPath: opts.idOrPath,
     cwd: opts.cwd,
@@ -491,8 +492,19 @@ export async function resumeFromIdOrPath(
   thinkingGate.session = session
   attachSessionEventPrinter(session, printer)
 
+  // 快照读不了但从 append-only transcript 救回来了。
+  // 静默恢复等于隐瞒损坏——说清楚发生了什么、坏文件在哪、我们没动它。
+  if (recovered) {
+    writeErr(
+      `warn: session snapshot was unreadable (${recovered.reason}); ` +
+        `recovered the conversation from the transcript. ` +
+        `The unreadable file was left untouched at ${recovered.corruptPath}
+`,
+    )
+  }
+
   // 快照加载成功后再提示无 key；判定以 workspace active profile 为准。
-  if (!forced && workspace.providerMissingKey) {
+  if (!forced && workspace.providerMissingKey && !isExplicitMockProvider()) {
     const delayedFailure = createCliProvider()
     session.provider = delayedFailure.provider
     session.deps = productionDeps(delayedFailure.provider)

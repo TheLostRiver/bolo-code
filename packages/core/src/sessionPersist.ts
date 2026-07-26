@@ -1088,6 +1088,18 @@ async function loadSessionSnapshotFromPath(
   return parseSessionSnapshot(JSON.parse(raw) as unknown)
 }
 
+export type SessionRecoveryNote = {
+  from: 'transcript'
+  /** 读不了的那个文件；保持原样不动，供用户排查 */
+  corruptPath: string
+  reason: string
+}
+
+function errorReason(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err)
+  return msg.trim() || 'unreadable'
+}
+
 function isMissingFileError(err: unknown): boolean {
   const code = (err as NodeJS.ErrnoException)?.code
   if (code === 'ENOENT') return true
@@ -1209,24 +1221,37 @@ async function snapshotFromTranscriptOnly(
 export async function loadSessionPair(
   jsonPath: string,
   opts?: { idHint?: string; cwd?: string },
-): Promise<{ path: string; snapshot: SessionSnapshot; fromTranscript: boolean }> {
+): Promise<{
+  path: string
+  snapshot: SessionSnapshot
+  fromTranscript: boolean
+  /**
+   * 有文件读不了、但会话仍被救回来时填。
+   * 恢复必须**可见**——静默吞掉损坏，用户下次才会在更糟的时候发现。
+   */
+  recovered?: SessionRecoveryNote
+}> {
   const resolvedJson = path.resolve(jsonPath)
   const transcriptPath = resolveTranscriptPathFromJson(resolvedJson)
 
+  // 读不了 ≠ 不存在。旁车快照坏掉不该挡住完好的 append-only transcript ——
+  // 后者才是 durable 真源。先记下失败原因，等两边都试过再决定要不要报错。
   let jsonSnap: SessionSnapshot | undefined
+  let jsonFailure: unknown
   try {
     jsonSnap = await loadSessionSnapshotFromPath(resolvedJson)
   } catch (err) {
-    if (!isMissingFileError(err)) throw err
+    if (!isMissingFileError(err)) jsonFailure = err
   }
 
   let transcript:
     | Awaited<ReturnType<typeof loadTranscriptMessages>>
     | undefined
+  let transcriptFailure: unknown
   try {
     transcript = await loadTranscriptMessages(transcriptPath)
   } catch (err) {
-    if (!isMissingFileError(err)) throw err
+    if (!isMissingFileError(err)) transcriptFailure = err
   }
 
   if (jsonSnap && transcript) {
@@ -1250,13 +1275,52 @@ export async function loadSessionPair(
     return { path: resolvedJson, snapshot: jsonSnap, fromTranscript: false }
   }
 
+  // 快照坏了、transcript 又一条消息都读不出：没有任何东西被救回来。
+  // 此时返回一个空会话等于把「历史没了」伪装成「会话是空的」——
+  // 坏行会被逐行跳过，所以「解析没抛错」不代表内容还在。
+  if (jsonFailure !== undefined && transcript && transcript.messages.length === 0) {
+    throw new Error(
+      `session unreadable: ${resolvedJson} could not be parsed (${errorReason(jsonFailure)}) ` +
+        `and ${transcriptPath} yielded no usable messages. ` +
+        `Both files were left untouched.`,
+    )
+  }
+
   if (transcript) {
     const snapshot = await snapshotFromTranscriptOnly(transcriptPath, {
       idHint: opts?.idHint,
       cwd: opts?.cwd,
     })
     // T3：仅有 jsonl 时 path 指向真实文件，便于 CLI/autoSave 展示与回写
-    return { path: transcriptPath, snapshot, fromTranscript: true }
+    return {
+      path: transcriptPath,
+      snapshot,
+      fromTranscript: true,
+      ...(jsonFailure === undefined
+        ? {}
+        : {
+            recovered: {
+              from: 'transcript' as const,
+              corruptPath: resolvedJson,
+              reason: errorReason(jsonFailure),
+            },
+          }),
+    }
+  }
+
+  // 两边都读不了：必须说清是「读不了」而不是「找不到」。
+  // 说成 not found 会把用户支去找一个根本没丢的文件。
+  if (jsonFailure !== undefined || transcriptFailure !== undefined) {
+    const parts: string[] = []
+    if (jsonFailure !== undefined) {
+      parts.push(`${resolvedJson}: ${errorReason(jsonFailure)}`)
+    }
+    if (transcriptFailure !== undefined) {
+      parts.push(`${transcriptPath}: ${errorReason(transcriptFailure)}`)
+    }
+    throw new Error(
+      `session unreadable (files exist but could not be parsed) — ${parts.join('; ')}`,
+    )
   }
 
   throw new Error(`session not found: ${resolvedJson} (json and jsonl)`)
@@ -1271,7 +1335,12 @@ export async function loadSessionPair(
 export async function loadSession(
   idOrPath: string,
   options?: LoadSessionOptions,
-): Promise<{ path: string; snapshot: SessionSnapshot }> {
+): Promise<{
+  path: string
+  snapshot: SessionSnapshot
+  /** 快照损坏但从 transcript 救回时填；调用方应当告知用户 */
+  recovered?: SessionRecoveryNote
+}> {
   const cwd = options?.cwd
 
   if (options?.filePath) {
@@ -1282,10 +1351,18 @@ export async function loadSession(
         idHint: idOrPath,
         cwd,
       })
-      return { path: loaded.path, snapshot: loaded.snapshot }
+      return {
+      path: loaded.path,
+      snapshot: loaded.snapshot,
+      ...(loaded.recovered ? { recovered: loaded.recovered } : {}),
+    }
     }
     const loaded = await loadSessionPair(filePath, { idHint: idOrPath, cwd })
-    return { path: loaded.path, snapshot: loaded.snapshot }
+    return {
+      path: loaded.path,
+      snapshot: loaded.snapshot,
+      ...(loaded.recovered ? { recovered: loaded.recovered } : {}),
+    }
   }
 
   if (looksLikeSessionPath(idOrPath)) {
@@ -1296,19 +1373,31 @@ export async function loadSession(
         idHint: path.basename(jsonPath, '.json'),
         cwd,
       })
-      return { path: loaded.path, snapshot: loaded.snapshot }
+      return {
+      path: loaded.path,
+      snapshot: loaded.snapshot,
+      ...(loaded.recovered ? { recovered: loaded.recovered } : {}),
+    }
     }
     const loaded = await loadSessionPair(filePath, {
       idHint: path.basename(filePath, '.json'),
       cwd,
     })
-    return { path: loaded.path, snapshot: loaded.snapshot }
+    return {
+      path: loaded.path,
+      snapshot: loaded.snapshot,
+      ...(loaded.recovered ? { recovered: loaded.recovered } : {}),
+    }
   }
 
   if (options?.sessionsDir || options?.scope) {
     const { filePath } = resolveIdOrPath(idOrPath, options)
     const loaded = await loadSessionPair(filePath, { idHint: idOrPath, cwd })
-    return { path: loaded.path, snapshot: loaded.snapshot }
+    return {
+      path: loaded.path,
+      snapshot: loaded.snapshot,
+      ...(loaded.recovered ? { recovered: loaded.recovered } : {}),
+    }
   }
 
   // 纯 id：project → user
@@ -1321,7 +1410,11 @@ export async function loadSession(
       idHint: idOrPath,
       cwd: options?.cwd,
     })
-    return { path: loaded.path, snapshot: loaded.snapshot }
+    return {
+      path: loaded.path,
+      snapshot: loaded.snapshot,
+      ...(loaded.recovered ? { recovered: loaded.recovered } : {}),
+    }
   } catch (err) {
     if (!isMissingFileError(err)) throw err
   }
@@ -1331,7 +1424,11 @@ export async function loadSession(
       idHint: idOrPath,
       cwd: options?.cwd,
     })
-    return { path: loaded.path, snapshot: loaded.snapshot }
+    return {
+      path: loaded.path,
+      snapshot: loaded.snapshot,
+      ...(loaded.recovered ? { recovered: loaded.recovered } : {}),
+    }
   } catch (err) {
     if (isMissingFileError(err)) {
       throw new Error(
