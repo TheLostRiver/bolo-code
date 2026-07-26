@@ -18,6 +18,8 @@ export type ProviderUsage = {
   cacheReadInputTokens?: number
   /** 缓存写入 token；Anthropic cache_creation */
   cacheCreationInputTokens?: number
+  /** 服务端搜索请求次数（Anthropic `server_tool_use.web_search_requests`）；单独计费 */
+  webSearchRequests?: number
   /**
    * `inputTokens` 是否**不含**缓存部分。
    *
@@ -54,6 +56,21 @@ export type ProviderStreamEvent =
    * 这是**诊断信号**，不是错误：不终止本轮，也不写进 ChatMessage。
    */
   | { type: 'provider_notice'; kind: 'unknown_block'; detail: string }
+  /**
+   * 服务端搜索的可观测信号。
+   *
+   * **不是** `tool_call`——那个语义是「Bolo 去本地执行」。搜索在 provider 侧
+   * 已经跑完，这里只是让用户看见发生过什么：搜了什么词、回了几条、引了哪些源。
+   * 没有它，用户会为一次看不见的搜索付费。
+   */
+  | {
+      type: 'web_search'
+      phase: 'query' | 'results' | 'citation'
+      query?: string
+      resultCount?: number
+      url?: string
+      title?: string
+    }
   | {
       type: 'error'
       message: string

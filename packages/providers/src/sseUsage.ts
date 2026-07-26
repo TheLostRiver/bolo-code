@@ -116,12 +116,22 @@ export function parseAnthropicStreamUsage(evt: unknown): ProviderUsage | null {
       ? (inputTokens ?? 0) + (outputTokens ?? 0)
       : undefined)
   const cache = cacheFromRaw(raw)
+  // 服务端搜索按次单独计费，与 token 无关，得单独读出来
+  const serverToolUse = raw.server_tool_use as
+    | Record<string, unknown>
+    | undefined
+  const webSearchRequests =
+    serverToolUse && typeof serverToolUse === 'object'
+      ? num(serverToolUse.web_search_requests)
+      : undefined
+
   if (
     inputTokens == null &&
     outputTokens == null &&
     totalTokens == null &&
     cache.cacheReadInputTokens == null &&
-    cache.cacheCreationInputTokens == null
+    cache.cacheCreationInputTokens == null &&
+    webSearchRequests == null
   ) {
     return null
   }
@@ -130,6 +140,7 @@ export function parseAnthropicStreamUsage(evt: unknown): ProviderUsage | null {
     outputTokens,
     totalTokens,
     ...cache,
+    ...(webSearchRequests == null ? {} : { webSearchRequests }),
     // Anthropic 的 input_tokens 不含缓存部分；下游要还原真实 prompt 体积
     // 就得把 cache_read / cache_creation 加回来
     inputExcludesCache: true,
