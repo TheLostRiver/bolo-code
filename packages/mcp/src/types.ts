@@ -37,6 +37,17 @@ export type McpServerConfig = {
    */
   tools?: { name: string; description?: string }[]
   /**
+   * 只注册这些工具（白名单）。缺省 = server 列出什么就要什么。
+   *
+   * 存在的理由是实测出来的：一个 server 往往一次带进来好几个工具，
+   * 其中可能有用户并没打算启用的能力。典型例子——启用「搜索」时
+   * 搭着进来一个**远程抓取**工具，模型转头就用它替代了本地抓取，
+   * 于是用户的抓取请求也一并出了机器。用户得有办法只要其中一部分。
+   */
+  allowTools?: string[]
+  /** 排除这些工具。与 allowTools 同时配时**更严的一方胜出**（先 allow 再 exclude）。 */
+  excludeTools?: string[]
+  /**
    * M-GEN-8：配置来源（诊断 / 合并）。
    * user | project | plugin — 不参与协议 wire。
    */

@@ -51,6 +51,56 @@ export type McpListChangedEvent = {
   prompts: McpPromptDef[]
 }
 
+/** 工具白/黑名单（`McpServerConfig` 的子集，供过滤与重列共用） */
+export type McpToolFilter = Pick<McpServerConfig, 'allowTools' | 'excludeTools'>
+
+/**
+ * 按 allowTools / excludeTools 过滤 server 列出的工具。
+ *
+ * 两条设计约束都来自真实失败模式：
+ *
+ * ① **写错名字必须告警。** 这是本功能最危险的失败模式：`allowTools` 打错一个
+ *    字母 → 一个工具都注册不上 → 模型压根不知道有这个能力 → 用户以为
+ *    「配了但没用」，而哪里都不会报错。`excludeTools` 打错则相反：你以为排掉了，
+ *    其实那个工具还在。两种都是静默失败，都必须出声。
+ *
+ * ② **exclude 胜过 allow。** 两者同时命中时取更严的一方——放宽要显式，收紧要生效。
+ */
+export function filterMcpToolDefs(
+  listed: McpToolDef[],
+  filter: McpToolFilter,
+): { tools: McpToolDef[]; warnings: string[] } {
+  const allow = filter.allowTools?.filter((s) => s.trim())
+  const exclude = filter.excludeTools?.filter((s) => s.trim())
+  if (!allow?.length && !exclude?.length) return { tools: listed, warnings: [] }
+
+  const warnings: string[] = []
+  const available = listed.map((t) => t.name)
+  const known = new Set(available)
+
+  for (const name of allow ?? []) {
+    if (!known.has(name)) {
+      warnings.push(
+        `allowTools lists "${name}", which this server does not offer (available: ${available.join(', ') || 'none'})`,
+      )
+    }
+  }
+  for (const name of exclude ?? []) {
+    if (!known.has(name)) {
+      warnings.push(
+        `excludeTools lists "${name}", which this server does not offer (available: ${available.join(', ') || 'none'})`,
+      )
+    }
+  }
+
+  const allowSet = allow?.length ? new Set(allow) : undefined
+  const excludeSet = exclude?.length ? new Set(exclude) : undefined
+  const tools = listed.filter(
+    (t) => (!allowSet || allowSet.has(t.name)) && !excludeSet?.has(t.name),
+  )
+  return { tools, warnings }
+}
+
 export type ConnectedMcpServer = {
   name: string
   client: McpClient
@@ -70,6 +120,12 @@ export type ConnectedMcpServer = {
   endpointSummary?: string
   /** 最近一次连接/list 错误（若 status 曾为 error） */
   lastError?: string
+  /**
+   * 该 server 的工具过滤规则。
+   * **必须随连接保留**：list_changed 重列时要用同一套规则，
+   * 否则 server 热更新会把被排除的工具悄悄放回来。
+   */
+  toolFilter?: McpToolFilter
 }
 
 /** 连接失败、未进入 connected 列表的 server（M-GEN-2 诊断） */
@@ -231,7 +287,11 @@ export function attachMcpListChangedHandlers(
 
     const refreshTools = async () => {
       try {
-        const listed = await client.listTools()
+        const raw = await client.listTools()
+        // 重列必须套用同一套过滤，否则 server 热更新会把被排除的工具放回来
+        const listed = conn.toolFilter
+          ? filterMcpToolDefs(raw, conn.toolFilter).tools
+          : raw
         conn.tools = listed
         conn.capabilities.tools = client.supportsTools || listed.length > 0
         await onListChanged?.({
@@ -779,6 +839,11 @@ export async function connectMcpServers(
       let listed: McpToolDef[] = []
       try {
         listed = await client.listTools()
+        const filtered = filterMcpToolDefs(listed, expandedCfg)
+        listed = filtered.tools
+        for (const w of filtered.warnings) {
+          warnings.push(`MCP server "${cfg.name}": ${w}`)
+        }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
         warnings.push(`MCP server "${cfg.name}": tools/list failed: ${msg}`)
@@ -833,6 +898,18 @@ export async function connectMcpServers(
           prompts: client.supportsPrompts,
         },
         endpointSummary,
+        ...(expandedCfg.allowTools?.length || expandedCfg.excludeTools?.length
+          ? {
+              toolFilter: {
+                ...(expandedCfg.allowTools
+                  ? { allowTools: expandedCfg.allowTools }
+                  : {}),
+                ...(expandedCfg.excludeTools
+                  ? { excludeTools: expandedCfg.excludeTools }
+                  : {}),
+              },
+            }
+          : {}),
       })
 
       for (const t of listed) {
