@@ -96,8 +96,10 @@ async function main() {
     plan: {
       must: [
         'Permission mode: plan',
-        'read-only',
-        'avoid file edits',
+        // 「blocked outright」比原来的「avoid」准确：plan 模式是真 deny，不是建议
+        'blocked outright',
+        // 出口必须写进提示词，否则模型不知道自己能提出结束规划
+        'ExitPlanMode',
       ],
     },
     bypassPermissions: {

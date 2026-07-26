@@ -176,6 +176,8 @@ export type QueryLoopParams = {
    * AR-T2：后台 shell 注册表。后台进程跨 turn 存活，只在 session 结束时收尸。
    */
   backgroundShellStore?: import('../../shared/src/index.ts').BackgroundShellStore
+  /** AR-T3a：会话权限模式引用（ExitPlanMode 批准后切换） */
+  planModeStore?: import('../../tools/src/index.ts').PlanModeStoreRef
   /** 全局 agent 策略（Spec v0） */
   agentPolicy?: import('./subagent.ts').AgentPolicy
   /**
@@ -489,6 +491,7 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
           backgroundStore: params.backgroundStore,
           todoStore: params.todoStore,
           backgroundShellStore: params.backgroundShellStore,
+          planModeStore: params.planModeStore,
           parentMessages: params.messages,
           parentSystemPromptSections: params.systemPromptSections,
           model: params.model,

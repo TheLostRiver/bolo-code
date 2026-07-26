@@ -2256,6 +2256,16 @@ async function runOwnedPrompt(
       backgroundStore: session.backgroundAgents,
       todoStore: getSessionTodoStore(session),
       backgroundShellStore: session.backgroundShells,
+      // AR-T3a：ExitPlanMode 经用户批准后就地切换会话权限模式。
+      // 用 live getter/setter 直写 session，与 todoStore 同一手法。
+      planModeStore: {
+        get permissionMode(): string {
+          return session.permissionMode
+        },
+        set permissionMode(next: string) {
+          session.permissionMode = next as typeof session.permissionMode
+        },
+      },
       takeBackgroundResults: () =>
         session.backgroundAgents
           ? takeBackgroundAgentResultsForPromotion(

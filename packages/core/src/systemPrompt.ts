@@ -305,8 +305,10 @@ export function permissionModeBehaviorLine(
       )
     case 'plan':
       return (
-        'Permission mode: plan — planning / read-only bias. Prefer inspection and a ' +
-        'written plan; avoid file edits and mutating shell until the user leaves plan mode.'
+        'Permission mode: plan — reads are allowed; edits and shell are blocked outright. ' +
+        'Investigate first, then write a concrete plan. When the plan is specific enough ' +
+        'for the user to judge, call ExitPlanMode with it: approving leaves plan mode so ' +
+        'you can start work. Do not sit waiting for the user to switch modes by hand.'
       )
     case 'bypassPermissions':
       return (

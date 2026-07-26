@@ -201,6 +201,8 @@ export type RunToolUseContext = {
   todoStore?: import('../../tools/src/index.ts').TodoStoreRef
   /** AR-T2：后台 shell 注册表；经 extras 交给 Bash/BashOutput/KillShell */
   backgroundShellStore?: import('../../shared/src/index.ts').BackgroundShellStore
+  /** AR-T3a：会话权限模式引用；经 extras 交给 ExitPlanMode */
+  planModeStore?: import('../../tools/src/index.ts').PlanModeStoreRef
   /** 父会话 messages；仅供 fork 继承，后台完成不得异步修改 */
   parentMessages?: import('../../shared/src/index.ts').ChatMessage[]
   /** fork 时注入子 agent 的父 system 段 */
@@ -455,6 +457,7 @@ export async function runToolUse(
         skills: ctx.skills,
         todoStore: ctx.todoStore,
         backgroundShellStore: ctx.backgroundShellStore,
+        planModeStore: ctx.planModeStore,
       },
     })
     if (!v.ok) {
@@ -881,6 +884,7 @@ export async function runToolUse(
         skills: ctx.skills,
         todoStore: ctx.todoStore,
         backgroundShellStore: ctx.backgroundShellStore,
+        planModeStore: ctx.planModeStore,
         subagentParent: ctx.deps
           ? {
               parentSessionId: ctx.sessionId,

@@ -9,6 +9,13 @@ import { isAutoAllowlistedTool } from './autoAllowlist.ts'
 import { matchDangerousBashCommand } from './dangerousPatterns.ts'
 import { checkSensitivePath } from './sensitivePaths.ts'
 
+/**
+ * plan 模式出口工具名。
+ * 与 tools 包重复声明一份字符串常量，是为了不让 permissions 反向依赖 tools ——
+ * 权限层必须能独立判定，不能被工具层的加载顺序影响。
+ */
+export const EXIT_PLAN_MODE_TOOL_NAME = 'ExitPlanMode'
+
 export const PERMISSION_MODES = [
   'default',
   'acceptEdits',
@@ -642,6 +649,16 @@ export function decidePermission(input: GateInput): GateResult {
 
   // plan 优先于 always-allow：规划态仍禁止写/壳/MCP
   if (mode === 'plan') {
+    // 出口本身必须问得出口——否则 plan 模式会把自己的退出路径也 deny 掉，
+    // 模型规划完只能干等。放宽的是「能不能问用户」，不是「能不能动手」：
+    // 它照样要用户点头，且批准后落到 default 而非任何自动放行的模式。
+    if (input.toolName === EXIT_PLAN_MODE_TOOL_NAME) {
+      return {
+        ...base,
+        behavior: 'ask',
+        reason: 'plan: leaving plan mode requires your approval',
+      }
+    }
     if (category === 'read') {
       return { ...base, behavior: 'allow', reason: 'plan: read allowed' }
     }

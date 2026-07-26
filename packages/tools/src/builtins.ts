@@ -24,6 +24,7 @@ import {
 } from '../../permissions/src/osSandbox.ts'
 import { applyPatchToCwd } from './applyPatch.ts'
 import { createTodoWriteTool } from './todoWrite.ts'
+import { createExitPlanModeTool } from './exitPlanMode.ts'
 import {
   createBashOutputTool,
   createKillShellTool,
@@ -997,6 +998,7 @@ export function createBuiltinTools(): BoloTool[] {
     createSkillTool(),
     createWebFetchTool(),
     createTodoWriteTool(),
+    createExitPlanModeTool(),
     createBashOutputTool(),
     createKillShellTool(),
   ]

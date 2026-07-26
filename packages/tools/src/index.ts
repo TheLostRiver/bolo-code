@@ -37,6 +37,13 @@ export {
 } from './builtins.ts'
 
 export {
+  createExitPlanModeTool,
+  EXIT_PLAN_MODE_TOOL_NAME,
+  PLAN_MODE_EXIT_TARGET,
+  type PlanModeStoreRef,
+} from './exitPlanMode.ts'
+
+export {
   createTodoWriteTool,
   TODO_WRITE_TOOL_NAME,
   type TodoStoreRef,
