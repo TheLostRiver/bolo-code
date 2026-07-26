@@ -335,6 +335,41 @@ export function registrationFromListed(
   }
 }
 
+/**
+ * MCP 调用抛错时的可读化。
+ *
+ * 活体撞到的真实场景：Exa 免密层按 IP 限速，偶发抛 `fetch failed`——
+ * 模型和用户拿到的全部信息就这两个词。两个后果都实测到了：
+ * - 用户不知道是挂着的哪个 server 坏了（会话里可以有好几个）；
+ * - **模型**据此决策，无信息就会瞎撞（实测它接连去试 WebFetch、Bash，
+ *   把整轮 turn 预算烧光）。
+ *
+ * 只做分类，不改写原文：原始 message 一律保留在尾部。
+ * 分类不确定时**不**贴网络叙事——把人指向错误方向比不给提示更糟。
+ */
+function describeMcpCallError(
+  err: unknown,
+  reg: McpToolRegistration,
+  transport?: string,
+): string {
+  const msg = err instanceof Error ? err.message : String(err)
+  const where = `MCP ${reg.server}/${reg.tool} failed`
+  const RETRYABLE = 'transient; a retry may succeed'
+
+  // 超时排在网络前：请求发出去了但没等到，成因和「够不着」不同
+  if (/timed?\s*out|etimedout|deadline exceeded/i.test(msg)) {
+    return `${where}: the server did not answer in time — ${msg} · ${RETRYABLE}`
+  }
+  if (
+    /fetch failed|econnrefused|enotfound|eai_again|econnreset|ehostunreach|enetunreach|socket hang up|und_err|network/i.test(
+      msg,
+    )
+  ) {
+    return `${where}: could not reach the server over ${transport ?? 'its transport'} — ${msg} · ${RETRYABLE}`
+  }
+  return `${where}: ${msg}`
+}
+
 export function boloToolFromMcp(
   reg: McpToolRegistration,
   client: McpClient,
@@ -359,10 +394,9 @@ export function boloToolFromMcp(
           errorCode: isError ? 'mcp_tool_error' : undefined,
         }
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e)
         return {
           ok: false,
-          output: msg,
+          output: describeMcpCallError(e, reg, client.transport),
           isError: true,
           errorCode: 'mcp_call_failed',
         }
