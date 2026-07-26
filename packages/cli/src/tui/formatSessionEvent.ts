@@ -263,6 +263,23 @@ export function createSessionEventPrinter(opts: {
         writeErr(`warn: ${e.message}\n`)
         return
       }
+      // provider 侧搜索：写 stdout（是内容不是诊断），但用不同前缀标明
+      // 它不是本地工具调用。不显示就等于让用户为看不见的搜索买单。
+      if (e.type === 'web_search') {
+        ensureLineBreak()
+        if (e.phase === 'query') {
+          const q = typeof e.query === 'string' && e.query ? ` "${e.query}"` : ''
+          writeOut(`${DIM}⌕ web search${q}${RESET}\n`)
+        } else if (e.phase === 'results') {
+          const n = typeof e.resultCount === 'number' ? e.resultCount : '?'
+          writeOut(`${DIM}⌕ ${n} result(s)${RESET}\n`)
+        } else if (e.phase === 'citation' && typeof e.url === 'string') {
+          const t =
+            typeof e.title === 'string' && e.title ? `${e.title} — ` : ''
+          writeOut(`${DIM}  ↳ ${t}${e.url}${RESET}\n`)
+        }
+        return
+      }
       if (e.type === 'model_retry') {
         ensureLineBreak()
         const attempt = typeof e.attempt === 'number' ? e.attempt : '?'

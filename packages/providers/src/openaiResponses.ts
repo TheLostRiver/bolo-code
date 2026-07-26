@@ -9,6 +9,10 @@
  */
 
 import { parseRetryAfterMs } from './retryAfter.ts'
+import {
+  detectWebSearchDialectId,
+  resolveWebSearchPlan,
+} from './webSearchDialect.ts'
 import type { ChatMessage } from '../../shared/src/index.ts'
 import type { ToolSpec } from '../../tools/src/index.ts'
 import { toolsToOpenAI as toolsToOpenAIImpl } from '../../tools/src/providerSchema.ts'
@@ -175,9 +179,24 @@ export function buildResponsesRequest(
   if (options?.maxOutputTokens != null) {
     body.max_output_tokens = options.maxOutputTokens
   }
+  // hosted 搜索**不经过** toolsToResponses——那个 mapper 会把每一项包成
+  // `{type:'function', name, parameters}`，而 hosted 工具只有一个 type 字段。
+  // 缺省 = 关：直接调本函数的既有代码不该因此静默开启搜索并产生费用。
+  const searchPlan = resolveWebSearchPlan(
+    detectWebSearchDialectId({ kind: 'openai-responses', model: config.model }),
+    options?.webSearch ?? 'off',
+    { model: config.model },
+  )
+  const hostedTools = searchPlan.enabled
+    ? searchPlan.toolObjects.map((t) => ({ ...t }))
+    : []
+
   if (!options?.disableTools && options?.tools?.length) {
-    body.tools = toolsToResponses(options.tools)
+    body.tools = [...toolsToResponses(options.tools), ...hostedTools]
     body.tool_choice = 'auto'
+  } else if (!options?.disableTools && hostedTools.length) {
+    // 没有客户端工具但开了搜索：仍要把 hosted 条目发出去
+    body.tools = hostedTools
   }
   // prompt_cache_key：OpenAI 可选；兼容网关不识别时通常忽略未知字段
   if (isPromptCachingEnabled(options)) {
@@ -396,6 +415,26 @@ export function processResponsesSseJson(
     return { events }
   }
 
+  // 引用：正文里的来源标注。不处理就等于把「这句话依据哪来」丢掉。
+  if (
+    kind === 'response.output_text.annotation.added' ||
+    kind === 'response.output_text.annotation.done'
+  ) {
+    const ann = json.annotation as Record<string, unknown> | undefined
+    if (ann && typeof ann === 'object') {
+      const url = typeof ann.url === 'string' ? ann.url : undefined
+      if (url) {
+        events.push({
+          type: 'web_search',
+          phase: 'citation',
+          url,
+          ...(typeof ann.title === 'string' ? { title: ann.title } : {}),
+        })
+      }
+    }
+    return { events }
+  }
+
   if (kind === 'response.output_item.added' || kind === 'response.output_item.done') {
     const item = json.item as Record<string, unknown> | undefined
     if (item && typeof item === 'object') {
@@ -409,6 +448,22 @@ export function processResponsesSseJson(
           }
         } else {
           state.inReasoning = true
+        }
+        return { events }
+      }
+      // hosted 搜索：**只观测，不执行**。绝不进 toolAcc——那条路的终点是
+      // 「Bolo 本地跑这个工具」，而搜索已经在 OpenAI 侧跑完了。
+      if (t === 'web_search_call' || t === 'web_search_call_preview') {
+        if (kind === 'response.output_item.done') {
+          const action = item.action as Record<string, unknown> | undefined
+          const query =
+            action && typeof action.query === 'string' ? action.query : undefined
+          events.push({
+            type: 'web_search',
+            phase: 'query',
+            // 查询词拿不到就不填——不伪造，但搜索发生过这件事仍然要报
+            ...(query ? { query } : {}),
+          })
         }
         return { events }
       }

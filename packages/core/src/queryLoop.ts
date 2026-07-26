@@ -79,6 +79,19 @@ export type QueryLoopEvent =
    * 「付了钱、没结果、查不出原因」。CLI printer 已有 warn 渲染。
    */
   | { type: 'warning'; message: string }
+  /**
+   * provider 侧执行的搜索的可观测信号（查询词 / 结果数 / 引用）。
+   * 与 tool_start/tool_end 刻意分开：这不是 Bolo 跑的工具，
+   * 混进工具轨会让人以为本地执行了什么。
+   */
+  | {
+      type: 'web_search'
+      phase: 'query' | 'results' | 'citation'
+      query?: string
+      resultCount?: number
+      url?: string
+      title?: string
+    }
   | {
       type: 'ptl_retry'
       attempt: number
@@ -580,6 +593,17 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
               cacheReadInputTokens: ev.usage?.cacheReadInputTokens,
               cacheCreationInputTokens: ev.usage?.cacheCreationInputTokens,
             }
+          } else if (ev.type === 'web_search') {
+            // provider 侧已经搜完了。这里只是让它可见——不可见就等于
+            // 用户为一次看不到的搜索付费。**不是** tool_call，不本地执行。
+            emit(params, {
+              type: 'web_search',
+              phase: ev.phase,
+              ...(ev.query ? { query: ev.query } : {}),
+              ...(ev.resultCount != null ? { resultCount: ev.resultCount } : {}),
+              ...(ev.url ? { url: ev.url } : {}),
+              ...(ev.title ? { title: ev.title } : {}),
+            })
           } else if (ev.type === 'provider_notice') {
             // provider 流里出现本客户端不认识的块。不是错误，不终止本轮，
             // 但必须让用户看见——否则「搜索跑了、花了钱、结果没了」查不出来。
