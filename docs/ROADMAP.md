@@ -25,7 +25,7 @@
 | **CLI TUI（壳）** | **~70–80%** | 文本框布局/picker/主题；active Ctrl-C 取消本轮；**非**真 React Ink |
 | **Electron GUI** | **~65–75%** | 壳 + 流式 + 权限 + 设置 + 多 provider（CX7） |
 | **Hooks · 日用契约** | **~96–98%** | **H0–H5 已落地**（SessionEnd · exit 语义 · updatedInput · `/hooks recent`） |
-| **Compact · 日用管道** | **~95–97%** | **C0–C5 + AR2A0a/A0b/A1/A2 已落地**（hybrid 计数 · 中段截断 · 防重摘要 · range/watermark 契约 · 切分不拆对穷举验证 · 写失败完整回退 · durable 条目不丢）；中段压缩按证据门控**显式不启用**（§13.10.2） |
+| **Compact · 日用管道** | **~96–98%** | **C0–C5 + AR2 全段已落地**（hybrid 计数 · 中段截断 · 防重摘要 · range/watermark 契约 · 切分不拆对穷举验证 · 写失败完整回退 · durable 条目不丢 · **CJK/密文估算修正** · 管道基准）；中段压缩与远端压缩均**显式关闭**（§13.10.2 · [ADR](./ADR_COMPACT_REMOTE.md)） |
 | **Provider · 多实例热切** | **~92–96%** | **P0–P4.1 + CX7 Desktop** |
 | **Effort · 推理强度方言** | **~92–95%** | **E0–E9 已落地**；adaptive thinking 归 AR4 |
 | **Provider UX · 便利层** | **~95–98%** | **CX0–CX8 已落地**（ultrathink 默认 off）· [PROVIDER_UX.md](./PROVIDER_UX.md) |
@@ -33,7 +33,7 @@
 
 **已闭环主线：** headless 日用 → Diff（D0–D7 / U0–U4）· Hooks（H0–H5）· Compact（C0–C5）· Provider（P0–P4.1）· Effort（E0–E9）· Provider UX（CX0–CX8）· 可靠性（R0–R4）· **Durable Runtime（DR0–DR4）** · **Autonomous Road AR1 CLI/TUI runtime UX**。切片明细 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
 
-**当前主线：** **AR2B–C · tokenizer 重估 / 基准 / remote 决策**（§13.10.2 · 看板第 17 位）。AR-T1/AR-T2/AR-T3a/AR-T3b/AR-T3+ · **AR2A0a/A0b/A1/A2** 与 **AR5C-early 分发**（§15）已收口。
+**当前主线：** **AR3 · Codex App 风格 Desktop**（§13.10.2 · 看板第 18 位）。AR-T1/AR-T2/AR-T3a/AR-T3b/AR-T3+ · **AR2 全段（A0a/A0b/A1/A2/B1/B2/C）** 与 **AR5C-early 分发**（§15）已收口。
 
 **已插队并收口：** **AR-T · Agent 能力面**（§14）。准入证据：基础设施深度（DR0–DR4 + AR1）已远超能力广度——彼时 agent 无法跨步骤记住计划，也无法启动任何活过一次工具调用的进程。AR2 压缩深化顺延，A0a/A0b 成果不受影响。
 
@@ -101,7 +101,7 @@
 | **AR-T3a ExitPlanMode · AR-T3b Web search**（§14） | ✅ |
 | **AR5C-early · CLI 可分发**（§15） | ✅ |
 | **AR-T3+ 能力面续刀**（WebSearch · plan 工具流 · AskUserQuestion） | ✅ 三项均已落地（AskUserQuestion 的真 TTY 交互未验，见 §14.5） |
-| AR2 Compact depth（A0a/A0b ✅ → A1/A2 → B → C） | 📋 顺延 |
+| **AR2 Compact depth（A0a/A0b/A1/A2/B1/B2/C 全段）** | ✅ |
 | AR3 Desktop shell · AR4 证据深水 · AR5 release hardening | 📋 |
 | 无遥测 | ✅ 永不 |
 
@@ -113,7 +113,7 @@
 
 **一句话：** 主路径、Diff、Hooks、Compact、多 Provider、Effort、Provider UX、可靠性 R0–R4、Durable Runtime DR0–DR4、AR1 runtime UX、**AR-T1/AR-T2 能力面**已收口。
 
-**下一刀（当前主线）：** **AR2B1 tokenizer registry 必要性重估**（§13.10.2 · 看板第 17 位）。AR2A 全段已收口；中段压缩按证据门控显式不启用。
+**下一刀（当前主线）：** **AR3A protocol client/store**（§13.10.2 · 看板第 18 位）。AR2 全段已收口；中段压缩与远端压缩均按证据门控**显式关闭**（后者见 [ADR_COMPACT_REMOTE.md](./ADR_COMPACT_REMOTE.md)）。
 
 ---
 
@@ -129,6 +129,7 @@
 | [PROVIDER_UX.md](./PROVIDER_UX.md) | CX 便利层（preset · caps · ultrathink） |
 | [EFFORT.md](./EFFORT.md) / [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md) | Effort 方言 |
 | [COMPACTION.md](./COMPACTION.md) | Compact **实现真源** |
+| [ADR_COMPACT_REMOTE.md](./ADR_COMPACT_REMOTE.md) | **AR2C 决定**：compaction 保持 local-only（含重开条件） |
 | [TOOLS.md](./TOOLS.md) | **内置工具契约**（TodoWrite · 后台 shell） |
 | [RELEASE.md](./RELEASE.md) | **发布契约**（构建 · tarball · 门禁 · 发布流程） |
 | [HOOKS.md](./HOOKS.md) | Hook 契约 |
@@ -287,9 +288,9 @@ Safe boundary 只承诺：provider 调用前/完整响应归约后 · 每个 too
 | **AR2A0b · 中段截断 + 防重摘要** ✅ | `truncateMiddle`（保头尾 + 原始规模标注 + 幂等）· per-tool 预算表 · `COMPACT_SUMMARY_MARKER` / merge 提示 | toolExecution exec 边界 + microcompact 共用；spill 全量落盘不动；boundary `mergedPriorSummary` | ✅ 截断只在产出时一次，不回溯改写历史 |
 | **AR2A1 · range/watermark** ✅ | `packages/compact/src/range.ts`：`MessageRange` · `deriveCompactWatermark` · `findAtomicBlocks` · `validateCompactRange` · `planPartialCompact` + 结构化拒绝原因。**watermark 推导而非存储**（`ChatMessage` 无 id，存下标必漂移；summary 消息可判别故可推导） | `test-compact-range.ts` 固定 fixture：原子块、吸附上报、空/越界/倒置、幂等、重复 compact、保留尾部、不改入参。**未接 provider** | ✅ 契约可表达 tool pair 与 lifecycle（summary 消息）；**`resolution` 是 transcript 条目不是 ChatMessage**，明确划在契约外，由 A2 接线时单独保证 |
 | **AR2A2 · safe rewrite** ✅**（安全面）**/ ⏸**（中段能力未启用）** | 四条验收全过：tool pair 不拆对（`test-compact-split-invariant.ts` 穷举 7736 切点 + 6820 split 组合，`findAtomicBlocks` 当裁判）· durable 条目不丢（`3e918ea`）· 旧 transcript 可读（含坏行与旧格式两例）· 写失败完整回退（`948061c`） | 两处修复均为**已复现**的真 bug 而非预防性改动 | ⏸ **`planPartialCompact` / `validateCompactRange` 产品代码零调用**——契约只作为验证者接线，未启用任意中段压缩。理由见下 |
-| **AR2B1 · tokenizer registry** ⏸ **重估中（缺 ground truth）** | 重估查明一条具体缺陷：`looksDenseTokenText` 只按 **ASCII 标点**判密文，**无 CJK 分支**，中文走默认 4 字符/token（本地实测 ≈3.8）。本项目中文内容是常态，若真实 CJK 更密即为**低估**——危险方向（auto compact 迟触发） | `scripts/live-token-calibration.ts` 已就位（中/英/代码/JSON/日志固定语料 → 真实 `prompt_tokens` 对比）。**本地半已跑通；live 半未跑通：Desktop 上的 OpenRouter key 已失效（`/api/v1/key` 同样 401，非请求形状问题）** | ⏸ 缺 ground truth 不下结论、也不改算法。**缓解已验证**：`hybridTokenCount` 有 anchor 时只估锚点之后的尾部且 `pad` 偏高，误差作用面被结构性收窄 |
-| **AR2B2 · measurable budget** | B1 可复现；固定中英文本、tool/diff、长 JSON 语料 | 记录 token 偏差、compact 后成本、延迟与峰值内存；设回归阈值 | 没有相对当前估算的稳定收益，不替换默认算法，只保留基准结论 |
-| **AR2C · remote decision** | A/B 已证明本地瓶颈且有真实跨会话需求 | 写 ADR：local-only、remote/session-memory 之一；列隐私、离线、兼容与失败回退 | 需要新服务、遥测或不透明存储时默认"不实施"，关闭而非永久挂起 |
+| **AR2B1 · tokenizer registry** ✅ **不引入（改为修正启发式）** | 重估结论：真 tokenizer 要么联网、要么引入不可审计 native 依赖/大体积 BPE 表，**均撞零依赖红线**。改为用真实端点标定后修正字符类别分类 | 实测查出 `looksDenseTokenText` **无 CJK 分支**导致中文低估 **53%**；交叉两家 tokenizer 后取最密值定参 | ✅ 最差低估 −53% → **−5.3%**，最差高估 +109% → +41%（`test-token-estimate-accuracy.ts` 进门禁；`live-token-calibration.ts` 供复测，不进门禁） |
+| **AR2B2 · measurable budget** ✅ | `scripts/test-compact-benchmark.ts`（进门禁）：中英/tool/diff/长 JSON 混合语料 | 实测 20 轮 11047→859 tok ×12.9 · 80 轮 44607→859 ×51.9 · 均 2–3ms · heap +0.1MB · 4× 输入仅 1.2× 耗时 | ✅ 阈值分两档：确定性指标（不改入参 · 压缩比 · 不留孤儿 tool_calls）严格断言；时延/内存只设灾难阈（8s/320MB）——卡太紧只会制造假红灯 |
+| **AR2C · remote decision** ✅ **不实施（closed）** | [ADR_COMPACT_REMOTE.md](./ADR_COMPACT_REMOTE.md) | 准入两条**均不成立**：压缩管道 2–3ms/0.1MB 无本地瓶颈；无真实跨会话需求 | ✅ 远端压缩要把**对话正文全部**发给新第三方接收方，比遥测更严重；且离线/兼容/失败回退四面皆为净负。已列重开条件，非永久挂起 |
 
 AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 registry（重估后）→ B2 benchmark → C 决策文档**。每刀都必须能单独回滚到 C0–C5，不以"压缩率更高"交换 transcript 可恢复性。
 
@@ -371,8 +372,8 @@ AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 regis
 | 14 | **AR5C-early · CLI 分发** | esbuild 单文件 + 发布元数据 + 双布局资产 | `npm i -g bolo-code` 可用 | pack→install→run E2E + 零依赖 + tarball 清单 | ✅ |
 | 15 | **AR-T3+ · 能力面续刀** | `bolo search enable` · OpenRouter plugin · AskUserQuestion（逐项） | 见 §14.5 | 每项独立红灯 + 全量门禁 | ✅（AskUserQuestion 真 TTY 交互未验） |
 | 16 | **AR2A1–A2 · watermark/safe rewrite** | range/watermark 纯契约 ✅ · 契约作为验证者接线 ✅ | compact 安全面收口 | tool pairing + lifecycle 保留 | ✅ 四条验收全过（`3e918ea` · `948061c` · `b5c7112`）；**中段压缩按证据门控显式不启用**，理由见 §13.10.2 |
-| 17 | **AR2B–C · tokenizer/benchmark/ADR** | registry（重估）+ 语料基准 + remote 决策 | 可量化 token/cost | 偏差阈值 + fail-closed | **当前** |
-| 18 | **AR3A–F** | protocol client/store；无 renderer 状态机 | Codex App 风格 Desktop | mock/core IPC + crash/restart + Windows package | 📋 |
+| 17 | **AR2B–C · tokenizer/benchmark/ADR** | 启发式修正 ✅ + 语料基准 ✅ + remote ADR ✅ | 可量化 token/cost | 偏差阈值 + fail-closed | ✅ B1 不引入 tokenizer（`661fc7d`）· B2 基准（`28f70fc`）· C 决定 local-only |
+| 18 | **AR3A–F** | protocol client/store；无 renderer 状态机 | Codex App 风格 Desktop | mock/core IPC + crash/restart + Windows package | **当前** |
 | 19 | **AR4** | 逐项 evidence gate | 有证据实施；无证据书面关闭 | 场景/基准/兼容证据 | 📋 |
 | 20 | **AR5A–D**（AR5C 已提前完成） | compatibility/security/release contracts | clean clone 安装、升级、恢复手册 | full test + cross-platform smoke + security audit | 📋 |
 
