@@ -89,6 +89,72 @@ async function main() {
   assert(r2.didCompact !== true, 'no compact when querySource=compact')
   assert(ran === 1, 'still one run')
 
+  // ── 1b) AR2A0a：getUsageAnchor 混合计数修复迟触发 ──
+  const { fingerprintMessagePrefix } = await import(
+    '../packages/compact/src/index.ts'
+  )
+  const win = 64_000
+  const winThr = getAutoCompactThreshold(win)
+  const anchorHead: ChatMessage[] = [
+    { role: 'user', content: 'q '.repeat(40) },
+    { role: 'assistant', content: 'a '.repeat(40) },
+  ]
+  // 尾部追加的大 tool 输出：估算 ~20k tokens，远低于阈值(~41k)
+  const anchorMsgs: ChatMessage[] = [
+    ...anchorHead,
+    { role: 'tool', content: 'y'.repeat(80_000), tool_call_id: 'c1' },
+  ]
+  assert(estimateTokens(anchorMsgs) < winThr, 'pure estimate below threshold')
+
+  let hybridRan = 0
+  const hybridPrepare = createAutoCompactPrepare({
+    enabled: true,
+    contextWindowTokens: win,
+    runAutoCompact: async () => {
+      hybridRan += 1
+      return [
+        { role: 'system', content: 'Conversation compacted' },
+        { role: 'user', content: 'HYBRID_SUMMARY' },
+      ]
+    },
+    // 锚：上次 API input 已接近阈值，但尚未越过
+    getUsageAnchor: () => ({
+      anchorInputTokens: winThr - 1_000,
+      anchoredMessageCount: anchorHead.length,
+      fingerprint: fingerprintMessagePrefix(anchorMsgs, anchorHead.length),
+    }),
+  })
+  const rHy = await hybridPrepare({
+    messages: anchorMsgs,
+    querySource: 'repl_main_thread',
+    tokenCount: 0,
+  })
+  assert(rHy.didCompact === true, 'hybrid anchor triggers compact (old path missed it)')
+  assert(hybridRan === 1, 'hybrid runAutoCompact once')
+
+  // 锚失效（消息被重写）→ 回退全量估算 → 不触发
+  let staleRan = 0
+  const stalePrepare = createAutoCompactPrepare({
+    enabled: true,
+    contextWindowTokens: win,
+    runAutoCompact: async () => {
+      staleRan += 1
+      return null
+    },
+    getUsageAnchor: () => ({
+      anchorInputTokens: winThr - 1_000,
+      anchoredMessageCount: 2,
+      fingerprint: 'stale-fingerprint',
+    }),
+  })
+  const rStale = await stalePrepare({
+    messages: anchorMsgs,
+    querySource: 'repl_main_thread',
+    tokenCount: 0,
+  })
+  assert(rStale.didCompact !== true, 'stale anchor falls back to estimate (below threshold)')
+  assert(staleRan === 0, 'stale anchor does not trigger compact')
+
   // ── 2) session：auto → compactSession + summarizer ──
   let summarizeCalls = 0
   const longContent = 'y'.repeat((getAutoCompactThreshold(8_000) + 200) * 4)

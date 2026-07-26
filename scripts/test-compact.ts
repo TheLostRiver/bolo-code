@@ -211,6 +211,146 @@ async function main() {
   })
   assert(over.level === 'over', 'full window → over')
 
+  // ── AR2A0a：混合 usage 锚定 token 计数 ──
+  const {
+    hybridTokenCount,
+    fingerprintMessagePrefix,
+    resolveAutoCompactTokenCount,
+    CONSERVATIVE_ESTIMATE_PAD,
+  } = await import('../packages/compact/src/index.ts')
+
+  const head: ChatMessage[] = [
+    { role: 'user', content: 'question one '.repeat(20) },
+    { role: 'assistant', content: 'answer one '.repeat(20) },
+  ]
+  const tail: ChatMessage[] = [
+    { role: 'assistant', content: 'calling tool', tool_calls: [{ id: 'c9', name: 'Bash', arguments: '{"command":"ls"}' }] },
+    { role: 'tool', content: 'tool output '.repeat(60), tool_call_id: 'c9' },
+  ]
+  const full = [...head, ...tail]
+  const anchor = {
+    anchorInputTokens: 5_000,
+    anchoredMessageCount: head.length,
+    fingerprint: fingerprintMessagePrefix(full, head.length),
+  }
+
+  // (a) 无锚 → 全量估算
+  const hNo = hybridTokenCount({ messages: full })
+  assert(hNo.source === 'estimate', 'no anchor → estimate source')
+  assert(hNo.tokenCount === estimateTokens(full), 'no anchor equals estimateTokens')
+
+  // (b) 锚 == 全长 → 纯 usage
+  const hFull = hybridTokenCount({
+    messages: head,
+    anchor: { ...anchor, fingerprint: fingerprintMessagePrefix(head, head.length) },
+  })
+  assert(hFull.source === 'usage', 'anchor at full length → usage source')
+  assert(hFull.tokenCount === 5_000, 'anchor at full length equals anchor input')
+
+  // (c) 锚 + 尾部 → anchor + (padded) tail 估算
+  const tailEst = estimateTokens(tail)
+  const hPad = hybridTokenCount({ messages: full, anchor, pad: true })
+  assert(hPad.source === 'hybrid', 'anchor+tail → hybrid source')
+  assert(
+    hPad.tokenCount === 5_000 + Math.ceil(tailEst * CONSERVATIVE_ESTIMATE_PAD),
+    'hybrid = anchor + padded tail estimate',
+  )
+  const hNoPad = hybridTokenCount({ messages: full, anchor })
+  assert(hNoPad.tokenCount === 5_000 + tailEst, 'hybrid without pad = anchor + tail estimate')
+
+  // (d) 指纹失配（头部被 snip/compact 改写）→ 回退全量估算
+  const rewrittenHead: ChatMessage[] = [
+    { role: 'system', content: 'Conversation compacted' },
+    { role: 'user', content: 'SUMMARY' },
+  ]
+  const hMismatch = hybridTokenCount({
+    messages: [...rewrittenHead, ...tail],
+    anchor,
+  })
+  assert(hMismatch.source === 'estimate', 'fingerprint mismatch → estimate fallback')
+  assert(
+    hMismatch.tokenCount === estimateTokens([...rewrittenHead, ...tail]),
+    'mismatch equals full estimate',
+  )
+
+  // (e) micro 只改内容不改 role/tool_calls → 锚仍有效
+  const microHead: ChatMessage[] = [
+    { role: 'user', content: '[Old tool result content cleared]' },
+    { role: 'assistant', content: 'answer one '.repeat(20) },
+  ]
+  const hMicro = hybridTokenCount({ messages: [...microHead, ...tail], anchor })
+  assert(hMicro.source === 'hybrid', 'content-only rewrite keeps anchor valid')
+
+  // (f) 锚超过消息数（compact 缩短）→ 回退
+  const hShrunk = hybridTokenCount({
+    messages: head.slice(0, 1),
+    anchor,
+  })
+  assert(hShrunk.source === 'estimate', 'anchored count beyond length → estimate fallback')
+
+  // resolveAutoCompactTokenCount：anchor 路径 → hybrid；旧路径不变
+  const rHybrid = resolveAutoCompactTokenCount({
+    estimateTokens: estimateTokens(full),
+    anchor,
+    messages: full,
+    pad: true,
+  })
+  assert(rHybrid.source === 'hybrid', 'resolve reports hybrid source')
+  assert(rHybrid.tokenCount === hPad.tokenCount, 'resolve matches hybridTokenCount')
+  const rOld = resolveAutoCompactTokenCount({
+    estimateTokens: 123,
+    usageInputTokens: 456,
+  })
+  assert(rOld.source === 'usage' && rOld.tokenCount === 456, 'legacy usage path unchanged')
+
+  // shouldAutoCompact：锚值低于阈值但追加尾部后 hybrid 过阈值 → 触发（修复迟触发）
+  const win = 64_000
+  const thr2 = getAutoCompactThreshold(win)
+  const bigTail: ChatMessage[] = [
+    { role: 'tool', content: 'y'.repeat(80_000), tool_call_id: 'c1' },
+  ]
+  const anchoredMsgs = [...head, ...bigTail]
+  const nearAnchor = {
+    anchorInputTokens: thr2 - 1_000,
+    anchoredMessageCount: head.length,
+    fingerprint: fingerprintMessagePrefix(anchoredMsgs, head.length),
+  }
+  assert(
+    shouldAutoCompact({
+      tokenCount: 0,
+      usageInputTokens: nearAnchor.anchorInputTokens,
+      contextWindowTokens: win,
+      enabled: true,
+      consecutiveFailures: 0,
+    }) === false,
+    'legacy usage-only path stays below threshold (documents the old gap)',
+  )
+  assert(
+    shouldAutoCompact({
+      tokenCount: 0,
+      contextWindowTokens: win,
+      enabled: true,
+      consecutiveFailures: 0,
+      anchor: nearAnchor,
+      messages: anchoredMsgs,
+      pad: true,
+    }) === true,
+    'hybrid anchor + appended tail crosses threshold',
+  )
+  assert(
+    shouldAutoCompact({
+      tokenCount: 0,
+      contextWindowTokens: win,
+      enabled: true,
+      consecutiveFailures: 0,
+      querySource: 'compact',
+      anchor: nearAnchor,
+      messages: anchoredMsgs,
+      pad: true,
+    }) === false,
+    'hybrid path still refuses compact querySource',
+  )
+
   console.log('COMPACT TESTS PASS')
 }
 
