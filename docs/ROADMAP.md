@@ -423,7 +423,7 @@ AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 regis
 但开的是 **deny → ask，不是 deny → allow**；批准后落 `default` 而非 `acceptEdits`/`bypass`——
 用户批准的是**这一份计划**，不是随便写的权限。`permissions` 自己声明工具名，不反向依赖 `tools`。
 
-### 14.4 AR-T3b · Web search ✅（两条 hosted 线路已活体验证）
+### 14.4 AR-T3b · Web search ✅（五条线路全部活体验证）
 
 **契约与实现真源 → [TOOLS.md](./TOOLS.md) §3。**
 
@@ -440,16 +440,23 @@ AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 regis
 | 开关 | `/websearch [on\|off\|auto]`；会话缺省 auto，**provider 层缺省 off** |
 | 兜底 | 未知块 → `provider_notice` → CLI warning（防「搜了、付费了、屏幕空白」） |
 
-**活体验证：** anthropic ✅ · openai-responses ✅（均经第三方中转，比官方端点更严格，两者**零告警**）·
-openai-compatible ✅（DeepSeek 官方 API，确认**无** hosted 搜索且不 400）· openrouter-plugin ✅（免费模型零余额）。
-原调研标 UNCERTAIN 的 wire format 全部证实。仅 `mcp-external` 尚未接真实 server 跑过。
+**活体验证（五条线路全绿）：** anthropic ✅ · openai-responses ✅（均经第三方中转，比官方端点更严格，两者**零告警**）·
+openai-compatible ✅（DeepSeek 官方 API，确认**无** hosted 搜索且不 400）· openrouter-plugin ✅（免费模型零余额）·
+`mcp-external` ✅（Exa 免密层：`enable → 连接 → 列工具 → 真调用 → CLI 端到端`，见 TOOLS.md §3.3b）。
+原调研标 UNCERTAIN 的 wire format 全部证实。
 
 **实测决定的门控：** DeepSeek 对 `tools[{type:'web_search'}]` **硬 400**，
 但对 body 顶层未知字段 `plugins` **静默忽略** —— 后者更危险（用户以为开着实际没有），
 故 OpenRouter 增强必须硬门控 baseUrl。
 
-**只有真跑才发现的两个缺陷：** 引用逐句重复（渲染层按 turn 去重）；
-中转 `HTTP 503` 包着 `model_not_found`（错误解释改为 **body 优先于 status**）。
+**只有真跑才发现的缺陷：** 引用逐句重复（渲染层按 turn 去重）；
+中转 `HTTP 503` 包着 `model_not_found`（错误解释改为 **body 优先于 status**）；
+MCP 工具失败只吐 `fetch failed`（补 `describeMcpCallError`：指名 server + 分类 + 可重试标注）。
+
+**活体脚本不进门禁：** `scripts/live-mcp-search.ts` 依赖公网与第三方可用性，
+实测 3 跑挂 1（Exa 免密层按 IP 限速）。放进 `npm test` 会让 CI 因别人家限速变红，
+继而所有人开始无视红灯——**比没有这个测试更糟**。契约面由
+`test-search-cli.ts` / `test-mcp-tool-error.ts` 等门禁测试覆盖。
 
 ### 14.5 AR-T3+ · 续刀候选（当前）
 
@@ -457,9 +464,8 @@ openai-compatible ✅（DeepSeek 官方 API，确认**无** hosted 搜索且不 
 
 | 候选 | 现状 | 备注 |
 |------|------|------|
-| **`bolo search enable`** | preset 逻辑已就位，CLI 子命令未接 | 见 TOOLS.md §3 |
-| **`mcp-external` 活体验证** | 契约与 preset 已就位，未接真实搜索 MCP server 跑过 | 需一个 Exa/SearXNG 端点 |
-| **AskUserQuestion** | 无 | 结构化澄清；与 CLI picker / Desktop 对话框对接 |
+| **AskUserQuestion** | 无 | 结构化澄清；与 CLI picker / Desktop 对话框对接。**自包含、不依赖外部端点** |
+| **headless 工具放行粒度** | 只能整档 `bypassPermissions` | 活体暴露：`-p` 下想放行单个 MCP 工具，只能把**全部**权限一起放开。参考实现有 `--allowedTools` 粒度 |
 | **前台命令自动后台化** | 无 | 参考实现有阻塞预算超时自动转后台；语义复杂，暂不做 |
 | **LSP** | 无 | 体量大，归 AR4 证据门控 |
 

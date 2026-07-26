@@ -230,7 +230,7 @@ Responses 侧按 `item.type` 分流即可，**永远不要按 id 前缀判断**�
 **③ hosted 条目必须在 cache 断点之前混入。** 否则落在缓存前缀之外，每轮重新计费。
 同理 `max_uses` 是常量：被缓存的 tool 定义里放按调用变化的字段会击穿缓存。
 
-### 3.3 ✅ 活体验证状态（2026-07）
+### 3.3 ✅ 活体验证状态（2026-07）· 五条线路全绿
 
 **两条 hosted 线路均通过第三方中转实测**——比官方端点更严格，中转还得能正确代理服务端工具。
 
@@ -240,10 +240,41 @@ Responses 侧按 `item.type` 分流即可，**永远不要按 id 前缀判断**�
 | `openai-responses` | ✅ **活体验证** | `⌕ web search "site:nodejs.org …"` + 引用；**零告警** |
 | `openai-compatible`（普通端点） | ✅ **活体验证**（DeepSeek 官方 API） | 确认**无** hosted 搜索；不 400；降级措辞正确 |
 | `openrouter-plugin` | ✅ **活体验证**（免费模型，零余额） | `plugins:[{id:'web'}]` 生效；引用正确解析 |
-| `mcp-external` | ⚠️ **仅契约验证** | 未接真实搜索 MCP server 跑过 |
+| `mcp-external` | ✅ **活体验证**（Exa 免密层） | 见 §3.3b —— 连接 → 列工具 → 真调用 → 端到端 |
 
 「零告警」是有意义的证据：未知块兜底一次都没触发，说明**没有任何块被静默丢弃**，
 猜的块类型名全部命中。
+
+### 3.3b `mcp-external` 活体验证（Exa · `scripts/live-mcp-search.ts`）
+
+这条腿是给**没有 hosted 搜索的端点**补搜索用的，所以验证从用户真会敲的那条命令开始，
+一路走到模型真的把结果用上。
+
+| 步骤 | 实测结果 |
+|------|----------|
+| `bolo search enable exa` | 写出 `mcp.json`；产品加载器读回**零告警** |
+| 连接 | `transport=http`（Streamable HTTP），免密，2.3–14s |
+| `tools/list` | `web_search_exa` · `web_fetch_exa` |
+| 注册名 | `mcp__exa-search__web_search_exa`，`requiresPermission=true` |
+| `tools/call` | 真实结果，正文含真 URL（`nodejs.org/en/download` 等） |
+| 模型侧路径 | 入参过 schema 校验 → `tool.call()` → 同样拿到真 URL |
+| 坏参数 | 返回 `isError=true`，连接**仍可用** |
+| CLI 端到端 | 模型自行调用该工具并给出带引用的答案 |
+
+**为什么这个脚本不进 `npm test`：** 它依赖公网 + 第三方可用性。
+实测 3 次跑挂 1 次（Exa 免密层按 IP 限速，正是 preset 注释里警告的那条）。
+把它放进门禁，会让 CI 因为别人家的限速变红，然后所有人开始无视红灯——
+**那比没有这个测试更糟。**
+
+**端到端要在 headless 下真跑通，得显式放宽权限。** MCP 工具一律
+`requiresPermission=true`，而非交互模式下 `askPermission` 默认 `'deny'`（fail-closed，
+无人可问就不放行——设计如此）。在 `-p` 下需要项目级 `.bolo/config.json` 里配
+`"permissionMode": "bypassPermissions"`。
+
+> 踩坑记录：起初把它写进 `BOLO_CONFIG_DIR` 指向的**用户级**配置，不生效。
+> 优先级是 `defaults < ~/.bolo/config.json < .bolo/config.json < 环境变量`，
+> 而脚手架生成的项目级配置里带着显式 `"permissionMode": "default"`，压过了用户级。
+> **这不是 bug，是优先级正确工作**——但足够反直觉，值得记一笔。
 
 **已证实的 wire format**（原调研标 UNCERTAIN，现已确认）：
 
@@ -258,15 +289,26 @@ OpenRouter Chat Completions 是**嵌套** `annotations[].url_citation.url`。
 **两条腿的能力差异（非 bug）：** Responses 没有独立的结果块，所以拿不到结果计数。
 实现在这种情况下**不填、不伪造**——用户看到查询词与引用，而不是一个编出来的数字。
 
-### 3.4 只有真跑才发现的两个问题
+### 3.4 只有真跑才发现的问题
 
-活体测试各抓到一个假流测不出来的缺陷：
+每条线路的活体测试都抓到了假流测不出来的缺陷：
 
 | 问题 | 修复 |
 |------|------|
 | Anthropic **逐句**发引用 → 一次搜索 7 行引用只有 4 个不同 URL，一个连出 3 次 | 渲染层按 turn 去重；解析层如实反映 provider 发了什么 |
 | 中转返回 `HTTP 503` 却包着 `{"code":"model_not_found"}` | 错误解释改为 **body 优先于 status**；否则会告诉用户「是上游问题不是你的配置」，把人往反方向指 |
 | 状态提示写着 `run 'bolo search enable exa'`，而该命令**当时不存在** | 补 `searchCli.ts`，并加断言：**文案里承诺的命令必须真能跑** |
+| MCP 工具失败时只吐两个词 `fetch failed` | `describeMcpCallError()`：指名 server、分类网络/超时、标注可重试；**原文一律保留**（`test-mcp-tool-error.ts`） |
+
+最后一条是端到端跑出来的，值得展开——它同时坑了人和模型：
+
+- 会话可以挂**多个** MCP server，`fetch failed` 不说是哪个坏了，用户无从修。
+- **模型也在读这条错误**，据此决定重试、换工具还是放弃。实测它拿到无信息的错误后
+  接连去试 `WebFetch`、`Bash`，把整轮 turn 预算烧光才放弃。
+- provider 侧同类错误早有 `explainProviderError` 给可行动提示，MCP 侧却什么都没有——
+  同一类失败两套待遇。
+
+分类不确定时**不贴网络叙事**：把人指向错误方向比不给提示更糟（同 §3.4b 的教训）。
 
 ### 3.4b 端点行为差异（实测，决定了门控严格度）
 
