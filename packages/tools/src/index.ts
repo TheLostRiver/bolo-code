@@ -37,6 +37,34 @@ export {
 } from './builtins.ts'
 
 export {
+  createTodoWriteTool,
+  TODO_WRITE_TOOL_NAME,
+  type TodoStoreRef,
+} from './todoWrite.ts'
+
+export {
+  createBashOutputTool,
+  createKillShellTool,
+  BASH_OUTPUT_TOOL_NAME,
+  KILL_SHELL_TOOL_NAME,
+} from './backgroundShellTools.ts'
+
+export {
+  spawnBackgroundShell,
+  killBackgroundShell,
+  killAllBackgroundShells,
+  readBackgroundShellOutput,
+  cleanupShellOutputDir,
+  resolveShellOutputDir,
+  isProcessAlive,
+  MAX_SHELL_OUTPUT_READ_BYTES,
+  type SpawnBackgroundShellOptions,
+  type SpawnBackgroundShellResult,
+  type KillBackgroundShellResult,
+  type ReadShellOutputResult,
+} from './backgroundShellRuntime.ts'
+
+export {
   applyPatchToCwd,
   parseApplyPatch,
   resolveSafe,

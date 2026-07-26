@@ -8,7 +8,12 @@
 
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
-import { nowIso, type ChatMessage } from '../../shared/src/index.ts'
+import {
+  nowIso,
+  validateTodoList,
+  type ChatMessage,
+  type TodoItem,
+} from '../../shared/src/index.ts'
 import type {
   PermissionMode,
   SessionPermissionRules,
@@ -141,6 +146,16 @@ export type TranscriptFileDiffEntry = TranscriptEntryBase & {
   turn?: number
 }
 
+/**
+ * AR-T1：待办表快照（**不进模型链**）。
+ * append-only：每次 TodoWrite 追加一条全量快照，resume 取最后一条。
+ * 表本身很小（几行文本），全量快照比增量 patch 更抗中断。
+ */
+export type TranscriptTodoEntry = TranscriptEntryBase & {
+  type: 'todo'
+  todos: TodoItem[]
+}
+
 /** DR0：append-only turn 生命周期；不进模型 messages。 */
 export type TranscriptTurnEntry = TranscriptEntryBase & {
   type: 'turn'
@@ -212,6 +227,7 @@ export type TranscriptEntry =
   | TranscriptTitleEntry
   | TranscriptSystemNoteEntry
   | TranscriptFileDiffEntry
+  | TranscriptTodoEntry
   | TranscriptTurnEntry
   | TranscriptControlEntry
   | TranscriptTaskEntry
@@ -619,6 +635,40 @@ export async function appendFileDiffEntry(
   const entry = buildFileDiffEntry(opts)
   await appendTranscriptLine(file, entry)
   return entry
+}
+
+export function buildTodoEntry(opts: {
+  sessionId: string
+  todos: readonly TodoItem[]
+  timestamp?: string
+}): TranscriptTodoEntry {
+  return {
+    type: 'todo',
+    sessionId: opts.sessionId,
+    timestamp: opts.timestamp ?? nowIso(),
+    todos: opts.todos.map((t) => ({ ...t })),
+  }
+}
+
+/** 追加 `todo` 全量快照（不进模型链） */
+export async function appendTodoEntry(
+  file: string,
+  opts: { sessionId: string; todos: readonly TodoItem[] },
+): Promise<TranscriptTodoEntry> {
+  const entry = buildTodoEntry(opts)
+  await appendTranscriptLine(file, entry)
+  return entry
+}
+
+/** 取 entries 中最后一条 todo 快照；无则空表 */
+export function projectTodosFromEntries(
+  entries: readonly TranscriptEntry[],
+): TodoItem[] {
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const e = entries[i]
+    if (e && e.type === 'todo') return e.todos.map((t) => ({ ...t }))
+  }
+  return []
 }
 
 export function buildTurnEntry(opts: {
@@ -1974,6 +2024,20 @@ export async function loadTranscriptFile(
           ...(typeof o.turn === 'number' && Number.isFinite(o.turn)
             ? { turn: Math.floor(o.turn) }
             : {}),
+          uuid: typeof o.uuid === 'string' ? o.uuid : undefined,
+        })
+        continue
+      }
+      if (o.type === 'todo') {
+        // 坏快照整条丢弃，不做部分恢复：半张待办表比没有更危险。
+        const validation = validateTodoList(o.todos)
+        if (!validation.ok) continue
+        entries.push({
+          type: 'todo',
+          sessionId: typeof o.sessionId === 'string' ? o.sessionId : '',
+          timestamp:
+            typeof o.timestamp === 'string' ? o.timestamp : nowIso(),
+          todos: validation.todos,
           uuid: typeof o.uuid === 'string' ? o.uuid : undefined,
         })
       }

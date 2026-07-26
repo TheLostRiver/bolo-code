@@ -37,6 +37,7 @@ import type {
   ToolUseBlock,
 } from './toolExecution.ts'
 import { StreamingToolExecutor } from './streamingToolExecutor.ts'
+import { buildTodoReminderMessage } from './sessionTodo.ts'
 import { prepareModelMessages, getCacheStablePrefix } from './systemPrompt.ts'
 import {
   accumulateSessionUsage,
@@ -104,6 +105,8 @@ export type QueryLoopEvent =
       status: BackgroundAgentEntry['status']
       boundary: SessionSafeBoundary
     }
+  /** AR-T1：当前待办表已重新注入对话（模型久未更新 / compact 后失去视野） */
+  | { type: 'todo_reminder' }
   | { type: 'done'; terminal: Terminal }
   | ToolExecutionEvent
 
@@ -164,6 +167,15 @@ export type QueryLoopParams = {
   backgroundStore?: import('./subagent.ts').BackgroundAgentStore
   /** DR3B：父 session owner 在 safe boundary 提供尚未 delivery 的结果。 */
   takeBackgroundResults?: () => readonly BackgroundAgentEntry[]
+  /**
+   * AR-T1：会话待办表 store（TodoWrite 工具写入 · reminder 注入读取）。
+   * 不进 messages，因此不受 compact 影响。
+   */
+  todoStore?: import('../../tools/src/index.ts').TodoStoreRef
+  /**
+   * AR-T2：后台 shell 注册表。后台进程跨 turn 存活，只在 session 结束时收尸。
+   */
+  backgroundShellStore?: import('../../shared/src/index.ts').BackgroundShellStore
   /** 全局 agent 策略（Spec v0） */
   agentPolicy?: import('./subagent.ts').AgentPolicy
   /**
@@ -295,6 +307,19 @@ async function visitSafeBoundary(
       boundary,
       prompt: control.prompt,
     })
+  }
+  // AR-T1：待办表不在 messages 里，模型看不见它。
+  // 在下一次 provider 调用前，按锚点策略把当前表重新注入一次。
+  if (boundary === 'before_provider' && params.todoStore) {
+    const reminder = buildTodoReminderMessage(
+      params.todoStore.todos,
+      params.messages,
+    )
+    if (reminder) {
+      params.messages.push(reminder)
+      promoted += 1
+      emit(params, { type: 'todo_reminder' })
+    }
   }
   if (
     params.takeBackgroundResults &&
@@ -462,6 +487,8 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
           deps: params.deps,
           agentDefinitions: params.agentDefinitions,
           backgroundStore: params.backgroundStore,
+          todoStore: params.todoStore,
+          backgroundShellStore: params.backgroundShellStore,
           parentMessages: params.messages,
           parentSystemPromptSections: params.systemPromptSections,
           model: params.model,

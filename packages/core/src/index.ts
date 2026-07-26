@@ -50,6 +50,11 @@ import type {
 } from '../../plugins/src/index.ts'
 import type { BoloTool } from '../../tools/src/index.ts'
 import {
+  cleanupShellOutputDir,
+  killAllBackgroundShells,
+} from '../../tools/src/index.ts'
+import { createBackgroundShellStore } from '../../shared/src/index.ts'
+import {
   newId,
   nowIso,
   type ChatMessage,
@@ -67,6 +72,7 @@ import {
   type QueryDeps,
 } from './deps.ts'
 import { queryLoop, type QueryLoopEvent, type Terminal } from './queryLoop.ts'
+import { getSessionTodoStore } from './sessionTodo.ts'
 import type { AskPermissionFn } from './toolExecution.ts'
 import {
   appendHookDiag,
@@ -111,6 +117,7 @@ import {
   saveSession,
   setSessionPersistMeta,
   appendSessionFileDiff,
+  appendSessionTodos,
   appendSessionSystemNote,
   appendSessionTurnState,
   hasDurableSessionPersistence,
@@ -124,6 +131,7 @@ import {
   resolveTranscriptPathFromJson,
   loadTranscriptFile,
   fileDiffsFromTranscriptEntries,
+  projectTodosFromEntries,
   projectDurableTurns,
   projectDurableControls,
   projectDurableTasks,
@@ -514,6 +522,7 @@ export {
   setSessionTitle,
   appendSessionSystemNote,
   appendSessionFileDiff,
+  appendSessionTodos,
   appendSessionTurnState,
   appendSessionControlState,
   appendSessionTaskState,
@@ -568,6 +577,9 @@ export {
   titleFromTranscriptEntries,
   systemNotesFromTranscriptEntries,
   fileDiffsFromTranscriptEntries,
+  projectTodosFromEntries,
+  appendTodoEntry,
+  buildTodoEntry,
   projectDurableTurns,
   projectDurableControls,
   projectDurableTasks,
@@ -595,6 +607,7 @@ export {
   type TranscriptTitleEntry,
   type TranscriptSystemNoteEntry,
   type TranscriptFileDiffEntry,
+  type TranscriptTodoEntry,
   type TranscriptTurnEntry,
   type TranscriptControlEntry,
   type TranscriptTaskEntry,
@@ -1026,6 +1039,24 @@ export type BoloSession = {
    * pendingAgents + backgroundAgentResults；/agents status · /bg 读取。
    */
   backgroundAgents?: import('./subagent.ts').BackgroundAgentStore
+  /**
+   * AR-T1：会话待办表（TodoWrite）。
+   * **不进 messages** —— 因此不被 compact 改写；由 core 周期性以
+   * `<todo_reminder>` 块重新注入，并经 transcript `todo` entry 落盘/resume。
+   */
+  todos?: import('../../shared/src/index.ts').TodoItem[]
+  /**
+   * AR-T1：todo 写入后的落盘回调（createSession/submit 注入）。
+   * 与 onFileDiffRecord 同构；失败不得改变工具语义。
+   */
+  onTodoWrite?: (
+    application: import('../../shared/src/index.ts').TodoWriteApplication,
+  ) => void | Promise<void>
+  /**
+   * AR-T2：后台 shell 注册表（Bash run_in_background）。
+   * 进程跨 turn 存活；endSession 与 process exit 时统一收尸，绝不越过会话。
+   */
+  backgroundShells?: import('../../shared/src/index.ts').BackgroundShellStore
   /** 已连接的 MCP stdio 进程；endSession 时关闭 */
   mcpConnections?: ConnectedMcpServer[]
   /**
@@ -1242,6 +1273,8 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
     promptCacheState:
       opts.promptCacheState ?? createPromptCacheSessionState(),
     sessionStartedAtMs: Date.now(),
+    todos: [],
+    backgroundShells: createBackgroundShellStore(),
     fileDiffLog: [],
     diffTurn: 0,
     durableTurns: [],
@@ -1295,6 +1328,14 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
       await appendSessionFileDiff(session, rec)
     } catch {
       /* 落盘失败不拖垮 */
+    }
+  }
+
+  session.onTodoWrite = async (application) => {
+    try {
+      await appendSessionTodos(session, application.stored)
+    } catch {
+      /* 落盘失败不拖垮；表仍在内存里有效 */
     }
   }
 
@@ -1855,6 +1896,20 @@ export async function endSession(
   setPhase(session, 'stopping')
   await runSessionEndHooks(session, options)
 
+  // AR-T2：后台进程绝不能活过启动它的会话（防僵尸）。
+  if (session.backgroundShells) {
+    try {
+      await killAllBackgroundShells(session.backgroundShells)
+      await cleanupShellOutputDir(session.cwd, session.id)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      emit(session, {
+        type: 'error',
+        message: `kill background shells on endSession: ${message}`,
+      })
+    }
+  }
+
   if (options?.closeMcp !== false) {
     try {
       await closeSessionMcp(session)
@@ -2198,6 +2253,8 @@ async function runOwnedPrompt(
         }),
       agentDefinitions: session.agentDefinitions,
       backgroundStore: session.backgroundAgents,
+      todoStore: getSessionTodoStore(session),
+      backgroundShellStore: session.backgroundShells,
       takeBackgroundResults: () =>
         session.backgroundAgents
           ? takeBackgroundAgentResultsForPromotion(
@@ -2450,6 +2507,8 @@ export async function resumeSession(
         session.durableTasks,
       )
     }
+    // AR-T1：待办表随 resume 恢复。表不在 messages 里，只能从 transcript 快照取。
+    session.todos = projectTodosFromEntries(entries)
     const diffs = fileDiffsFromTranscriptEntries(entries)
     if (diffs.length) {
       session.fileDiffLog = diffs.map((d) => ({
@@ -3025,3 +3084,16 @@ export {
   type RuntimeTextRenderOptions,
   type RuntimeTextPage,
 } from './runtimeTextView.ts'
+
+export {
+  getSessionTodoStore,
+  computeTodoReminderAnchors,
+  buildTodoReminderMessage,
+  type TodoSessionRef,
+  type TodoReminderAnchors,
+} from './sessionTodo.ts'
+
+export {
+  formatTodoCell,
+  type FormatTodoCellOptions,
+} from './todoCell.ts'

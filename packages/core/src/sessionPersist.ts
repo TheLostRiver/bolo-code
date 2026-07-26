@@ -35,6 +35,7 @@ import {
   appendSessionTitle,
   appendSystemNote,
   appendFileDiffEntry,
+  appendTodoEntry,
   appendTurnEntry,
   appendControlEntry,
   appendTaskEntry,
@@ -1022,6 +1023,47 @@ export async function appendSessionFileDiff(
     ...(rec.op ? { op: rec.op } : {}),
     ...(rec.turn != null ? { turn: rec.turn } : {}),
   })
+
+  const prev = getTranscriptWriteState(session)
+  if (prev?.filePath) {
+    setTranscriptWriteState(session, {
+      filePath: prev.filePath,
+      appendedMessageCount: prev.appendedMessageCount,
+    })
+  } else {
+    setTranscriptWriteState(session, {
+      filePath: transcriptPath,
+      appendedMessageCount: session.messages.length,
+    })
+  }
+
+  return { transcriptPath }
+}
+
+/**
+ * AR-T1：追加待办表全量快照（不进模型链）。
+ * 与 appendSessionFileDiff 同构：只写 transcript，不动 messages 计数。
+ */
+export async function appendSessionTodos(
+  session: PersistableSession,
+  todos: readonly import('../../shared/src/index.ts').TodoItem[],
+  options?: {
+    scope?: SessionScope
+    sessionsDir?: string
+    filePath?: string
+  },
+): Promise<{ transcriptPath: string }> {
+  const rawFilePath = options?.filePath
+    ? path.resolve(options.filePath)
+    : resolveSessionFilePath(session.id, {
+        scope: options?.scope,
+        cwd: session.cwd,
+        sessionsDir: options?.sessionsDir,
+      })
+  const transcriptPath = resolveTranscriptPathFromJson(rawFilePath)
+
+  await ensureTranscriptFile(transcriptPath, metaInputFromSession(session))
+  await appendTodoEntry(transcriptPath, { sessionId: session.id, todos })
 
   const prev = getTranscriptWriteState(session)
   if (prev?.filePath) {

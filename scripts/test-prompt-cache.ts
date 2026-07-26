@@ -34,11 +34,12 @@ async function main() {
 
   // 1) 无参 / 内置 stable 非空且固定序
   const stable = getCacheStableSections()
-  assert(stable.length === 4, `stable section count ${stable.length}`)
+  assert(stable.length === 5, `stable section count ${stable.length}`)
   assert(stable[0]!.startsWith('# Identity'), 'stable0 Identity')
   assert(stable[1]!.startsWith('# System'), 'stable1 System')
   assert(stable[2]!.startsWith('# Task style'), 'stable2 Task')
-  assert(stable[3]!.startsWith('# Tools'), 'stable3 Tools')
+  assert(stable[3]!.startsWith('# Task tracking'), 'stable3 Task tracking')
+  assert(stable[4]!.startsWith('# Tools'), 'stable4 Tools')
   const prefixBuiltIn = getCacheStablePrefix()
   assert(prefixBuiltIn.includes('Bolo Code'), 'prefix identity')
   assert(!prefixBuiltIn.includes('# Environment'), 'stable has no Environment')

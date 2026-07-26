@@ -23,6 +23,13 @@ import {
   planSandboxedShell,
 } from '../../permissions/src/osSandbox.ts'
 import { applyPatchToCwd } from './applyPatch.ts'
+import { createTodoWriteTool } from './todoWrite.ts'
+import {
+  createBashOutputTool,
+  createKillShellTool,
+} from './backgroundShellTools.ts'
+import { spawnBackgroundShell } from './backgroundShellRuntime.ts'
+import type { BackgroundShellStore } from '../../shared/src/index.ts'
 import {
   countHunkLines,
   diffHunksFromEdit,
@@ -137,6 +144,16 @@ export function createBashTool(): BoloTool {
           type: 'number',
           description: 'Timeout in ms (default 30000, max 600000)',
         },
+        run_in_background: {
+          type: 'boolean',
+          description:
+            'Run the command in the background and return immediately. Use for dev servers, watchers and long builds; read incremental output with BashOutput and stop it with KillShell. Background shells outlive the turn but never the session.',
+        },
+        description: {
+          type: 'string',
+          description:
+            'Short human label for a background command (shown in status lines)',
+        },
       },
       required: ['command'],
     },
@@ -190,6 +207,57 @@ export function createBashTool(): BoloTool {
             output: `Error: sandbox require but OS isolation unavailable (${plan.warning ?? sand.warning ?? 'none'})`,
             errorCode: 'sandbox_unavailable',
           }
+        }
+      }
+
+      // AR-T2：后台分支。走完与前台**同一套** policy/sandbox 门禁后才分流；
+      // 之后不套 timeout、不吃 ctx.signal —— 后台进程的意义就是跨 turn 存活。
+      if (input.run_in_background === true) {
+        const store = ctx.extras?.backgroundShellStore as
+          | BackgroundShellStore
+          | undefined
+        if (!store) {
+          await cleanupOsSandboxPlan(plan)
+          return {
+            ok: false,
+            isError: true,
+            output:
+              'run_in_background is unavailable: no background shell store is bound to this session.',
+            errorCode: 'unavailable',
+          }
+        }
+        const description =
+          typeof input.description === 'string' && input.description.trim()
+            ? input.description.trim()
+            : undefined
+        const spawned = await spawnBackgroundShell({
+          store,
+          command,
+          cwd: ctx.cwd,
+          file: plan.file,
+          args: plan.args,
+          env: sand.env,
+          // 沙箱临时文件必须活到进程退出后才清理
+          cleanup: () => cleanupOsSandboxPlan(plan),
+          ...(ctx.sessionId ? { sessionId: ctx.sessionId } : {}),
+          ...(description ? { description } : {}),
+        })
+        if (!spawned.ok) {
+          await cleanupOsSandboxPlan(plan)
+          return {
+            ok: false,
+            isError: true,
+            output: `Error: ${spawned.error}`,
+            errorCode: 'spawn_failed',
+          }
+        }
+        return {
+          ok: true,
+          output: [
+            `Started background shell ${spawned.record.shellId}`,
+            `command: ${command}`,
+            `Use BashOutput with bash_id "${spawned.record.shellId}" to read incremental output, and KillShell to stop it.`,
+          ].join('\n'),
         }
       }
 
@@ -928,6 +996,9 @@ export function createBuiltinTools(): BoloTool[] {
     createGrepTool(),
     createSkillTool(),
     createWebFetchTool(),
+    createTodoWriteTool(),
+    createBashOutputTool(),
+    createKillShellTool(),
   ]
 }
 

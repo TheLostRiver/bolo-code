@@ -238,6 +238,7 @@ const CACHE_STABLE_HEADINGS = [
   '# Identity',
   '# System',
   '# Task style',
+  '# Task tracking',
   '# Tools',
 ] as const
 
@@ -337,11 +338,21 @@ function taskStyleSection(): string {
 - Do not add unsolicited markdown docs or drive-by refactors.`
 }
 
+function todoSection(): string {
+  return `# Task tracking
+- Use the TodoWrite tool for work that spans multiple steps, so progress survives context compaction.
+- Submit the whole list every time; it replaces the previous one.
+- Keep exactly one task in_progress. Mark it in_progress before starting, completed right after finishing.
+- If a task is blocked or failed, leave it in_progress and add a new task describing the blocker — do not mark it completed.
+- Skip it for single-step or purely conversational requests; a todo list there is noise.`
+}
+
 function toolsSection(): string {
   return `# Tools
 - Call tools with valid JSON arguments matching each tool schema.
 - Read before write. Prefer specialized tools (Read/Write/Edit/Glob/Grep) over shell when equivalent.
 - Skill catalog (if present) lists skill ids only — call the Skill tool to load full skill body when needed.
+- Long-running commands (dev servers, watchers, long builds) belong in the background: call Bash with run_in_background, follow it with BashOutput, stop it with KillShell. Do not block a turn on them.
 - Do not claim a tool ran unless you actually received its result.`
 }
 
@@ -383,6 +394,7 @@ export function getCacheStableSections(): string[] {
     identitySection(),
     systemRulesSection(),
     taskStyleSection(),
+    todoSection(),
     toolsSection(),
   ].filter((s) => s.trim().length > 0)
 }

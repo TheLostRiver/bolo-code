@@ -37,6 +37,7 @@ import {
   findToolByName,
   formatToolUseError,
   validateAgainstJsonSchema,
+  TODO_WRITE_TOOL_NAME,
   type BoloTool,
   type ToolResult,
 } from '../../tools/src/index.ts'
@@ -196,6 +197,10 @@ export type RunToolUseContext = {
   agentDefinitions?: import('./subagent.ts').ActiveAgentDefinitions
   /** 后台 subagent 状态表 */
   backgroundStore?: import('./subagent.ts').BackgroundAgentStore
+  /** AR-T1：会话待办表 store；经 extras 交给 TodoWrite 工具 */
+  todoStore?: import('../../tools/src/index.ts').TodoStoreRef
+  /** AR-T2：后台 shell 注册表；经 extras 交给 Bash/BashOutput/KillShell */
+  backgroundShellStore?: import('../../shared/src/index.ts').BackgroundShellStore
   /** 父会话 messages；仅供 fork 继承，后台完成不得异步修改 */
   parentMessages?: import('../../shared/src/index.ts').ChatMessage[]
   /** fork 时注入子 agent 的父 system 段 */
@@ -446,7 +451,11 @@ export async function runToolUse(
       cwd: ctx.cwd,
       sessionId: ctx.sessionId,
       signal: ctx.signal,
-      extras: { skills: ctx.skills },
+      extras: {
+        skills: ctx.skills,
+        todoStore: ctx.todoStore,
+        backgroundShellStore: ctx.backgroundShellStore,
+      },
     })
     if (!v.ok) {
       const content = formatToolUseError(v.message)
@@ -870,6 +879,8 @@ export async function runToolUse(
       },
       extras: {
         skills: ctx.skills,
+        todoStore: ctx.todoStore,
+        backgroundShellStore: ctx.backgroundShellStore,
         subagentParent: ctx.deps
           ? {
               parentSessionId: ctx.sessionId,
@@ -1014,6 +1025,19 @@ export async function runToolUse(
           maxUnifiedLines: maxUni > 0 ? maxUni : 16,
         })
       }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // AR-T1：TodoWrite 没有 file meta，用会话表本身渲染 cell。
+  // 读的是写入后的 store，所以展示的就是刚刚生效的表。
+  if (result.ok && name === TODO_WRITE_TOOL_NAME && ctx.todoStore) {
+    try {
+      const { formatTodoCell } = await import('./todoCell.ts')
+      const todos = ctx.todoStore.todos
+      cellCollapsed = formatTodoCell(todos, { expanded: false, color: true })
+      cellExpanded = formatTodoCell(todos, { expanded: true, color: true })
     } catch {
       /* ignore */
     }
