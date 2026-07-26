@@ -89,3 +89,16 @@ export {
   type ResolvedWorkspace,
   type LoadWorkspaceOptions,
 } from './loadWorkspace.ts'
+
+export {
+  BUILTIN_SEARCH_PRESETS,
+  describeWebSearchStatus,
+  enableSearchPresetInMcpFile,
+  getSearchPreset,
+  listSearchPresets,
+  type EnableSearchPresetResult,
+  type SearchPreset,
+  type SearchPresetAuth,
+  type WebSearchStatus,
+  type WebSearchStatusInput,
+} from './searchPresets.ts'
