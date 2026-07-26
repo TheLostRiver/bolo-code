@@ -75,6 +75,32 @@ async function main() {
   assert(joined.includes('test-model'), 'model')
   assert(joined.includes('Project BOLO'), 'bolo md in system')
 
+  // 2a) AskUserQuestion 必须写进提示词
+  //
+  // 工具接线全通了、门禁全绿，模型却可能一次都不用它 —— 因为它压根不知道
+  // 这东西存在、也不知道什么时候该用。这种「功能做完了但没人用」的失败
+  // 不会以任何形式报错，只会表现为「它怎么从来不问我」。
+  assert(
+    joined.includes('AskUserQuestion'),
+    'the model is told the tool exists — a tool it never hears about is a tool it never calls',
+  )
+  // 光有名字不够：得说清什么时候该用、什么时候不该用。
+  // 不划边界的话，模型要么完全不用，要么每件小事都来问一遍。
+  assert(
+    /ambigu|two ways|materially different/i.test(joined),
+    'says when to ask: genuine ambiguity where the readings diverge',
+  )
+  assert(
+    /obvious default|do not use it|conventional|check yourself/i.test(joined),
+    'says when NOT to ask — otherwise it will ask about everything',
+  )
+  // 「用户可以自己写答案」由 UI 提供，模型不该自己塞一个 Other 选项进去
+  assert(
+    /own words/i.test(joined),
+    'tells the model users can always answer freely, so it must not add its own Other option',
+  )
+
+
   // 2b) 不同 permissionMode → Environment 行为关键词不同
   const modeKeywords: Record<
     PermissionMode,

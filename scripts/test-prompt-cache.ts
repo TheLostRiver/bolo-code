@@ -10,6 +10,7 @@ import {
   getSystemPromptPartition,
   getCacheStableSections,
   getCacheStablePrefix,
+  partitionSystemPromptSections,
   prepareModelMessages,
 } from '../packages/core/src/index.ts'
 import { toolsToOpenAI } from '../packages/tools/src/providerSchema.ts'
@@ -34,12 +35,35 @@ async function main() {
 
   // 1) 无参 / 内置 stable 非空且固定序
   const stable = getCacheStableSections()
-  assert(stable.length === 5, `stable section count ${stable.length}`)
+  assert(stable.length === 6, `stable section count ${stable.length}`)
   assert(stable[0]!.startsWith('# Identity'), 'stable0 Identity')
   assert(stable[1]!.startsWith('# System'), 'stable1 System')
   assert(stable[2]!.startsWith('# Task style'), 'stable2 Task')
   assert(stable[3]!.startsWith('# Task tracking'), 'stable3 Task tracking')
-  assert(stable[4]!.startsWith('# Tools'), 'stable4 Tools')
+  assert(stable[4]!.startsWith('# Asking the user'), 'stable4 Asking the user')
+  assert(stable[5]!.startsWith('# Tools'), 'stable5 Tools')
+
+  // 1b) 防漂移：内置 stable 段与标题白名单必须逐项对应。
+  //
+  // 这两处是同一份契约的两个真源：getCacheStableSections() 决定前缀里放什么，
+  // CACHE_STABLE_HEADINGS 决定按标题分区时算不算 stable。只加一处的后果**完全静默**：
+  // 新段掉出缓存前缀、每轮重新计费，没有任何测试或日志会报错。
+  // （加 AskUserQuestion 那节时真漏过一次，就是这条断言的由来。）
+  {
+    const repartitioned = partitionSystemPromptSections(stable)
+    assert(
+      repartitioned.volatileSections.length === 0,
+      `every built-in stable section must also be recognised as stable by the partitioner; ` +
+        `these fell through to volatile and would be re-billed every turn: ` +
+        repartitioned.volatileSections
+          .map((x) => x.split('\n')[0])
+          .join(' | '),
+    )
+    assert(
+      repartitioned.cacheStableSections.length === stable.length,
+      'partitioner keeps all stable sections',
+    )
+  }
   const prefixBuiltIn = getCacheStablePrefix()
   assert(prefixBuiltIn.includes('Bolo Code'), 'prefix identity')
   assert(!prefixBuiltIn.includes('# Environment'), 'stable has no Environment')

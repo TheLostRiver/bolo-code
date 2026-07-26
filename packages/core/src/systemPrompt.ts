@@ -234,11 +234,20 @@ export type SystemPromptPartition = {
 }
 
 /** 稳定段标题前缀（用于从完整 sections 回拆） */
+/**
+ * 缓存稳定段的标题白名单。
+ *
+ * **必须与 `getCacheStableSections()` 逐项对应。** 两处是同一份契约的两个真源：
+ * 前者决定「按标题分区时算不算 stable」，后者决定「内置前缀里放什么」。
+ * 只加一处的后果是静默的——新段会掉出缓存前缀、每轮重新计费，
+ * 而任何测试和日志都不会报错。防漂移断言见 `test-prompt-cache.ts`。
+ */
 const CACHE_STABLE_HEADINGS = [
   '# Identity',
   '# System',
   '# Task style',
   '# Task tracking',
+  '# Asking the user',
   '# Tools',
 ] as const
 
@@ -349,6 +358,23 @@ function todoSection(): string {
 - Skip it for single-step or purely conversational requests; a todo list there is noise.`
 }
 
+/**
+ * AR-T3+：AskUserQuestion 的用法边界。
+ *
+ * 单独成节而不是塞进 toolsSection，因为难点不在「怎么调」而在「何时调」：
+ * 不划边界的话，模型要么一次都不用（默默猜错），要么每件小事都来问一遍
+ * （比猜错更烦人）。所以正反两面都要说。
+ */
+function askUserQuestionSection(): string {
+  return `# Asking the user
+- When a request could reasonably be read two ways and the readings would lead to materially different work, call AskUserQuestion instead of guessing.
+- Do not use it for choices with an obvious or conventional default, or for facts you can check yourself in the code — make those calls yourself and say what you decided.
+- Ask at the point the answer changes what you do next, not at the start out of habit. Do everything that does not depend on the answer first.
+- Each question needs 2-4 distinct options; if you recommend one, put it first and append "(Recommended)" to its label.
+- Users can always answer in their own words, so never add an "Other" option yourself.
+- If the tool reports that no user is available, do not wait and do not ask again: continue with your best judgement and state the assumption you made.`
+}
+
 function toolsSection(): string {
   return `# Tools
 - Call tools with valid JSON arguments matching each tool schema.
@@ -397,6 +423,7 @@ export function getCacheStableSections(): string[] {
     systemRulesSection(),
     taskStyleSection(),
     todoSection(),
+    askUserQuestionSection(),
     toolsSection(),
   ].filter((s) => s.trim().length > 0)
 }

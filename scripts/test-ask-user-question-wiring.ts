@@ -19,10 +19,10 @@ import type {
   AskUserQuestionOutcome,
 } from '../packages/tools/src/index.ts'
 import type {
-  ChatMessage,
   LlmProvider,
   ProviderStreamEvent,
 } from '../packages/providers/src/index.ts'
+import type { ChatMessage } from '../packages/shared/src/index.ts'
 
 function assert(cond: unknown, msg: string) {
   if (!cond) {
