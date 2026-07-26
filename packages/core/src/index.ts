@@ -919,6 +919,15 @@ export type BoloSession = {
   deps: QueryDeps
   permissionMode: PermissionMode
   askPermission: AskPermissionFn
+  /**
+   * AR-T3+：AskUserQuestion 的提问句柄（CLI picker / Desktop 对话框各注入一个）。
+   *
+   * 与 `askPermission` 有意不同：**没有 fail-closed 的默认实现，缺省就是 undefined。**
+   * 权限的默认 `deny` 是一个有意义的答复（不许），而「问题」没有对应的默认答复——
+   * 编一个就等于替用户表态。工具据 undefined 返回 `unavailable`，
+   * 让模型带着显式假设继续，而不是等一个永远不会来的回答。
+   */
+  askUserQuestion?: import('../../tools/src/index.ts').AskUserQuestionAskerRef
   /** 会话 Always-allow（/allow 与 CLI `a`） */
   permissionRules: SessionPermissionRules
   /**
@@ -2273,6 +2282,10 @@ async function runOwnedPrompt(
           session.permissionMode = next as typeof session.permissionMode
         },
       },
+      // AR-T3+：AskUserQuestion 的提问句柄。CLI / Desktop 各注入自己的实现；
+      // 未注入时保持 undefined —— 工具会据此返回 `unavailable` 并让模型
+      // 带着假设继续跑，而不是等一个永远不会来的回答。
+      askUserQuestion: session.askUserQuestion,
       takeBackgroundResults: () =>
         session.backgroundAgents
           ? takeBackgroundAgentResultsForPromotion(

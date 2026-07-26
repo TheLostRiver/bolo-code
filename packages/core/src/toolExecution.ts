@@ -203,6 +203,7 @@ export type RunToolUseContext = {
   backgroundShellStore?: import('../../shared/src/index.ts').BackgroundShellStore
   /** AR-T3a：会话权限模式引用；经 extras 交给 ExitPlanMode */
   planModeStore?: import('../../tools/src/index.ts').PlanModeStoreRef
+  askUserQuestion?: import('../../tools/src/index.ts').AskUserQuestionAskerRef
   /** 父会话 messages；仅供 fork 继承，后台完成不得异步修改 */
   parentMessages?: import('../../shared/src/index.ts').ChatMessage[]
   /** fork 时注入子 agent 的父 system 段 */
@@ -458,6 +459,7 @@ export async function runToolUse(
         todoStore: ctx.todoStore,
         backgroundShellStore: ctx.backgroundShellStore,
         planModeStore: ctx.planModeStore,
+        askUserQuestion: ctx.askUserQuestion,
       },
     })
     if (!v.ok) {
@@ -885,6 +887,7 @@ export async function runToolUse(
         todoStore: ctx.todoStore,
         backgroundShellStore: ctx.backgroundShellStore,
         planModeStore: ctx.planModeStore,
+        askUserQuestion: ctx.askUserQuestion,
         subagentParent: ctx.deps
           ? {
               parentSessionId: ctx.sessionId,

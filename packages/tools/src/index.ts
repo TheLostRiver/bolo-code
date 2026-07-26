@@ -44,6 +44,13 @@ export {
 } from './exitPlanMode.ts'
 
 export {
+  createAskUserQuestionTool,
+  ASK_USER_QUESTION_TOOL_NAME,
+  type AskUserQuestionAskerRef,
+  type AskUserQuestionOutcome,
+} from './askUserQuestion.ts'
+
+export {
   createTodoWriteTool,
   TODO_WRITE_TOOL_NAME,
   type TodoStoreRef,

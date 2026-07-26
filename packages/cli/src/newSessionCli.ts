@@ -13,6 +13,7 @@ import {
 import { createCliProvider, isExplicitMockProvider } from './provider.ts'
 import { createSessionErrorExplainer } from './explainSessionError.ts'
 import { createTtyAskPermission } from './tui/askPermissionTty.ts'
+import { createTtyAskUserQuestion } from './tui/askUserQuestionTty.ts'
 import { renderWelcomeBanner } from './tui/banner.ts'
 import { formatSessionStatusLine } from './tui/statusLine.ts'
 import { renderInkLayout } from './tui/inkLayout.ts'
@@ -73,6 +74,14 @@ export async function runNewSessionCli(
     signal: opts.signal,
   })
 
+  // AskUserQuestion 的提问句柄。非 TTY 时它自己收口成 unavailable ——
+  // 不在这里编一个默认答案。
+  const askUserQuestion = createTtyAskUserQuestion({
+    isTty,
+    writeOut,
+    signal: opts.signal,
+  })
+
   const { session, workspace } = await createSessionFromWorkspace({
     cwd,
     ensureDefaults: true,
@@ -81,6 +90,7 @@ export async function runNewSessionCli(
   })
 
   thinkingGate.session = session
+  session.askUserQuestion = askUserQuestion
   attachSessionEventPrinter(session, printer)
 
   // 配置解析失败必须先说——否则用户会把「配置没生效」误当成别的问题排查
