@@ -230,6 +230,12 @@ if (list.type === 'slash') {
   assert.match(list.message, /task_queued/)
   assert.match(list.message, /queued/)
 }
+const taskList = await submitUserInput(session, '/runtime list task')
+assert.equal(taskList.type, 'slash')
+if (taskList.type === 'slash') {
+  assert.match(taskList.message, /task entities \(1\)/)
+  assert.match(taskList.message, /task_queued/)
+}
 const inspectTask = await submitUserInput(
   session,
   '/runtime inspect task task_queued',

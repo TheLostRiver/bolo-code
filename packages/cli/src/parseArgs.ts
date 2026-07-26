@@ -7,11 +7,18 @@
  *   --list | -l
  *   --migrate-session <id|path> | --migrate-session=<id>
  *   --force | --delete-json（配合 migrate）
+ *   runtime list [turn|control|task] --resume <id> [--json]
+ *   runtime inspect <turn|control|task> <id> --resume <session> [--json]
  *   --print | -p [prompt]
  *   --cwd <path>
  *   --help | -h
  *   位置参数：拼成 prompt（在 --print 时或作为单轮输入）
  */
+
+import {
+  isRuntimeQueryEntity,
+  type RuntimeQuery,
+} from '../../shared/src/runtimeQuery.ts'
 
 export type CliArgs = {
   help: boolean
@@ -38,6 +45,10 @@ export type CliArgs = {
   deleteJson?: boolean
   /** 单轮 / 非交互：有 prompt 则 submit 后退出；无 prompt 则只打印摘要 */
   print: boolean
+  /** AR1A：非交互 runtime snapshot query。 */
+  runtimeQuery?: RuntimeQuery
+  /** runtime query 输出单行纯 JSON。 */
+  json?: boolean
   /** 用户输入（-p 值、位置参数拼接、或后续由 stdin 填充） */
   prompt?: string
   cwd?: string
@@ -103,6 +114,10 @@ export function parseArgs(argv: string[]): CliArgs {
     }
     if (a === '--delete-json') {
       out.deleteJson = true
+      continue
+    }
+    if (a === '--json') {
+      out.json = true
       continue
     }
 
@@ -181,6 +196,49 @@ export function parseArgs(argv: string[]): CliArgs {
     positionals.push(a)
   }
 
+  // 位置子命令：runtime list|inspect
+  if (positionals[0] === 'runtime') {
+    const action = positionals[1]?.toLowerCase()
+    if (action === 'list') {
+      if (positionals.length > 3) {
+        throw new Error(
+          'runtime list accepts at most one entity: turn|control|task',
+        )
+      }
+      const entity = positionals[2]?.toLowerCase()
+      if (entity !== undefined && !isRuntimeQueryEntity(entity)) {
+        throw new Error(
+          'runtime entity must be turn, control, or task',
+        )
+      }
+      out.runtimeQuery = {
+        action: 'list',
+        ...(entity ? { entity } : {}),
+      }
+    } else if (action === 'inspect') {
+      const entity = positionals[2]?.toLowerCase()
+      const entityId = positionals[3]
+      if (!entityId || positionals.length !== 4) {
+        throw new Error(
+          'runtime inspect requires <turn|control|task> <id>',
+        )
+      }
+      if (!isRuntimeQueryEntity(entity)) {
+        throw new Error(
+          'runtime entity must be turn, control, or task',
+        )
+      }
+      out.runtimeQuery = {
+        action: 'inspect',
+        entity,
+        entityId,
+      }
+    } else {
+      throw new Error('runtime requires list or inspect')
+    }
+    positionals.splice(0)
+  }
+
   // 位置子命令：migrate-session <id>
   if (positionals[0] === 'migrate-session') {
     const id = positionals[1]
@@ -197,6 +255,28 @@ export function parseArgs(argv: string[]): CliArgs {
       out.prompt = out.prompt ? `${out.prompt} ${joined}` : joined
     }
     out.rest = positionals
+  }
+
+  if (out.json && !out.runtimeQuery) {
+    throw new Error('--json requires runtime list or runtime inspect')
+  }
+  if (
+    out.runtimeQuery &&
+    (out.list ||
+      out.migrateSession !== undefined ||
+      out.prompt !== undefined ||
+      out.print ||
+      out.force ||
+      out.deleteJson)
+  ) {
+    throw new Error(
+      'runtime query cannot be combined with session listing, migration, or prompt options',
+    )
+  }
+  if (out.runtimeQuery && out.continue && out.resume !== undefined) {
+    throw new Error(
+      'runtime query accepts either --resume or --continue, not both',
+    )
   }
 
   return out
@@ -222,6 +302,9 @@ export function formatHelp(): string {
   bolo --resume <id> -p "prompt"     恢复后单轮 submit 并打印助手输出
   bolo --resume=<id> --print         仅摘要（非交互）
   bolo -r <id> "follow-up question"  位置参数作为 prompt
+  bolo runtime list --resume <id>    列出恢复会话的 runtime entities
+  bolo runtime list task -c --json   最新会话 task list，stdout 为单行纯 JSON
+  bolo runtime inspect turn <turnId> --resume <id> [--json]
   bolo --migrate-session <id|path>   旧 JSON → 旁路 jsonl（默认不删 JSON）
   bolo migrate-session <id|path>     同上（位置子命令）
   bolo --migrate-session <id> --force --delete-json
@@ -242,6 +325,7 @@ REPL 斜杠命令（会话内）:
       --migrate-session    旧 JSON 旁路写出 jsonl
       --force              migrate：强制 rewrite 已有非空 jsonl
       --delete-json        migrate：写出后删除旧 .json
+      --json               runtime query 输出单行纯 JSON（无 banner/summary）
   -p, --prompt [text]      单轮 prompt（隐含 --print）
       --print              非交互：有 prompt 则跑一轮，否则只摘要
       --cwd <dir>          解析 project sessions 的工作目录

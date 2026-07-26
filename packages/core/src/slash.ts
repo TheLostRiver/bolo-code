@@ -30,12 +30,15 @@ import {
 import {
   HOOK_EVENTS,
   RUNTIME_PROTOCOL_VERSION,
+  isRuntimeQueryEntity,
+  queryRuntimeSnapshot,
   type ChatMessage,
   type HooksConfig,
   type HookEvent,
   type RuntimeCommand,
   type RuntimeCommandResult,
-  type RuntimeSnapshot,
+  type RuntimeListItem,
+  type RuntimeListView,
 } from '../../shared/src/index.ts'
 import {
   estimateSystemSectionsTokens,
@@ -1122,27 +1125,25 @@ function runtimeResultMessage(result: RuntimeCommandResult): string {
   return lines.join('\n')
 }
 
-function formatRuntimeList(snapshot: RuntimeSnapshot): string {
-  const { session } = snapshot
+function formatRuntimeQueryItem(item: RuntimeListItem): string {
+  if (item.entity === 'turn') {
+    return `  ${item.entityId} · ${item.record.state}`
+  }
+  if (item.entity === 'control') {
+    return `  ${item.entityId} · ${item.record.kind}/${item.record.state}`
+  }
+  return `  ${item.entityId} · ${item.record.agentType}/${item.record.state}`
+}
+
+function formatRuntimeList(view: RuntimeListView): string {
   const lines = [
-    `Runtime protocol v${snapshot.protocolVersion}`,
-    `session: ${session.sessionId} · phase=${session.phase}`,
-    session.runner.state === 'running'
-      ? `runner: running · turn=${session.runner.active.turnId}`
+    `Runtime protocol v${view.protocolVersion}`,
+    `session: ${view.sessionId} · phase=${view.phase}`,
+    view.runner.state === 'running'
+      ? `runner: running · turn=${view.runner.active.turnId}`
       : 'runner: idle',
-    `turns (${session.turns.length}):`,
-    ...session.turns.map(
-      (turn) => `  ${turn.turnId} · ${turn.state}`,
-    ),
-    `controls (${session.controls.length}):`,
-    ...session.controls.map(
-      (control) =>
-        `  ${control.controlId} · ${control.kind}/${control.state}`,
-    ),
-    `tasks (${session.tasks.length}):`,
-    ...session.tasks.map(
-      (task) => `  ${task.taskId} · ${task.agentType}/${task.state}`,
-    ),
+    `${view.entity} entities (${view.items.length}):`,
+    ...view.items.map(formatRuntimeQueryItem),
   ]
   return lines.join('\n')
 }
@@ -1170,14 +1171,30 @@ async function cmdRuntime(
   const snapshot = inspected.snapshot
 
   if (action === 'list' || action === 'status') {
-    if (parts.length > 1) {
+    const entity = parts[1]?.toLowerCase()
+    if (
+      parts.length > 2 ||
+      (entity !== undefined && !isRuntimeQueryEntity(entity))
+    ) {
       return {
         ok: false,
         message:
-          'Usage: /runtime [list|json|inspect [turn|control|task] [id]|interrupt <turnId>|cancel <control|task> <id>|discard <turn|control|task> <id>|retry-safe <turn|control|task> <id>]',
+          'Usage: /runtime list [turn|control|task]',
       }
     }
-    return { ok: true, message: formatRuntimeList(snapshot) }
+    const queried = queryRuntimeSnapshot(snapshot, {
+      action: 'list',
+      ...(entity ? { entity } : {}),
+    })
+    if (!queried.ok || queried.view.kind !== 'runtime.list') {
+      return {
+        ok: false,
+        message: queried.ok
+          ? 'runtime list query returned an unexpected view'
+          : queried.detail,
+      }
+    }
+    return { ok: true, message: formatRuntimeList(queried.view) }
   }
   if (action === 'json') {
     if (parts.length > 1) {
@@ -1186,35 +1203,40 @@ async function cmdRuntime(
     return { ok: true, message: JSON.stringify(snapshot, null, 2) }
   }
   if (action === 'inspect') {
-    if (parts.length === 1) {
-      return { ok: true, message: JSON.stringify(snapshot, null, 2) }
-    }
     const entity = parts[1]?.toLowerCase()
     const id = parts[2]
-    if (!id || parts.length !== 3) {
+    if (
+      !id ||
+      parts.length !== 3 ||
+      !isRuntimeQueryEntity(entity)
+    ) {
       return {
         ok: false,
         message:
-          'Usage: /runtime inspect [turn <turnId>|control <controlId>|task <taskId>]',
+          'Usage: /runtime inspect <turn|control|task> <id>',
       }
     }
-    const row =
-      entity === 'turn'
-        ? snapshot.session.turns.find((turn) => turn.turnId === id)
-        : entity === 'control'
-          ? snapshot.session.controls.find(
-              (control) => control.controlId === id,
-            )
-          : entity === 'task'
-            ? snapshot.session.tasks.find((task) => task.taskId === id)
-            : undefined
-    if (!row) {
+    const queried = queryRuntimeSnapshot(snapshot, {
+      action: 'inspect',
+      entity,
+      entityId: id,
+    })
+    if (!queried.ok) {
       return {
         ok: false,
-        message: `runtime ${entity ?? 'entity'} "${id}" not found`,
+        message: queried.detail,
       }
     }
-    return { ok: true, message: JSON.stringify(row, null, 2) }
+    if (queried.view.kind !== 'runtime.inspect') {
+      return {
+        ok: false,
+        message: 'runtime inspect query returned an unexpected view',
+      }
+    }
+    return {
+      ok: true,
+      message: JSON.stringify(queried.view.item.record, null, 2),
+    }
   }
   if (action === 'interrupt') {
     const turnId = parts[1]
@@ -3516,7 +3538,7 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     summary:
       'Protocol v1 runtime inspect/control/discard/retry-safe',
     usage:
-      '[list|json|inspect [turn|control|task] [id]|interrupt <turnId>|cancel <control|task> <id>|discard <turn|control|task> <id>|retry-safe <turn|control|task> <id>]',
+      '[list [turn|control|task]|json|inspect <turn|control|task> <id>|interrupt <turnId>|cancel <control|task> <id>|discard <turn|control|task> <id>|retry-safe <turn|control|task> <id>]',
     group: 'session',
     run: cmdRuntime,
   },

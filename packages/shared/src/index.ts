@@ -218,3 +218,19 @@ export {
   type RuntimeUsageView,
   type RuntimeRecoveryCommand,
 } from './runtimeProtocol.ts'
+
+export {
+  RUNTIME_QUERY_ENTITIES,
+  isRuntimeQueryEntity,
+  queryRuntimeSnapshot,
+  type RuntimeQueryEntity,
+  type RuntimeQuery,
+  type RuntimeTurnListItem,
+  type RuntimeControlListItem,
+  type RuntimeTaskListItem,
+  type RuntimeListItem,
+  type RuntimeListView,
+  type RuntimeInspectView,
+  type RuntimeQueryView,
+  type RuntimeQueryResult,
+} from './runtimeQuery.ts'

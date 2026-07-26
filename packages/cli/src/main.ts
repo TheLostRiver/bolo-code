@@ -13,6 +13,7 @@ import {
   ResumePickerError,
   runResumeCli,
 } from './resumeCli.ts'
+import { runRuntimeQueryCli } from './runtimeCli.ts'
 
 /**
  * 非 TTY 时尝试读 stdin。
@@ -74,6 +75,45 @@ async function main(): Promise<void> {
 
   const cwd = args.cwd ?? process.cwd()
   const isTty = process.stdin.isTTY === true
+
+  // ── runtime list/inspect：只恢复 snapshot，不打印 banner/summary ──
+  if (args.runtimeQuery) {
+    let idOrPath: string
+    if (args.continue) {
+      try {
+        idOrPath = await resolveContinueSessionId({ cwd })
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        if (args.json) {
+          process.stdout.write(
+            `${JSON.stringify({
+              ok: false,
+              code: 'load_failed',
+              detail: msg,
+            })}\n`,
+          )
+        } else {
+          process.stderr.write(`error: ${msg}\n`)
+        }
+        process.exit(1)
+      }
+    } else if (typeof args.resume === 'string') {
+      idOrPath = args.resume
+    } else {
+      process.stderr.write(
+        'error: runtime query requires --resume <id|path> or --continue\n',
+      )
+      process.exit(2)
+    }
+
+    const result = await runRuntimeQueryCli({
+      idOrPath,
+      cwd,
+      query: args.runtimeQuery,
+      json: args.json,
+    })
+    process.exit(result.exitCode)
+  }
 
   // ── --list / -l：非交互列项目会话 ──
   if (args.list) {
