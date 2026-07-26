@@ -31,7 +31,11 @@ import {
   type ProviderKind,
 } from '../../providers/src/index.ts'
 import { ensureAllLayouts } from './ensure.ts'
-import { loadConfigJson, loadHooksJson, mergeConfigs } from './io.ts'
+import {
+  loadConfigJsonWithWarnings,
+  loadHooksJson,
+  mergeConfigs,
+} from './io.ts'
 import {
   getProjectLayout,
   getUserLayout,
@@ -55,6 +59,8 @@ export type ResolvedWorkspace = {
   mcpServers: McpServerConfig[]
   /** M-GEN-1：mcp.json 校验 / 解析 warnings（不阻断会话） */
   mcpConfigWarnings?: string[]
+  /** config.json 解析失败等；不阻断会话，但 CLI 必须打印 */
+  configWarnings?: string[]
   skills: LoadedSkill[]
   plugins: LoadedPlugin[]
   pluginMerge?: MergeResult
@@ -148,8 +154,12 @@ export async function loadWorkspace(
   const user = getUserLayout()
   const project = getProjectLayout(cwd)
 
-  const userConfig = await loadConfigJson(user)
-  const projectConfig = await loadConfigJson(project)
+  const userLoaded = await loadConfigJsonWithWarnings(user)
+  const projectLoaded = await loadConfigJsonWithWarnings(project)
+  const userConfig = userLoaded.config
+  const projectConfig = projectLoaded.config
+  // 配置写坏了不阻断启动（进不去 CLI 更难修），但必须让用户看见
+  const configWarnings = [...userLoaded.warnings, ...projectLoaded.warnings]
   const config = mergeConfigs(userConfig, projectConfig)
 
   let hooks = mergeHooks(
@@ -276,6 +286,7 @@ export async function loadWorkspace(
     hooks,
     mcpServers,
     ...(mcpConfigWarnings.length ? { mcpConfigWarnings } : {}),
+    ...(configWarnings.length ? { configWarnings } : {}),
     skills,
     plugins,
     pluginMerge,

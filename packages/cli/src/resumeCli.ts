@@ -504,6 +504,11 @@ export async function resumeFromIdOrPath(
   }
 
   // 快照加载成功后再提示无 key；判定以 workspace active profile 为准。
+  // 配置解析失败必须先说——否则用户会把「配置没生效」误当成别的问题排查
+  for (const w of workspace.configWarnings ?? []) {
+    writeErr(`warn: ${w}\n`)
+  }
+
   if (!forced && workspace.providerMissingKey && !isExplicitMockProvider()) {
     const delayedFailure = createCliProvider()
     session.provider = delayedFailure.provider

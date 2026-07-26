@@ -69,6 +69,9 @@ export {
 
 export {
   readJsonFile,
+  readJsonFileResult,
+  loadConfigJsonWithWarnings,
+  type ReadJsonResult,
   writeJsonFile,
   writeTextIfMissing,
   loadConfigJson,

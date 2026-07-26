@@ -81,6 +81,11 @@ export async function runNewSessionCli(
   thinkingGate.session = session
   attachSessionEventPrinter(session, printer)
 
+  // 配置解析失败必须先说——否则用户会把「配置没生效」误当成别的问题排查
+  for (const w of workspace.configWarnings ?? []) {
+    writeErr(`warn: ${w}\n`)
+  }
+
   // forceMock 是显式测试覆盖；缺 key 判定必须来自 workspace active profile，
   // 不能用通用 env 探测覆盖一个已由自定义 apiKeyEnv 正确装配的 provider。
   if (opts.forceMock) {

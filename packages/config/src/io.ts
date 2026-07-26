@@ -71,11 +71,49 @@ export function parseJsonc<T>(raw: string): T {
 export async function readJsonFile<T>(
   filePath: string,
 ): Promise<T | null> {
+  const r = await readJsonFileResult<T>(filePath)
+  return r.found && r.ok ? r.value : null
+}
+
+export type ReadJsonResult<T> =
+  | { found: false }
+  | { found: true; ok: true; value: T }
+  | { found: true; ok: false; reason: string }
+
+/**
+ * 区分「文件不存在」与「文件在但读不了 / 解析不了」。
+ *
+ * readJsonFile 那个 `catch { return null }` 把两者压成了同一个结果，
+ * 于是用户改坏 config 之后毫无提示、直接退回默认值 —— 他会以为自己的配置生效了，
+ * 然后去排查一个根本不存在的问题。
+ */
+export async function readJsonFileResult<T>(
+  filePath: string,
+): Promise<ReadJsonResult<T>> {
+  let raw: string
   try {
-    const raw = await fs.readFile(filePath, 'utf8')
-    return parseJsonc<T>(raw)
-  } catch {
-    return null
+    raw = await fs.readFile(filePath, 'utf8')
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException)?.code
+    if (code === 'ENOENT') return { found: false }
+    return {
+      found: true,
+      ok: false,
+      reason: err instanceof Error ? err.message : String(err),
+    }
+  }
+  try {
+    const value = parseJsonc<T>(raw)
+    if (value == null) {
+      return { found: true, ok: false, reason: 'not a JSON object' }
+    }
+    return { found: true, ok: true, value }
+  } catch (err) {
+    return {
+      found: true,
+      ok: false,
+      reason: err instanceof Error ? err.message : String(err),
+    }
   }
 }
 
@@ -102,9 +140,30 @@ export async function writeTextIfMissing(
 export async function loadConfigJson(
   layout: BoloLayoutPaths,
 ): Promise<BoloConfigJson> {
-  const file = await readJsonFile<BoloConfigJson>(layout.configJson)
-  if (!file) return { ...DEFAULT_CONFIG }
-  return mergeConfigJson({ ...DEFAULT_CONFIG }, file)
+  return (await loadConfigJsonWithWarnings(layout)).config
+}
+
+/**
+ * 同 loadConfigJson，但把「文件在却读不了」变成可见 warning。
+ * 坏配置不阻断启动——进不去 CLI 就更难修了——但必须说出来。
+ */
+export async function loadConfigJsonWithWarnings(
+  layout: BoloLayoutPaths,
+): Promise<{ config: BoloConfigJson; warnings: string[] }> {
+  const r = await readJsonFileResult<BoloConfigJson>(layout.configJson)
+  if (!r.found) return { config: { ...DEFAULT_CONFIG }, warnings: [] }
+  if (!r.ok) {
+    return {
+      config: { ...DEFAULT_CONFIG },
+      warnings: [
+        `${layout.configJson}: could not be parsed (${r.reason}); using defaults — the settings in this file are NOT in effect`,
+      ],
+    }
+  }
+  return {
+    config: mergeConfigJson({ ...DEFAULT_CONFIG }, r.value),
+    warnings: [],
+  }
 }
 
 export async function loadMcpJson(
