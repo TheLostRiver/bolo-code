@@ -9,6 +9,7 @@
 2. 读 `docs/AGENT_HANDOFF.md`（交接约定与 git 规则）、`README.md`。
 3. 用 planning-with-files 恢复/建立上下文（见第 5 节）。
 4. `git status` 确认工作区干净、`HEAD == origin/main`。
+5. 功能实现 架构 开发思想 等等 可以借鉴D:\DEV\HelsincyCode，E:\Tools\codex，E:\Tools\opencode这三个项目，但要注意这三项目非常庞大
 
 ## 1. 任务从哪来
 
