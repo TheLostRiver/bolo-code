@@ -129,6 +129,7 @@
 | [PROVIDER_UX.md](./PROVIDER_UX.md) | CX 便利层（preset · caps · ultrathink） |
 | [EFFORT.md](./EFFORT.md) / [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md) | Effort 方言 |
 | [COMPACTION.md](./COMPACTION.md) | Compact **实现真源** |
+| [DESKTOP_DESIGN.md](./DESKTOP_DESIGN.md) | **AR3 设计方案**（信息架构 · 交互 · 视觉 · 不做什么） |
 | [ADR_COMPACT_REMOTE.md](./ADR_COMPACT_REMOTE.md) | **AR2C 决定**：compaction 保持 local-only（含重开条件） |
 | [TOOLS.md](./TOOLS.md) | **内置工具契约**（TodoWrite · 后台 shell） |
 | [RELEASE.md](./RELEASE.md) | **发布契约**（构建 · tarball · 门禁 · 发布流程） |
@@ -314,6 +315,9 @@ AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 regis
 （HC 用 load 时 prune 解决）。这是独立的架构决策，**不塞进 A2**。
 
 ##### AR3 · Codex App 风格 Desktop（薄 renderer）
+
+> **动手前的方案见 [DESKTOP_DESIGN.md](./DESKTOP_DESIGN.md)**（含证据可信度说明、现状实测、
+> 明确不重复的反面教材、以及未决问题）。下表是切片划分，设计判断以该文档为准。
 
 | 切片 | packages-first / IPC 契约 | Codex App 风格人类结果 | 专项门禁 |
 |------|---------------------------|------------------------|----------|
