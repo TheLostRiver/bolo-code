@@ -107,7 +107,7 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | 层 | 粗估 | 状态摘要 |
 |----|------|----------|
 | Headless 核心 | ~82–90% | queryLoop · STE · 权限 · tools；partial stream fail-closed |
-| **Agent 能力面（工具集）** | **~72–80%** | 13 工具；**TodoWrite** · **Bash 后台三件套**（ROADMAP §14） |
+| **Agent 能力面（工具集）** | **~78–85%** | 13 工具 + **Web search**；TodoWrite · Bash 后台三件套 · ExitPlanMode（ROADMAP §14 · [TOOLS.md](./TOOLS.md)） |
 | **分发（CLI）** | **~85–92%** | `npm i -g` / `npx` 单文件产物；零运行时依赖（ROADMAP §15 · [RELEASE.md](./RELEASE.md)） |
 | 会话 / CLI | ~90–96% | JSONL · new/resume 同构 runtime · durable controls/tasks · background FIFO/promotion · versioned runtime protocol |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
@@ -123,7 +123,7 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | Electron GUI | ~65–75% | 薄壳；非 HC 级 IDE |
 | 产品相对 HC 全家桶 | ~74–88% | 日用高；UI 密度另计 |
 
-**已闭环：** Diff · Hooks · Compact · Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR-T1 TodoWrite / AR-T2 Bash background** · **AR5C-early CLI 分发**。
+**已闭环：** Diff · Hooks · Compact · Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR-T1 TodoWrite / AR-T2 Bash background / AR-T3a ExitPlanMode / AR-T3b Web search** · **AR5C-early CLI 分发**。
 
 **当前主线：** **AR-T3+ 能力面续刀**（ROADMAP §14.3）：WebSearch · plan 工具流（`ExitPlanMode` 缺位）· AskUserQuestion，逐项独立准入。
 
@@ -322,6 +322,9 @@ npx tsx scripts/test-config.ts
 - 为后台进程管理引入 `tree-kill` 之类运行时依赖（**Bolo `dependencies` 恒为空**）
 - 新增「相对自己文件找资源」的代码却不做双布局兼容（bundling 会压平模块路径）
 - 用变量做 `import()` 的 specifier（bundle 运行时会炸）
+- 把 provider **服务端**工具块存进客户端工具累加器（`flushTools` 会把它发成本地 `tool_call` 去执行一个不存在的工具）
+- 解析器只留白名单不留兜底（未知块静默丢弃 = 用户付了钱看不到结果）
+- 错误解释只看 HTTP status 不看 body（中转常把配置错误包在 5xx 里）
 - 把 todo 表写进 `messages`（会被 compact 吞掉，白做）
 
 ---
@@ -389,6 +392,8 @@ cd apps/desktop && npm install && set BOLO_DESKTOP_MOCK=1 && npm start
 | **AR-T1** | `TodoWrite` 工具 · todo 存 session 不进 messages（免疫 compact）· transcript `todo` 快照 + resume 投影 · `# Task tracking` cache-stable 段 · 双阈值 + 锚点丢失快速路径的提醒注入 · core 预渲染 cell |
 | **AR-T2** | `Bash.run_in_background` + `BashOutput` + `KillShell` · 输出落盘 + 增量游标 · **零依赖原生进程树 kill**（POSIX 进程组两级升级 / Windows `taskkill /T /F`）· 体积熔断 · `endSession` 收尸防僵尸 |
 | **AR-T2 修复** | 落盘 sink 失败（ENOSPC / write-after-end）曾是**未捕获异常 → 整进程崩溃**；接住之后还必须连带收进程树，否则留下 `KillShell` 也杀不掉的孤儿 |
+| **AR-T3a** | `ExitPlanMode`：plan 模式补出口；权限层 deny→**ask**（非 allow），批准落 `default` 而非 acceptEdits |
+| **AR-T3b** | Web search 方言表（意图↔wire 分离）· anthropic/responses hosted 两条腿**已活体验证零告警** · compatible 走既有 MCP · 未知块兜底防「搜了没结果」 |
 | **AR5C-early** | esbuild 单文件产物 · 发布元数据 · `getBundledSkillsDir()` 双布局 · pack→install→run E2E 进门禁 · [RELEASE.md](./RELEASE.md) |
 
 最新 commit 以 `git log` 为准。

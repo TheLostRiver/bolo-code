@@ -13,7 +13,7 @@
 |----|------|------|
 | **Headless 核心** | **~82–90%** | loop/STE/权限/auto/snip/policy/OS sandbox；partial stream fail-closed |
 | **分发（CLI）** | **~85–92%** | `npm i -g` / `npx` 单文件产物 · 零运行时依赖 · pack→install→run E2E 进门禁；见 §15 与 [RELEASE.md](./RELEASE.md) |
-| **Agent 能力面（工具集）** | **~72–80%** | 13 工具：Bash（含 `run_in_background`）· BashOutput · KillShell · Read/Write/Edit/apply_patch · Glob/Grep · Skill · WebFetch · Agent · **TodoWrite**；见 §14 |
+| **Agent 能力面（工具集）** | **~78–85%** | 13 工具 + **Web search**（anthropic / openai-responses 已活体验证）：Bash（含 `run_in_background`）· BashOutput · KillShell · Read/Write/Edit/apply_patch · Glob/Grep · Skill · WebFetch · Agent · **TodoWrite**；见 §14 |
 | 会话与 CLI | **~90–96%** | JSONL · new/resume 同构 runtime · durable controls/tasks · background FIFO/promotion · versioned runtime protocol |
 | **扩展面** | **~80–88%** | MCP×3 · Skills · Plugins · WebFetch · OAuth 本地 |
 | **Subagent** | **~89–95%** | Spec v0；durable task/result · overflow FIFO/cancel · safe-boundary delivery · worktree fail-closed |
@@ -33,7 +33,7 @@
 
 **已闭环主线：** headless 日用 → Diff（D0–D7 / U0–U4）· Hooks（H0–H5）· Compact（C0–C5）· Provider（P0–P4.1）· Effort（E0–E9）· Provider UX（CX0–CX8）· 可靠性（R0–R4）· **Durable Runtime（DR0–DR4）** · **Autonomous Road AR1 CLI/TUI runtime UX**。切片明细 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
 
-**当前主线：** **AR-T3 · 能力面续刀**（§14）。AR-T1/AR-T2 与 **AR5C-early 分发**（§15）已收口。
+**当前主线：** **AR-T3 · 能力面续刀**（§14）。AR-T1/AR-T2/AR-T3a/AR-T3b 与 **AR5C-early 分发**（§15）已收口。
 
 **已插队并收口：** **AR-T · Agent 能力面**（§14）。准入证据：基础设施深度（DR0–DR4 + AR1）已远超能力广度——彼时 agent 无法跨步骤记住计划，也无法启动任何活过一次工具调用的进程。AR2 压缩深化顺延，A0a/A0b 成果不受影响。
 
@@ -98,6 +98,7 @@
 | Hooks H0–H5 · Compact C0–C5 · Provider P0–P4.1 · Effort E0–E9 · Provider UX CX0–CX8 | ✅ |
 | CLI / Agent 可靠性 R0–R4 · Durable Runtime DR0–DR4 · AR1 runtime UX | ✅ |
 | **AR-T1 TodoWrite · AR-T2 Bash background**（§14） | ✅ |
+| **AR-T3a ExitPlanMode · AR-T3b Web search**（§14） | ✅ |
 | **AR5C-early · CLI 可分发**（§15） | ✅ |
 | **AR-T3+ 能力面续刀**（WebSearch · plan 工具流 · AskUserQuestion） | 🔄 当前 |
 | AR2 Compact depth（A0a/A0b ✅ → A1/A2 → B → C） | 📋 顺延 |
@@ -112,7 +113,7 @@
 
 **一句话：** 主路径、Diff、Hooks、Compact、多 Provider、Effort、Provider UX、可靠性 R0–R4、Durable Runtime DR0–DR4、AR1 runtime UX、**AR-T1/AR-T2 能力面**已收口。
 
-**下一刀（当前主线）：** **AR-T3+ 能力面续刀**（§14.3），逐项独立准入。AR2A1 range/watermark 顺延（§13.10.2）。
+**下一刀（当前主线）：** **AR-T3+ 能力面续刀**（§14.5），逐项独立准入。AR2A1 range/watermark 顺延（§13.10.2）。
 
 ---
 
@@ -349,7 +350,7 @@ AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 regis
 | 12 | **AR-T1 · TodoWrite** | `packages/shared` todo 契约 + 工具 + session/transcript 接线 | 多步任务可跨 compact/resume 追踪 | compact 存活 + resume 投影 + 提醒双阈值 | ✅ |
 | 13 | **AR-T2 · Bash background** | `BackgroundShell` 契约 + 原生进程树 kill + BashOutput/KillShell | dev server / 长构建不再阻塞 turn | 真实进程 kill + endSession 无僵尸 + 前台回归 | ✅ |
 | 14 | **AR5C-early · CLI 分发** | esbuild 单文件 + 发布元数据 + 双布局资产 | `npm i -g bolo-code` 可用 | pack→install→run E2E + 零依赖 + tarball 清单 | ✅ |
-| 15 | **AR-T3+ · 能力面续刀** | WebSearch · plan 工具流 · AskUserQuestion（逐项） | 见 §14.3 | 每项独立红灯 + 全量门禁 | **当前** |
+| 15 | **AR-T3+ · 能力面续刀** | `bolo search enable` · OpenRouter plugin · AskUserQuestion（逐项） | 见 §14.5 | 每项独立红灯 + 全量门禁 | **当前** |
 | 16 | **AR2A1–A2 · watermark/safe rewrite** | range/watermark 纯契约 → rewrite 接线 | partial compact 主路径 | tool pairing + lifecycle 保留 | 📋 顺延 |
 | 17 | **AR2B–C · tokenizer/benchmark/ADR** | registry（重估）+ 语料基准 + remote 决策 | 可量化 token/cost | 偏差阈值 + fail-closed | 📋 |
 | 18 | **AR3A–F** | protocol client/store；无 renderer 状态机 | Codex App 风格 Desktop | mock/core IPC + crash/restart + Windows package | 📋 |
@@ -414,14 +415,45 @@ AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 regis
 - 沙箱临时文件延后到进程退出才清理（前台是 `finally` 清理，后台不能照搬）
 - terminal 状态幂等：kill 之后进程自然退出的那次 exit 必须被忽略，否则「用户杀掉的」会被记成「正常完成」
 
-### 14.3 AR-T3+ · 续刀候选（当前）
+### 14.3 AR-T3a · plan 模式出口 ✅
+
+`/plan` 有入口没出口——踩了 README「无 stub 冒充完成」。`ExitPlanMode` 补上闭环。
+
+安全形状是重点：plan 模式必须给自己的出口开口子（否则全面 deny 会吃掉退出路径），
+但开的是 **deny → ask，不是 deny → allow**；批准后落 `default` 而非 `acceptEdits`/`bypass`——
+用户批准的是**这一份计划**，不是随便写的权限。`permissions` 自己声明工具名，不反向依赖 `tools`。
+
+### 14.4 AR-T3b · Web search ✅（两条 hosted 线路已活体验证）
+
+**契约与实现真源 → [TOOLS.md](./TOOLS.md) §3。**
+
+调研结论：三个参考实现**全部让 provider 去搜**，没人自建搜索引擎
+（HC 用 Anthropic 服务端工具；codex 发 hosted ToolSpec；opencode 把自调 Exa 那份注释为 "this compromise"）。
+因此 hosted 不引入新的第三方接收方 → **默认可开**。
+
+| 面 | 落点 |
+|----|------|
+| 方言表 | `packages/providers/src/webSearchDialect.ts`（意图 ↔ wire 分离，同 effort 轨） |
+| Anthropic | 发送侧混入 cache 断点前；解析抽到 `anthropicStream.ts` + `anthropicEvents.ts` |
+| Responses | 绕过 `toolsToResponses`；`web_search_call` 只观测不执行；`url_citation` 浮出 |
+| compatible | 走**既有 MCP host**（`searchPresets.ts`），零 provider 代码、零新依赖 |
+| 开关 | `/websearch [on\|off\|auto]`；会话缺省 auto，**provider 层缺省 off** |
+| 兜底 | 未知块 → `provider_notice` → CLI warning（防「搜了、付费了、屏幕空白」） |
+
+**活体验证（第三方中转，比官方端点更严格）：** anthropic ✅ · openai-responses ✅ · 两者**零告警**，
+原调研标 UNCERTAIN 的 wire format 全部证实。compatible/MCP 仍仅契约验证。
+
+**只有真跑才发现的两个缺陷：** 引用逐句重复（渲染层按 turn 去重）；
+中转 `HTTP 503` 包着 `model_not_found`（错误解释改为 **body 优先于 status**）。
+
+### 14.5 AR-T3+ · 续刀候选（当前）
 
 按 §13.10 固定规则「一次一个最小切片」，逐项独立准入：
 
 | 候选 | 现状 | 备注 |
 |------|------|------|
-| **WebSearch** | 只有 `WebFetch`（能取已知 URL，不能发现） | 需先定 provider 中立的检索后端与离线降级 |
-| **plan 工具流** | `PERMISSION_MODES` 已有 `'plan'`，但只 deny 编辑 + 一行提示；**无 `ExitPlanMode`** ⇒ 没有「提计划→批准→执行」闭环 | 与权限档联动，需谨慎设计 |
+| **`bolo search enable`** | preset 逻辑已就位，CLI 子命令未接 | 见 TOOLS.md §3 |
+| **OpenRouter plugin** | 方言表有行，`openaiCompatible.ts` 未接 `bodyPatch` | 需 baseUrl 硬门控 |
 | **AskUserQuestion** | 无 | 结构化澄清；与 CLI picker / Desktop 对话框对接 |
 | **前台命令自动后台化** | 无 | 参考实现有阻塞预算超时自动转后台；语义复杂，暂不做 |
 | **LSP** | 无 | 体量大，归 AR4 证据门控 |

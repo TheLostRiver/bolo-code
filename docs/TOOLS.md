@@ -7,6 +7,8 @@
 
 ## 0. 全集（13）
 
+> `Agent` 由 subagent 层按策略注入，不在 `createBuiltinTools()` 里。
+
 | 工具 | 权限 | 并发安全 | 只读 | interrupt |
 |------|------|----------|------|-----------|
 | `Bash` | ✅ 需门控 | ✗ | ✗ | cancel |
@@ -21,6 +23,7 @@
 | `Skill` | ✗ | ✅ | ✅ | cancel |
 | `WebFetch` | ✅ 网络出站 | ✅ | ✅ | cancel |
 | `TodoWrite` | ✗ | ✗ | ✗ | cancel |
+| `ExitPlanMode` | ✅ 需用户批准 | ✗ | ✗ | cancel |
 | `Agent` | 按 policy | — | ✗ | — |
 
 权限判定统一在 **PermissionGate**，工具内不得自判 allow/deny。
@@ -184,7 +187,96 @@ endSession → killAllBackgroundShells(session.backgroundShells)
 
 ---
 
-## 3. 门禁
+## 3. Web search（AR-T3b）
+
+### 3.0 为什么不自建搜索
+
+三个参考实现全部让**模型 provider** 去搜，没人自己接搜索 API：
+HelsincyCode 用 Anthropic 服务端 `web_search`；codex 发 OpenAI hosted ToolSpec
+（文件名就叫 `hosted_spec.rs`）；opencode 两条都有，且把自调 Exa 的那份在源码注释里
+称为 *"this compromise"* / *"legacy"*。
+
+推论很关键：**provider-hosted 不引入新的第三方接收方**——对话本来就发给该 provider。
+所以没有理由默认关闭。
+
+### 3.1 方言表（真源：`packages/providers/src/webSearchDialect.ts`）
+
+与 effort 轨同构：**会话只携带意图 `on|off|auto`，厂商 wire 片段全住表里**。
+`ToolSpec` 不被任何厂商形状污染；加一家只改一行。
+
+| dialect | 触发 | 发什么 | `auto` 默认 |
+|---------|------|--------|------------|
+| `anthropic-hosted` | kind=anthropic | tools 里加 `{type:'web_search_20250305', name, max_uses}` | **开** |
+| `openai-responses-hosted` | kind=openai-responses | tools 里加 `{type:'web_search'}`（绕过 `toolsToResponses`） | **开** |
+| `openrouter-plugin` | kind=openai-compatible ∧ baseUrl~openrouter.ai | `plugins:[{id:'web'}]` | 关（新第三方 + 按次计费） |
+| `mcp-external` | 任意 kind ∧ 配了搜索 MCP server | 无（带外走 MCP） | 配了即开 |
+| `off` | 其余 | 无 | — |
+
+`off` 表示**没有这个能力**，不是坏了。用户明确要开时，plan 带 `unsupportedReason` 供 CLI 解释。
+
+### 3.2 三条不可违反的规则
+
+**① 服务端块绝不能进本地工具通道。**
+`anthropic.ts` 的 `flushTools()` 会把累加器里每一项发成 `tool_call`，语义是「Bolo 本地执行」。
+服务端搜索块（`server_tool_use`）长得和客户端 `tool_use` 几乎一样——同样有 id/name、
+同样用 `input_json_delta` 累加——**复用同一个 map 会让流末尝试执行一个不存在的本地工具**。
+必须用独立的 `serverToolByIndex`（见 `anthropicStream.ts` 顶部不变量说明）。
+Responses 侧按 `item.type` 分流即可，**永远不要按 id 前缀判断**。
+
+**② 白名单必须有兜底。** 两个解析器都靠白名单防误执行，但没有 else 分支就等于静默丢弃。
+不认识的块会发 `provider_notice` → CLI warning。缺了它，失败模式是
+「搜索跑了 · 用户付了钱 · 屏幕上什么都没有」——报错能诊断，静默不能。
+
+**③ hosted 条目必须在 cache 断点之前混入。** 否则落在缓存前缀之外，每轮重新计费。
+同理 `max_uses` 是常量：被缓存的 tool 定义里放按调用变化的字段会击穿缓存。
+
+### 3.3 ✅ 活体验证状态（2026-07）
+
+**两条 hosted 线路均通过第三方中转实测**——比官方端点更严格，中转还得能正确代理服务端工具。
+
+| 线路 | 状态 | 实测结果 |
+|------|------|----------|
+| `anthropic` | ✅ **活体验证** | `⌕ web search "..."` + `⌕ 7 result(s)` + 引用；**零告警** |
+| `openai-responses` | ✅ **活体验证** | `⌕ web search "site:nodejs.org …"` + 引用；**零告警** |
+| `openai-compatible` (MCP) | ⚠️ **仅契约验证** | 未接真实搜索 MCP server 跑过 |
+| `openrouter-plugin` | ⚠️ **未实现**（表里有行，`openaiCompatible.ts` 未接线） | — |
+
+「零告警」是有意义的证据：未知块兜底一次都没触发，说明**没有任何块被静默丢弃**，
+猜的块类型名全部命中。
+
+**已证实的 wire format**（原调研标 UNCERTAIN，现已确认）：
+
+- Anthropic：`web_search_20250305` · `server_tool_use` · `web_search_tool_result.content[]` · `citations_delta.citation.{url,title}` · `server_tool_use.web_search_requests`
+- Responses：hosted 类型就是 **`web_search`**（不带 preview 后缀）· `web_search_call` · `action.query` · `url_citation` annotation
+
+**两条腿的能力差异（非 bug）：** Responses 没有独立的结果块，所以拿不到结果计数。
+实现在这种情况下**不填、不伪造**——用户看到查询词与引用，而不是一个编出来的数字。
+
+### 3.4 只有真跑才发现的两个问题
+
+活体测试各抓到一个假流测不出来的缺陷：
+
+| 问题 | 修复 |
+|------|------|
+| Anthropic **逐句**发引用 → 一次搜索 7 行引用只有 4 个不同 URL，一个连出 3 次 | 渲染层按 turn 去重；解析层如实反映 provider 发了什么 |
+| 中转返回 `HTTP 503` 却包着 `{"code":"model_not_found"}` | 错误解释改为 **body 优先于 status**；否则会告诉用户「是上游问题不是你的配置」，把人往反方向指 |
+
+第二条是通用教训：**中转/网关经常把配置错误包在语义不符的状态码里。**
+
+### 3.5 开关
+
+```bash
+/websearch            # 查看当前状态（经方言解析，反映这条线路实际会发生什么）
+/websearch on|off|auto
+```
+
+`auto` 是会话缺省。注意 **provider 层缺省是关**：不传该选项等于关，
+「默认开」必须由会话层显式传下来——否则直接调 `buildAnthropicRequestBody`
+的既有代码会静默开启搜索并产生费用。
+
+---
+
+## 4. 门禁
 
 ```bash
 npx tsx scripts/test-todo.ts                     # todo 纯契约
@@ -197,7 +289,7 @@ npx tsx scripts/test-bash-background-runtime.ts  # 真实进程 spawn/read/kill/
 
 ---
 
-## 4. 尚未实现（AR-T3+ 候选）
+## 5. 尚未实现（AR-T3+ 候选）
 
 | 候选 | 现状 |
 |------|------|

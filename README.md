@@ -26,7 +26,7 @@
 | 层 | 粗估 | 说明 |
 |----|------|------|
 | Headless 核心 | ~82–90% | queryLoop · 权限 · tools · STE；partial stream fail-closed |
-| **Agent 能力面（工具集）** | **~72–80%** | 13 工具；**TodoWrite** 计划追踪 · **Bash 后台三件套** |
+| **Agent 能力面（工具集）** | **~78–85%** | 13 工具 + **Web search**（Anthropic / OpenAI Responses 已实测）· TodoWrite · Bash 后台三件套 · ExitPlanMode |
 | 会话 / CLI | ~92–97% | JSONL · durable runtime · query/action CLI · TTY pager · pipe/JSON automation |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
 | Subagent | ~89–95% | `config.agents` + `agents/*.md` · durable task/result · overflow FIFO/cancel · safe delivery · worktree 保全 |
@@ -187,7 +187,12 @@ npm start
 | `TodoWrite` | 多步任务的待办表；**存在会话状态里而非消息历史**，因此 compact 后不丢，resume 可恢复 |
 | `Skill` | 按 id 载入 skill 全文 |
 | `WebFetch` | 取 http(s) 文本 |
+| `ExitPlanMode` | 提交计划请用户批准，退出 plan 模式 |
 | `Agent` | 拉起 subagent |
+
+**Web search** 由你正在对话的 provider 服务端执行——不引入新的第三方接收方，
+所以默认开启。`/websearch [on|off|auto]` 可切换。
+Anthropic 与 OpenAI Responses 两条线路已实测；其它端点可配一个搜索 MCP server 获得同等能力。
 
 后台 shell **跨 turn 存活，但绝不越过会话**：`endSession` 统一收尸，不留僵尸进程。
 实现无任何运行时依赖（进程树 kill 走 POSIX 进程组 / Windows `taskkill /T /F`）。
