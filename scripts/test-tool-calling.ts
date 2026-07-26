@@ -244,10 +244,14 @@ async function main() {
     },
   )
   const bigContent = bigRes.toolResultMessage.content
-  assert(bigContent.includes('truncated'), 'long output truncated marker')
+  // AR2A0b：中段截断（保头保尾 + 原始规模标注）
+  assert(bigContent.includes('truncated middle'), 'middle truncation marker')
   assert(bigContent.includes('full result not stored in transcript'), 'trunc note')
-  assert(bigContent.length < longOut.length, 'content shorter than full')
-  assert(bigContent.startsWith('x'.repeat(50)), 'keeps first maxChars')
+  assert(bigContent.startsWith('x'.repeat(30)), 'keeps head (60% of budget)')
+  assert(bigContent.endsWith('x'.repeat(20)), 'keeps tail (40% of budget)')
+  const keptChars = (bigContent.match(/x/g) ?? []).length
+  assert(keptChars === 50, 'kept exactly budget chars (head+tail)')
+  assert(bigContent.includes(`${longOut.length} chars`), 'marker shows original chars')
 
   console.log('TOOL CALLING ALIGN TESTS PASS')
 }

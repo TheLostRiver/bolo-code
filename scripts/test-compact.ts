@@ -351,6 +351,99 @@ async function main() {
     'hybrid path still refuses compact querySource',
   )
 
+  // ── AR2A0b：summary 标记 + 二次 compact 合并提示（防重摘要）──
+  const {
+    COMPACT_SUMMARY_MARKER,
+    COMPACT_MERGE_PRIOR_SUMMARY_HINT,
+    isCompactSummaryMessage,
+    getCompactUserSummaryMessage,
+  } = await import('../packages/compact/src/index.ts')
+
+  const summaryMsg: ChatMessage = {
+    role: 'user',
+    content: getCompactUserSummaryMessage(
+      '<summary>\n1. Primary Request and Intent:\n   earlier work.\n</summary>',
+    ),
+  }
+  assert(
+    summaryMsg.content.startsWith(COMPACT_SUMMARY_MARKER),
+    'summary message carries stable marker prefix',
+  )
+  assert(isCompactSummaryMessage(summaryMsg), 'summary message detected')
+  assert(
+    !isCompactSummaryMessage({ role: 'user', content: 'normal user msg' }),
+    'normal user msg not summary',
+  )
+  assert(
+    !isCompactSummaryMessage({
+      role: 'assistant',
+      content: summaryMsg.content,
+    }),
+    'assistant echo not treated as summary',
+  )
+
+  // 二次 compact：历史含旧 summary → prompt 注入合并提示 + metadata 标记
+  let capturedPrompt = ''
+  const second = await runFullCompact({
+    messages: [
+      { role: 'system', content: 'Conversation compacted' },
+      summaryMsg,
+      { role: 'user', content: 'more work after first compact' },
+      { role: 'assistant', content: 'did more work' },
+      { role: 'user', content: 'latest question' },
+      { role: 'assistant', content: 'latest answer' },
+    ],
+    trigger: 'auto',
+    keepRecentUserTurns: 1,
+    summarize: async ({ compactPrompt }) => {
+      capturedPrompt = compactPrompt
+      return {
+        text: `<summary>\n1. Primary Request and Intent:\n   merged summary.\n</summary>`,
+      }
+    },
+  })
+  assert(second.ok === true, 'second compact succeeds')
+  assert(
+    capturedPrompt.includes(COMPACT_MERGE_PRIOR_SUMMARY_HINT),
+    'merge hint injected when prior summary present',
+  )
+  if (second.ok) {
+    assert(
+      second.result.boundary.compactMetadata.mergedPriorSummary === true,
+      'boundary metadata marks merged prior summary',
+    )
+  }
+
+  // 首次 compact（无旧 summary）→ 不注入提示
+  let firstPrompt = ''
+  const first = await runFullCompact({
+    messages: [
+      { role: 'user', content: 'fresh question' },
+      { role: 'assistant', content: 'fresh answer' },
+      { role: 'user', content: 'follow up' },
+      { role: 'assistant', content: 'done' },
+    ],
+    trigger: 'manual',
+    keepRecentUserTurns: 1,
+    summarize: async ({ compactPrompt }) => {
+      firstPrompt = compactPrompt
+      return {
+        text: `<summary>\n1. Primary Request and Intent:\n   fresh summary.\n</summary>`,
+      }
+    },
+  })
+  assert(first.ok === true, 'fresh compact succeeds')
+  assert(
+    !firstPrompt.includes(COMPACT_MERGE_PRIOR_SUMMARY_HINT),
+    'no merge hint without prior summary',
+  )
+  if (first.ok) {
+    assert(
+      first.result.boundary.compactMetadata.mergedPriorSummary === undefined,
+      'no mergedPriorSummary flag on fresh compact',
+    )
+  }
+
   console.log('COMPACT TESTS PASS')
 }
 
