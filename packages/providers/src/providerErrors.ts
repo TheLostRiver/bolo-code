@@ -16,9 +16,21 @@ export type ProviderErrorContext = {
   effortLevel?: string
   dialect?: string | EffortDialect | null
   apiKeyEnv?: string
+  /** 实际拨号的端点；网络类错误里最值钱的一条信息 */
+  baseUrl?: string
   status?: number
   /** 原始错误字符串（可截断） */
   raw?: string
+}
+
+/**
+ * 抹掉可能被上游原样回显的密钥。
+ * 错误文案会进终端、也可能被用户贴进 issue —— 绝不能把 key 带出去。
+ */
+function redactSecrets(s: string): string {
+  return s
+    .replace(/(sk|pk|api|key)[-_][A-Za-z0-9_-]{8,}/gi, '<redacted>')
+    .replace(/Bearer\s+[A-Za-z0-9._-]{8,}/gi, 'Bearer <redacted>')
 }
 
 function clip(s: string, n: number): string {
@@ -51,8 +63,60 @@ export function explainProviderError(
   const status = ctx.status ?? extractStatus(raw)
   const lines: string[] = []
 
-  const head = clip(raw, 240)
+  const head = clip(redactSecrets(raw), 240)
   if (head) lines.push(head)
+
+  // 网络够不着：baseUrl 打错、出不去网、代理没配。
+  // 这是新用户最容易撞上的一类，却最容易只看到 "fetch failed" 三个字。
+  if (
+    /fetch failed|econnrefused|enotfound|eai_again|econnreset|ehostunreach|enetunreach|socket hang up|network|tunneling socket|self.signed certificate|unable to verify/i.test(
+      raw,
+    )
+  ) {
+    lines.push(
+      `hint: could not reach the provider${ctx.baseUrl ? ` at ${ctx.baseUrl}` : ''} — the request never got a response`,
+    )
+    lines.push(
+      'hint: check baseUrl for typos · confirm you are online · if behind a proxy set HTTPS_PROXY',
+    )
+    if (ctx.providerId) {
+      lines.push(`hint: or switch backend with /provider use <other>`)
+    }
+    return lines.join('\n')
+  }
+
+  // 超时：请求发出去了但没等到
+  if (
+    /timed?\s*out|etimedout|aborted due to timeout|deadline exceeded/i.test(raw)
+  ) {
+    lines.push(
+      'hint: the provider did not answer in time — the request may still have been charged',
+    )
+    lines.push(
+      'hint: retry · try a smaller request · or raise timeoutMs in the provider config',
+    )
+    return lines.join('\n')
+  }
+
+  // 限流：现在会尊重 Retry-After，但仍要告诉用户还能干嘛
+  if (status === 429 || /rate.?limit|too many requests|quota/i.test(raw)) {
+    lines.push(
+      'hint: rate limited — Bolo waits for the delay the provider asks for, then retries',
+    )
+    lines.push(
+      'hint: if it keeps happening, slow down, raise your plan limits, or switch backend with /provider use <other>',
+    )
+    return lines.join('\n')
+  }
+
+  // 上游 5xx：不是用户的错，明说，免得他去乱改配置
+  if (status !== undefined && status >= 500 && status < 600) {
+    lines.push(
+      `hint: the provider returned a server error (${status}) — this is upstream, not a problem with your setup`,
+    )
+    lines.push('hint: retry shortly · or switch backend with /provider use <other>')
+    return lines.join('\n')
+  }
 
   // 缺 key
   if (

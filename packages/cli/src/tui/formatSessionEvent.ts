@@ -172,6 +172,11 @@ export function createSessionEventPrinter(opts: {
   writeOut: (s: string) => void
   writeErr?: (s: string) => void
   showThinking?: boolean | (() => boolean)
+  /**
+   * 把 provider 原始错误变成「怎么了 + 下一步」。
+   * 由 CLI 绑定当前 provider 上下文后注入；不注入则原样打印。
+   */
+  explainError?: (message: string) => string
 }): SessionEventPrinter {
   const writeOut = opts.writeOut
   const writeErr = opts.writeErr ?? ((s: string) => process.stderr.write(s))
@@ -247,7 +252,10 @@ export function createSessionEventPrinter(opts: {
       }
       if (e.type === 'error' && typeof e.message === 'string') {
         ensureLineBreak()
-        writeErr(`error: ${e.message}\n`)
+        const explained = opts.explainError
+          ? opts.explainError(e.message)
+          : e.message
+        writeErr(`error: ${explained}\n`)
         return
       }
       if (e.type === 'warning' && typeof e.message === 'string') {

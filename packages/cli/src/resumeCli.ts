@@ -23,6 +23,7 @@ import {
 } from '../../core/src/index.ts'
 import type { ChatMessage } from '../../shared/src/index.ts'
 import { createCliProvider, isExplicitMockProvider } from './provider.ts'
+import { createSessionErrorExplainer } from './explainSessionError.ts'
 import { createTtyAskPermission } from './tui/askPermissionTty.ts'
 import { renderWelcomeBanner } from './tui/banner.ts'
 import {
@@ -420,6 +421,8 @@ export function createCliOnEvent(opts: {
    * 可传函数以绑定 session.showThinking（/thinking off）。
    */
   showThinking?: boolean | (() => boolean)
+  /** 把 provider 原始错误变成「怎么了 + 下一步」（晚绑定到活跃 session） */
+  explainError?: (message: string) => string
 }): {
   printer: SessionEventPrinter
   onEvent: (e: SessionEvent) => void
@@ -428,6 +431,7 @@ export function createCliOnEvent(opts: {
     writeOut: opts.writeOut,
     writeErr: opts.writeErr,
     showThinking: opts.showThinking,
+    ...(opts.explainError ? { explainError: opts.explainError } : {}),
   })
   return {
     printer,
@@ -457,6 +461,7 @@ export async function resumeFromIdOrPath(
     onSessionEvent: opts.onSessionEvent,
     onEvent: opts.onEvent,
     showThinking: () => thinkingGate.session?.showThinking !== false,
+    explainError: createSessionErrorExplainer(thinkingGate),
   })
 
   const askPermission = createTtyAskPermission({

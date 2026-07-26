@@ -11,6 +11,7 @@ import {
   type SessionEvent,
 } from '../../core/src/index.ts'
 import { createCliProvider, isExplicitMockProvider } from './provider.ts'
+import { createSessionErrorExplainer } from './explainSessionError.ts'
 import { createTtyAskPermission } from './tui/askPermissionTty.ts'
 import { renderWelcomeBanner } from './tui/banner.ts'
 import { formatSessionStatusLine } from './tui/statusLine.ts'
@@ -61,6 +62,7 @@ export async function runNewSessionCli(
     writeErr,
     onSessionEvent: opts.onSessionEvent,
     showThinking: () => thinkingGate.session?.showThinking !== false,
+    explainError: createSessionErrorExplainer(thinkingGate),
   })
 
   const askPermission = createTtyAskPermission({
