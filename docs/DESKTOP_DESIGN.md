@@ -177,10 +177,37 @@ maximize 后的渲染稳定性、焦点环与键盘走查、长会话滚动性�
 | `npmRebuild` / `nodeGypRebuild` / `buildDependenciesFromSource` 关掉 | ❌ 无效，依赖收集是无条件跑的 |
 | collector 实际执行的命令本身坏了 | ❌ 手动跑均正常：`npm prefix -w` 返回仓库根；`npm list -a --include prod --include optional --omit dev --json --long --silent --loglevel=error` 从 `apps/desktop` 与仓库根都输出干净 JSON（12.5 KB / 22 KB，首字符均为 `{`） |
 
-**剩余假设（未验证）：** electron-builder **spawn 这些命令的方式**（环境变量 / shell /
-编码）与手动执行不同。注意 `extractJsonFromPollutedOutput` 有「找第一个 `{`」的兜底，
-它仍然报错说明拿到的输出**是空的**——即 spawn 出来的进程没产出任何东西。
-下一步应从这里查，而不是再去改配置。
+**根因已查清（不再是假设）：上游与 Node/Windows 的不兼容。**
+
+`which.sync('npm')` 在本机解析到 **`npm.CMD`**，而 electron-builder 直接 spawn 它。
+现代 Node 出于安全加固（CVE-2024-27980）**拒绝不带 shell 直接 spawn `.CMD`/`.bat`**。
+最小复现：
+
+```js
+spawnSync(whichSync('npm'), ['list', '--json'], { encoding: 'utf8' })
+// → status=null · error=EINVAL · stdout 长度=0
+```
+
+空输出正是 `No JSON content found in output` 的来源。**与配置无关**——
+手动执行同样的命令一切正常（22 KB 干净 JSON）。
+
+**为什么绕不过去：**
+
+| 尝试 | 结果 |
+|---|---|
+| 在 `apps/desktop` 声明 `packageManager: npm@…` | ❌ 仍失败：detection 会**从 workspace 根重新检测**，根的声明压过一切 |
+| 声明 `packageManager: traversal@…`（该值在 PM 枚举里合法，走文件遍历、不 spawn） | ❌ 同上，被根重新检测覆盖 |
+| 把**根**声明改成 `traversal` | 🚫 不做：那不是包管理器，写上去就是对人和工具撒谎 |
+| 把**根**声明改成 `npm` | 🚫 无用：正好回到 `npm.CMD` 的 EINVAL |
+| 升到 electron-builder 27 | 🚫 仅有 alpha（27.0.0-alpha.6）。不为打包把构建链压在 alpha 上 |
+
+**建议的解法（需所有者决定，故未擅自实施）：** 让 `which` 解析到可直接 spawn 的
+`npm` 而非 `npm.CMD`（例如 PATH 里提供一个 `npm.exe` 垫片），或等 electron-builder 27 稳定版。
+
+> 顺带查明：根 `package.json` 的 `packageManager: pnpm@9.15.0` **与实际不符**——
+> 无 `pnpm-lock.yaml`、无 `pnpm-workspace.yaml`，根用的是 npm 风格 `workspaces`
+> 字段且有 `package-lock.json`。这是一处独立于打包的陈旧声明，**未擅自修改**
+> （影响全仓，属所有者决定），但它确实是本次排查绕不过去的那道墙。
 
 **已确认打包并未真正成功**：`release/win-unpacked/resources/` 是空的，
 即只下载了 Electron 外壳，应用文件从未被拷入。失败产物已清理。
