@@ -2901,6 +2901,34 @@ export async function compactSession(
   session.messages.length = 0
   session.messages.push(...outcome.apiMessages)
 
+  // 旁路 jsonl：rewrite 并写入 compact_boundary（不改 JSON 快照）。
+  //
+  // **必须排在 PostCompact hook 与再注入之前。** 写盘失败要能干净回退，
+  // 而 hook 一旦跑过就收不回来了。
+  //
+  // 失败即完整回退（与摘要失败同待遇）。此前这里只 emit error 然后
+  // `return { ok: true }`，后果是内存与磁盘分叉：内存是压缩后的短链，
+  // 磁盘还是压缩前的长历史且无 boundary。resume 会加载那份旧历史 ——
+  // 这次压缩等于没发生，上下文压力原样存在，于是立刻再次触发 auto compact，
+  // 转圈，而调用方全程拿到的是 ok:true。
+  try {
+    const meta = getSessionPersistMeta(session)
+    await writeTranscriptAfterCompact(session, {
+      summary: outcome.result.summaryText,
+      filePath: meta?.filePath,
+      sessionsDir: meta?.sessionsDir,
+      createdAt: meta?.createdAt,
+    })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    session.messages.length = 0
+    session.messages.push(...snapshot)
+    const reason = `compact transcript write failed, compaction rolled back: ${message}`
+    emit(session, { type: 'error', message: reason })
+    setPhase(session, 'ready')
+    return { ok: false, reason }
+  }
+
   // full compact 只改对话 messages；systemPromptSections 稳定前缀不动
   // boundary 为 apiMessages[0] system「Conversation compacted」
 
@@ -2942,23 +2970,6 @@ export async function compactSession(
     emit(session, { type: 'hook', event: 'PostCompact', exitCode: r.exitCode })
   }
   recordSessionHookDiag(session, 'PostCompact', post)
-
-  // 旁路 jsonl：rewrite 并写入 compact_boundary（不改 JSON 快照）
-  try {
-    const meta = getSessionPersistMeta(session)
-    await writeTranscriptAfterCompact(session, {
-      summary: outcome.result.summaryText,
-      filePath: meta?.filePath,
-      sessionsDir: meta?.sessionsDir,
-      createdAt: meta?.createdAt,
-    })
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    emit(session, {
-      type: 'error',
-      message: `compact transcript boundary failed: ${message}`,
-    })
-  }
 
   setPhase(session, 'ready')
   return { ok: true }
