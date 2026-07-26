@@ -312,3 +312,12 @@ export {
   type SessionListEntry,
   type BuildSessionListViewOptions,
 } from './sessionListView.ts'
+
+// AR3B：turn timeline 视图模型（消息 + 工具 + diff → 可回看的分组时间线）
+export {
+  buildTurnTimeline,
+  type TimelineItem,
+  type TimelineTurn,
+  type TimelineFileDiff,
+  type BuildTurnTimelineOptions,
+} from './turnTimeline.ts'
