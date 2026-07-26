@@ -276,3 +276,19 @@ export {
   type RuntimeQueryView,
   type RuntimeQueryResult,
 } from './runtimeQuery.ts'
+
+export {
+  ASK_MAX_QUESTIONS,
+  ASK_MIN_OPTIONS,
+  ASK_MAX_OPTIONS,
+  ASK_MAX_HEADER_CHARS,
+  validateAskUserQuestionInput,
+  projectAskUserQuestionAnswers,
+  formatAskUserQuestionResult,
+  type AskQuestion,
+  type AskQuestionOption,
+  type AskUserQuestionAnswer,
+  type AskUserQuestionProjection,
+  type AskUserQuestionSelection,
+  type AskUserQuestionValidation,
+} from './askUserQuestion.ts'

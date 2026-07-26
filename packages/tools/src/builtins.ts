@@ -25,6 +25,7 @@ import {
 import { applyPatchToCwd } from './applyPatch.ts'
 import { createTodoWriteTool } from './todoWrite.ts'
 import { createExitPlanModeTool } from './exitPlanMode.ts'
+import { createAskUserQuestionTool } from './askUserQuestion.ts'
 import {
   createBashOutputTool,
   createKillShellTool,
@@ -999,6 +1000,7 @@ export function createBuiltinTools(): BoloTool[] {
     createWebFetchTool(),
     createTodoWriteTool(),
     createExitPlanModeTool(),
+    createAskUserQuestionTool(),
     createBashOutputTool(),
     createKillShellTool(),
   ]

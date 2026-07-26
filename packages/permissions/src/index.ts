@@ -15,6 +15,12 @@ import { checkSensitivePath } from './sensitivePaths.ts'
  * 权限层必须能独立判定，不能被工具层的加载顺序影响。
  */
 export const EXIT_PLAN_MODE_TOOL_NAME = 'ExitPlanMode'
+/**
+ * 与 `packages/tools/src/askUserQuestion.ts` 各存一份，避免 permissions ← tools
+ * 的包循环（同 EXIT_PLAN_MODE_TOOL_NAME 的既有做法）。
+ * 两份不得漂移——由 `test-ask-user-question-tool.ts` 断言守住。
+ */
+export const ASK_USER_QUESTION_TOOL_NAME = 'AskUserQuestion'
 
 export const PERMISSION_MODES = [
   'default',
@@ -170,9 +176,24 @@ const READ_TOOLS = new Set(['Read', 'Glob', 'Grep', 'Skill'])
 const EDIT_TOOLS = new Set(['Write', 'apply_patch', 'Edit'])
 const SHELL_TOOLS = new Set(['Bash'])
 
+/**
+ * 对本机零副作用的工具：不碰文件、不起进程、不出网。
+ *
+ * 归进 read 类，因为本分类回答的是「这个工具能对你的机器做什么」——
+ * 答案是「什么都做不了」，比 `Read` 还安全。
+ *
+ * 对 AskUserQuestion 这不是优化而是必需：落到 `unknown` 的话，
+ * plan 模式会直接 deny 它，而「规划时先问清需求」正是它最主要的用途；
+ * acceptEdits / auto 两档则会先弹一次权限审批——等于问问题之前
+ * 先问一句「要不要问问题」。
+ */
+const SIDE_EFFECT_FREE_TOOLS = new Set([ASK_USER_QUESTION_TOOL_NAME])
+
 export function classifyTool(toolName: string): ToolCategory {
   if (toolName.startsWith('mcp__')) return 'mcp'
-  if (READ_TOOLS.has(toolName)) return 'read'
+  if (READ_TOOLS.has(toolName) || SIDE_EFFECT_FREE_TOOLS.has(toolName)) {
+    return 'read'
+  }
   if (EDIT_TOOLS.has(toolName)) return 'edit'
   if (SHELL_TOOLS.has(toolName)) return 'shell'
   return 'unknown'
