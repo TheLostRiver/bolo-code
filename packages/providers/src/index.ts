@@ -128,3 +128,17 @@ export {
   MAX_HONORED_RETRY_AFTER_MS,
   type HeaderLike,
 } from './retryAfter.ts'
+
+export {
+  ANTHROPIC_WEB_SEARCH_TOOL,
+  OPENAI_RESPONSES_WEB_SEARCH_TOOL,
+  WEB_SEARCH_DIALECTS,
+  detectWebSearchDialectId,
+  resolveWebSearchPlan,
+  type DetectWebSearchDialectInput,
+  type ResolveWebSearchOptions,
+  type WebSearchDialect,
+  type WebSearchDialectId,
+  type WebSearchIntent,
+  type WebSearchPlan,
+} from './webSearchDialect.ts'

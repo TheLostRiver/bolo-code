@@ -5,6 +5,10 @@
  */
 
 import { parseRetryAfterMs } from './retryAfter.ts'
+import {
+  detectWebSearchDialectId,
+  resolveWebSearchPlan,
+} from './webSearchDialect.ts'
 import type { ChatMessage } from '../../shared/src/index.ts'
 import type { ToolSpec } from '../../tools/src/index.ts'
 import { toolsToAnthropic as toolsToAnthropicImpl } from '../../tools/src/providerSchema.ts'
@@ -295,10 +299,28 @@ export function buildAnthropicRequestBody(
   const systemBlocks = buildAnthropicSystemBlocks(system, caching)
   if (systemBlocks) body.system = systemBlocks
   if (!options?.disableTools && options?.tools?.length) {
-    body.tools = withToolsCacheBreakpoint(
-      toolsToAnthropic(options.tools) as Array<Record<string, unknown>>,
-      caching,
+    // hosted 搜索条目必须在打 cache 断点**之前**混入，
+    // 否则它落在缓存前缀之外，每轮都要重新计费。
+    // 它是 tools 数组里的兄弟对象，但**不**经过客户端工具 mapper：
+    // 服务端工具只有 type + name，没有 input_schema。
+    const clientTools = toolsToAnthropic(options.tools) as Array<
+      Record<string, unknown>
+    >
+    // 缺省 = 不启用。`auto` 的「默认开」必须由**会话层显式传下来**，
+    // 而不是在这里替调用方决定：直接调 buildAnthropicRequestBody 的既有代码
+    // 若因此静默开启搜索，用户会为自己没要求过的请求付费。
+    const plan = resolveWebSearchPlan(
+      detectWebSearchDialectId({
+        kind: 'anthropic',
+        model: config.model,
+      }),
+      options.webSearch ?? 'off',
+      { model: config.model },
     )
+    const merged = plan.enabled
+      ? [...plan.toolObjects.map((t) => ({ ...t })), ...clientTools]
+      : clientTools
+    body.tools = withToolsCacheBreakpoint(merged, caching)
   }
   const thinking = resolveAnthropicThinking(
     options?.anthropicThinking,

@@ -68,6 +68,11 @@ export type ProviderStreamEvent =
 
 export type CompleteStreamOptions = {
   tools?: ToolSpec[]
+  /**
+   * Web search 意图（`auto` = 按该 provider 方言的默认值）。
+   * 只是意图；厂商 wire 片段住在 webSearchDialect 表里。
+   */
+  webSearch?: import('./webSearchDialect.ts').WebSearchIntent
   signal?: AbortSignal
   disableTools?: boolean
   /**
