@@ -14,6 +14,11 @@ export type ClassifiedError = {
   status?: number
   /** 简短原因标签，便于日志 */
   reason: string
+  /**
+   * 服务端要求的等待时长（ms），源自 `retry-after` 头。
+   * 缺省表示服务端没说——退避策略应回退到自己的指数退避，不要猜。
+   */
+  retryAfterMs?: number
 }
 
 export type ClassifyErrorOptions = {
@@ -34,6 +39,16 @@ export function errorMessageOf(input: unknown): string {
     if (typeof o.error === 'string') return o.error
   }
   return String(input)
+}
+
+/** 从错误对象取服务端给的等待时长（provider 解析响应头后附上） */
+export function extractRetryAfterMs(input: unknown): number | undefined {
+  if (!input || typeof input !== 'object') return undefined
+  const raw = (input as { retryAfterMs?: unknown }).retryAfterMs
+  if (typeof raw !== 'number' || !Number.isFinite(raw) || raw < 0) {
+    return undefined
+  }
+  return raw
 }
 
 /** 从 message / 字段解析 HTTP status */
@@ -126,6 +141,7 @@ export function classifyError(
 ): ClassifiedError {
   const message = errorMessageOf(input)
   const status = extractHttpStatus(input, message)
+  const retryAfterMs = extractRetryAfterMs(input)
   const name =
     input instanceof Error
       ? input.name
@@ -158,6 +174,7 @@ export function classifyError(
       message,
       status,
       reason: status === 429 ? 'rate_limit' : `http_${status}`,
+      ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
     }
   }
 

@@ -4,6 +4,7 @@
  * 不依赖官方 SDK；无遥测。
  */
 
+import { parseRetryAfterMs } from './retryAfter.ts'
 import type { ChatMessage } from '../../shared/src/index.ts'
 import type { ToolSpec } from '../../tools/src/index.ts'
 import { toolsToAnthropic as toolsToAnthropicImpl } from '../../tools/src/providerSchema.ts'
@@ -385,9 +386,12 @@ export function createAnthropicProvider(config: AnthropicConfig): LlmProvider {
 
       if (!res.ok) {
         const errText = await res.text().catch(() => '')
+        const retryAfterMs = parseRetryAfterMs(res.headers)
         yield {
           type: 'error',
           message: `Anthropic HTTP ${res.status}: ${errText.slice(0, 500)}`,
+          status: res.status,
+          ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
         }
         yield { type: 'done' }
         return

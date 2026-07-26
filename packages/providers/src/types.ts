@@ -33,7 +33,17 @@ export type ProviderStreamEvent =
   | { type: 'tool_call'; id: string; name: string; arguments: string }
   | { type: 'usage'; usage: ProviderUsage }
   | { type: 'done' }
-  | { type: 'error'; message: string }
+  | {
+      type: 'error'
+      message: string
+      /** HTTP 状态（若可得）；供分类器判断可重试性 */
+      status?: number
+      /**
+       * 服务端要求的等待时长（ms），来自 `retry-after` / `retry-after-ms`。
+       * 缺省表示服务端没说，调用方应退回自己的退避策略——**不要猜**。
+       */
+      retryAfterMs?: number
+    }
 
 export type CompleteStreamOptions = {
   tools?: ToolSpec[]

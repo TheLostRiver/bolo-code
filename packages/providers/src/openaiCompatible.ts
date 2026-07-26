@@ -4,6 +4,7 @@
  * 无遥测。
  */
 
+import { parseRetryAfterMs } from './retryAfter.ts'
 import type { ChatMessage } from '../../shared/src/index.ts'
 import type { ToolSpec } from '../../tools/src/index.ts'
 import { toolsToOpenAI as toolsToOpenAIImpl } from '../../tools/src/providerSchema.ts'
@@ -268,9 +269,12 @@ export function createOpenAICompatibleProvider(
 
       if (!res.ok) {
         const errText = await res.text().catch(() => '')
+        const retryAfterMs = parseRetryAfterMs(res.headers)
         yield {
           type: 'error',
           message: `OpenAI-compatible HTTP ${res.status}: ${errText.slice(0, 500)}`,
+          status: res.status,
+          ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
         }
         yield { type: 'done' }
         return

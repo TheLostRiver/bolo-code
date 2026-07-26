@@ -121,3 +121,10 @@ export {
   parseModelCapRules,
   type ModelCapRule,
 } from './modelCapability.ts'
+
+export {
+  parseRetryAfterMs,
+  formatRetryWait,
+  MAX_HONORED_RETRY_AFTER_MS,
+  type HeaderLike,
+} from './retryAfter.ts'

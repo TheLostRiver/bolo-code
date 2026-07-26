@@ -8,6 +8,10 @@
  */
 
 import type { ProviderStreamEvent } from '../../providers/src/index.ts'
+import {
+  formatRetryWait,
+  MAX_HONORED_RETRY_AFTER_MS,
+} from '../../providers/src/index.ts'
 import type { CallModelFn } from './deps.ts'
 import {
   classifyError,
@@ -118,7 +122,8 @@ export function wrapCallModelWithRetry(
       try {
         for await (const ev of inner(req)) {
           if (ev.type === 'error') {
-            const c = classifyError(ev.message, { signal: req.signal })
+            // 传整个事件而非 message：status 与 retryAfterMs 都在事件上
+            const c = classifyError(ev, { signal: req.signal })
             if (
               c.class === 'retryable' &&
               !hadContent &&
@@ -163,8 +168,26 @@ export function wrapCallModelWithRetry(
         return
       }
 
+      // 服务端说的等待超过上限：干等一小时不是修复，是另一种失败。
+      // 立刻收口，并把「还要等多久」讲清楚，让用户能决定下一步。
+      const required = retryable.retryAfterMs
+      if (required !== undefined && required > MAX_HONORED_RETRY_AFTER_MS) {
+        yield {
+          type: 'error' as const,
+          message:
+            `${retryable.message}\n` +
+            `Rate limited: the provider asks to wait ${formatRetryWait(required)}, ` +
+            `which is beyond the ${formatRetryWait(MAX_HONORED_RETRY_AFTER_MS)} ` +
+            `auto-retry limit. Nothing was sent. Retry after that window, ` +
+            `switch provider with /provider use, or lower request volume.`,
+        }
+        yield { type: 'done' as const }
+        return
+      }
+
       attempt += 1
-      const delayMs = backoffMs(baseDelayMs, attempt)
+      // 服务端给了时间就听它的；没给才用自己的指数退避猜
+      const delayMs = Math.max(backoffMs(baseDelayMs, attempt), required ?? 0)
       onRetry?.({
         attempt,
         maxRetries,
