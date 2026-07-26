@@ -321,3 +321,12 @@ export {
   type TimelineFileDiff,
   type BuildTurnTimelineOptions,
 } from './turnTimeline.ts'
+
+// AR3C：内容卡片视图模型（折叠策略与截断在 packages 决定，renderer 只渲染）
+export {
+  buildTimelineCards,
+  type TimelineCard,
+  type TimelineCardKind,
+  type TimelineCardStatus,
+  type BuildTimelineCardsOptions,
+} from './timelineCards.ts'
