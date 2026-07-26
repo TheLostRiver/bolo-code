@@ -178,7 +178,7 @@ controlId + sessionId + kind + state + timestamp
 - snapshot 只含纯数据 `session/runner/turns/controls/tasks`；core builder 不遍历或序列化 provider、tools、AbortController、Promise、lease/callback/closure。
 - feature negotiation 选择共同 v1；未知 optional feature 被忽略，缺 required feature 或无共同版本明确拒绝。
 - parser 允许 object 增加未知字段，但未知 version/kind/action/state、重复 id、跨 session control/task 均 fail-closed。
-- command 使用 `requestId + action + target + expectedState`；v1 描述 inspect、interrupt、queued/pending/ready cancel，以及 interrupted discard/retry-safe，但从不自动 replay。
+- command 使用 `requestId + action + target + expectedState`；v1 描述 inspect、interrupt、queued/pending/ready cancel/replace，以及 interrupted discard/retry-safe，但从不自动 replay。
 - DR4B1 已让 `/runtime list|json|inspect` 消费该 view-model，并由同一 executor 提供 expected-state interrupt/control/task cancel；target/state 竞态 fail-closed。
 - action 已生效但 durable audit 或后置 snapshot 有问题时，result 保持 accepted 并附 warnings；不会误导调用方重试已生效动作。
 - `resolution` 是 append-only JSONL entry：记录 `resolutionId/sessionId/entityKind/entityId/action`，retry-safe 另含 replacement turn id；compact rewrite 与 resume 保留，原 lifecycle 不删除。
@@ -189,15 +189,18 @@ controlId + sessionId + kind + state + timestamp
 - 外部 JSONL 的引用过滤不放宽 core invariant：手工构造的非法 runtime source 仍由 snapshot builder/parser 明确拒绝。
 - 这仍不是 daemon/RPC；当前没有第二客户端需求，不引入 app-server 或传输框架。
 
-### 1.7 Runtime Query CLI（AR1A）
+### 1.7 Runtime Query / Queue CLI（AR1A–AR1B2）
 
 - `packages/shared/src/runtimeQuery.ts` 把已验证 snapshot 投影为稳定 `runtime.list` / `runtime.inspect` view；turn/control/task 记录深拷贝，不把 consumer 修改反写到 snapshot。
 - `bolo runtime list [turn|control|task] --resume <id|path> [--json]` 与 `bolo runtime inspect <entity> <id> --resume … [--json]` 只恢复既有会话、构建 snapshot、查询并 teardown；不会调用 provider、显示 resume banner 或隐式创建会话。
 - `--continue` 可替代 `--resume`；bare `--resume` picker 不用于机器查询。JSON stdout 始终是一个完整 payload，成功/查询失败 exit 0/1，参数使用错误 exit 2。
 - `/runtime list [entity]` 与 `/runtime inspect entity id` 使用同一 selector；`/runtime json` 继续输出原始 protocol snapshot，保持 DR4 自动化兼容。
 - AR1B1 为每个 query item 纯推导 `availableActions`（action + target + expectedState）；runner 忙、状态不匹配、已有 resolution 或副作用不明时 fail-closed 少显示动作。`/runtime inspect` 保持旧 record 字段顶层，只 additive 增加该数组。
+- AR1B2 为 pending/ready queue additive 显示 `control.replace + requiredInput=["prompt"]`；steer 仍只可 cancel。`control.replace` 先 preflight，再 durable cancel 旧 control、以 requestId 稳定派生新 control/turn 并追加 FIFO 尾部；旧 prompt/lifecycle 不改写。
+- `/runtime edit <controlId> <prompt>` 与 `/runtime remove <controlId>` 只操作当前进程 live coordinator。cancel 已生效但 replacement admission 失败时返回 accepted + warning 且无 replacement；同 requestId 完整成功幂等，不同请求/stale target 冲突。
+- 顶层 `bolo runtime list|inspect --resume …` 仍是只读诊断。进程退出后 pending/ready 只恢复 interrupted，coordinator 不重建 executable queue，因此不支持跨进程原地 edit/remove。
 
-DR0–DR4、AR1A 与 AR1B1 已收口；当前主线为 AR1B2 queue remove/edit。
+DR0–DR4、AR1A 与 AR1B1–B2 已收口；当前主线为 AR1B3 command closeout。
 
 ## 2. 快照格式（version 1，只读兼容）
 

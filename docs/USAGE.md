@@ -187,6 +187,7 @@ npm start
 | `/turn queue <text>` · `/turn cancel <controlId>` | FIFO 排队下一轮；执行前取消 pending/ready control |
 | `/runtime list [turn\|control\|task]` · `/runtime inspect <turn\|control\|task> <id>` · `/runtime json` | protocol v1 共用 query selector；`json` 保留原始 snapshot |
 | `/runtime interrupt <turnId>` · `/runtime cancel <control\|task> <id>` | expected-state 安全动作；target/state 变化时拒绝 |
+| `/runtime edit <controlId> <prompt>` · `/runtime remove <controlId>` | 替换或删除当前进程尚未开始的 queue；edit 保留旧历史并在 FIFO 尾部追加 replacement |
 | `/runtime discard <turn\|control\|task> <id>` | 对 interrupted 记录追加人工确认；不删除原历史 |
 | `/runtime retry-safe <turn\|control\|task> <id>` | 只为 admitted-only turn 或未启动 queue 建立新 FIFO turn；其它类型拒绝 |
 | `/diff` · `/diff last` · `/diff git` | 本会话文件改动 |
@@ -422,7 +423,10 @@ CLI：
 - background result 仅在主 queryLoop 安全边界进入 `<background_task_result>`；父 turn 已结束时等下一 turn。重启后只供 `/bg` 检查，不自动重复注入。
 - 开发者可通过 `buildRuntimeSnapshot(session)` 取得 protocol v1 纯数据 view-model，并用 `executeRuntimeCommand` 走与 `/runtime` 相同的 expected-state 安全动作；不存在后台 daemon 或自动 replay。
 - AR1A 的 `queryRuntimeSnapshot(snapshot, query)` 是 CLI 与 `/runtime list|inspect` 的共享纯 selector；返回记录与输入 snapshot 脱离，consumer 不读取 coordinator/provider 私有对象。
-- AR1B1 在 query item 上追加 `availableActions`。active running turn 才显示 interrupt，pending/ready control 与 queued task 才显示 cancel；interrupted 默认只显示 discard，且仅 idle session 的 admitted-only turn / 未启动 queue 额外显示 retry-safe。resolved/terminal 项不显示动作。
+- AR1B1–B2 在 query item 上追加 `availableActions`。active running turn 才显示 interrupt，pending/ready control 与 queued task 才显示 cancel；pending/ready queue 另显示 `control.replace` 与 `requiredInput=["prompt"]`，steer 不显示 replace。interrupted 默认只显示 discard，且仅 idle session 的 admitted-only turn / 未启动 queue 额外显示 retry-safe。resolved/terminal 项不显示动作。
+- `/runtime edit <controlId> <prompt>` 不会原地改旧 prompt：它先 cancel 旧 control，再用稳定新 control/turn ID 把 replacement 追加到 FIFO 尾部；`/runtime remove` 复用同一 durable cancel。running/promoted/interrupted 或 stale expected state 均拒绝。
+- edit 若已取消旧项但新 admission 失败，会返回 accepted + warning 且不带 replacement；不要换 requestId 重试。完整成功后的同 requestId 可安全取得同一 replacement。
+- edit/remove 只针对当前进程仍 executable 的 live queue。顶层 `bolo runtime list|inspect --resume …` 是只读查询；重启后原 pending/ready queue 已投影为 interrupted，不存在可跨进程原地编辑的 live queue。
 - interrupted turn/control/task 可用 `/runtime inspect` 查看、用 `/runtime discard` 追加确认。discard 不删除 lifecycle，只把 resolution 嵌入后续 snapshot。
 - `/runtime retry-safe` 仅接受崩溃前还在 admitted 的 turn，或 pending/ready queue control；它会创建新的 durable turn/control 并进入 FIFO，不复活旧 ID。running turn、steer 与 background task 都返回 `not_retry_safe`。
 - retry-safe 只表示“重新排队”，不会在命令内调用模型。若返回 accepted + warning，说明新 queue 可能已生效，不要换 requestId 重试；同 requestId 可安全补齐缺失的 resolution 审计。
@@ -462,6 +466,7 @@ npx tsx scripts/test-worktree-safety.ts
 npm run test:runtime-protocol
 npm run test:runtime-closeout
 npm run test:runtime-cli-query
+npm run test:runtime-queue-edit
 npx tsx scripts/test-slash.ts
 npx tsx scripts/test-multi-provider.ts
 npx tsx scripts/test-ultrathink.ts

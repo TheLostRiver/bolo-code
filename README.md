@@ -41,7 +41,7 @@
 
 **已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Runtime DR0–DR4。
 
-**当前主线：** Autonomous Road **AR1B2**：queue remove/edit 的 append-only 安全语义；AR1A query 与 AR1B1 available-actions 已完成。
+**当前主线：** Autonomous Road **AR1B3**：runtime command/result 失败窗口收口；AR1A query 与 AR1B1–B2 safe actions/queue edit 已完成。
 
 **非阻塞开放轨：** Compact §8.9 · U5 真·Ink/IDE · adaptive thinking · Desktop 体验打磨。
 
@@ -112,6 +112,7 @@ npx bolo runtime list task --continue --json
 | `/turn status` · `/turn queue` · `/turn interrupt` | turn/control 状态与安全控制 |
 | `/runtime list [entity]` · `/runtime inspect <entity> <id>` · `/runtime json` | 共用 query view + availableActions；顶层 `bolo runtime … --json` 为单 payload |
 | `/runtime interrupt <turnId>` · `/runtime cancel <control\|task> <id>` | expected-state 安全动作；竞态 fail-closed |
+| `/runtime edit <controlId> <prompt>` · `/runtime remove <controlId>` | 同进程 live queue 的 append-only 替换/删除；旧历史保留 |
 | `/runtime discard <turn\|control\|task> <id>` · `/runtime retry-safe <turn\|control\|task> <id>` | interrupted 人工处置；只重排可证明未开始的输入 |
 | `/diff` · `/compact` · `/context` · `/cost` | Diff · 压缩 · 费用 |
 | `/permissions` · `/hooks` · `/doctor` | 权限 · Hooks · 诊断 |

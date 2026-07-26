@@ -31,7 +31,7 @@
 
 **已闭环主线：** headless 日用 → Diff · Hooks · Compact · Provider · Effort · **Provider UX CX0–CX8** · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4**。
 
-**当前主线：** **Autonomous Road AR1B2**（§13.10–§13.11：queue remove/edit 的 append-only 安全语义）。AR1A–AR1B1 已完成。
+**当前主线：** **Autonomous Road AR1B3**（§13.10–§13.11：runtime command/result 与失败窗口收口）。AR1A–AR1B2 已完成。
 
 **开放轨：**
 
@@ -198,7 +198,7 @@ apps/desktop       消费同一 DiffViewModel                 （U3）
 **一句话：**  
 主路径、Diff、Hooks、Compact、**多 Provider、Effort、Provider UX（含 CX8）、CLI/Agent 可靠性 R0–R4、Durable Runtime DR0–DR4**已收口；当前从协议正确性进入 CLI 可操作性优化。
 
-**下一刀（当前主线）：** **AR1B2 queue remove/edit**：remove 复用 durable cancel；edit 采用旧 control cancel + 新 queue/turn append，不原地修改历史。AR1B1 available-actions 矩阵已完成。
+**下一刀（当前主线）：** **AR1B3 command closeout**：统一 text/JSON result/error envelope，覆盖 persistence/restart/concurrent-target 与 exit 0/1/2；AR1B2 queue remove/edit 已完成。
 
 **非阻塞加深：** Compact §8.9 · U5 · adaptive thinking · Desktop 体验打磨。
 
@@ -1134,10 +1134,20 @@ DR0–DR4 收口后进入 Autonomous Road（AR）。一次只推进一个可独�
 |------|---------------------|--------------|----------|------|
 | **AR1A · query** | `RuntimeSnapshot → runtime.list/runtime.inspect` 纯 view-model；记录深拷贝；CLI 独立 consumer | `bolo runtime list [entity] --resume … [--json]`、`runtime inspect …`；`--continue` 可用；不显示 banner/summary | 参数顺序、missing/load/not-found、JSON 单 payload、真实 bin、无 provider call、`/runtime` 共用 selector | ✅ `4c3db76` |
 | **AR1B1 · action discovery** | 只由 snapshot/target/state 推导 `availableActions`；每个动作携带 expected state，不读取 coordinator 私有结构 | inspect/list 能告诉用户“现在可安全做什么”；非法动作在执行前可解释 | completed/interrupted/pending/ready/running/queued 矩阵；旧 snapshot additive 兼容 | ✅ `673df59` |
-| **AR1B2 · queue remove/edit** | remove 复用 durable cancel；edit 是“cancel 旧 control + append 新 queue/turn”，新 ID、旧历史保留，禁止原地改 prompt | 顶层 CLI 与 `/runtime` 可删除或替换尚未开始的 queue；running/promoted/interrupted 默认拒绝 | FIFO、duplicate request、stale expected state、cancel 成功/new append 失败的 partial-accept warning | **当前** |
-| **AR1B3 · command closeout** | query/command 共享稳定 result/error envelope；accepted + warning 不诱导换 requestId 重试 | text/JSON 都能区分 usage、rejected、accepted-with-warning | persistence failure、restart 后非 executable queue、并发 target 变化、exit 0/1/2 | 📋 |
+| **AR1B2 · queue remove/edit** | remove 复用 durable cancel；edit 是“cancel 旧 control + append 新 queue/turn”，新 ID、旧历史保留，禁止原地改 prompt | protocol executor 与同进程 `/runtime edit\|remove` 可替换/删除尚未开始的 live queue；running/promoted/interrupted 默认拒绝 | FIFO、duplicate request、stale expected state、cancel 成功/new append 失败的 partial-accept warning | ✅ `3643530` |
+| **AR1B3 · command closeout** | query/command 共享稳定 result/error envelope；accepted + warning 不诱导换 requestId 重试 | text/JSON 都能区分 usage、rejected、accepted-with-warning | persistence failure、restart 后非 executable queue、并发 target 变化、exit 0/1/2 | **当前** |
 | **AR1C1 · text/pager** | renderer 输入仅为 AR1 view-model；分页状态不进入 core/session | 大列表可分页/筛选；窄屏、NO_COLOR、非 TTY 不挂起 | 0/1/N 行、窄终端、重定向、Ctrl-C/EOF | 📋 |
 | **AR1C2 · automation closeout** | JSON schema/排序/错误码稳定；原 `/runtime json` 保持 protocol snapshot 兼容 | 脚本无需清洗 ANSI/banner/summary；help/USAGE 完整 | golden snapshot、stdout/stderr 分离、参数排列、旧会话 | 📋 |
+
+#### AR1B2 已落地契约
+
+- protocol v1 additive 增加 `commands.replace` / `control.replace`。target 必须携带 `controlId + expectedState=pending|ready`，replacement 必须提供非空 prompt；success 可返回 `replacedControlId/controlId/turnId`。
+- `availableActions` 只为 pending/ready queue 显示 `control.replace`，并声明 `requiredInput=["prompt"]`；steer 仍只有 cancel，promoted/interrupted/terminal 不显示 edit。
+- executor 先完成 kind/state/runner/ID 冲突 preflight：pending queue 必须仍关联当前 active turn，ready queue 必须仍处于 idle session。
+- edit 先 append-only cancel 旧 control，再以 requestId 稳定派生新 control/turn 并追加到 FIFO 尾部；旧 prompt/history 保留，不伪装维持原队列位置。
+- 完整成功后同 requestId 返回同一 replacement；不同 requestId 或 stale/promoted target 返回 state conflict。cancel 已生效但新 admission 失败时保持 `ok:true + warnings` 且不返回 replacement，避免诱导危险重试。
+- `/runtime edit <controlId> <prompt>` 与 `/runtime remove <controlId>` 只操作当前进程的 executable queue。顶层 `bolo runtime list|inspect --resume …` 仍是只读查询；进程退出后 pending/ready 已恢复为 interrupted，不伪装跨进程 live edit。
+- 默认 `npm test` 已纳入 `test-runtime-queue-edit`，覆盖 ready/pending、FIFO、duplicate/conflict、stale/steer、slash、result round-trip 与 replacement admission EIO。
 
 #### 13.10.2 AR2–AR5 细化
 
@@ -1169,7 +1179,7 @@ DR0–DR4 收口后进入 Autonomous Road（AR）。一次只推进一个可独�
 | 5 | **DR4B** | B1 protocol executor；B2 append-only recovery resolution | list/inspect/interrupt/cancel/discard/retry-safe | target/state races；default no replay | ✅ |
 | 6 | **DR4C** | 真实 consumer 反馈与兼容收紧 | new/resume 共用协议投影 | crash/restart E2E + old transcript | ✅ |
 | 7 | **AR1A** | runtime list/inspect query view-model | resume/continue + text/纯 JSON | real bin + no banner/provider + old session | ✅ `4c3db76` |
-| 8 | **AR1B1–B3** | action discovery + append-only queue replace/remove | 只显示并执行 expected-state 安全动作 | state matrix + persistence/race/restart | **当前（AR1B2；B1 ✅）** |
+| 8 | **AR1B1–B3** | action discovery + append-only queue replace/remove | 只显示并执行 expected-state 安全动作 | state matrix + persistence/race/restart | **当前（AR1B3；B1–B2 ✅）** |
 | 9 | **AR1C1–C2** | renderer/pager + automation schema closeout | 大列表、窄屏、pipe/JSON 均可用 | TTY + non-TTY + golden snapshots | 📋 |
 | 10 | **AR2A–C** | compact range/watermark/token budget | 可量化上下文成本与稳定回退 | lifecycle/tool pairing + token/cost baseline | 📋 |
 | 11 | **AR3A–F** | protocol client/store；无 renderer 状态机 | Codex App 风格 Desktop 完整主路径 | mock/core IPC + crash/restart + Windows package | 📋 |

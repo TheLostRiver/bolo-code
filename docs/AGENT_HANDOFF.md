@@ -123,7 +123,7 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 
 **已闭环：** Diff · Hooks · Compact · Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4**。
 
-**当前主线：** Autonomous Road **AR1B2 queue remove/edit**：以 append-only cancel + replacement 实现，不原地改历史。AR1A–AR1B1 已完成。
+**当前主线：** Autonomous Road **AR1B3 command closeout**：统一 runtime text/JSON envelope 与 persistence/restart/concurrent-target 失败窗口。AR1A–AR1B2 已完成。
 
 **其它开放轨（非阻塞）：**
 
@@ -153,8 +153,8 @@ DR2A 单 session runner ✅
 → DR4C closeout ✅
 → AR1A runtime query ✅
 → AR1B1 safe action discovery ✅
-→ AR1B2 queue remove/edit（当前）
-→ AR1B3 command closeout
+→ AR1B2 queue remove/edit ✅
+→ AR1B3 command closeout（当前）
 → AR1C pager/automation closeout
 → AR2 Compact depth
 → AR3 Codex App 风格 Desktop
@@ -276,7 +276,7 @@ npx tsx scripts/test-file-diff.ts
 npx tsx scripts/test-config.ts
 ```
 
-`npm test` 已覆盖 R0–R4、Durable Runtime DR0–DR4、AR1A 与 AR1B1（`test-runtime-cli-query` / `test-runtime-actions`）；其它新轨仍以对应 `test-*` 脚本为准。
+`npm test` 已覆盖 R0–R4、Durable Runtime DR0–DR4、AR1A 与 AR1B1–B2（`test-runtime-cli-query` / `test-runtime-actions` / `test-runtime-queue-edit`）；其它新轨仍以对应 `test-*` 脚本为准。
 
 ### 7.3 Git
 
@@ -351,6 +351,7 @@ cd apps/desktop && npm install && set BOLO_DESKTOP_MOCK=1 && npm start
 | DR4C | 真实 CLI crash/restart E2E · replacement 单次消费/重启不 replay · 旧 v1/JSONL 兼容 · 坏 resolution 引用 fail-closed |
 | AR1A | shared list/inspect query view-model · 顶层 `runtime` 子命令 · resume/continue · 单 payload JSON · `/runtime` 共用 selector |
 | AR1B1 | snapshot-only available-actions 矩阵 · action target 含 expectedState · CLI/slash text+JSON · DR4C 顶层 inspect 兼容 |
+| AR1B2 | `control.replace` · cancel+replacement append-only edit · requestId 稳定 ID/FIFO 尾插 · `/runtime edit\|remove` · partial accepted warning |
 
 最新 commit 以 `git log` 为准。
 

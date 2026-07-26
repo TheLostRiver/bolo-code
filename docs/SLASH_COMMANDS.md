@@ -31,6 +31,7 @@
 | `/turn queue <text>` · `/turn cancel <controlId>` | active 时 pending、idle 时 ready；REPL FIFO drain；pending/ready 可取消；durable 写成功后才交给执行器 |
 | `/runtime list [turn\|control\|task]` · `/runtime inspect <turn\|control\|task> <id>` · `/runtime json` | list/inspect 共用 AR1A query selector；`json` 保留 protocol v1 原 snapshot |
 | `/runtime interrupt <turnId>` · `/runtime cancel <control\|task> <id>` | 先核对 snapshot expected state，再调用 durable executor；stale target fail-closed |
+| `/runtime edit <controlId> <prompt>` · `/runtime remove <controlId>` | 同进程 pending/ready queue 的 append-only 替换/删除；edit 新项追加 FIFO 尾部 |
 | `/runtime discard <turn\|control\|task> <id>` | 为 interrupted entity 追加 resolution；保留原 lifecycle |
 | `/runtime retry-safe <turn\|control\|task> <id>` | 仅 admitted-only turn / pending-ready queue 可重排为新 turn；其它工作拒绝 |
 | `/agents` · `/agents status` | 列 subagent 类型/来源；`status` 显示后台 queued/running/done/error/aborted/interrupted 计数 |
@@ -90,6 +91,8 @@ REPL 额外：`/exit` `/quit` 由 CLI 处理（退出循环，不进总线）。
 - DR4B2 在同一 protocol executor 上增加 append-only discard/retry-safe；running turn、steer、background task 和副作用不明工作不允许 retry。
 - AR1A 顶层 `bolo runtime list|inspect --resume … [--json]` 与斜杠共用 shared selector；顶层查询不调用 provider、不显示 banner，JSON stdout 只有一个 payload。
 - AR1B1 的 list/inspect 结果含 snapshot-only `availableActions`；每个 action 带 expected-state target。斜杠 inspect 保留旧 record 顶层 JSON，只 additive 增加 actions。
+- AR1B2 的 pending/ready queue actions 另含 `control.replace` 与 `requiredInput=["prompt"]`；steer 不可 replace。edit 使用稳定 replacement IDs、保留旧 control/prompt，并在 cancel 已生效而新 admission 失败时返回 accepted + warning。
+- `/runtime edit|remove` 只操作当前进程 live queue；顶层 resume runtime 命令仍为只读 query，重启后 interrupted control 不会重建为可编辑 queue。
 - 模块：`packages/core/src/slash.ts`；导出见 `@bolo/core`。
 
 ## 插件 slash（PL2 最小）
