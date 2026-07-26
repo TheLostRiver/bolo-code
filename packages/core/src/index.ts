@@ -552,6 +552,14 @@ export {
   type SessionControlTakeResult,
   type SessionRunnerReleaseResult,
 } from './sessionControlRuntime.ts'
+// AR3B：视图装配（transcript → 会话列表 / turn timeline）
+export {
+  loadSessionTimeline,
+  loadSessionListEntries,
+  type LoadTimelineResult,
+  type LoadSessionListOptions,
+} from './sessionViews.ts'
+
 export {
   appendTranscriptLine,
   ensureTranscriptFile,

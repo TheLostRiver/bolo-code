@@ -6,6 +6,10 @@ contextBridge.exposeInMainWorld('bolo', {
   setSettings: (patch) => ipcRenderer.invoke('bolo:setSettings', patch),
   submit: (text) => ipcRenderer.invoke('bolo:submit', text),
   listMessages: () => ipcRenderer.invoke('bolo:listMessages'),
+  /** AR3B：结构化 turn timeline（工具调用与 diff 不丢） */
+  getTimeline: () => ipcRenderer.invoke('bolo:getTimeline'),
+  /** AR3B：会话列表（含运行时状态徽标） */
+  listSessions: () => ipcRenderer.invoke('bolo:listSessions'),
   /** CX7：多 provider */
   listProviders: () => ipcRenderer.invoke('bolo:listProviders'),
   useProvider: (idOrPayload) =>

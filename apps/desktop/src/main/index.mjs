@@ -24,6 +24,10 @@ const {
   switchSessionProvider,
   listSessionProviders,
   attachProviderRegistry,
+  loadSessionTimeline,
+  loadSessionListEntries,
+  getSessionPersistMeta,
+  buildRuntimeSnapshot,
 } = await import(
   pathToFileURL(path.join(repoRoot, 'packages/core/src/index.ts')).href
 )
@@ -383,6 +387,43 @@ function registerIpc() {
       role: m.role,
       content: String(m.content ?? '').slice(0, 4000),
     }))
+  })
+
+  // AR3B：可回看的 turn timeline。
+  //
+  // 与 bolo:listMessages 的区别不是「更详细」而是**语义不同**：
+  // listMessages 把历史拍平成截断字符串，工具调用与 diff 一律丢失；
+  // 这里返回按 turn 分组、带工具与 diff 的结构化时间线。
+  //
+  // 装配与投影都在 packages（core/sessionViews + shared/turnTimeline），
+  // 主进程只做转发 —— renderer 更不该重算。
+  ipcMain.handle('bolo:getTimeline', async () => {
+    const s = await ensureSession()
+    const meta = getSessionPersistMeta(s)
+    if (!meta?.filePath) {
+      // 还没落盘的新会话：不是错误，也不是「读不出来」
+      return { ok: true, turns: [], usedCompactBoundary: false }
+    }
+    // 三种情况在这里就分开了，renderer 不必自己猜：
+    // not_found（还没写）/ unreadable（有文件但读不出）/ ok 且零 turn（真空）
+    return await loadSessionTimeline(meta.filePath)
+  })
+
+  // AR3B：会话列表。运行时状态来自当前会话的快照，
+  // 其余会话没有快照 —— 视图模型会把它们标成 unknown 而不是 idle。
+  ipcMain.handle('bolo:listSessions', async () => {
+    const s = await ensureSession()
+    let snapshots = []
+    try {
+      snapshots = [buildRuntimeSnapshot(s)]
+    } catch {
+      // 拿不到快照就当没有：标成 unknown 比编一个状态好
+    }
+    return await loadSessionListEntries({
+      cwd: s.cwd,
+      snapshots,
+      activeSessionId: s.id,
+    })
   })
 
   ipcMain.handle('bolo:permission_response', async (_evt, payload) => {
