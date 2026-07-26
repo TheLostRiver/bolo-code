@@ -130,6 +130,52 @@ async function main() {
   const ctxAfter = await dispatchSlashCommand(session, 'context', '')
   assert(ctxAfter.message.includes('last compact:'), 'context last compact line')
 
+  // ── AR2A0a：/context hybrid 来源显示 ──
+  const { fingerprintMessagePrefix } = await import(
+    '../packages/compact/src/index.ts'
+  )
+  session.usage = {
+    inputTokens: 4_000,
+    outputTokens: 100,
+    totalTokens: 4_100,
+    calls: 1,
+    lastCall: {
+      inputTokens: 4_000,
+      outputTokens: 100,
+      totalTokens: 4_100,
+      at: new Date().toISOString(),
+      messageCountAtCall: session.messages.length,
+      messagePrefixFingerprint: fingerprintMessagePrefix(
+        session.messages,
+        session.messages.length,
+      ),
+    },
+  }
+  // 锚 == 全长 → usage；追加一条尾部消息 → hybrid
+  session.messages.push({ role: 'user', content: 'tail after usage anchor' })
+  const ctxHybrid = await dispatchSlashCommand(session, 'context', '')
+  assert(
+    ctxHybrid.message.includes('pressure source: hybrid'),
+    'context shows hybrid source with anchored tail',
+  )
+  assert(
+    ctxHybrid.message.includes('anchor input ~4000'),
+    'context shows anchor input tokens',
+  )
+  // 头部形状被改写（模拟 snip/compact 重排）→ 锚失效 → 不再显示 hybrid
+  const savedFirst = session.messages[0]!
+  session.messages[0] = {
+    role: 'assistant',
+    content: 'head rewritten',
+    tool_calls: [{ id: 'zz', name: 'Bash', arguments: '{}' }],
+  }
+  const ctxStale = await dispatchSlashCommand(session, 'context', '')
+  assert(
+    !ctxStale.message.includes('pressure source: hybrid'),
+    'stale anchor no longer reports hybrid',
+  )
+  session.messages[0] = savedFirst
+
   // /autocompact 可见性
   const ac = await dispatchSlashCommand(session, 'autocompact', 'off')
   assert(ac.ok, 'autocompact off ok')

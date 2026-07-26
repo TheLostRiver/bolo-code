@@ -15,6 +15,7 @@ import {
   isPromptTooLongError,
   truncateHeadForPtlRetry,
   DEFAULT_MAX_PTL_RETRIES,
+  fingerprintMessagePrefix,
 } from '../../compact/src/index.ts'
 import { classifyError } from './errorClassify.ts'
 import type { ModelRetryInfo } from './modelRetry.ts'
@@ -633,6 +634,13 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
             ...fromProvider,
             ...(modelTag ? { model: modelTag } : {}),
             apiDurationMs,
+            // AR2A0a usage 锚：记录 call 时会话消息数与前缀形状指纹。
+            // 只在 provider 真实 usage 上记；估算 usage 锚定无意义。
+            messageCountAtCall: params.messages.length,
+            messagePrefixFingerprint: fingerprintMessagePrefix(
+              params.messages,
+              params.messages.length,
+            ),
           })
         } else {
           accumulateSessionUsage(params.usage, {

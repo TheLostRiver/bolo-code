@@ -12,6 +12,7 @@ import {
   type CompactSummarizer,
   type MicrocompactOptions,
   type SnipOptions,
+  type UsageAnchor,
 } from '../../compact/src/index.ts'
 import { runHooks } from '../../hooks/src/index.ts'
 import {
@@ -1264,15 +1265,19 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
     }
     if (isAutoCompactEnvDisabled()) return false
     const estimate = estimateTokens(session.messages)
-    const usage =
-      session.usage?.lastCall?.inputTokens ??
-      (session.usage && session.usage.inputTokens > 0
-        ? session.usage.inputTokens
-        : undefined)
+    // AR2A0a：优先混合锚；无锚回退 C2 usage / estimate
+    const anchor = getSessionUsageAnchor(session)
+    const usage = anchor
+      ? undefined
+      : (session.usage?.lastCall?.inputTokens ??
+        (session.usage && session.usage.inputTokens > 0
+          ? session.usage.inputTokens
+          : undefined))
     if (
       !shouldAutoCompact({
         tokenCount: estimate,
         usageInputTokens: usage,
+        ...(anchor ? { anchor, messages: session.messages, pad: true } : {}),
         contextWindowTokens: session.contextWindowTokens,
         enabled: true,
         consecutiveFailures: 0,
@@ -2583,6 +2588,34 @@ export async function persistSession(
 }
 
 /**
+ * AR2A0a：从 session.usage.lastCall 构造 usage 锚。
+ * 仅当最近一次 call 是 provider 真实 usage（非估算）且记录了消息数快照时返回；
+ * 否则 undefined → 调用方回退 usageInputTokens / estimate 路径。
+ */
+export function getSessionUsageAnchor(
+  session: Pick<BoloSession, 'usage'>,
+): UsageAnchor | undefined {
+  const last = session.usage?.lastCall
+  if (!last || last.estimated) return undefined
+  if (!(last.inputTokens > 0)) return undefined
+  if (
+    last.messageCountAtCall == null ||
+    !Number.isFinite(last.messageCountAtCall) ||
+    last.messageCountAtCall <= 0
+  ) {
+    return undefined
+  }
+  const anchor: UsageAnchor = {
+    anchorInputTokens: last.inputTokens,
+    anchoredMessageCount: last.messageCountAtCall,
+  }
+  if (last.messagePrefixFingerprint) {
+    anchor.fingerprint = last.messagePrefixFingerprint
+  }
+  return anchor
+}
+
+/**
  * 按 session.autoCompactEnabled + summarizer 重挂 prepare 链。
  * 供 createSession / 运行时 `/autocompact` 共用。
  * 顺序：snip → micro → auto full。
@@ -2618,6 +2651,8 @@ export function wireSessionPrepareMessages(
         createAutoCompactPrepare({
           enabled: true,
           contextWindowTokens: session.contextWindowTokens,
+          // AR2A0a：有锚走混合计数；无锚（旧会话/估算 usage）回退 C2 usage 路径
+          getUsageAnchor: () => getSessionUsageAnchor(session),
           getUsageInputTokens: () => {
             const u = session.usage
             if (!u) return undefined

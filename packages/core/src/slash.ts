@@ -786,7 +786,22 @@ function cmdContext(session: SlashSession, _args: string): SlashDispatchResult {
     session.contextWindowTokens > 0
       ? session.contextWindowTokens
       : 128_000
-  // C5：pressure 计数优先 usage
+  // C5：pressure 计数优先 usage；AR2A0a：有锚（真实 usage + 消息数快照）走混合
+  const lastCall = session.usage?.lastCall
+  const anchor =
+    lastCall &&
+    !lastCall.estimated &&
+    lastCall.inputTokens > 0 &&
+    lastCall.messageCountAtCall != null &&
+    lastCall.messageCountAtCall > 0
+      ? {
+          anchorInputTokens: lastCall.inputTokens,
+          anchoredMessageCount: lastCall.messageCountAtCall,
+          ...(lastCall.messagePrefixFingerprint
+            ? { fingerprint: lastCall.messagePrefixFingerprint }
+            : {}),
+        }
+      : undefined
   const usageIn =
     session.usage?.lastCall?.inputTokens ??
     (session.usage && session.usage.inputTokens > 0
@@ -795,6 +810,7 @@ function cmdContext(session: SlashSession, _args: string): SlashDispatchResult {
   const resolved = resolveAutoCompactTokenCount({
     estimateTokens: est.totalTokens,
     usageInputTokens: usageIn,
+    ...(anchor ? { anchor, messages: session.messages, pad: true } : {}),
   })
   const pressure = getContextPressure({
     tokenCount: resolved.tokenCount,
@@ -824,7 +840,13 @@ function cmdContext(session: SlashSession, _args: string): SlashDispatchResult {
     `chars (approx):  ${chars}`,
     `tokens (est):    ~${est.totalTokens}  (messages ~${est.messagesTokens} + system ~${est.systemTokens})`,
     `  heuristic:     text≈chars/4; dense JSON≈chars/2; tool_calls counted (local only, not billing)`,
-    `pressure source: ${resolved.source}${usageIn != null ? `  (usage input ~${usageIn})` : ''}`,
+    `pressure source: ${resolved.source}${
+      resolved.source === 'hybrid' && anchor
+        ? `  (anchor input ~${anchor.anchorInputTokens} + tail est ~${Math.max(0, resolved.tokenCount - anchor.anchorInputTokens)}, ×4/3 pad)`
+        : usageIn != null
+          ? `  (usage input ~${usageIn})`
+          : ''
+    }`,
     `window:          ${window}  (effective ~${pressure.effectiveWindow}; auto threshold ~${pressure.autoThreshold})`,
     `pressure:        ${pressure.level}  (~${pressure.percentOfWindow}% of window; ~${pressure.percentOfThreshold}% of auto threshold)`,
     `autoCompact:     ${autoOn ? 'on' : 'off'}${autoOn && pressure.aboveAutoThreshold && !envDisabled ? '  (would trigger on next prepare/mid-turn)' : ''}${envDisabled ? '  (env-disabled)' : ''}`,

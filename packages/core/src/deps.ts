@@ -16,6 +16,7 @@ import {
   type ChatMessage as CompactChatMessage,
   type MicrocompactOptions,
   type SnipOptions,
+  type UsageAnchor,
 } from '../../compact/src/index.ts'
 import type { LlmProvider, ProviderStreamEvent } from '../../providers/src/index.ts'
 import type { ChatMessage } from '../../shared/src/index.ts'
@@ -161,17 +162,30 @@ export function createAutoCompactPrepare(opts: {
   runAutoCompact: (messages: ChatMessage[]) => Promise<ChatMessage[] | null>
   /** C2：返回最近 API input tokens；无则 undefined → 用 estimate */
   getUsageInputTokens?: () => number | undefined
+  /**
+   * AR2A0a（优先于 getUsageInputTokens）：返回 usage 锚；
+   * 锚 + 当前 messages 走混合计数（anchor input + 尾部估算 ×4/3）。
+   */
+  getUsageAnchor?: () => UsageAnchor | undefined
 }): PrepareMessagesFn {
   let failures = 0
   return async ({ messages, querySource }) => {
     if (!opts.enabled) return { messages }
     // snip 后 messages 已变短；Bolo 用内容启发式，无需再扣 snipTokensFreed
     const tokenCount = estimateTokens(messages as CompactChatMessage[])
-    const usageInputTokens = opts.getUsageInputTokens?.()
+    const anchor = opts.getUsageAnchor?.()
+    const usageInputTokens = anchor ? undefined : opts.getUsageInputTokens?.()
     if (
       !shouldAutoCompact({
         tokenCount,
         usageInputTokens,
+        ...(anchor
+          ? {
+              anchor,
+              messages: messages as CompactChatMessage[],
+              pad: true,
+            }
+          : {}),
         contextWindowTokens: opts.contextWindowTokens,
         enabled: true,
         consecutiveFailures: failures,

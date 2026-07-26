@@ -29,6 +29,10 @@ export type LastCallUsage = {
   at: string
   /** 本 call API 墙钟 ms */
   apiDurationMs?: number
+  /** AR2A0a：本 call 发起时 session.messages 长度（usage 锚） */
+  messageCountAtCall?: number
+  /** AR2A0a：call 时消息前缀形状指纹（compact fingerprintMessagePrefix） */
+  messagePrefixFingerprint?: string
 }
 
 export type SessionUsage = {
@@ -62,6 +66,10 @@ export type UsageDelta = {
   model?: string
   /** 本 call API 墙钟 ms */
   apiDurationMs?: number
+  /** AR2A0a：本 call 发起时 session.messages 长度（usage 锚） */
+  messageCountAtCall?: number
+  /** AR2A0a：call 时消息前缀形状指纹 */
+  messagePrefixFingerprint?: string
 }
 
 export function createEmptySessionUsage(): SessionUsage {
@@ -233,6 +241,16 @@ export function accumulateSessionUsage(
   if (delta.estimated) last.estimated = true
   if (key) last.model = key
   if (apiMs > 0) last.apiDurationMs = apiMs
+  if (
+    delta.messageCountAtCall != null &&
+    Number.isFinite(delta.messageCountAtCall) &&
+    delta.messageCountAtCall > 0
+  ) {
+    last.messageCountAtCall = Math.floor(delta.messageCountAtCall)
+    if (delta.messagePrefixFingerprint) {
+      last.messagePrefixFingerprint = delta.messagePrefixFingerprint
+    }
+  }
   usage.lastCall = last
 }
 
