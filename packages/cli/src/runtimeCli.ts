@@ -12,8 +12,7 @@ import {
   endSession,
   executeRuntimeCommand,
   queryRuntimeSnapshot,
-  type RuntimeListItem,
-  type RuntimeListView,
+  renderRuntimeText,
   type RuntimeQuery,
   type RuntimeQueryEntity,
   type RuntimeQueryView,
@@ -45,42 +44,12 @@ type RuntimeCliError = {
   detail: string
 }
 
-function formatRunner(view: RuntimeListView): string {
-  return view.runner.state === 'running'
-    ? `runner: running · turn=${view.runner.active.turnId}`
-    : 'runner: idle'
-}
-
-function formatListItem(item: RuntimeListItem): string {
-  const actions = item.availableActions.length
-    ? item.availableActions.map((action) => action.action).join(',')
-    : 'none'
-  if (item.entity === 'turn') {
-    return `  turn ${item.entityId} · ${item.record.state} · actions=${actions}`
-  }
-  if (item.entity === 'control') {
-    return `  control ${item.entityId} · ${item.record.kind}/${item.record.state} · actions=${actions}`
-  }
-  return `  task ${item.entityId} · ${item.record.agentType}/${item.record.state} · actions=${actions}`
-}
-
 export function formatRuntimeQueryView(view: RuntimeQueryView): string {
-  if (view.kind === 'runtime.inspect') {
-    return [
-      `Runtime protocol v${view.protocolVersion}`,
-      `session: ${view.sessionId}`,
-      `${view.entity}: ${view.item.entityId}`,
-      JSON.stringify(view.item, null, 2),
-    ].join('\n')
-  }
-
-  return [
-    `Runtime protocol v${view.protocolVersion}`,
-    `session: ${view.sessionId} · phase=${view.phase}`,
-    formatRunner(view),
-    `${view.entity} entities (${view.items.length}):`,
-    ...view.items.map(formatListItem),
-  ].join('\n')
+  return renderRuntimeText(view, {
+    columns: Number.MAX_SAFE_INTEGER,
+    pageSize: Number.MAX_SAFE_INTEGER,
+    color: false,
+  }).text
 }
 
 function writeFailure(

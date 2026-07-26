@@ -2984,3 +2984,9 @@ export {
   executeRuntimeCommand,
   type RuntimeCommandSession,
 } from './runtimeCommand.ts'
+
+export {
+  renderRuntimeText,
+  type RuntimeTextRenderOptions,
+  type RuntimeTextPage,
+} from './runtimeTextView.ts'

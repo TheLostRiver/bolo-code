@@ -37,8 +37,6 @@ import {
   type HookEvent,
   type RuntimeCommand,
   type RuntimeCommandResult,
-  type RuntimeListItem,
-  type RuntimeListView,
 } from '../../shared/src/index.ts'
 import {
   estimateSystemSectionsTokens,
@@ -64,6 +62,7 @@ import {
 import { formatPromptCacheSessionLine } from '../../compact/src/index.ts'
 import { formatDurationMs } from './modelCost.ts'
 import { formatDiffSlash } from './fileDiffLog.ts'
+import { renderRuntimeText } from './runtimeTextView.ts'
 import {
   switchSessionProvider,
   switchSessionModel,
@@ -1132,32 +1131,6 @@ function runtimeResultMessage(result: RuntimeCommandResult): string {
   return lines.join('\n')
 }
 
-function formatRuntimeQueryItem(item: RuntimeListItem): string {
-  const actions = item.availableActions.length
-    ? item.availableActions.map((action) => action.action).join(',')
-    : 'none'
-  if (item.entity === 'turn') {
-    return `  ${item.entityId} · ${item.record.state} · actions=${actions}`
-  }
-  if (item.entity === 'control') {
-    return `  ${item.entityId} · ${item.record.kind}/${item.record.state} · actions=${actions}`
-  }
-  return `  ${item.entityId} · ${item.record.agentType}/${item.record.state} · actions=${actions}`
-}
-
-function formatRuntimeList(view: RuntimeListView): string {
-  const lines = [
-    `Runtime protocol v${view.protocolVersion}`,
-    `session: ${view.sessionId} · phase=${view.phase}`,
-    view.runner.state === 'running'
-      ? `runner: running · turn=${view.runner.active.turnId}`
-      : 'runner: idle',
-    `${view.entity} entities (${view.items.length}):`,
-    ...view.items.map(formatRuntimeQueryItem),
-  ]
-  return lines.join('\n')
-}
-
 async function cmdRuntime(
   session: SlashSession,
   args: string,
@@ -1204,7 +1177,14 @@ async function cmdRuntime(
           : queried.detail,
       }
     }
-    return { ok: true, message: formatRuntimeList(queried.view) }
+    return {
+      ok: true,
+      message: renderRuntimeText(queried.view, {
+        columns: Number.MAX_SAFE_INTEGER,
+        pageSize: Number.MAX_SAFE_INTEGER,
+        color: false,
+      }).text,
+    }
   }
   if (action === 'json') {
     if (parts.length > 1) {
