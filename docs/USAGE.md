@@ -154,7 +154,7 @@ npx bolo runtime inspect turn <turnId> --resume <id> --json
 
 REPL 中，模型或工具正在运行时按 `Ctrl-C` 会针对 coordinator 当前 active turn 请求 interrupt 并返回提示符；空闲提示符下按 `Ctrl-C` 才退出。若取消发生在权限问答或 diff 审批面板，core 默认按拒绝处理。
 
-`bolo runtime list|inspect` 必须显式给 `--resume <id|path>` 或 `--continue`，不会进入 picker、创建新会话或调用 provider。`--json` 成功时 stdout 只有一个 view payload；load/not-found 等查询失败也只有一个 `{ "ok": false, "code": "...", "detail": "..." }` payload。成功 exit 0，查询/加载失败 exit 1，参数使用错误 exit 2。
+`bolo runtime list|inspect` 必须显式给 `--resume <id|path>` 或 `--continue`，不会进入 picker、创建新会话或调用 provider。每个 item 的 `availableActions` 由当前 snapshot 纯推导，并携带执行所需 expected state；空数组表示当前不应尝试动作。`--json` 成功时 stdout 只有一个 view payload；load/not-found 等查询失败也只有一个 `{ "ok": false, "code": "...", "detail": "..." }` payload。成功 exit 0，查询/加载失败 exit 1，参数使用错误 exit 2。
 
 ### 3.2 Desktop（Electron）
 
@@ -422,6 +422,7 @@ CLI：
 - background result 仅在主 queryLoop 安全边界进入 `<background_task_result>`；父 turn 已结束时等下一 turn。重启后只供 `/bg` 检查，不自动重复注入。
 - 开发者可通过 `buildRuntimeSnapshot(session)` 取得 protocol v1 纯数据 view-model，并用 `executeRuntimeCommand` 走与 `/runtime` 相同的 expected-state 安全动作；不存在后台 daemon 或自动 replay。
 - AR1A 的 `queryRuntimeSnapshot(snapshot, query)` 是 CLI 与 `/runtime list|inspect` 的共享纯 selector；返回记录与输入 snapshot 脱离，consumer 不读取 coordinator/provider 私有对象。
+- AR1B1 在 query item 上追加 `availableActions`。active running turn 才显示 interrupt，pending/ready control 与 queued task 才显示 cancel；interrupted 默认只显示 discard，且仅 idle session 的 admitted-only turn / 未启动 queue 额外显示 retry-safe。resolved/terminal 项不显示动作。
 - interrupted turn/control/task 可用 `/runtime inspect` 查看、用 `/runtime discard` 追加确认。discard 不删除 lifecycle，只把 resolution 嵌入后续 snapshot。
 - `/runtime retry-safe` 仅接受崩溃前还在 admitted 的 turn，或 pending/ready queue control；它会创建新的 durable turn/control 并进入 FIFO，不复活旧 ID。running turn、steer 与 background task 都返回 `not_retry_safe`。
 - retry-safe 只表示“重新排队”，不会在命令内调用模型。若返回 accepted + warning，说明新 queue 可能已生效，不要换 requestId 重试；同 requestId 可安全补齐缺失的 resolution 审计。

@@ -89,6 +89,7 @@ REPL 额外：`/exit` `/quit` 由 CLI 处理（退出循环，不进总线）。
 - `/runtime` 是 DR4 protocol consumer，不维护第二套状态机；action 已生效但持久化/后置 snapshot 出现问题时显示 accepted + warning，避免错误重试。
 - DR4B2 在同一 protocol executor 上增加 append-only discard/retry-safe；running turn、steer、background task 和副作用不明工作不允许 retry。
 - AR1A 顶层 `bolo runtime list|inspect --resume … [--json]` 与斜杠共用 shared selector；顶层查询不调用 provider、不显示 banner，JSON stdout 只有一个 payload。
+- AR1B1 的 list/inspect 结果含 snapshot-only `availableActions`；每个 action 带 expected-state target。斜杠 inspect 保留旧 record 顶层 JSON，只 additive 增加 actions。
 - 模块：`packages/core/src/slash.ts`；导出见 `@bolo/core`。
 
 ## 插件 slash（PL2 最小）

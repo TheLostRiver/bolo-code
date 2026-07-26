@@ -195,8 +195,9 @@ controlId + sessionId + kind + state + timestamp
 - `bolo runtime list [turn|control|task] --resume <id|path> [--json]` 与 `bolo runtime inspect <entity> <id> --resume … [--json]` 只恢复既有会话、构建 snapshot、查询并 teardown；不会调用 provider、显示 resume banner 或隐式创建会话。
 - `--continue` 可替代 `--resume`；bare `--resume` picker 不用于机器查询。JSON stdout 始终是一个完整 payload，成功/查询失败 exit 0/1，参数使用错误 exit 2。
 - `/runtime list [entity]` 与 `/runtime inspect entity id` 使用同一 selector；`/runtime json` 继续输出原始 protocol snapshot，保持 DR4 自动化兼容。
+- AR1B1 为每个 query item 纯推导 `availableActions`（action + target + expectedState）；runner 忙、状态不匹配、已有 resolution 或副作用不明时 fail-closed 少显示动作。`/runtime inspect` 保持旧 record 字段顶层，只 additive 增加该数组。
 
-DR0–DR4 与 AR1A 已收口；当前主线为 AR1B1 runtime safe actions。
+DR0–DR4、AR1A 与 AR1B1 已收口；当前主线为 AR1B2 queue remove/edit。
 
 ## 2. 快照格式（version 1，只读兼容）
 
