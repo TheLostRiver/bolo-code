@@ -52,14 +52,47 @@
 
 ## 快速开始
 
-**要求：** Node ≥ 20 · 建议 pnpm 9+
+**要求：** Node ≥ 20。**无运行时依赖**——装完就是一个自包含的单文件。
 
 ```bash
-pnpm install          # 或 npm install
-pnpm bolo:init        # 或 npx tsx scripts/bolo-init.ts
+npm install -g bolo-code
+bolo --help
 ```
 
-配置 API（JSONC，可用 `//` 注释）→ 编辑 `~/.bolo/config.json` 或项目 `.bolo/config.json`。
+或者不装，直接跑：
+
+```bash
+npx bolo-code
+```
+
+然后配 API key（二选一即可）：
+
+```bash
+export ANTHROPIC_API_KEY=...      # 或 OPENAI_API_KEY / BOLO_API_KEY
+bolo "帮我看看这个仓库是干什么的"
+```
+
+想先空跑一遍、不消耗额度：
+
+```bash
+BOLO_PROVIDER=mock bolo -p "hello"
+```
+
+更细的配置（多后端、权限、Effort、Subagent）→ 编辑 `~/.bolo/config.json` 或项目 `.bolo/config.json`（JSONC，可用 `//` 注释）。
+
+### 从源码开发
+
+```bash
+git clone https://github.com/TheLostRiver/bolo-code.git
+cd bolo-code
+npm install           # 或 pnpm install
+npm run dev           # 直接跑 TS 源（tsx）
+npm run build         # 打出 dist/bolo.mjs
+npm test              # 完整门禁
+```
+
+`npm run build` 用 esbuild 把 `packages/*` 打成单文件 `dist/bolo.mjs`。
+esbuild 只是**构建期**工具（devDependency）——发布产物的 `dependencies` 恒为 `{}`。
 
 **多后端（推荐）：**
 
@@ -93,16 +126,18 @@ Key 走环境变量（`OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / profile `apiKeyEn
 
 ### 启动 CLI
 
+装过之后命令就是 `bolo`；仓库内开发用 `npm run dev --`。
+
 ```bash
-npx bolo
-npx bolo -p "hello"
-npx bolo --list
-npx bolo --resume <id>
-npx bolo runtime list --resume <id>
-npx bolo runtime list task --continue --json
-npx bolo runtime inspect turn <turnId> --resume <id>
-npx bolo runtime discard turn <turnId> --resume <id> --json
-npx bolo runtime retry-safe control <controlId> --continue --json
+bolo
+bolo -p "hello"
+bolo --list
+bolo --resume <id>
+bolo runtime list --resume <id>
+bolo runtime list task --continue --json
+bolo runtime inspect turn <turnId> --resume <id>
+bolo runtime discard turn <turnId> --resume <id> --json
+bolo runtime retry-safe control <controlId> --continue --json
 ```
 
 `runtime list|inspect` 的文本输出在 **stdin/stdout 都是 TTY** 且内容超过一页时自动分页：`n/j/↓/→` 下一页，`p/k/↑/←` 上一页，`q/Esc` 退出，`Ctrl-C` 返回 130。0/1 页不读键盘；pipe 与 `--json` 永不进入 pager、不会输出 ANSI/banner，也不会因为大列表挂起。

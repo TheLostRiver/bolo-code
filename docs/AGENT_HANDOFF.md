@@ -108,6 +108,7 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 |----|------|----------|
 | Headless 核心 | ~82–90% | queryLoop · STE · 权限 · tools；partial stream fail-closed |
 | **Agent 能力面（工具集）** | **~72–80%** | 13 工具；**TodoWrite** · **Bash 后台三件套**（ROADMAP §14） |
+| **分发（CLI）** | **~85–92%** | `npm i -g` / `npx` 单文件产物；零运行时依赖（ROADMAP §15 · [RELEASE.md](./RELEASE.md)） |
 | 会话 / CLI | ~90–96% | JSONL · new/resume 同构 runtime · durable controls/tasks · background FIFO/promotion · versioned runtime protocol |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
 | Subagent | ~89–95% | Spec v0；durable task/result · overflow FIFO/cancel · safe-boundary delivery · worktree 成果保全 |
@@ -122,7 +123,7 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | Electron GUI | ~65–75% | 薄壳；非 HC 级 IDE |
 | 产品相对 HC 全家桶 | ~74–88% | 日用高；UI 密度另计 |
 
-**已闭环：** Diff · Hooks · Compact · Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR-T1 TodoWrite / AR-T2 Bash background**。
+**已闭环：** Diff · Hooks · Compact · Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR-T1 TodoWrite / AR-T2 Bash background** · **AR5C-early CLI 分发**。
 
 **当前主线：** **AR-T3+ 能力面续刀**（ROADMAP §14.3）：WebSearch · plan 工具流（`ExitPlanMode` 缺位）· AskUserQuestion，逐项独立准入。
 
@@ -163,6 +164,7 @@ DR2A 单 session runner ✅
 → AR2A0b 中段截断 + 防重摘要 ✅
 → AR-T1 TodoWrite ✅
 → AR-T2 Bash background ✅
+→ AR5C-early CLI 分发 ✅
 → AR-T3+ 能力面续刀（当前）
 → AR2A1 range/watermark（顺延）
 → AR2A2–C Compact depth
@@ -226,6 +228,7 @@ DR2A 单 session runner ✅
 | 内置工具 | `packages/tools/src/builtins.ts` · `textDiff.ts` · `gitDiff.ts` |
 | **待办表（TodoWrite）** | `packages/shared/src/todo.ts`（契约）· `packages/tools/src/todoWrite.ts`（工具）· `packages/core/src/sessionTodo.ts`（store/注入）· `todoCell.ts`（渲染） |
 | **后台 shell** | `packages/shared/src/backgroundShell.ts`（契约）· `packages/tools/src/backgroundShellRuntime.ts`（spawn/kill/游标）· `backgroundShellTools.ts`（BashOutput/KillShell） |
+| **构建 / 发布产物** | `scripts/build-dist.ts`（esbuild → `dist/bolo.mjs`）· `package.json` 的 `files`/`bin`/`prepack` |
 | CLI 打印 / picker | `packages/cli/src/**` |
 | Desktop IPC | `apps/desktop/src/main/index.mjs` · `renderer/*` |
 | 单测 | `scripts/test-*.ts` · `scripts/smoke-*.ts` |
@@ -246,6 +249,7 @@ DR2A 单 session runner ✅
 | Compact | [COMPACTION.md](./COMPACTION.md) |
 | Subagent | [SUBAGENT.md](./SUBAGENT.md) · [SUBAGENT_SPEC.md](./SUBAGENT_SPEC.md) |
 | **内置工具 / 待办表 / 后台 shell** | **[TOOLS.md](./TOOLS.md)** |
+| **构建 / 打包 / 发布** | **[RELEASE.md](./RELEASE.md)** |
 | 权限 | [PERMISSIONS.md](./PERMISSIONS.md) |
 | 会话 JSONL | [SESSIONS.md](./SESSIONS.md) |
 | Skills / MCP / Plugins | [SKILLS.md](./SKILLS.md) · [MCP.md](./MCP.md) · [PLUGINS.md](./PLUGINS.md) |
@@ -290,6 +294,8 @@ npx tsx scripts/test-todo.ts
 npx tsx scripts/test-todo-session.ts
 npx tsx scripts/test-bash-background.ts
 npx tsx scripts/test-bash-background-runtime.ts
+npx tsx scripts/test-dist-build.ts
+npx tsx scripts/test-dist-install.ts
 npx tsx scripts/test-compact-c-track.ts
 npx tsx scripts/test-file-diff.ts
 npx tsx scripts/test-config.ts
@@ -314,6 +320,8 @@ npx tsx scripts/test-config.ts
 - stub MCP/假 hook 冒充完成  
 - 引入遥测「先打点以后再用」
 - 为后台进程管理引入 `tree-kill` 之类运行时依赖（**Bolo `dependencies` 恒为空**）
+- 新增「相对自己文件找资源」的代码却不做双布局兼容（bundling 会压平模块路径）
+- 用变量做 `import()` 的 specifier（bundle 运行时会炸）
 - 把 todo 表写进 `messages`（会被 compact 吞掉，白做）
 
 ---
@@ -380,6 +388,8 @@ cd apps/desktop && npm install && set BOLO_DESKTOP_MOCK=1 && npm start
 | AR2A0b | `truncateMiddle` 中段截断（幂等 + 原始规模标注）· per-tool 预算表 · exec/micro 共用 · `COMPACT_SUMMARY_MARKER` 防重摘要合并提示 |
 | **AR-T1** | `TodoWrite` 工具 · todo 存 session 不进 messages（免疫 compact）· transcript `todo` 快照 + resume 投影 · `# Task tracking` cache-stable 段 · 双阈值 + 锚点丢失快速路径的提醒注入 · core 预渲染 cell |
 | **AR-T2** | `Bash.run_in_background` + `BashOutput` + `KillShell` · 输出落盘 + 增量游标 · **零依赖原生进程树 kill**（POSIX 进程组两级升级 / Windows `taskkill /T /F`）· 体积熔断 · `endSession` 收尸防僵尸 |
+| **AR-T2 修复** | 落盘 sink 失败（ENOSPC / write-after-end）曾是**未捕获异常 → 整进程崩溃**；接住之后还必须连带收进程树，否则留下 `KillShell` 也杀不掉的孤儿 |
+| **AR5C-early** | esbuild 单文件产物 · 发布元数据 · `getBundledSkillsDir()` 双布局 · pack→install→run E2E 进门禁 · [RELEASE.md](./RELEASE.md) |
 
 最新 commit 以 `git log` 为准。
 

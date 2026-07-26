@@ -1,0 +1,138 @@
+# 发布（CLI）
+
+> **真源。** 改构建、改发布内容、改 bin，先改本文档。
+> 进度水位见 [ROADMAP.md](./ROADMAP.md) §0 与 §15。
+
+---
+
+## 0. 形态
+
+发布物是**一个自包含的单文件**：`dist/bolo.mjs`。
+
+```
+npm install -g bolo-code   →   bolo
+npx bolo-code              →   bolo
+```
+
+| 性质 | 值 |
+|------|-----|
+| 运行时依赖 | **0**（`dependencies` 恒为 `{}`） |
+| tarball 内容 | `dist/`（含 `bundled-skills/`）+ `README.md` + `LICENSE` + `package.json`，共 6 项 |
+| Node 要求 | ≥ 20 |
+| bin | `./dist/bolo.mjs`（产物自带 shebang，没有 wrapper 层） |
+
+---
+
+## 1. 为什么是 bundle 而不是 `tsc`
+
+全仓 **491 处**相对导入带显式 `.ts` 扩展名，而 TypeScript 的 `allowImportingTsExtensions`
+**强制** `noEmit`。也就是说当前导入风格在结构上就不允许 `tsc` 产出 JS ——
+这不是"还没做构建"，是"做不了 tsc 构建"。
+
+| 备选 | 取舍 |
+|------|------|
+| **esbuild → 单文件**（选中） | esbuild 只进 devDependencies；产物零依赖；491 处导入一行不用改 |
+| 把 `tsx` 提为 runtime dependency | 🚫 破坏零依赖红线；用户装个 CLI 却拖来一整套 TS 工具链 |
+| codemod 491 处 `.ts` → `.js` 再 `tsc` | 🚫 风险高一个数量级，且产出多文件目录树 |
+
+esbuild 是**构建期**工具。产物里不含它，用户也装不到它。
+
+---
+
+## 2. 构建
+
+```bash
+npm run build          # → dist/bolo.mjs (~1.1 MB, 125 模块)
+```
+
+`scripts/build-dist.ts` 做三件事：
+
+1. esbuild bundle `packages/cli/src/main.ts`：`platform=node` · `target=node20` · `format=esm` · `packages: 'bundle'`
+   （**不列任何 external**——列了就等于引入运行时依赖）
+2. 加 `#!/usr/bin/env node` banner，`chmod 755`
+3. 把 `packages/bundled-skills/` 拷到 `dist/bundled-skills/`
+
+> 构建日志走 **stderr**。`prepack` 会调用它，stdout 要留给 `npm pack --json` 之类的消费者。
+
+### 打包会踩的两个坑（已处理，改动时别踩回去）
+
+**自身路径计算。** bundling 会把模块路径压平，任何 `import.meta.url` 自算路径的代码都会指错。
+全仓只有一处：`packages/skills/src/index.ts` 的 `getBundledSkillsDir()`。它现在**按存在性探测**两种布局：
+
+```
+开发     packages/skills/src/  → ../../bundled-skills
+发布产物 dist/                 → ./bundled-skills
+```
+
+新增任何「相对自己文件找资源」的代码，都必须同样处理，否则装完就找不到资源。
+
+**动态 import。** 全仓的 `await import(...)` 目前**全是字面量相对路径**，esbuild 能静态打包。
+一旦引入变量 specifier（`await import(someVar)`），bundle 会在运行时炸。
+
+---
+
+## 3. 发布前门禁
+
+```bash
+npm test               # 完整门禁，尾部含下面两个
+npm run test:dist-build     # 产物契约
+npm run test:dist-install   # 真实 pack → 安装 → 运行
+```
+
+`test:dist-build` 断言的是发布元数据与产物本身：
+
+- `private !== true`、有 `name`/`version`/`files`
+- `files` 不含 `.bolo-tmp` / `.planning` / `.bolo` / `.`
+- **`dependencies` 为空**
+- 有 `prepack`（保证 tarball 里不会是旧产物）
+- bin 指向产物本身、产物带 shebang
+- 产物不含 `tsx` 引用、不含 `.ts` 导入、能跑 `--help`
+- `dist/bundled-skills/skill-creator/SKILL.md` 就位
+
+`test:dist-install` 是**离开仓库**的证据：
+
+- `npm pack` → 检查 tarball 清单不含源码/临时目录/密钥
+- 装进一个干净项目（`--omit=dev`）
+- 确认 `tsx` / `typescript` / `esbuild` **没有**被带进去
+- 确认 npm 链接了 `bolo` bin
+- 装完的产物能 `--help`，并能跑通一轮 mock provider
+
+> 该测试会剥掉继承来的 `npm_config_*` 环境变量。原因：脚本常经 `npx` 启动，
+> 而 npx 会把用户 `~/.npmrc` 的每一条注入成环境变量；其中 `npm_config_allow_scripts`
+> 会让子 npm 的 project-scoped install 直接报 `EALLOWSCRIPTS`。
+> 不剥的话，这个测试的成败取决于开发者个人的 npm 配置——正反两个方向都不该。
+>
+> staging 目录放在仓库 `.bolo-tmp/` 而非 `os.tmpdir()`：Windows 上后者位于
+> `C:\Users\<user>\AppData\Local\Temp`，是家目录子目录，npm 会把 `~/.npmrc`
+> 当成 **project** 配置读进来，那一级环境变量覆盖不掉。
+
+---
+
+## 4. 发布
+
+```bash
+npm version <patch|minor|major>
+npm publish          # prepack 自动重建 dist
+git push --follow-tags
+```
+
+`prepack` 保证 tarball 里的产物是当次构建的，不会是本地残留的旧文件。
+
+**发布前自查：**
+
+- [ ] `npm test` 全绿
+- [ ] `npm pack --dry-run` 看清单只有那 6 项
+- [ ] tarball 里没有密钥、`.bolo-tmp`、`.planning`、`.claude`
+- [ ] `dependencies` 仍为 `{}`
+
+---
+
+## 5. 明确不做
+
+| 项 | 原因 |
+|----|------|
+| 发布 `@bolo/*` 各子包 | 跨包导入用的是相对路径（`../../shared/src/index.ts`），workspace 包名目前是装饰性的；拆包发布是另一个工程 |
+| 把 `tsx` 或 `esbuild` 放进 `dependencies` | 零依赖红线 |
+| postinstall / preinstall 脚本 | 发布包不该靠生命周期脚本才能用；也会撞上收紧了脚本策略的用户环境 |
+| 遥测 / 安装统计 | 项目红线，永不 |
+| Electron 安装包 | 后置。本轮只做 CLI |

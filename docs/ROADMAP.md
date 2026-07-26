@@ -12,6 +12,7 @@
 | 层 | 粗估 | 说明 |
 |----|------|------|
 | **Headless 核心** | **~82–90%** | loop/STE/权限/auto/snip/policy/OS sandbox；partial stream fail-closed |
+| **分发（CLI）** | **~85–92%** | `npm i -g` / `npx` 单文件产物 · 零运行时依赖 · pack→install→run E2E 进门禁；见 §15 与 [RELEASE.md](./RELEASE.md) |
 | **Agent 能力面（工具集）** | **~72–80%** | 13 工具：Bash（含 `run_in_background`）· BashOutput · KillShell · Read/Write/Edit/apply_patch · Glob/Grep · Skill · WebFetch · Agent · **TodoWrite**；见 §14 |
 | 会话与 CLI | **~90–96%** | JSONL · new/resume 同构 runtime · durable controls/tasks · background FIFO/promotion · versioned runtime protocol |
 | **扩展面** | **~80–88%** | MCP×3 · Skills · Plugins · WebFetch · OAuth 本地 |
@@ -32,7 +33,7 @@
 
 **已闭环主线：** headless 日用 → Diff（D0–D7 / U0–U4）· Hooks（H0–H5）· Compact（C0–C5）· Provider（P0–P4.1）· Effort（E0–E9）· Provider UX（CX0–CX8）· 可靠性（R0–R4）· **Durable Runtime（DR0–DR4）** · **Autonomous Road AR1 CLI/TUI runtime UX**。切片明细 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
 
-**当前主线：** **AR-T3 · 能力面续刀**（§14）。AR-T1 TodoWrite 与 AR-T2 Bash background 已收口。
+**当前主线：** **AR-T3 · 能力面续刀**（§14）。AR-T1/AR-T2 与 **AR5C-early 分发**（§15）已收口。
 
 **已插队并收口：** **AR-T · Agent 能力面**（§14）。准入证据：基础设施深度（DR0–DR4 + AR1）已远超能力广度——彼时 agent 无法跨步骤记住计划，也无法启动任何活过一次工具调用的进程。AR2 压缩深化顺延，A0a/A0b 成果不受影响。
 
@@ -97,6 +98,7 @@
 | Hooks H0–H5 · Compact C0–C5 · Provider P0–P4.1 · Effort E0–E9 · Provider UX CX0–CX8 | ✅ |
 | CLI / Agent 可靠性 R0–R4 · Durable Runtime DR0–DR4 · AR1 runtime UX | ✅ |
 | **AR-T1 TodoWrite · AR-T2 Bash background**（§14） | ✅ |
+| **AR5C-early · CLI 可分发**（§15） | ✅ |
 | **AR-T3+ 能力面续刀**（WebSearch · plan 工具流 · AskUserQuestion） | 🔄 当前 |
 | AR2 Compact depth（A0a/A0b ✅ → A1/A2 → B → C） | 📋 顺延 |
 | AR3 Desktop shell · AR4 证据深水 · AR5 release hardening | 📋 |
@@ -127,6 +129,7 @@
 | [EFFORT.md](./EFFORT.md) / [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md) | Effort 方言 |
 | [COMPACTION.md](./COMPACTION.md) | Compact **实现真源** |
 | [TOOLS.md](./TOOLS.md) | **内置工具契约**（TodoWrite · 后台 shell） |
+| [RELEASE.md](./RELEASE.md) | **发布契约**（构建 · tarball · 门禁 · 发布流程） |
 | [HOOKS.md](./HOOKS.md) | Hook 契约 |
 | [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) | Diff 契约与阶段 |
 | [TUI.md](./TUI.md) | CLI TUI 壳与 U 挂载 |
@@ -345,12 +348,13 @@ AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 regis
 | 11 | **AR2A0b · 中段截断/防重摘要** | `truncateMiddle` + 预算表 + summary marker | 工具长输出保头尾；re-compact 不重新叙述 | 幂等 + spill 完整 + cache 稳定 | ✅ |
 | 12 | **AR-T1 · TodoWrite** | `packages/shared` todo 契约 + 工具 + session/transcript 接线 | 多步任务可跨 compact/resume 追踪 | compact 存活 + resume 投影 + 提醒双阈值 | ✅ |
 | 13 | **AR-T2 · Bash background** | `BackgroundShell` 契约 + 原生进程树 kill + BashOutput/KillShell | dev server / 长构建不再阻塞 turn | 真实进程 kill + endSession 无僵尸 + 前台回归 | ✅ |
-| 14 | **AR-T3+ · 能力面续刀** | WebSearch · plan 工具流 · AskUserQuestion（逐项） | 见 §14.3 | 每项独立红灯 + 全量门禁 | **当前** |
-| 15 | **AR2A1–A2 · watermark/safe rewrite** | range/watermark 纯契约 → rewrite 接线 | partial compact 主路径 | tool pairing + lifecycle 保留 | 📋 顺延 |
-| 16 | **AR2B–C · tokenizer/benchmark/ADR** | registry（重估）+ 语料基准 + remote 决策 | 可量化 token/cost | 偏差阈值 + fail-closed | 📋 |
-| 17 | **AR3A–F** | protocol client/store；无 renderer 状态机 | Codex App 风格 Desktop | mock/core IPC + crash/restart + Windows package | 📋 |
-| 18 | **AR4** | 逐项 evidence gate | 有证据实施；无证据书面关闭 | 场景/基准/兼容证据 | 📋 |
-| 19 | **AR5A–D** | compatibility/security/release contracts | clean clone 安装、升级、恢复手册 | full test + cross-platform smoke + security audit | 📋 |
+| 14 | **AR5C-early · CLI 分发** | esbuild 单文件 + 发布元数据 + 双布局资产 | `npm i -g bolo-code` 可用 | pack→install→run E2E + 零依赖 + tarball 清单 | ✅ |
+| 15 | **AR-T3+ · 能力面续刀** | WebSearch · plan 工具流 · AskUserQuestion（逐项） | 见 §14.3 | 每项独立红灯 + 全量门禁 | **当前** |
+| 16 | **AR2A1–A2 · watermark/safe rewrite** | range/watermark 纯契约 → rewrite 接线 | partial compact 主路径 | tool pairing + lifecycle 保留 | 📋 顺延 |
+| 17 | **AR2B–C · tokenizer/benchmark/ADR** | registry（重估）+ 语料基准 + remote 决策 | 可量化 token/cost | 偏差阈值 + fail-closed | 📋 |
+| 18 | **AR3A–F** | protocol client/store；无 renderer 状态机 | Codex App 风格 Desktop | mock/core IPC + crash/restart + Windows package | 📋 |
+| 19 | **AR4** | 逐项 evidence gate | 有证据实施；无证据书面关闭 | 场景/基准/兼容证据 | 📋 |
+| 20 | **AR5A–D**（AR5C 已提前完成） | compatibility/security/release contracts | clean clone 安装、升级、恢复手册 | full test + cross-platform smoke + security audit | 📋 |
 
 固定 checkpoint：
 
@@ -421,3 +425,38 @@ AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 regis
 | **AskUserQuestion** | 无 | 结构化澄清；与 CLI picker / Desktop 对话框对接 |
 | **前台命令自动后台化** | 无 | 参考实现有阻塞预算超时自动转后台；语义复杂，暂不做 |
 | **LSP** | 无 | 体量大，归 AR4 证据门控 |
+
+---
+
+## 15. AR5C-early · CLI 可分发性 ✅
+
+> **为什么提前。** 原排期把 install lifecycle 放在看板最后（AR5C），那个顺序假设「最后才发布」。
+> 一旦产品目标包含「网友能用」，分发就不是终点而是**闸门**。
+>
+> **准入证据（clean clone 实测）：** 仓库 clone + `npm install` 后 CLI 能跑，
+> 但陌生人拿不到它——`private: true` 让 `npm publish` 直接拒绝；
+> `bin` 在运行时 spawn `tsx` 而 `tsx` 是 devDependency（实测报 `Cannot find module 'tsx/cli'`）；
+> 且 `allowImportingTsExtensions` + 491 处 `.ts` 导入使 `tsc` **结构上无法**产出 JS。
+> 现状不是「打磨不足」，是**分发 = 0**。
+
+### 15.1 交付
+
+| 面 | 落点 |
+|----|------|
+| 构建 | `scripts/build-dist.ts`：esbuild bundle → `dist/bolo.mjs`（~1.1 MB / 125 模块）+ 拷 `bundled-skills` |
+| 发布元数据 | `private:false` · `name`/`version`/`files`/`keywords`/`homepage`/`bugs` · `bin → ./dist/bolo.mjs` · `prepack` |
+| 资产路径 | `getBundledSkillsDir()` 改为**双布局存在性探测**（开发 / 发布产物） |
+| 门禁 | `scripts/test-dist-build.ts`（产物契约）· `scripts/test-dist-install.ts`（真实 pack→install→run） |
+| 文档 | **[RELEASE.md](./RELEASE.md)**（发布真源）· README 安装章节面向用户重写 |
+
+### 15.2 语义要点
+
+- **零运行时依赖是红线**：`dependencies` 显式写成 `{}`，并由测试断言。esbuild/tsx 只是构建期工具，产物里没有它们，用户也装不到。
+- **bin 就是产物本身**，没有 wrapper —— 少一层就少一处会走偏的地方。
+- **`prepack` 强制重建**，杜绝 tarball 里混进旧产物。
+- **bundling 会压平模块路径**：任何 `import.meta.url` 自算路径的代码都必须做双布局兼容；任何非字面量的动态 `import()` 都会让 bundle 在运行时炸。改代码时注意这两条。
+- tarball 清单被测试锁死：只有 `dist/` + `README.md` + `LICENSE` + `package.json`，源码/`.bolo-tmp`/`.planning`/`.claude`/密钥一律不得进。
+
+### 15.3 本轮不做
+
+Electron 安装包（后置，先 CLI）· `@bolo/*` 子包独立发布（跨包用相对路径导入，workspace 包名目前是装饰性的）· 签名/公证 · 自动升级检查。
