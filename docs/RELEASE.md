@@ -135,4 +135,113 @@ git push --follow-tags
 | 把 `tsx` 或 `esbuild` 放进 `dependencies` | 零依赖红线 |
 | postinstall / preinstall 脚本 | 发布包不该靠生命周期脚本才能用；也会撞上收紧了脚本策略的用户环境 |
 | 遥测 / 安装统计 | 项目红线，永不 |
-| Electron 安装包 | 后置。本轮只做 CLI |
+| Electron 安装包 | **受阻**，非「不做」：根因已查清，见 [DESKTOP_DESIGN.md](./DESKTOP_DESIGN.md) §7c |
+
+---
+
+## 6. AR5D · 发布门（性能预算 · SBOM · 安全 · 已知限制 · 恢复）
+
+> 本节的判据是「**未参与者能独立执行**」。凡是需要口头补充才能做的步骤，
+> 都算这节写得不合格。
+
+### 6.1 SBOM（软件物料清单）
+
+**运行时依赖：零。** `dependencies: {}` 是红线，且由
+`test-desktop-bundle.ts` 与 `test-dist-install.ts` 在门禁里断言。
+发布的 tarball 里除了自己的代码，没有第三方运行时代码。
+
+构建期依赖共 **4** 个，都不进产物：
+
+| 包 | 用途 | 为什么不进产物 |
+|---|---|---|
+| `esbuild` | 打 CLI 与桌面主进程单文件 | 打包器本身不随产物分发 |
+| `typescript` | `npm run typecheck` | 仅类型检查，不产出 JS |
+| `tsx` | 跑 `scripts/*.ts` 测试 | 只在开发/测试期 |
+| `electron-builder` | Windows 安装包（**当前受阻**） | 构建工具 |
+
+> 核对命令（任何人可跑）：
+> ```bash
+> node -e "console.log(JSON.stringify(require('./package.json').dependencies))"   # 必须是 {}
+> npm pack --dry-run                                                              # 清单只应有 6 项
+> ```
+
+### 6.2 性能预算
+
+本机实测（数值随机器浮动，**关注的是量级不是小数点**）：
+
+| 指标 | 实测 | 预算（超出即需解释） |
+|---|---|---|
+| CLI 产物体积 | ~1.17 MB / 145 模块 | < 3 MB |
+| 桌面主进程产物 | ~1.09 MB / 127 模块 | < 3 MB |
+| compact 管道（20 轮 / 100 消息） | 2–3 ms · heap +0.1 MB | < 8 s · < 320 MB（灾难阈） |
+| compact 压缩比 | ×12.9（20 轮）· ×51.9（80 轮） | ≥ ×3 |
+| 规模伸缩 | 4× 输入 → 1.2× 耗时 | < 20×（超出即疑似二次行为） |
+
+回归由 `test-compact-benchmark.ts` 与 `test-dist-build.ts` 在门禁里守。
+**时延/内存只设灾难阈**：单机噪声大，卡太紧只会制造假红灯，
+而假红灯会训练所有人无视红灯。
+
+### 6.3 安全自查
+
+以下每条都有门禁测试，不靠人工 review 记得：
+
+| 面 | 保证 | 守它的测试 |
+|---|---|---|
+| 遥测 | **永不**。无任何数据外发 | 红线（`docs/ENGINEERING_PRINCIPLES.md`） |
+| 密钥落盘 | 配置只写 `${ENV}` 引用，密钥不入文件 | `test-search-preset-privacy.ts` |
+| 密钥过界 | 不回传 renderer/transcript；按**值**判断，`detail`/`message` 里回显的 key 同样抹除 | `test-desktop-secret-boundary.ts` |
+| HTML 注入 | renderer 全程 `textContent`，模型输出绝不当 HTML | `test-timeline-cards.ts` |
+| 工具越权 | MCP 工具可按 `allowTools`/`excludeTools` 限权；启用搜索不搭售远程抓取 | `test-mcp-tool-filter.ts` |
+| 无人时的权限 | headless 下 `askPermission` 默认 `deny`（fail-closed） | `test-session-permission-boundary.ts` |
+| 数据销毁 | 读不出旧文件时**中止**而非覆盖（写盘与迁移两条路径各自守） | `test-transcript-rewrite-preserve.ts` · `test-session-migration.ts` |
+
+**未做代码签名。** 没有证书就不假装签了——Windows 用户会看到 SmartScreen 警告，
+这是事实，写在这里而不是掩盖。
+
+### 6.4 已知限制（发布时必须原样告知用户）
+
+**不要在没有新证据的情况下删减这一节。** 它是这个项目对使用者的诚实交代。
+
+| 限制 | 状态 | 详情 |
+|---|---|---|
+| **Windows 安装包（NSIS）** | ⛔ 受阻 | 上游 electron-builder 与 Node/Windows 的不兼容（CVE-2024-27980 加固禁止直接 spawn `.CMD`）。根因已确证并附最小复现 → [DESKTOP_DESIGN §7c](./DESKTOP_DESIGN.md) |
+| **桌面窗口的视觉呈现** | ❌ 未验证 | 应用**能启动**且 renderer 挂载已由 `test-desktop-launch.ts` 实证；但布局观感、Windows 主题切换与 maximize 渲染、键盘走查、长会话滚动**没有肉眼验证过** |
+| **`AskUserQuestion` 的真 TTY 交互** | ❌ 未验证 | 控件逻辑测试注入 `readKey`，覆盖不到真实 raw-mode 与 REPL 抢 stdin |
+| **`mcp-external` 搜索** | ⚠️ 仅验过 Exa | `searxng` preset 指向的桥需用户自建，**从未真连过** |
+| **中段 compact** | 🚫 显式不启用 | 契约就绪但产品代码零调用；两个参考实现都没真正跑过它 → §13.10.2 |
+| **远端 compaction** | 🚫 显式不实施 | 见 [ADR_COMPACT_REMOTE.md](./ADR_COMPACT_REMOTE.md) |
+| **token 估算对非 CJK 的高估** | ⚠️ 已知偏差 | 最差 +41%（英文散文）。方向安全（提前压缩），但会多花摘要调用 → `test-token-estimate-accuracy.ts` |
+
+### 6.5 恢复手册
+
+**前提：transcript（`.bolo/sessions/*.jsonl`）是唯一真源，append-only 语义。
+任何恢复动作都不要先删它。**
+
+| 症状 | 原因 | 怎么办 |
+|---|---|---|
+| 启动报 `transcript too large` | 单份 transcript > 32 MiB | 该会话已超读取上限。**先复制一份备份**，再用 `bolo --resume <id>` 之外的方式（编辑器）截去早期行；或直接开新会话，旧文件留作存档 |
+| compact 报 `transcript write failed, compaction rolled back` | 磁盘满 / 权限 / 超上限 | 内存已回退到压缩前，**数据未丢**。清理磁盘或修权限后重试 |
+| `refusing to rewrite …: the existing transcript could not be read` | 旧文件存在但读不出 | **这是保护不是故障**：读不出就不知道会毁掉什么。先手动确认那个文件的状态，再决定备份还是删除 |
+| resume 后历史看着变短 | 曾发生过 compact | 正常。摘要之前的原始消息仍在 jsonl 里（boundary 之前），只是不再进模型上下文 |
+| 桌面端白屏 | preload / renderer 路径错 | 跑 `npx tsx scripts/test-desktop-launch.ts`，它会指出缺哪一项 |
+| 配置改了不生效 | 层级优先级 | 顺序是 `defaults < ~/.bolo < .bolo < 环境变量`。**项目级会压过用户级**——先确认改的是哪一层 |
+
+### 6.6 发布 checklist（逐项可执行）
+
+```bash
+npm test                              # typecheck + 92 个测试脚本，必须 EXIT=0
+node -e "console.log(JSON.stringify(require('./package.json').dependencies))"
+                                      # 必须输出 {}
+npm pack --dry-run                    # 清单只应有 6 项
+git status --porcelain                # 必须干净
+git rev-parse HEAD origin/main | uniq | wc -l   # 必须是 1
+```
+
+- [ ] 上述五条全过
+- [ ] §6.4 已知限制**原样**出现在 release notes 里，未被删减
+- [ ] 版本号已 bump，且 CHANGELOG 记录了本次的**行为变更**（不只是功能）
+- [ ] 若本次动过 compact / transcript / 权限中任一处：确认 §6.3 表里对应的
+      那条测试**确实跑过并且是绿的**，而不是只看总数
+
+> 最后一条不是形式主义。本项目多次出现「测试通过但出于错误的理由」——
+> 断言没有对象、保护来自别处、抽取器抽了个空。总数全绿不等于那一条在守。
