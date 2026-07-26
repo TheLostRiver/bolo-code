@@ -18,7 +18,14 @@
 import {
   isRuntimeQueryEntity,
   type RuntimeQuery,
+  type RuntimeQueryEntity,
 } from '../../shared/src/runtimeQuery.ts'
+
+export type RuntimeRecoveryCliAction = {
+  action: 'runtime.discard' | 'runtime.retry-safe'
+  entity: RuntimeQueryEntity
+  entityId: string
+}
 
 export type CliArgs = {
   help: boolean
@@ -47,7 +54,11 @@ export type CliArgs = {
   print: boolean
   /** AR1A：非交互 runtime snapshot query。 */
   runtimeQuery?: RuntimeQuery
-  /** runtime query 输出单行纯 JSON。 */
+  /** AR1B3：恢复后仍可执行的 append-only recovery action。 */
+  runtimeAction?: RuntimeRecoveryCliAction
+  /** 覆盖 runtime action 默认稳定派生的 requestId。 */
+  runtimeRequestId?: string
+  /** runtime query/command 输出单行纯 JSON。 */
   json?: boolean
   /** 用户输入（-p 值、位置参数拼接、或后续由 stdin 填充） */
   prompt?: string
@@ -69,6 +80,18 @@ function takeValue(
     throw new Error(`missing value after ${argv[i]}`)
   }
   return { value: next, next: i + 1 }
+}
+
+function normalizeRuntimeRequestId(value: string): string {
+  const requestId = value.trim()
+  if (!requestId) throw new Error('--request-id is empty')
+  if (requestId.length > 256) {
+    throw new Error('--request-id is too long')
+  }
+  if (/[\r\n\0]/.test(requestId)) {
+    throw new Error('--request-id contains invalid control characters')
+  }
+  return requestId
 }
 
 /**
@@ -118,6 +141,18 @@ export function parseArgs(argv: string[]): CliArgs {
     }
     if (a === '--json') {
       out.json = true
+      continue
+    }
+    if (a === '--request-id') {
+      const { value, next } = takeValue(argv, i)
+      out.runtimeRequestId = normalizeRuntimeRequestId(value)
+      i = next
+      continue
+    }
+    if (a.startsWith('--request-id=')) {
+      const value = a.slice('--request-id='.length)
+      if (!value) throw new Error('missing value after --request-id=')
+      out.runtimeRequestId = normalizeRuntimeRequestId(value)
       continue
     }
 
@@ -196,7 +231,7 @@ export function parseArgs(argv: string[]): CliArgs {
     positionals.push(a)
   }
 
-  // 位置子命令：runtime list|inspect
+  // 位置子命令：runtime list|inspect|discard|retry-safe
   if (positionals[0] === 'runtime') {
     const action = positionals[1]?.toLowerCase()
     if (action === 'list') {
@@ -233,8 +268,31 @@ export function parseArgs(argv: string[]): CliArgs {
         entity,
         entityId,
       }
+    } else if (action === 'discard' || action === 'retry-safe') {
+      const entity = positionals[2]?.toLowerCase()
+      const entityId = positionals[3]
+      if (!entityId || positionals.length !== 4) {
+        throw new Error(
+          `runtime ${action} requires <turn|control|task> <id>`,
+        )
+      }
+      if (!isRuntimeQueryEntity(entity)) {
+        throw new Error(
+          'runtime entity must be turn, control, or task',
+        )
+      }
+      out.runtimeAction = {
+        action:
+          action === 'discard'
+            ? 'runtime.discard'
+            : 'runtime.retry-safe',
+        entity,
+        entityId,
+      }
     } else {
-      throw new Error('runtime requires list or inspect')
+      throw new Error(
+        'runtime requires list, inspect, discard, or retry-safe',
+      )
     }
     positionals.splice(0)
   }
@@ -257,11 +315,19 @@ export function parseArgs(argv: string[]): CliArgs {
     out.rest = positionals
   }
 
-  if (out.json && !out.runtimeQuery) {
-    throw new Error('--json requires runtime list or runtime inspect')
+  const runtimeOperation = out.runtimeQuery ?? out.runtimeAction
+  if (out.json && !runtimeOperation) {
+    throw new Error(
+      '--json requires runtime list, inspect, discard, or retry-safe',
+    )
+  }
+  if (out.runtimeRequestId && !out.runtimeAction) {
+    throw new Error(
+      '--request-id requires runtime discard or runtime retry-safe',
+    )
   }
   if (
-    out.runtimeQuery &&
+    runtimeOperation &&
     (out.list ||
       out.migrateSession !== undefined ||
       out.prompt !== undefined ||
@@ -270,12 +336,12 @@ export function parseArgs(argv: string[]): CliArgs {
       out.deleteJson)
   ) {
     throw new Error(
-      'runtime query cannot be combined with session listing, migration, or prompt options',
+      'runtime operation cannot be combined with session listing, migration, or prompt options',
     )
   }
-  if (out.runtimeQuery && out.continue && out.resume !== undefined) {
+  if (runtimeOperation && out.continue && out.resume !== undefined) {
     throw new Error(
-      'runtime query accepts either --resume or --continue, not both',
+      'runtime operation accepts either --resume or --continue, not both',
     )
   }
 
@@ -305,6 +371,8 @@ export function formatHelp(): string {
   bolo runtime list --resume <id>    列出恢复会话的 runtime entities
   bolo runtime list task -c --json   最新会话 task list，stdout 为单行纯 JSON
   bolo runtime inspect turn <turnId> --resume <id> [--json]
+  bolo runtime discard turn <turnId> --resume <id> [--json]
+  bolo runtime retry-safe control <controlId> --resume <id> [--json]
   bolo --migrate-session <id|path>   旧 JSON → 旁路 jsonl（默认不删 JSON）
   bolo migrate-session <id|path>     同上（位置子命令）
   bolo --migrate-session <id> --force --delete-json
@@ -325,7 +393,8 @@ REPL 斜杠命令（会话内）:
       --migrate-session    旧 JSON 旁路写出 jsonl
       --force              migrate：强制 rewrite 已有非空 jsonl
       --delete-json        migrate：写出后删除旧 .json
-      --json               runtime query 输出单行纯 JSON（无 banner/summary）
+      --json               runtime query/command 输出单行纯 JSON（无 banner/summary）
+      --request-id <id>    runtime discard/retry-safe 幂等键（默认稳定派生）
   -p, --prompt [text]      单轮 prompt（隐含 --print）
       --print              非交互：有 prompt 则跑一轮，否则只摘要
       --cwd <dir>          解析 project sessions 的工作目录

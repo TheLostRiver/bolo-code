@@ -13,7 +13,10 @@ import {
   ResumePickerError,
   runResumeCli,
 } from './resumeCli.ts'
-import { runRuntimeQueryCli } from './runtimeCli.ts'
+import {
+  runRuntimeCommandCli,
+  runRuntimeQueryCli,
+} from './runtimeCli.ts'
 
 /**
  * 非 TTY 时尝试读 stdin。
@@ -76,8 +79,8 @@ async function main(): Promise<void> {
   const cwd = args.cwd ?? process.cwd()
   const isTty = process.stdin.isTTY === true
 
-  // ── runtime list/inspect：只恢复 snapshot，不打印 banner/summary ──
-  if (args.runtimeQuery) {
+  // ── runtime query/recovery command：不打印 banner/summary ──
+  if (args.runtimeQuery || args.runtimeAction) {
     let idOrPath: string
     if (args.continue) {
       try {
@@ -101,17 +104,25 @@ async function main(): Promise<void> {
       idOrPath = args.resume
     } else {
       process.stderr.write(
-        'error: runtime query requires --resume <id|path> or --continue\n',
+        `error: runtime ${args.runtimeQuery ? 'query' : 'command'} requires --resume <id|path> or --continue\n`,
       )
       process.exit(2)
     }
 
-    const result = await runRuntimeQueryCli({
-      idOrPath,
-      cwd,
-      query: args.runtimeQuery,
-      json: args.json,
-    })
+    const result = args.runtimeQuery
+      ? await runRuntimeQueryCli({
+          idOrPath,
+          cwd,
+          query: args.runtimeQuery,
+          json: args.json,
+        })
+      : await runRuntimeCommandCli({
+          idOrPath,
+          cwd,
+          action: args.runtimeAction!,
+          requestId: args.runtimeRequestId,
+          json: args.json,
+        })
     process.exit(result.exitCode)
   }
 
