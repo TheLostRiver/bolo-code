@@ -199,6 +199,45 @@ finalInstructions = userInstructions + "\n\n" + hookInstructions
 - summary user-message 以稳定字面量开头：`COMPACT_SUMMARY_MARKER`（既有输出前缀，零变化）；`isCompactSummaryMessage` 可检测
 - 二次 compact 时若旧 summary 落在**待摘要前缀**（keep 尾部不算），`runFullCompact` 经 instructions 通道注入 `COMPACT_MERGE_PRIOR_SUMMARY_HINT`（合并事实、勿重新叙述），并在 boundary `compactMetadata.mergedPriorSummary: true` 留本地可观测标记（非遥测）
 
+### 2.7 AR2A1 · partial range / watermark 契约（纯函数，**尚未接线**）
+
+真源：`packages/compact/src/range.ts` · 测试：`scripts/test-compact-range.ts`
+
+§2.6 的模型是**单切点**：`[toSummarize | messagesToKeep]`，只能压前缀。
+partial compact 要压任意区间，于是先把四个问题定成契约：
+
+| 问题 | 函数 |
+|------|------|
+| 这个区间合法吗 | `validateCompactRange` |
+| 哪些已经被摘要过了 | `deriveCompactWatermark` |
+| 哪些绝不能被摘要 | `findAtomicBlocks` + `preserveTailCount` |
+| 不合法时为什么 | `CompactRangeRejection` |
+
+**watermark 是推导的，不是存储的。**
+
+参考实现（HC）用 `lastSummarizedMessageId` 这类稳定 id 标记「已摘要到哪」。
+Bolo 的 `ChatMessage` **没有 id 字段**，而 rewrite 会移动下标——存下标必然漂移。
+但 compact 总会插入一条可判别的 summary 消息（`isCompactSummaryMessage`），
+所以水位可以直接从消息表推导：**推导值不可能与实际历史不一致**。
+
+> 代价：无法区分同一位置的两次不同摘要。可接受——契约只需回答
+> 「这段是否已被某次摘要覆盖」，不需要溯源是哪一次。
+> 多条 summary 时以**最新**的为准，旧 summary 不该压低水位。
+
+**原子块（`findAtomicBlocks`）为什么单独成为一等概念：**
+带 `tool_calls` 的 assistant 消息 + 紧随其后的全部 tool 结果不可拆分。
+拆开会留下一条有 `tool_calls` 却没有对应结果的消息——多数 provider 直接 400。
+这是 compact 改动里最容易造成**不可恢复损坏**的一处，所以不做成散落的边界判断。
+
+**吸附必须如实上报（`snapped: true`）。**
+静默返回一个与请求不同的区间，会让调用方以为压缩了 A 实际压缩了 B——
+比直接拒绝危险得多。同理 `planPartialCompact` 在无内容可压时**明确拒绝**
+（`nothing_to_compact`）而不是返回空区间：空区间是最容易被误当成「压成功了」的返回值。
+
+**边界：** 本模块全是纯函数、不改入参（就地改历史会让回退失效）。
+`resolution` / durable 控制项是 **transcript 条目**而非 `ChatMessage`，
+不在本契约覆盖范围内——接线（AR2A2）时须单独保证其不丢。
+
 ---
 
 ## 3. Auto Compact 策略（对照 autoCompact.ts）
