@@ -169,11 +169,23 @@ async function main() {
     estimateTextTokens('abcdefgh') >= estimateTextTokens('abcd'),
     'longer text never costs fewer tokens',
   )
-  const jsonish = '{"a":1,"b":2,"c":3,"d":4,"e":5,"f":6,"g":7,"h":8}'
-  const prose = 'a'.repeat(jsonish.length)
+  // 这一条原本断言「密文 JSON 比散文更贵」，用 `'a'.repeat()` 当散文。
+  // **两个前提都被实测推翻了**：JSON 真实 4.18 字符/token，是非 CJK 里最稀的
+  // 一类；而一整串 'a' 也从来不是散文（它是单个超长 token 串）。
+  // 现在断言的是有实测支撑的那个方向：真正的自然语言比结构化文本更便宜。
+  const realProse =
+    'The runtime records every message to an append only transcript so that a session ' +
+    'can be resumed after a crash without replaying any provider calls at all here.'
+  const jsonish = JSON.stringify({
+    tools: Array.from({ length: 4 }, (_, i) => ({ name: `t${i}`, args: { path: 'x' } })),
+  }).padEnd(realProse.length, ' ')
   assert(
-    estimateTextTokens(jsonish) > estimateTextTokens(prose),
-    'dense JSON costs more per character than plain prose',
+    jsonish.length === realProse.length,
+    'setup: the two samples really are the same length, so the comparison is about class not size',
+  )
+  assert(
+    estimateTextTokens(realProse) < estimateTextTokens(jsonish),
+    'natural-language prose costs fewer tokens per character than structured text',
   )
   // 安全关键：同样字数的 CJK 必须比拉丁贵。
   // 二者同价正是此前中文被低估 53% 的根因。

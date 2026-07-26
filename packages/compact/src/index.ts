@@ -69,33 +69,106 @@ export function mergeHookInstructions(
  * JSON/高标点密文 ≈chars/2；tool_calls 计入 name+arguments。
  */
 /**
- * 普通文本每 token 约合多少字符。
+ * 非散文的非 CJK 文本每 token 约合多少字符。
  *
- * 实测（DeepSeek）非 CJK 文本的真实比例跨度不小：
- * 英文散文 **4.9**、TypeScript 代码 ~3.6、日志/路径/堆栈 **3.3** 字符/token。
- * 路径、camelCase、转义符会切出大量罕见 token，比散文密得多。
+ * 实测（见 `scripts/live-token-calibration.ts`）三类非散文语料的真实比例：
  *
- * **一个常量服务不了整个跨度。** 要做到永不低估就得贴着最密的那一类取值，
- * 代价是把最稀疏的一类高估约四成。这里取 3.5（略保守于实测最密的 3.3）——
- * 因为两个方向的代价不对称：低估会让 auto compact 迟触发、撞 provider 硬上限；
- * 高估只是提前压缩，浪费而已。
+ * | 语料 | 字符/token |
+ * |------|------------|
+ * | JSON 工具 schema | 4.18 |
+ * | TypeScript 代码 | 3.77 |
+ * | 日志 / 路径 / 堆栈 | **3.31** |
  *
- * 这个跨度本身就是无依赖启发式的固有上限；真 tokenizer 能消掉它，
- * 但要么联网、要么引入不可审计的 native 依赖，两条都撞零运行时依赖红线。
+ * 3.5 贴着最密的那一类（日志）取，因为两个方向的代价不对称：
+ * 低估会让 auto compact 迟触发、撞 provider 硬上限；高估只是提前压缩。
  */
-export const DEFAULT_BYTES_PER_TOKEN = 3.5
-/** JSON 类密文：单字符 token 更多，低估会拖晚 auto compact */
+export const DEFAULT_CHARS_PER_TOKEN = 3.5
+
 /**
- * 密文（JSON / 高标点）每 token 约合多少字符。
+ * 散文（自然语言）每 token 约合多少字符。
  *
- * 原值 2 是拍出来的，实测**高估 109%**：一份 4701 字符的工具 schema JSON
- * 真实只有 1124 token，即 **4.18 字符/token**——BPE 对重复出现的 key
- * 压得很好，密文并不等于 token 密。
+ * 英文散文实测 **4.96** 字符/token，且是全部语料里唯一拿到**两家
+ * tokenizer 一致读数**的（DeepSeek 56 / GPT-5.6 55，差 2%）。取 4.5
+ * 留 ~9% 保守余量。
  *
- * 取 3 而不是实测的 4.18：仍留 ~39% 保守余量。高估只是提前压缩（浪费），
- * 低估才会撞 provider 硬上限（会炸），两个方向的代价不对称。
+ * 分这一类的理由是实测出来的：散文按 3.5 算**高估 41%**，
+ * 而它在真实会话里占比不小（用户提问、模型回答、文档）。
+ * 高估不会炸，但会让 auto compact 提前开火——白花摘要调用、少留原文。
  */
-export const DENSE_BYTES_PER_TOKEN = 3
+export const PROSE_CHARS_PER_TOKEN = 4.5
+
+/**
+ * 是否按「散文」估。
+ *
+ * 这里曾经是 `looksDenseTokenText`，把 JSON/高标点归为「密文」并给它更小的
+ * 字符/token。**实测推翻了那个前提**：JSON 真实 4.18 字符/token，是非散文里
+ * 最**稀**的一类（BPE 对重复 key 压得很好），而标点最少的日志反而最密。
+ * 所以「标点多 = token 密」是错的，密文类被删除；真正分得开的是
+ * **散文 4.96 vs 其余 3.3–4.2**。
+ *
+ * 判别器必须很紧：误判成散文意味着把 3.5 换成 4.5，是**向低估偏 29%**。
+ * 而低估是会炸的那个方向。三条条件各自挡一类冒充者：
+ *
+ * - **标点密度 ≤ 2%**——实测散文 0.004，次低的日志 0.061，中间差 15 倍。
+ * - **平均词长 3–12**——挡 base64 / 压缩后的代码（没标点，但整块是一个巨大的
+ *   「词」）与 hex dump（词长 2）。这两类恰恰比日志还密。
+ * - **字母占非空白字符 ≥ 60%**——挡数字表、时间戳序列、坐标转储。
+ *
+ * 这三条本身有单独的回归测试（`scripts/test-token-estimate-accuracy.ts`
+ * 里的「冒充者」一节）：它们是本改动唯一新增的风险面。
+ */
+export function looksProseText(text: string): boolean {
+  // 太短判不准，落回保守的默认类
+  if (text.length < 40) return false
+
+  const sample = Math.min(text.length, 400)
+  let punct = 0
+  let alpha = 0
+  let nonSpace = 0
+  let words = 0
+  let inWord = false
+
+  for (let i = 0; i < sample; i++) {
+    const c = text[i]!
+    // 用码点判空白：转义序列穿过多层引用时会被吃掉，字符码不会
+    const code = c.charCodeAt(0)
+    const isSpace = code === 32 || code === 9 || code === 10 || code === 13
+    if (isSpace) {
+      inWord = false
+      continue
+    }
+    nonSpace += 1
+    if (!inWord) {
+      inWord = true
+      words += 1
+    }
+    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) alpha += 1
+    // 结构性标点按码点比对——反斜杠写成字面量会被多层引用吃掉
+    if (
+      code === 123 || // {
+      code === 125 || // }
+      code === 91 ||  // [
+      code === 93 ||  // ]
+      code === 34 ||  // "
+      code === 39 ||  // '
+      code === 58 ||  // :
+      code === 44 ||  // ,
+      code === 92 ||  // backslash
+      code === 59     // ;
+    ) {
+      punct += 1
+    }
+  }
+  if (words === 0 || nonSpace === 0) return false
+  if (punct / sample > 0.02) return false
+  if (alpha / nonSpace < 0.6) return false
+
+  const avgWord = nonSpace / words
+  if (avgWord < 3 || avgWord > 12) return false
+
+  return true
+}
+
 export const ROLE_OVERHEAD_TOKENS = 4
 export const TOOL_CALL_OVERHEAD_TOKENS = 8
 
@@ -176,9 +249,9 @@ export function estimateTextTokens(text: string): number {
   if (!text) return 0
   const cjk = countCjkChars(text)
   const rest = text.length - cjk
-  const bpt = looksDenseTokenText(text)
-    ? DENSE_BYTES_PER_TOKEN
-    : DEFAULT_BYTES_PER_TOKEN
+  const bpt = looksProseText(text)
+    ? PROSE_CHARS_PER_TOKEN
+    : DEFAULT_CHARS_PER_TOKEN
   return Math.ceil(cjk / CJK_CHARS_PER_TOKEN + rest / bpt)
 }
 

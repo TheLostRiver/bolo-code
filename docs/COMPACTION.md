@@ -298,12 +298,23 @@ DEFAULT_MAX_AUTOCOMPACT_FAILURES = 3
 
 ### 3.2 Token 估计（本地启发式，非计费）
 
-| 片段 | 规则 |
-|------|------|
-| 普通正文 | ≈ `ceil(chars / 4)` |
-| 密文 JSON / 高标点 | ≈ `ceil(chars / 2)`（`looksDenseTokenText`） |
-| 每条消息 | + role 开销；`tool_calls` 计 name + arguments |
-| system sections | `estimateSystemSectionsTokens`（`/context` 合计压力） |
+按**字符类别**分开数，比例全部来自真实端点标定（`scripts/live-token-calibration.ts`）：
+
+| 片段 | 规则 | 实测依据 |
+|------|------|---------|
+| CJK 字符 | `chars / 1.3` | 两家 tokenizer 取更密的一家（1.34 / 1.73） |
+| 散文（自然语言） | `chars / 4.5`（`looksProseText`） | 实测 4.96，留 ~9% 余量 |
+| 其余非 CJK | `chars / 3.5` | JSON 4.18 / 代码 3.77 / 日志 3.31，贴最密的一类 |
+| 每条消息 | + role 开销；`tool_calls` 计 name + arguments | |
+| system sections | `estimateSystemSectionsTokens`（`/context` 合计压力） | |
+
+**曾经的「密文 JSON / 高标点」类已删除**：标定推翻了它的前提——JSON 实测
+4.18 字符/token，是非 CJK 里最**稀**的一类（BPE 对重复 key 压得好），
+而标点最少的日志反而最密。「标点多 = token 密」是错的。
+
+`looksProseText` 的判别刻意收紧（标点密度 ≤ 2%、平均词长 3–12、字母占非空白
+≥ 60%）：判成散文意味着比例从 3.5 抬到 4.5，是**向低估偏 29%**，而低估会让
+auto compact 迟触发、撞 provider 硬上限。三条护栏各有单独的红灯验证。
 
 与 `/context`、`shouldAutoCompact`、full compact boundary 元数据共用 `estimateTokens` 族。  
 **不做** 真 tokenizer / 计费 API（是否引入 tokenizer registry 由 AR2B1 在 A0a 落地后重估）。

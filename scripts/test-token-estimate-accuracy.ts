@@ -32,7 +32,7 @@
  *
  * 运行：npx tsx scripts/test-token-estimate-accuracy.ts
  */
-import { estimateTokens, looksDenseTokenText } from '../packages/compact/src/index.ts'
+import { estimateTokens, looksProseText } from '../packages/compact/src/index.ts'
 import type { ChatMessage } from '../packages/shared/src/index.ts'
 
 function assert(cond: unknown, msg: string) {
@@ -44,8 +44,17 @@ function assert(cond: unknown, msg: string) {
 
 /** 低估多少算不可接受——这是会炸的方向 */
 const MAX_UNDERESTIMATE = 0.15
-/** 高估多少算浪费得离谱——只是效率问题，故放得宽 */
-const MAX_OVERESTIMATE = 0.6
+/**
+ * 高估多少算浪费得离谱。
+ *
+ * 起初定 0.6 是因为「一个常量服务不了 3.3–4.9 的跨度」。但那个前提只在
+ * **不分类**时成立——实测显示散文（4.96 字符/token）与其余（3.3–4.2）
+ * 是可以判别开的两类，分开取值后余量能收到 0.25。
+ *
+ * 收紧的收益是实在的：高估意味着 auto compact 提前触发，
+ * 白白多花摘要调用、少留原文。
+ */
+const MAX_OVERESTIMATE = 0.25
 
 const EN = `The quick brown fox jumps over the lazy dog. Compaction must never trade
 recoverability for a better compression ratio. When a tool call is separated from its
@@ -163,10 +172,82 @@ function main() {
     )
   }
 
-  // 密文判定仍要认得 JSON（放宽比例不等于放弃分类）
+  // ── 散文判别器：冒充者一个都不能放进来 ──
+  //
+  // 判成散文 = 用 4.5 而不是 3.5 字符/token，**向低估偏 29%**。低估是会炸的方向，
+  // 所以这一节才是本次改动真正的风险面：比例取值有实测撑着，判别器没有。
+  //
+  // 下面每一条都是「没有标点、看着像自然语言」但**实际比日志还密**的东西。
   {
-    assert(looksDenseTokenText(JSON_BLOB), 'JSON is still classified as dense')
-    assert(!looksDenseTokenText(EN), 'prose is not dense')
+    const b64 =
+      'aGVsbG8gd29ybGQgdGhpcyBpcyBhIGJhc2U2NCBibG9iIHRoYXQgY29udGFpbnMgbm8gcHVuY3R1' +
+      'YXRpb24gd2hhdHNvZXZlciBhbmQgd291bGQgYmUgbWlzdGFrZW4gZm9yIHByb3NlIGJ5IGEgbmFp' +
+      'dmUgcHVuY3R1YXRpb24gZGVuc2l0eSB0ZXN0IGFsb25l'
+    const hexDump = Array.from({ length: 120 }, (_, i) =>
+      (i * 37).toString(16).padStart(2, '0'),
+    ).join(' ')
+    const uuids = Array.from(
+      { length: 8 },
+      (_, i) => `3f2b8a${i}c-9d1e-4f77-b0a2-5c6e7d8f90a${i}`,
+    ).join(' ')
+    const numbers = Array.from({ length: 90 }, (_, i) => String(1700000000 + i * 7)).join(
+      ' ',
+    )
+    const spacedHash = Array.from({ length: 6 }, (_, i) =>
+      'a1b2c3d4e5f60718293a4b5c6d7e8f90'.slice(0, 32 - i),
+    ).join(' ')
+
+    const imposters: Array<[string, string]> = [
+      ['base64 blob (no punctuation, one giant word)', b64],
+      ['hex dump (short words, mostly digits)', hexDump],
+      ['uuid list (long words, mixed digits)', uuids],
+      ['bare timestamp column (digits only)', numbers],
+      ['whitespace-separated hashes', spacedHash],
+      ['json', JSON_BLOB],
+      ['typescript', CODE],
+      ['logs and stack traces', TOOL_OUT],
+    ]
+    for (const [name, text] of imposters) {
+      assert(
+        !looksProseText(text),
+        `${name} must NOT be treated as prose — prose gets 4.5 chars/token, ` +
+          `and everything here is denser than the 3.5 default, so misclassifying it underestimates`,
+      )
+    }
+
+    // 反面：真正的散文必须认得出来，否则这个类白加了
+    const proseSamples: Array<[string, string]> = [
+      ['the english fixture', EN],
+      [
+        'a user question',
+        'can you explain why the compaction step keeps discarding the tool results ' +
+          'before the assistant has had a chance to read them back in the next turn',
+      ],
+      [
+        'documentation paragraph',
+        'The runtime records every message to an append only transcript so that a ' +
+          'session can be resumed after a crash without replaying any provider calls.',
+      ],
+    ]
+    for (const [name, text] of proseSamples) {
+      assert(
+        looksProseText(text),
+        `${name} must be recognised as prose — otherwise the class is dead code ` +
+          `and prose keeps its 41% overestimate`,
+      )
+    }
+
+    // 这一类必须真的**改变结果**，而不是分了类但两边取值一样
+    {
+      const proseText = proseSamples[2]![1]
+      const asProse = estimateOne(proseText)
+      const dense = 'x'.repeat(proseText.length)
+      assert(
+        !looksProseText(dense) && asProse < estimateOne(dense),
+        'the prose class is load-bearing: the same number of characters costs ' +
+          'fewer tokens as prose than under the default ratio',
+      )
+    }
   }
 
   console.log(rows.join('\n'))

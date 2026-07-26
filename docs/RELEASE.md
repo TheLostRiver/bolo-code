@@ -210,7 +210,7 @@ git push --follow-tags
 | **`mcp-external` 搜索** | ⚠️ 仅验过 Exa | `searxng` preset 指向的桥需用户自建，**从未真连过** |
 | **中段 compact** | 🚫 显式不启用 | 契约就绪但产品代码零调用；两个参考实现都没真正跑过它 → §13.10.2 |
 | **远端 compaction** | 🚫 显式不实施 | 见 [ADR_COMPACT_REMOTE.md](./ADR_COMPACT_REMOTE.md) |
-| **token 估算对非 CJK 的高估** | ⚠️ 已知偏差 | 最差 +41%（英文散文）。方向安全（提前压缩），但会多花摘要调用 → `test-token-estimate-accuracy.ts` |
+| **token 估算对非 CJK 的高估** | ⚠️ 已收窄，仍有偏差 | 最差 **+19.5%**（JSON 工具 schema），英文散文已从 +41% 降到 +8.9%。做法：删掉前提被推翻的「密文」类，改分散文 4.5 / 其余 3.5 字符/token。剩余偏差是无依赖启发式的固有上限——JSON 真实 4.18 而日志 3.31，一个常量服务不了这个跨度，只能贴着最密的一类取。方向安全（提前压缩），代价是多花摘要调用 → `test-token-estimate-accuracy.ts` |
 
 ### 6.5 恢复手册
 

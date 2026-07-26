@@ -65,3 +65,6 @@ task_plan.md
 
 # Nested Desktop runtime config/session data
 apps/desktop/.bolo/
+
+# Claude Code 的本地权限设置，属机器本地状态，不进版本库
+.claude/settings.local.json
