@@ -582,7 +582,13 @@ try {
     },
   )
   assert.equal(noSession.status, 2)
-  assert.match(noSession.stderr, /requires --resume <id\\|path> or --continue/)
+  assert.equal(noSession.stderr, '')
+  assert.deepEqual(JSON.parse(noSession.stdout), {
+    ok: false,
+    code: 'usage',
+    detail:
+      'runtime command requires --resume <id|path> or --continue',
+  })
 
   console.log('PASS: test-runtime-cli-command')
 } finally {

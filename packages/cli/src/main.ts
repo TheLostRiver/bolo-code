@@ -14,6 +14,7 @@ import {
   runResumeCli,
 } from './resumeCli.ts'
 import {
+  formatRuntimeCliFailure,
   runRuntimeCommandCli,
   runRuntimeQueryCli,
 } from './runtimeCli.ts'
@@ -62,12 +63,24 @@ async function readStdinIfPiped(idleMs = 80): Promise<string | undefined> {
 }
 
 async function main(): Promise<void> {
+  const argv = process.argv.slice(2)
+  const wantsJson = argv.includes('--json')
   let args
   try {
-    args = parseArgs(process.argv.slice(2))
+    args = parseArgs(argv)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    process.stderr.write(`error: ${msg}\n\n${formatHelp()}`)
+    if (wantsJson) {
+      process.stdout.write(
+        `${formatRuntimeCliFailure({
+          ok: false,
+          code: 'usage',
+          detail: msg,
+        })}\n`,
+      )
+    } else {
+      process.stderr.write(`error: ${msg}\n\n${formatHelp()}`)
+    }
     process.exit(2)
   }
 
@@ -89,7 +102,7 @@ async function main(): Promise<void> {
         const msg = err instanceof Error ? err.message : String(err)
         if (args.json) {
           process.stdout.write(
-            `${JSON.stringify({
+            `${formatRuntimeCliFailure({
               ok: false,
               code: 'load_failed',
               detail: msg,
@@ -103,9 +116,18 @@ async function main(): Promise<void> {
     } else if (typeof args.resume === 'string') {
       idOrPath = args.resume
     } else {
-      process.stderr.write(
-        `error: runtime ${args.runtimeQuery ? 'query' : 'command'} requires --resume <id|path> or --continue\n`,
-      )
+      const detail = `runtime ${args.runtimeQuery ? 'query' : 'command'} requires --resume <id|path> or --continue`
+      if (args.json) {
+        process.stdout.write(
+          `${formatRuntimeCliFailure({
+            ok: false,
+            code: 'usage',
+            detail,
+          })}\n`,
+        )
+      } else {
+        process.stderr.write(`error: ${detail}\n`)
+      }
       process.exit(2)
     }
 

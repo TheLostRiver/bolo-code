@@ -49,13 +49,20 @@ export type RuntimeQueryCliResult = {
   exitCode: 0 | 1 | 130
 }
 
-type RuntimeCliError = {
+export const RUNTIME_CLI_FAILURE_CODES = [
+  'usage',
+  'load_failed',
+  'invalid_query',
+  'not_found',
+  'pager_failed',
+] as const
+
+export type RuntimeCliFailureCode =
+  (typeof RUNTIME_CLI_FAILURE_CODES)[number]
+
+export type RuntimeCliFailure = {
   ok: false
-  code:
-    | 'load_failed'
-    | 'invalid_query'
-    | 'not_found'
-    | 'pager_failed'
+  code: RuntimeCliFailureCode
   detail: string
 }
 
@@ -67,8 +74,25 @@ export function formatRuntimeQueryView(view: RuntimeQueryView): string {
   }).text
 }
 
+/**
+ * AR1C2 automation compatibility:
+ * - success stays the raw runtime.list/runtime.inspect view;
+ * - JSON.stringify preserves known field order and additive unknown fields.
+ */
+export function formatRuntimeQueryJson(
+  view: RuntimeQueryView,
+): string {
+  return JSON.stringify(view)
+}
+
+export function formatRuntimeCliFailure(
+  failure: RuntimeCliFailure,
+): string {
+  return JSON.stringify(failure)
+}
+
 function writeFailure(
-  failure: RuntimeCliError,
+  failure: RuntimeCliFailure,
   options: {
     json: boolean
     writeOut: (text: string) => void
@@ -76,7 +100,7 @@ function writeFailure(
   },
 ): void {
   if (options.json) {
-    options.writeOut(`${JSON.stringify(failure)}\n`)
+    options.writeOut(`${formatRuntimeCliFailure(failure)}\n`)
     return
   }
   options.writeErr(`error [${failure.code}]: ${failure.detail}\n`)
@@ -108,7 +132,7 @@ export async function runRuntimeQueryCli(
       writeErr: () => undefined,
     })
   } catch (error) {
-    const failure: RuntimeCliError = {
+    const failure: RuntimeCliFailure = {
       ok: false,
       code: 'load_failed',
       detail: error instanceof Error ? error.message : String(error),
@@ -128,7 +152,7 @@ export async function runRuntimeQueryCli(
     }
 
     if (json) {
-      writeOut(`${JSON.stringify(result.view)}\n`)
+      writeOut(`${formatRuntimeQueryJson(result.view)}\n`)
       return { exitCode: 0 }
     }
 
@@ -290,7 +314,7 @@ export async function runRuntimeCommandCli(
       writeErr: () => undefined,
     })
   } catch (error) {
-    const failure: RuntimeCliError = {
+    const failure: RuntimeCliFailure = {
       ok: false,
       code: 'load_failed',
       detail: error instanceof Error ? error.message : String(error),
