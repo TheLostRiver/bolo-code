@@ -25,7 +25,7 @@
 | **CLI TUI（壳）** | **~70–80%** | 文本框布局/picker/主题；active Ctrl-C 取消本轮；**非**真 React Ink |
 | **Electron GUI** | **~65–75%** | 壳 + 流式 + 权限 + 设置 + 多 provider（CX7） |
 | **Hooks · 日用契约** | **~96–98%** | **H0–H5 已落地**（SessionEnd · exit 语义 · updatedInput · `/hooks recent`） |
-| **Compact · 日用管道** | **~94–96%** | **C0–C5 + AR2A0a/A0b + AR2A1 契约已落地**（hybrid 计数 · 中段截断 · 防重摘要 · partial range/watermark 纯函数）；A2 safe rewrite 接线进行中（§13.10.2） |
+| **Compact · 日用管道** | **~95–97%** | **C0–C5 + AR2A0a/A0b/A1/A2 已落地**（hybrid 计数 · 中段截断 · 防重摘要 · range/watermark 契约 · 切分不拆对穷举验证 · 写失败完整回退 · durable 条目不丢）；中段压缩按证据门控**显式不启用**（§13.10.2） |
 | **Provider · 多实例热切** | **~92–96%** | **P0–P4.1 + CX7 Desktop** |
 | **Effort · 推理强度方言** | **~92–95%** | **E0–E9 已落地**；adaptive thinking 归 AR4 |
 | **Provider UX · 便利层** | **~95–98%** | **CX0–CX8 已落地**（ultrathink 默认 off）· [PROVIDER_UX.md](./PROVIDER_UX.md) |
@@ -33,7 +33,7 @@
 
 **已闭环主线：** headless 日用 → Diff（D0–D7 / U0–U4）· Hooks（H0–H5）· Compact（C0–C5）· Provider（P0–P4.1）· Effort（E0–E9）· Provider UX（CX0–CX8）· 可靠性（R0–R4）· **Durable Runtime（DR0–DR4）** · **Autonomous Road AR1 CLI/TUI runtime UX**。切片明细 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
 
-**当前主线：** **AR2A1–A2 · Compact 深化**（§13.10.2 · 看板第 16 位）。AR-T1/AR-T2/AR-T3a/AR-T3b/AR-T3+ 与 **AR5C-early 分发**（§15）已收口。
+**当前主线：** **AR2B–C · tokenizer 重估 / 基准 / remote 决策**（§13.10.2 · 看板第 17 位）。AR-T1/AR-T2/AR-T3a/AR-T3b/AR-T3+ · **AR2A0a/A0b/A1/A2** 与 **AR5C-early 分发**（§15）已收口。
 
 **已插队并收口：** **AR-T · Agent 能力面**（§14）。准入证据：基础设施深度（DR0–DR4 + AR1）已远超能力广度——彼时 agent 无法跨步骤记住计划，也无法启动任何活过一次工具调用的进程。AR2 压缩深化顺延，A0a/A0b 成果不受影响。
 
@@ -113,7 +113,7 @@
 
 **一句话：** 主路径、Diff、Hooks、Compact、多 Provider、Effort、Provider UX、可靠性 R0–R4、Durable Runtime DR0–DR4、AR1 runtime UX、**AR-T1/AR-T2 能力面**已收口。
 
-**下一刀（当前主线）：** **AR2A1–A2 range/watermark + safe rewrite**（§13.10.2 · 看板第 16 位）。AR-T3+ 的三项命名交付已完成；§14.5 余下条目为可选续刀，不构成阻塞。
+**下一刀（当前主线）：** **AR2B1 tokenizer registry 必要性重估**（§13.10.2 · 看板第 17 位）。AR2A 全段已收口；中段压缩按证据门控显式不启用。
 
 ---
 
@@ -286,12 +286,31 @@ Safe boundary 只承诺：provider 调用前/完整响应归约后 · 每个 too
 | **AR2A0a · 混合 token 计数** ✅ | `UsageAnchor` + `hybridTokenCount` 纯函数 · `shouldAutoCompact`/`resolveAutoCompactTokenCount` opt-in 扩展 | sessionUsage 记 `messageCountAtCall`/指纹；deps/queryLoop/mid-turn 传锚；`/context` `pressure source: hybrid`；锚失效回退全量估算 | ✅ 旧 usage/estimate 路径不变；micro 改写不毁锚 |
 | **AR2A0b · 中段截断 + 防重摘要** ✅ | `truncateMiddle`（保头尾 + 原始规模标注 + 幂等）· per-tool 预算表 · `COMPACT_SUMMARY_MARKER` / merge 提示 | toolExecution exec 边界 + microcompact 共用；spill 全量落盘不动；boundary `mergedPriorSummary` | ✅ 截断只在产出时一次，不回溯改写历史 |
 | **AR2A1 · range/watermark** ✅ | `packages/compact/src/range.ts`：`MessageRange` · `deriveCompactWatermark` · `findAtomicBlocks` · `validateCompactRange` · `planPartialCompact` + 结构化拒绝原因。**watermark 推导而非存储**（`ChatMessage` 无 id，存下标必漂移；summary 消息可判别故可推导） | `test-compact-range.ts` 固定 fixture：原子块、吸附上报、空/越界/倒置、幂等、重复 compact、保留尾部、不改入参。**未接 provider** | ✅ 契约可表达 tool pair 与 lifecycle（summary 消息）；**`resolution` 是 transcript 条目不是 ChatMessage**，明确划在契约外，由 A2 接线时单独保证 |
-| **AR2A2 · safe rewrite** | A1 全绿；把 range 接入现有 C0–C5 compact/rewrite barrier | tool call/result 不拆对；durable turn/control/task/resolution 不丢；旧 transcript 可读；写失败完整回退 | 任一 fixture 出现不可恢复丢失、半写或自动 replay，立即回退并停止本刀 |
+| **AR2A2 · safe rewrite** ✅**（安全面）**/ ⏸**（中段能力未启用）** | 四条验收全过：tool pair 不拆对（`test-compact-split-invariant.ts` 穷举 7736 切点 + 6820 split 组合，`findAtomicBlocks` 当裁判）· durable 条目不丢（`3e918ea`）· 旧 transcript 可读（含坏行与旧格式两例）· 写失败完整回退（`948061c`） | 两处修复均为**已复现**的真 bug 而非预防性改动 | ⏸ **`planPartialCompact` / `validateCompactRange` 产品代码零调用**——契约只作为验证者接线，未启用任意中段压缩。理由见下 |
 | **AR2B1 · tokenizer registry** | A2 稳定；**先重估必要性**（A0a 已显著提升精度）；若仍需要：providers/shared 契约层 provider/model→tokenizer/budget，unknown 保守 fallback | renderer/core 不出现 provider 分支；mock 与至少两类方言 fixture；预算错误 fail-closed | 若必须联网或引入不可审计 native 依赖，只保留接口与 fallback，不引入实现 |
 | **AR2B2 · measurable budget** | B1 可复现；固定中英文本、tool/diff、长 JSON 语料 | 记录 token 偏差、compact 后成本、延迟与峰值内存；设回归阈值 | 没有相对当前估算的稳定收益，不替换默认算法，只保留基准结论 |
 | **AR2C · remote decision** | A/B 已证明本地瓶颈且有真实跨会话需求 | 写 ADR：local-only、remote/session-memory 之一；列隐私、离线、兼容与失败回退 | 需要新服务、遥测或不透明存储时默认"不实施"，关闭而非永久挂起 |
 
 AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 registry（重估后）→ B2 benchmark → C 决策文档**。每刀都必须能单独回滚到 C0–C5，不以"压缩率更高"交换 transcript 可恢复性。
+
+##### 为什么 A2 不启用任意中段压缩（证据门控，2026-07 调研）
+
+调研两个参考实现后的结论：
+
+| | 中段压缩 | 写盘模型 |
+|---|---|---|
+| HC | partial 只有 `from`/`up_to`（前缀或后缀）；真中段是 `snip`（`removedUuids` 列表）**但其构建里是 no-op 桩 + feature flag 关闭** | append-only + load 时 prune |
+| codex | **无**，只有前缀坍缩（`CompactedItem.replacement_history`） | append-only |
+| Bolo | 契约已具备 | 整份重写 |
+
+即：**任意中段压缩没有任何一家真正跑在线上。** 契约留着（纯函数、有测试、零成本），
+但启用它属于净新增领域，需要先有证据证明前缀压缩不够用。当前没有这样的证据，
+故按 AR4 的证据门控方式**显式不启用**，而不是留一个永久待办。
+
+另记：Bolo 的读侧其实已是 append-only 语义（resume 取最后一个 `compact_boundary`
+之后的 message；durable 条目由 `projectDurable*` 全量扫描、不受 boundary 位置影响），
+所以写侧若日后改 append 与现有读侧兼容。但 append 会让文件只增不减、更易撞 32MiB 上限
+（HC 用 load 时 prune 解决）。这是独立的架构决策，**不塞进 A2**。
 
 ##### AR3 · Codex App 风格 Desktop（薄 renderer）
 
@@ -351,8 +370,8 @@ AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 regis
 | 13 | **AR-T2 · Bash background** | `BackgroundShell` 契约 + 原生进程树 kill + BashOutput/KillShell | dev server / 长构建不再阻塞 turn | 真实进程 kill + endSession 无僵尸 + 前台回归 | ✅ |
 | 14 | **AR5C-early · CLI 分发** | esbuild 单文件 + 发布元数据 + 双布局资产 | `npm i -g bolo-code` 可用 | pack→install→run E2E + 零依赖 + tarball 清单 | ✅ |
 | 15 | **AR-T3+ · 能力面续刀** | `bolo search enable` · OpenRouter plugin · AskUserQuestion（逐项） | 见 §14.5 | 每项独立红灯 + 全量门禁 | ✅（AskUserQuestion 真 TTY 交互未验） |
-| 16 | **AR2A1–A2 · watermark/safe rewrite** | range/watermark 纯契约 ✅ → rewrite 接线（A2 进行中） | partial compact 主路径 | tool pairing + lifecycle 保留 | **当前**：A2 四条验收已过两条（durable 不丢 `3e918ea` · 写失败完整回退 `948061c`，均为已复现的真 bug）；余「range 接线」与「旧 transcript 可读」 |
-| 17 | **AR2B–C · tokenizer/benchmark/ADR** | registry（重估）+ 语料基准 + remote 决策 | 可量化 token/cost | 偏差阈值 + fail-closed | 📋 |
+| 16 | **AR2A1–A2 · watermark/safe rewrite** | range/watermark 纯契约 ✅ · 契约作为验证者接线 ✅ | compact 安全面收口 | tool pairing + lifecycle 保留 | ✅ 四条验收全过（`3e918ea` · `948061c` · `b5c7112`）；**中段压缩按证据门控显式不启用**，理由见 §13.10.2 |
+| 17 | **AR2B–C · tokenizer/benchmark/ADR** | registry（重估）+ 语料基准 + remote 决策 | 可量化 token/cost | 偏差阈值 + fail-closed | **当前** |
 | 18 | **AR3A–F** | protocol client/store；无 renderer 状态机 | Codex App 风格 Desktop | mock/core IPC + crash/restart + Windows package | 📋 |
 | 19 | **AR4** | 逐项 evidence gate | 有证据实施；无证据书面关闭 | 场景/基准/兼容证据 | 📋 |
 | 20 | **AR5A–D**（AR5C 已提前完成） | compatibility/security/release contracts | clean clone 安装、升级、恢复手册 | full test + cross-platform smoke + security audit | 📋 |
