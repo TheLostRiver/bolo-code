@@ -1139,6 +1139,23 @@ DR0–DR4 收口后进入 Autonomous Road（AR）。一次只推进一个可独�
 | **AR1C1 · text/pager** | renderer 输入仅为 AR1 view-model；分页状态不进入 core/session | 大列表可分页/筛选；窄屏、NO_COLOR、非 TTY 不挂起 | 0/1/N 行、窄终端、重定向、Ctrl-C/EOF | **当前** |
 | **AR1C2 · automation closeout** | JSON schema/排序/错误码稳定；原 `/runtime json` 保持 protocol snapshot 兼容 | 脚本无需清洗 ANSI/banner/summary；help/USAGE 完整 | golden snapshot、stdout/stderr 分离、参数排列、旧会话 | 📋 |
 
+AR1C 内部执行顺序与提交边界：
+
+| 子切片 | 先落契约 / 测试 | 后接消费层 | 完成定义 | 建议代码提交 |
+|--------|-----------------|------------|----------|--------------|
+| **AR1C1a · pure renderer** | `RuntimeQueryView → RuntimeTextPage` 纯函数；columns/page/pageSize/color/filter 均显式输入 | 顶层 runtime text 与 slash runtime 复用同一行格式 | 0/1/N、turn/control/task、inspect、窄屏、NO_COLOR golden；不修改输入 view | `feat(cli): render paged runtime views` |
+| **AR1C1b · pager model** | page clamp、next/previous/quit key reducer；分页状态只存在 consumer 内 | TTY driver 复用现有 raw-mode/read-key primitive | next/prev、q/Esc/Ctrl-C/EOF；无条目与单页不进入等待；异常时恢复 raw mode | `feat(cli): page interactive runtime views` |
+| **AR1C1c · CLI integration** | 可注入 isTty/columns/rows/readKey/writeOut，保证可测 | `bolo runtime list|inspect` 仅在 text + TTY + 多页时启 pager；pipe/JSON 一次性输出 | 非 TTY 永不读 stdin；退出码与 AR1A/B 不变；真实 bin 与 pipe 回归 | 与 C1b 同批或独立小提交 |
+| **AR1C2a · automation schema** | 稳定 query success/error envelope、字段顺序与 entity 排序；保留 protocol v1 snapshot | `--json` stdout 单 payload，诊断只进 stderr | golden、旧 transcript、unknown additive fields、missing/not-found/load failure | `fix(cli): stabilize runtime automation output` |
+| **AR1C2b · surface closeout** | parser/help matrix 与兼容 fixture | help、USAGE、AGENT_HANDOFF、ROADMAP 同步 | `--resume/--continue/--json/--request-id` 排列；new/resume 不加载 provider；默认 `npm test` 纳入全部专项 | `docs: close autonomous runtime UX` |
+
+AR1C 明确非目标：
+
+- 不把 page、filter、cursor、terminal columns 写入 session、snapshot、protocol 或 JSONL。
+- 不为 pager 引入 Ink/React/ratatui；若现有 TypeScript primitive 无法通过验收，再按 AR4 独立举证。
+- 不改变 interrupted 默认只诊断、不 replay 的语义；renderer 不根据按钮可见性自行执行动作。
+- 不让 JSON/pipe 路径输出 ANSI、clear-screen、banner、provider warning 或人类摘要。
+
 #### AR1B2 已落地契约
 
 - protocol v1 additive 增加 `commands.replace` / `control.replace`。target 必须携带 `controlId + expectedState=pending|ready`，replacement 必须提供非空 prompt；success 可返回 `replacedControlId/controlId/turnId`。
@@ -1160,12 +1177,50 @@ DR0–DR4 收口后进入 Autonomous Road（AR）。一次只推进一个可独�
 
 #### 13.10.2 AR2–AR5 细化
 
-| 轨 | 顺序与交付 | 开工证据 | 完成/停止门槛 |
-|----|------------|----------|---------------|
-| **AR2 · Compact depth** | A1 range/watermark 纯契约 → A2 tool pairing/lifecycle/旧 transcript 兼容 → B1 provider-aware tokenizer registry → B2 固定语料 token/cost/latency 基准 → C remote/session-memory 决策 | AR1 收口；现有 C0–C5 基线可复现；新算法能在固定语料证明收益 | 任何失败可回退 C0–C5；不得擦除 lifecycle/resolution；remote 无明确收益或需服务端时书面关闭 |
-| **AR3 · Desktop shell** | A protocol client/store → B session/turn/control/task 导航 → C markdown/tool/diff/approval cards → D composer queue/steer/interrupt → E provider/effort/settings → F crash/keyboard/perf/package | AR1 view-model/command 至少稳定一个阶段；core IPC mock 与真 core fixture 可用 | renderer 不重算状态机/权限/diff；Windows 打包可复现；每刀先 packages 契约后 Electron |
-| **AR4 · Evidence depth** | 分别评估 U5 Ink/IDE bridge、adaptive thinking、hook trust UI、远程模型列表；每项独立决策 | 至少一个可复现用户场景、兼容缺口或量化基准 | 证据不足默认写“不实施”并关闭；禁止为对齐代码量引依赖、遥测或官方市场 API |
-| **AR5 · Release hardening** | A migration/compat matrix → B 磁盘满/部分写/崩溃/权限 fixture → C install/upgrade/uninstall + 三平台 smoke → D perf/security/docs/release checklist | 已选择的 AR1–AR4 全部关闭或完成；版本边界已冻结 | clean clone 可安装/升级/恢复；默认门禁全绿；无密钥、遥测、隐式 replay；已知限制可由文档独立操作 |
+##### AR2 · Compact depth（上下文正确性先于节省率）
+
+| 切片 | 准入 / packages-first 交付 | 集成与验收 | 完成或停止门槛 |
+|------|---------------------------|------------|----------------|
+| **AR2A1 · range/watermark** | AR1 完成；定义 partial range、stable watermark、保留区间与拒绝原因的纯类型/纯函数 | 仅用固定 message/transcript fixture 验证边界、幂等、空范围、重复 compact；尚不接 provider | 契约无法表达 tool pair、lifecycle 或 resolution 保留时停止集成，先修契约 |
+| **AR2A2 · safe rewrite** | A1 全绿；把 range 接入现有 C0–C5 compact/rewrite barrier | tool call/result 不拆对；durable turn/control/task/resolution 不丢；旧 transcript 可读；写失败完整回退 | 任一 fixture 出现不可恢复丢失、半写或自动 replay，立即回退并停止本刀 |
+| **AR2B1 · tokenizer registry** | A2 稳定；在 providers/shared 契约层定义 provider/model→tokenizer/budget，unknown 使用保守 fallback | renderer/core 不出现 provider 分支；mock 与至少两类方言 fixture；预算错误 fail-closed | 若必须联网或引入不可审计 native 依赖，只保留接口与 fallback，不引入实现 |
+| **AR2B2 · measurable budget** | B1 可复现；建立固定中英文本、tool/diff、长 JSON 语料 | 记录 token 偏差、compact 后成本、延迟与峰值内存；设回归阈值并进默认或分层门禁 | 没有相对当前估算的稳定收益，不替换默认算法，只保留基准结论 |
+| **AR2C · remote decision** | A/B 已证明本地瓶颈且有真实跨会话需求 | 写 ADR：local-only、remote/session-memory 之一；列隐私、离线、兼容与失败回退 | 需要新服务、遥测或不透明存储时默认“不实施”，关闭而非永久挂起 |
+
+AR2 提交顺序：A1 契约/测试 → A2 接线 → B1 registry → B2 benchmark/阈值 → C 决策文档。每刀都必须能单独回滚到 C0–C5，不以“压缩率更高”交换 transcript 可恢复性。
+
+##### AR3 · Codex App 风格 Desktop（薄 renderer）
+
+| 切片 | packages-first / IPC 契约 | Codex App 风格人类结果 | 专项门禁 |
+|------|---------------------------|------------------------|----------|
+| **AR3A · client/store** | protocol version negotiation、snapshot/query/command client、单一 normalized store；mock 与真 core adapter 同接口 | 启动后能看到 session 状态，断线/不兼容有明确空态，不把 core 对象泄到 renderer | protocol round-trip、unknown fields、stale command、IPC timeout/reconnect；store 不产生第二状态机 |
+| **AR3B · navigation/recovery** | session/turn/control/task selector 与 selection route 纯模型 | 左侧 session 导航、主区 turn timeline、任务/控制诊断抽屉；interrupted 明确 inspect/discard/retry-safe | 大会话、旧 transcript、missing target、crash/restart；默认不 replay |
+| **AR3C · content cards** | markdown/tool/diff/approval view-model 继续来自 packages；卡片只负责呈现 | 克制的 Codex App 信息密度：消息流、tool 状态、diff、approval、错误与复制 | unsafe HTML、超长输出、折叠、键盘/屏幕阅读标签；权限与 diff 不在 renderer 重算 |
+| **AR3D · composer/runtime actions** | composer intent→queue/steer/interrupt/command；携带 expected state/requestId | active turn 时清楚选择排队、修正或中断；partial acceptance/warning 可恢复 | double submit、stale target、offline、cancel/replace race；按钮可见性不等于授权 |
+| **AR3E · settings** | provider/model/effort/capabilities/config schema 共用 packages | provider/model/effort 可搜索与切换，能力/缺 key/重启需求可解释 | secret 不回传 renderer/transcript；切换失败保留旧值；mock/真配置兼容 |
+| **AR3F · hardening/package** | telemetry-free perf counters 仅本地测试；窗口/会话恢复边界；打包配置 | crash 后可重新打开并诊断；键盘主路径；Windows 安装包可复现 | cold/warm start、10k events、内存、renderer crash、Windows package/smoke；macOS/Linux 能运行脚本 smoke 或明确 CI 前置 |
+
+AR3 视觉原则：深浅主题都保持高对比、窄侧栏 + 单一主时间线 + 右侧按需诊断，避免仪表盘堆叠；先完成信息架构和状态正确性，再做动效与装饰。每个切片先落 packages/IPC fixture，后改 `apps/desktop`。
+
+##### AR4 · Evidence-driven depth（逐项准入，不设“大包”）
+
+| 候选 | 最低证据 | 获准后最小交付 | 无证据时的关闭方式 |
+|------|----------|----------------|--------------------|
+| **U5 Ink / IDE bridge** | AR1 pager 的可复现能力缺口，或 IDE 跳转能明显减少 diff 操作步骤 | 独立 spike + 依赖/启动/包体基准；默认路径仍可回落自研 TTY | 记录现有 pane 已满足验收，标记“不实施” |
+| **Adaptive thinking** | 固定语料显示静态 effort 在质量/成本上有稳定劣势 | provider-neutral policy + 可关闭配置 + 回归 corpus | 证据不稳定或 provider 专有时不进入默认 |
+| **Hook trust UI** | 用户确有多 workspace 信任切换需求，且 CLI 文本无法安全表达 | trust 状态契约、来源展示、最小选择 UI、fail-closed | 继续使用现有配置/文档，记录不扩 UI |
+| **远程模型列表** | 静态模型表造成真实兼容故障，且 provider 有稳定 API/缓存语义 | 可缓存 adapter、离线 fallback、超时/鉴权测试 | API 不稳定、需遥测/官方市场或离线退化差则关闭 |
+
+每个候选独立形成 `implement / defer / reject` 决策，带证据链接、风险、回滚和重新开启条件。`defer` 必须有明确外部前置，不允许用它掩盖没有完成定义的永久待办。
+
+##### AR5 · Release hardening（冻结后只修可靠性）
+
+| 切片 | 核心交付 | 关键 fixture / smoke | 完成定义 |
+|------|----------|----------------------|----------|
+| **AR5A · migration/compat** | session/config/protocol 版本矩阵、forward-additive/旧版读取、migration dry-run 与备份策略 | 最近支持版本 × 当前版本；unknown field/event；中断迁移；重复运行 | 旧数据可读或给出无损导出/恢复步骤；迁移幂等，失败不覆盖源 |
+| **AR5B · fault injection** | append/rewrite/config/cache 的故障注入 seam | 磁盘满、EACCES、部分写、rename 失败、进程崩溃、并发 resume、时钟异常 | 不伪造成功、不丢原文件、不自动 replay；错误含可操作恢复信息 |
+| **AR5C · install lifecycle** | clean clone、install/build/package、upgrade/uninstall 脚本与产物清单 | Windows 主门禁；macOS/Linux CI smoke；路径含空格/非 ASCII；无全局依赖 | 安装、升级、卸载均可复现；用户数据保留策略明确；产物不含密钥/临时文件 |
+| **AR5D · release gate** | 性能预算、安全审计、SBOM/许可证、已知限制、恢复手册、release checklist | CLI startup、10k-event resume、compact、Desktop cold start；依赖/secret/permission scan | 默认门禁与 release smoke 全绿；文档可由未参与开发的人独立执行；版本 tag 前 checkpoint 已 push |
 
 固定选择规则：
 
@@ -1174,6 +1229,9 @@ DR0–DR4 收口后进入 Autonomous Road（AR）。一次只推进一个可独�
 3. 每切片代码/测试与文档分批 commit/push；ROADMAP 水位只在验收全绿后前移。
 4. 对标 HC/Codex/OpenCode/Pi 只借鉴语义、失败模式和测试；不复制重量级目录、依赖或本机路径。
 5. AR4 属于条件触发项：若缺少真实需求，必须以书面取舍关闭，而不是留下永久“待办”。
+6. 每个切片开始时把准入证据和预计触碰路径写入 PWF；结束时记录专项、typecheck、完整测试、scoped diff 和远端 commit。
+7. 一个代码提交只承载一个可描述的行为变化；文档水位独立提交。每次 commit 后立即 push，并核对 `HEAD == origin/main`。
+8. 若用户既有脏文件与切片重叠，优先通过新增模块、窄补丁或依赖倒置避让；无法证明归属时触发 §13.8 停止条件。
 
 ### 13.11 无人值守执行看板
 
