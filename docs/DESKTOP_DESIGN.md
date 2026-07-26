@@ -133,6 +133,25 @@ Codex App 的一手资料**没拿到**：OpenAI 官方发布页 WebFetch 返回 
 4. Codex App 消息流里「模型文本 / 工具调用 / 错误」的具体视觉区分方式**未找到证据**，
    diff 是否有并排视图也未找到。这两点自己定，不假装是借鉴。
 
+## 7b. 验证状态（如实标注）
+
+| 面 | 状态 |
+|---|---|
+| 视图模型（会话列表 / timeline / 卡片） | ✅ 纯函数，门禁测试覆盖，关键语义均实证过会红 |
+| IPC 两侧对齐 | ✅ `test-desktop-ipc-contract.ts`（请求与推送两个方向） |
+| 事件名对齐 | ✅ `test-desktop-event-contract.ts` |
+| renderer 不注入 HTML | ✅ `test-timeline-cards.ts` 含抽取器自检 |
+| JS/HTML/CSS 语法 | ✅ `node --check` |
+| **真实 Electron 窗口里的呈现** | ❌ **未验证** |
+
+**未验证的具体是什么**：布局在真实窗口里的实际观感、Windows 上主题切换与
+maximize 后的渲染稳定性、焦点环与键盘走查、长会话下的滚动性能。
+
+这些自动化测试覆盖不到——与 `AskUserQuestion` 的真 TTY 交互是同一类缺口。
+Codex App 恰恰在 Windows 渲染上栽过一串（§3），所以这条不能靠推断带过。
+
+> **不要在没有真正打开过窗口的情况下把这一行改成 ✅。**
+
 ## 8. 不做
 
 - **不做遥测**（红线）
