@@ -199,6 +199,35 @@ finalInstructions = userInstructions + "\n\n" + hookInstructions
 - summary user-message 以稳定字面量开头：`COMPACT_SUMMARY_MARKER`（既有输出前缀，零变化）；`isCompactSummaryMessage` 可检测
 - 二次 compact 时若旧 summary 落在**待摘要前缀**（keep 尾部不算），`runFullCompact` 经 instructions 通道注入 `COMPACT_MERGE_PRIOR_SUMMARY_HINT`（合并事实、勿重新叙述），并在 boundary `compactMetadata.mergedPriorSummary: true` 留本地可观测标记（非遥测）
 
+### 2.6b 失败语义（两类失败必须对称）
+
+compact 有两个会失败的阶段，此前待遇不对称，已改齐：
+
+| 失败点 | 行为 |
+|--------|------|
+| 摘要生成 / PTL 重试耗尽 | 恢复 snapshot（保持同一数组引用，queryLoop 持有它）· `ok:false` |
+| **transcript 写盘** | **同上**——恢复 snapshot · `ok:false` · reason 说明是写盘失败 |
+
+原先写盘失败只 `emit error` 然后 `return { ok: true }`。后果是**内存与磁盘分叉**：
+内存是压缩后的短链，磁盘还是压缩前的长历史且无 boundary。resume 会加载那份旧历史
+——这次压缩等于没发生，上下文压力原样存在，于是立刻再次触发 auto compact 转圈，
+而调用方全程拿到 `ok:true`。
+
+> 写盘因此必须排在 **PostCompact hook 与 skill 再注入之前**：hook 一旦跑过就收不回来，
+> 排在它后面就没法干净回退。
+
+**durable 条目的保留不得静默失败。** 整份重写靠再读一次旧文件把
+turn/control/task/resolution 与 title/notes 接到新文件；那次读取只把 **ENOENT**
+当作「新文件」，其余错误一律中止整个 rewrite（`loadTranscriptForPreservation`）。
+
+读不出旧文件就**不知道**里面有什么，此时继续覆盖等于销毁：
+`loadTranscriptFile` 在 `st.size > 32MiB` 时直接抛，而长会话堆到 32MiB
+并非极端情况（大 tool 输出很容易）。原先那个 `catch {}` 把「文件不存在」与
+「文件在但读不出来」混为一谈，一次 compact 就能永久抹掉断点续跑所需的全部状态，
+且不报任何错。
+
+回归：`test-compact-write-failure.ts` · `test-transcript-rewrite-preserve.ts`。
+
 ### 2.7 AR2A1 · partial range / watermark 契约（纯函数，**尚未接线**）
 
 真源：`packages/compact/src/range.ts` · 测试：`scripts/test-compact-range.ts`

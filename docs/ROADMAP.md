@@ -351,7 +351,7 @@ AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 regis
 | 13 | **AR-T2 · Bash background** | `BackgroundShell` 契约 + 原生进程树 kill + BashOutput/KillShell | dev server / 长构建不再阻塞 turn | 真实进程 kill + endSession 无僵尸 + 前台回归 | ✅ |
 | 14 | **AR5C-early · CLI 分发** | esbuild 单文件 + 发布元数据 + 双布局资产 | `npm i -g bolo-code` 可用 | pack→install→run E2E + 零依赖 + tarball 清单 | ✅ |
 | 15 | **AR-T3+ · 能力面续刀** | `bolo search enable` · OpenRouter plugin · AskUserQuestion（逐项） | 见 §14.5 | 每项独立红灯 + 全量门禁 | ✅（AskUserQuestion 真 TTY 交互未验） |
-| 16 | **AR2A1–A2 · watermark/safe rewrite** | range/watermark 纯契约 ✅ → rewrite 接线（A2 待做） | partial compact 主路径 | tool pairing + lifecycle 保留 | **当前（A1 ✅ / A2 进行中）** |
+| 16 | **AR2A1–A2 · watermark/safe rewrite** | range/watermark 纯契约 ✅ → rewrite 接线（A2 进行中） | partial compact 主路径 | tool pairing + lifecycle 保留 | **当前**：A2 四条验收已过两条（durable 不丢 `3e918ea` · 写失败完整回退 `948061c`，均为已复现的真 bug）；余「range 接线」与「旧 transcript 可读」 |
 | 17 | **AR2B–C · tokenizer/benchmark/ADR** | registry（重估）+ 语料基准 + remote 决策 | 可量化 token/cost | 偏差阈值 + fail-closed | 📋 |
 | 18 | **AR3A–F** | protocol client/store；无 renderer 状态机 | Codex App 风格 Desktop | mock/core IPC + crash/restart + Windows package | 📋 |
 | 19 | **AR4** | 逐项 evidence gate | 有证据实施；无证据书面关闭 | 场景/基准/兼容证据 | 📋 |
