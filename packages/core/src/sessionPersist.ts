@@ -807,11 +807,25 @@ export async function migrateSessionToJsonl(
     : path.resolve(loadedPath)
   const transcriptPath = resolveTranscriptPathFromJson(jsonPath)
 
+  // 「文件不存在」（正常，该迁移）与「文件在但读不出来」（危险，绝不能覆盖）
+  // 必须分开。合成一个 catch 会把后者当成「里面没有消息」，
+  // 于是下面的保护失效，一个读不出来的 transcript 被直接覆盖——
+  // 而读不出来就意味着我们**不知道**会毁掉什么。
+  //
+  // 下游的 rewriteTranscriptFromMessages 也会拒绝这种情况，但依赖下游兜底是脆的：
+  // 这一层自己就该说得清，且报错要指向「迁移」而不是「重写」。
   let existingMessages = 0
   try {
     const t = await loadTranscriptMessages(transcriptPath)
     existingMessages = t.messages.length
-  } catch {
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+      const msg = e instanceof Error ? e.message : String(e)
+      throw new Error(
+        `refusing to migrate into ${transcriptPath}: it exists but could not be read, ` +
+          `so there is no way to tell what overwriting it would destroy. Cause: ${msg}`,
+      )
+    }
     existingMessages = 0
   }
 
