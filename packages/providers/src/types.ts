@@ -18,6 +18,16 @@ export type ProviderUsage = {
   cacheReadInputTokens?: number
   /** 缓存写入 token；Anthropic cache_creation */
   cacheCreationInputTokens?: number
+  /**
+   * `inputTokens` 是否**不含**缓存部分。
+   *
+   * 两家语义不同，必须显式标注而不是猜：
+   * - Anthropic：`input_tokens` 不含 cache_read/cache_creation，三者相加才是真实 prompt
+   * - OpenAI：`prompt_tokens` 已含 cached，`cached_tokens` 只是明细
+   *
+   * 消费方（如 usage 锚）据此决定要不要把 cache 加回来。
+   */
+  inputExcludesCache?: boolean
 }
 
 /**

@@ -158,6 +158,7 @@ import { createSessionBackgroundTaskLifecycle } from './sessionTaskRuntime.ts'
 import type { SessionUsage } from './sessionUsage.ts'
 import {
   cloneSessionUsage,
+  promptTokensFromUsage,
   createEmptySessionUsage,
 } from './sessionUsage.ts'
 import { createPromptCacheSessionState } from '../../compact/src/index.ts'
@@ -2682,7 +2683,10 @@ export function getSessionUsageAnchor(
     return undefined
   }
   const anchor: UsageAnchor = {
-    anchorInputTokens: last.inputTokens,
+    // C1：Anthropic 的 input_tokens 不含缓存部分。缓存越有效这个数越小，
+    // 直接拿来当锚会让 auto-compact 几乎不触发，一路涨到硬性 PTL。
+    // OpenAI 的 prompt_tokens 已含缓存，加回来就会重复计数。
+    anchorInputTokens: promptTokensFromUsage(last),
     anchoredMessageCount: last.messageCountAtCall,
   }
   if (last.messagePrefixFingerprint) {

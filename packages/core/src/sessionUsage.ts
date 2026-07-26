@@ -33,6 +33,8 @@ export type LastCallUsage = {
   messageCountAtCall?: number
   /** AR2A0a：call 时消息前缀形状指纹（compact fingerprintMessagePrefix） */
   messagePrefixFingerprint?: string
+  /** C1：inputTokens 是否不含缓存（Anthropic 语义）；锚据此还原真实 prompt */
+  inputExcludesCache?: boolean
 }
 
 export type SessionUsage = {
@@ -62,6 +64,12 @@ export type UsageDelta = {
   estimated?: boolean
   cacheReadInputTokens?: number
   cacheCreationInputTokens?: number
+  /**
+   * `inputTokens` 是否不含缓存部分（Anthropic 语义）。
+   * 只影响「真实 prompt 体积」的还原（usage 锚），**不影响计价**——
+   * 计价仍按 input / cacheRead / cacheWrite 三档分别算。
+   */
+  inputExcludesCache?: boolean
   /** 本轮使用的 model 标签；缺省不记 byModel */
   model?: string
   /** 本 call API 墙钟 ms */
@@ -238,6 +246,7 @@ export function accumulateSessionUsage(
   }
   if (cacheRead > 0) last.cacheReadInputTokens = cacheRead
   if (cacheCreate > 0) last.cacheCreationInputTokens = cacheCreate
+  if (delta.inputExcludesCache === true) last.inputExcludesCache = true
   if (delta.estimated) last.estimated = true
   if (key) last.model = key
   if (apiMs > 0) last.apiDurationMs = apiMs
@@ -351,6 +360,7 @@ export function normalizeProviderUsage(u: {
   totalTokens?: number
   cacheReadInputTokens?: number
   cacheCreationInputTokens?: number
+  inputExcludesCache?: boolean
 }): UsageDelta | null {
   const hasIn = u.inputTokens != null && Number.isFinite(u.inputTokens)
   const hasOut = u.outputTokens != null && Number.isFinite(u.outputTokens)
@@ -396,7 +406,28 @@ export function normalizeProviderUsage(u: {
       Math.floor(u.cacheCreationInputTokens!),
     )
   }
+  if (u.inputExcludesCache === true) out.inputExcludesCache = true
   return out
+}
+
+/**
+ * 真实发出去的 prompt 体积。
+ *
+ * provider 的 input 语义不统一：Anthropic 的 input_tokens 不含缓存，
+ * OpenAI 的 prompt_tokens 已含。只有标了 inputExcludesCache 的才需要加回来；
+ * 无脑相加会让 OpenAI 重复计数、过早压缩。
+ */
+export function promptTokensFromUsage(u: {
+  inputTokens?: number
+  cacheReadInputTokens?: number
+  cacheCreationInputTokens?: number
+  inputExcludesCache?: boolean
+}): number {
+  const input = Math.max(0, Math.floor(u.inputTokens ?? 0))
+  if (u.inputExcludesCache !== true) return input
+  const read = Math.max(0, Math.floor(u.cacheReadInputTokens ?? 0))
+  const write = Math.max(0, Math.floor(u.cacheCreationInputTokens ?? 0))
+  return input + read + write
 }
 
 export function estimateUsageFromCharCounts(opts: {

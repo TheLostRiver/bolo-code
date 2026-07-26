@@ -130,6 +130,9 @@ export function parseAnthropicStreamUsage(evt: unknown): ProviderUsage | null {
     outputTokens,
     totalTokens,
     ...cache,
+    // Anthropic 的 input_tokens 不含缓存部分；下游要还原真实 prompt 体积
+    // 就得把 cache_read / cache_creation 加回来
+    inputExcludesCache: true,
   }
 }
 
