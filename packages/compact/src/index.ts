@@ -1916,3 +1916,17 @@ export function formatPromptCacheSessionLine(
   }
   return `  promptCache:   ${parts.join(' · ')} (local layout/TTL/API-read; not vendor billing)`
 }
+// AR2A1：partial compact 的 range / watermark 契约（纯函数，不接 provider）
+export {
+  findAtomicBlocks,
+  deriveCompactWatermark,
+  validateCompactRange,
+  planPartialCompact,
+  type MessageRange,
+  type CompactWatermark,
+  type CompactRangeRejection,
+  type CompactRangeCheck,
+  type CompactRangeOptions,
+  type CompactPlan,
+  type CompactPlanRejection,
+} from './range.ts'
