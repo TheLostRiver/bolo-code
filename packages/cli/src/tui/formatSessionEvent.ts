@@ -187,6 +187,14 @@ export function createSessionEventPrinter(opts: {
   }
   let openTextLine = false
   let openReasoningLine = false
+  /**
+   * 本轮已展示过的引用 URL。
+   *
+   * 实测（第三方 Anthropic 中转）：引用是**逐句**发的，同一来源支撑多句话
+   * 就会重复到达——一次搜索 7 行引用只有 4 个不同 URL，其中一个连出 3 次。
+   * 解析层如实反映 provider 发了什么；不把同一个链接刷三遍是展示层的事。
+   */
+  let citedUrls = new Set<string>()
   let streamedText = false
   let reasoningPrefixDone = false
 
@@ -200,6 +208,8 @@ export function createSessionEventPrinter(opts: {
 
   return {
     beginTurn() {
+      // 新一轮重新计数：换个问题时同一来源应当再次显示
+      citedUrls = new Set<string>()
       streamedText = false
       openTextLine = false
       openReasoningLine = false
@@ -274,9 +284,12 @@ export function createSessionEventPrinter(opts: {
           const n = typeof e.resultCount === 'number' ? e.resultCount : '?'
           writeOut(`${DIM}⌕ ${n} result(s)${RESET}\n`)
         } else if (e.phase === 'citation' && typeof e.url === 'string') {
-          const t =
-            typeof e.title === 'string' && e.title ? `${e.title} — ` : ''
-          writeOut(`${DIM}  ↳ ${t}${e.url}${RESET}\n`)
+          if (!citedUrls.has(e.url)) {
+            citedUrls.add(e.url)
+            const t =
+              typeof e.title === 'string' && e.title ? `${e.title} — ` : ''
+            writeOut(`${DIM}  ↳ ${t}${e.url}${RESET}\n`)
+          }
         }
         return
       }
