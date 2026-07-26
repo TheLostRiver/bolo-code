@@ -12,6 +12,10 @@ import {
   formatRuntimeQueryJson,
   type RuntimeCliFailure,
 } from '../packages/cli/src/runtimeCli.ts'
+import {
+  formatHelp,
+  parseArgs,
+} from '../packages/cli/src/parseArgs.ts'
 import type { RuntimeListView } from '../packages/shared/src/runtimeQuery.ts'
 
 const view: RuntimeListView = {
@@ -71,6 +75,58 @@ assert.deepEqual(RUNTIME_CLI_FAILURE_CODES, [
   'pager_failed',
 ])
 
+const queryPermutations = [
+  [
+    '--json',
+    '--resume',
+    'session_a',
+    'runtime',
+    'list',
+    'task',
+  ],
+  [
+    'runtime',
+    'list',
+    'task',
+    '--resume=session_a',
+    '--json',
+  ],
+]
+for (const argv of queryPermutations) {
+  const parsed = parseArgs(argv)
+  assert.equal(parsed.json, true)
+  assert.equal(parsed.resume, 'session_a')
+  assert.deepEqual(parsed.runtimeQuery, {
+    action: 'list',
+    entity: 'task',
+  })
+}
+
+const commandPermutation = parseArgs([
+  '--request-id',
+  'request_a',
+  '--json',
+  'runtime',
+  'discard',
+  'turn',
+  'turn_a',
+  '--continue',
+])
+assert.equal(commandPermutation.json, true)
+assert.equal(commandPermutation.continue, true)
+assert.equal(commandPermutation.runtimeRequestId, 'request_a')
+assert.deepEqual(commandPermutation.runtimeAction, {
+  action: 'runtime.discard',
+  entity: 'turn',
+  entityId: 'turn_a',
+})
+
+const help = formatHelp()
+assert.match(help, /TTY 文本大列表自动分页/)
+assert.match(help, /n\/j\/↓/)
+assert.match(help, /q\/Esc/)
+assert.match(help, /usage 失败也输出单行 JSON/)
+
 const executable = path.resolve('packages/cli/bin/bolo.js')
 const baseEnv = {
   ...process.env,
@@ -100,6 +156,19 @@ assert.deepEqual(JSON.parse(parseFailure.stdout), {
   code: 'usage',
   detail: 'runtime inspect requires <turn|control|task> <id>',
 })
+
+const prefixJsonParseFailure = spawn([
+  '--json',
+  'runtime',
+  'inspect',
+  'turn',
+])
+assert.equal(prefixJsonParseFailure.status, 2)
+assert.equal(prefixJsonParseFailure.stderr, '')
+assert.deepEqual(
+  JSON.parse(prefixJsonParseFailure.stdout),
+  JSON.parse(parseFailure.stdout),
+)
 
 const invalidEntity = spawn([
   'runtime',

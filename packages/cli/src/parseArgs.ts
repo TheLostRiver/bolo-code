@@ -373,6 +373,7 @@ export function formatHelp(): string {
   bolo runtime inspect turn <turnId> --resume <id> [--json]
   bolo runtime discard turn <turnId> --resume <id> [--json]
   bolo runtime retry-safe control <controlId> --resume <id> [--json]
+  TTY 文本大列表自动分页：n/j/↓ 下一页，p/k/↑ 上一页，q/Esc 退出，Ctrl-C 返回 130
   bolo --migrate-session <id|path>   旧 JSON → 旁路 jsonl（默认不删 JSON）
   bolo migrate-session <id|path>     同上（位置子命令）
   bolo --migrate-session <id> --force --delete-json
@@ -393,7 +394,7 @@ REPL 斜杠命令（会话内）:
       --migrate-session    旧 JSON 旁路写出 jsonl
       --force              migrate：强制 rewrite 已有非空 jsonl
       --delete-json        migrate：写出后删除旧 .json
-      --json               runtime query/command 输出单行纯 JSON（无 banner/summary）
+      --json               runtime query/command 输出单行纯 JSON；usage 失败也输出单行 JSON
       --request-id <id>    runtime discard/retry-safe 幂等键（默认稳定派生）
   -p, --prompt [text]      单轮 prompt（隐含 --print）
       --print              非交互：有 prompt 则跑一轮，否则只摘要
@@ -401,7 +402,7 @@ REPL 斜杠命令（会话内）:
   -h, --help               帮助
 
 环境:
-  NO_COLOR / BOLO_PLAIN=1  欢迎 banner 仅输出一行 BOLO
+  NO_COLOR / BOLO_PLAIN=1  banner 简化；runtime TTY 文本不输出 ANSI 颜色
 
 无 API key 时仍可加载快照 / 启动会话；真正 callModel 时会报错（除非 BOLO_PROVIDER=mock）。
 `
