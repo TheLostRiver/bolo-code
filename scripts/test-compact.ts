@@ -158,12 +158,29 @@ async function main() {
     AUTOCOMPACT_BUFFER_TOKENS,
   } = await import('../packages/compact/src/index.ts')
 
-  assert(estimateTextTokens('abcd') === 1, 'plain text chars/4')
-  assert(estimateTextTokens('abcdefgh') === 2, 'plain 8 chars → 2')
-  const jsonish = '{"a":1,"b":2,"c":3,"d":4,"e":5,"f":6,"g":7,"h":8}'
+  // 这里原本钉死 `chars/4`。实测（DeepSeek，见 live-token-calibration.ts）
+  // 推翻了它作为普适常量：非 CJK 真实跨度 3.3（日志/路径）到 4.9（英文散文）
+  // 字符/token，按 4 算会把日志类**低估 17%**——那是会撞 provider 硬上限的方向。
+  // 数值精度改由 test-token-estimate-accuracy.ts 用真实 tokenizer 的实测值把关；
+  // 这里只断言必须成立的**性质**，不再绑死某个常量。
+  assert(estimateTextTokens('') === 0, 'empty text costs nothing')
+  assert(estimateTextTokens('abcd') >= 1, 'any non-empty text costs at least one token')
   assert(
-    estimateTextTokens(jsonish) > Math.ceil(jsonish.length / 4),
-    'dense JSON counts higher than chars/4',
+    estimateTextTokens('abcdefgh') >= estimateTextTokens('abcd'),
+    'longer text never costs fewer tokens',
+  )
+  const jsonish = '{"a":1,"b":2,"c":3,"d":4,"e":5,"f":6,"g":7,"h":8}'
+  const prose = 'a'.repeat(jsonish.length)
+  assert(
+    estimateTextTokens(jsonish) > estimateTextTokens(prose),
+    'dense JSON costs more per character than plain prose',
+  )
+  // 安全关键：同样字数的 CJK 必须比拉丁贵。
+  // 二者同价正是此前中文被低估 53% 的根因。
+  const cjk = '压缩绝不能拿可恢复性去换更高的压缩率'
+  assert(
+    estimateTextTokens(cjk) > estimateTextTokens('a'.repeat(cjk.length)),
+    'CJK costs more per character than Latin',
   )
   const withTools: ChatMessage = {
     role: 'assistant',

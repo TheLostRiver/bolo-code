@@ -68,9 +68,34 @@ export function mergeHookInstructions(
  * 对照参考 roughTokenCountEstimation：正文默认 ≈chars/4；
  * JSON/高标点密文 ≈chars/2；tool_calls 计入 name+arguments。
  */
-export const DEFAULT_BYTES_PER_TOKEN = 4
+/**
+ * 普通文本每 token 约合多少字符。
+ *
+ * 实测（DeepSeek）非 CJK 文本的真实比例跨度不小：
+ * 英文散文 **4.9**、TypeScript 代码 ~3.6、日志/路径/堆栈 **3.3** 字符/token。
+ * 路径、camelCase、转义符会切出大量罕见 token，比散文密得多。
+ *
+ * **一个常量服务不了整个跨度。** 要做到永不低估就得贴着最密的那一类取值，
+ * 代价是把最稀疏的一类高估约四成。这里取 3.5（略保守于实测最密的 3.3）——
+ * 因为两个方向的代价不对称：低估会让 auto compact 迟触发、撞 provider 硬上限；
+ * 高估只是提前压缩，浪费而已。
+ *
+ * 这个跨度本身就是无依赖启发式的固有上限；真 tokenizer 能消掉它，
+ * 但要么联网、要么引入不可审计的 native 依赖，两条都撞零运行时依赖红线。
+ */
+export const DEFAULT_BYTES_PER_TOKEN = 3.5
 /** JSON 类密文：单字符 token 更多，低估会拖晚 auto compact */
-export const DENSE_BYTES_PER_TOKEN = 2
+/**
+ * 密文（JSON / 高标点）每 token 约合多少字符。
+ *
+ * 原值 2 是拍出来的，实测**高估 109%**：一份 4701 字符的工具 schema JSON
+ * 真实只有 1124 token，即 **4.18 字符/token**——BPE 对重复出现的 key
+ * 压得很好，密文并不等于 token 密。
+ *
+ * 取 3 而不是实测的 4.18：仍留 ~39% 保守余量。高估只是提前压缩（浪费），
+ * 低估才会撞 provider 硬上限（会炸），两个方向的代价不对称。
+ */
+export const DENSE_BYTES_PER_TOKEN = 3
 export const ROLE_OVERHEAD_TOKENS = 4
 export const TOOL_CALL_OVERHEAD_TOKENS = 8
 
@@ -101,13 +126,60 @@ export function looksDenseTokenText(text: string): boolean {
   return punct / sample > 0.12
 }
 
-/** 单段文本粗估 */
+/**
+ * CJK 每字约合多少 token。
+ *
+ * **两家 tokenizer 实测**（见 `scripts/live-token-calibration.ts`），同一段
+ * 中文（99 CJK 字 + 18 非 CJK 字符）：
+ *
+ * | 端点 | 真实 token | 反推 CJK 密度 |
+ * |------|-----------|--------------|
+ * | DeepSeek | 62 | ≈1.73 字符/token |
+ * | GPT-5.6（中转） | **79** | **≈1.34 字符/token** |
+ *
+ * 差异不小，所以取值必须贴着**最密的那一家**：先按 DeepSeek 定的 1.5
+ * 在第二家上立刻变成低估 10%。这正是只标定一家会栽的地方。
+ *
+ * 不按字符类别分开数的后果同样是实测出来的：中文按默认比例算 **低估 53%**。
+ * 本项目的注释、文档、交流大量是中文，这不是边缘情况。
+ */
+export const CJK_CHARS_PER_TOKEN = 1.3
+
+/** CJK 及全角标点区间（够用即可，不追求 Unicode 完备） */
+function isCjkChar(code: number): boolean {
+  return (
+    (code >= 0x3000 && code <= 0x303f) || // CJK 标点
+    (code >= 0x3040 && code <= 0x30ff) || // 平假名 / 片假名
+    (code >= 0x3400 && code <= 0x4dbf) || // 扩展 A
+    (code >= 0x4e00 && code <= 0x9fff) || // 基本汉字
+    (code >= 0xf900 && code <= 0xfaff) || // 兼容汉字
+    (code >= 0xff00 && code <= 0xffef) || // 全角形式
+    (code >= 0xac00 && code <= 0xd7af) // 谚文
+  )
+}
+
+function countCjkChars(text: string): number {
+  let n = 0
+  for (let i = 0; i < text.length; i++) {
+    if (isCjkChar(text.charCodeAt(i))) n++
+  }
+  return n
+}
+
+/**
+ * 单段文本粗估。
+ *
+ * 按字符类别分开数：CJK 与拉丁的 token 密度差 2 倍以上，混在一起用同一个
+ * 比例必然在某一边失准，而**失准到低估那边是会炸的**。
+ */
 export function estimateTextTokens(text: string): number {
   if (!text) return 0
+  const cjk = countCjkChars(text)
+  const rest = text.length - cjk
   const bpt = looksDenseTokenText(text)
     ? DENSE_BYTES_PER_TOKEN
     : DEFAULT_BYTES_PER_TOKEN
-  return Math.ceil(text.length / bpt)
+  return Math.ceil(cjk / CJK_CHARS_PER_TOKEN + rest / bpt)
 }
 
 /** 单条消息（含 tool_calls / tool_call_id 开销） */

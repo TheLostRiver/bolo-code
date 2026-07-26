@@ -12,14 +12,24 @@
  * **不进 `npm test`**：依赖公网与第三方可用性，且会产生真实请求。
  * 让门禁因为别人家的故障变红，只会训练所有人无视红灯。
  *
- * 前置：环境变量 `OR_KEY`（OpenRouter），模型默认 `inclusionai/ling-3.0-flash:free`。
+ * 前置（任意 OpenAI 兼容端点，只要回 `usage.prompt_tokens`）：
  *
- * 运行：OR_KEY=... npx tsx scripts/live-token-calibration.ts
+ *   CALIB_BASE_URL=https://api.deepseek.com/v1
+ *   CALIB_KEY=<key>
+ *   CALIB_MODEL=deepseek-chat        # 可选
+ *
+ * 运行：CALIB_BASE_URL=… CALIB_KEY=… npx tsx scripts/live-token-calibration.ts
+ *
+ * 刻意不绑定某一家：不同厂商的 tokenizer 不同，本地启发式要面对的正是这种差异，
+ * 换一家跑一遍才看得出估算是普遍偏保守还是只对某家准。
  */
 import { estimateTokens } from '../packages/compact/src/index.ts'
 import type { ChatMessage } from '../packages/shared/src/index.ts'
 
-const BASE_URL = 'https://openrouter.ai/api/v1/chat/completions'
+const BASE_URL = (
+  process.env.CALIB_BASE_URL ?? 'https://openrouter.ai/api/v1'
+).replace(/\/+$/, '')
+const ENDPOINT = `${BASE_URL}/chat/completions`
 const MODEL = process.env.CALIB_MODEL ?? 'inclusionai/ling-3.0-flash:free'
 
 const EN = `The quick brown fox jumps over the lazy dog. Compaction must never trade
@@ -77,7 +87,7 @@ const CORPORA: Array<{ name: string; text: string }> = [
 ]
 
 async function promptTokens(key: string, content: string): Promise<number> {
-  const res = await fetch(BASE_URL, {
+  const res = await fetch(ENDPOINT, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -110,15 +120,16 @@ function estimateOne(text: string): number {
 }
 
 async function main() {
-  const key = process.env.OR_KEY?.trim()
+  const key = (process.env.CALIB_KEY ?? process.env.OR_KEY)?.trim()
   if (!key) {
-    console.error('OR_KEY is not set — this script makes real requests and cannot run without it')
+    console.error('CALIB_KEY is not set — this script makes real requests and cannot run without it')
     process.exit(2)
   }
 
   // 基线：最短请求的固定开销，从各语料里扣掉
   const base = await promptTokens(key, '.')
   const baseEstimate = estimateOne('.')
+  console.log(`endpoint: ${ENDPOINT}`)
   console.log(`model: ${MODEL}`)
   console.log(`baseline overhead: real=${base} tok (estimate=${baseEstimate})\n`)
 
