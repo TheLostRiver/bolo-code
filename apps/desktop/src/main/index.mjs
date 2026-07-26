@@ -31,7 +31,7 @@ const {
 } = await import(
   pathToFileURL(path.join(repoRoot, 'packages/core/src/index.ts')).href
 )
-const { buildTimelineCards } = await import(
+const { buildTimelineCards, redactSecretsDeep } = await import(
   pathToFileURL(path.join(repoRoot, 'packages/shared/src/index.ts')).href
 )
 const {
@@ -173,7 +173,7 @@ function sessionStatusPayload(s) {
     effortLevel: effort.effortLevel,
     effortDialect: effort.dialectId,
     effortChoosable: effort.choosable,
-    settings: { ...desktopSettings },
+    settings: redactSecretsDeep({ ...desktopSettings }),
   }
 }
 
@@ -235,7 +235,12 @@ function registerIpc() {
     return sessionStatusPayload(s)
   })
 
-  ipcMain.handle('bolo:getSettings', async () => ({ ...desktopSettings }))
+  // secret 不过界（ROADMAP AR3E 验收）。这里用的是**无边界展开**——
+  // 日后有人往 desktopSettings 加字段就会自动跟着过界，且没有任何东西会报警。
+  // 套一层抹除比每次 review 记得可靠。
+  ipcMain.handle('bolo:getSettings', async () =>
+    redactSecretsDeep({ ...desktopSettings }),
+  )
 
   ipcMain.handle('bolo:setSettings', async (_evt, patch) => {
     if (!patch || typeof patch !== 'object') {

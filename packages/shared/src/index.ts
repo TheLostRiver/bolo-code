@@ -342,3 +342,6 @@ export {
   type ComposerIntentInput,
   type ComposerIntentResult,
 } from './composerIntent.ts'
+
+// AR3E：secret 不越过进程/持久化边界
+export { redactSecretsDeep } from './secretBoundary.ts'
