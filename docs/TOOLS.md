@@ -420,14 +420,53 @@ npx tsx scripts/test-bash-background-runtime.ts  # 真实进程 spawn/read/kill/
 
 ---
 
-## 5. 尚未实现（AR-T3+ 候选）
+## 5. 能力面现状（AR-T3+）
+
+**已实现：**
+
+| 能力 | 落点 |
+|------|------|
+| plan 工具流 | `ExitPlanMode`（`packages/tools/src/exitPlanMode.ts`）：提计划 → 用户批准 → 落回 `default` 继续逐项审批。plan 模式下 gate 特批它为 `ask`，否则规划态会把自己的出口也 deny 掉 |
+| `AskUserQuestion` | 见 §5.1 |
+| 网页搜索 | 五条线路，见 §3 |
+
+**尚未实现：**
 
 | 候选 | 现状 |
 |------|------|
-| `WebSearch` | 无（只有 `WebFetch`，能取已知 URL 不能发现） |
-| plan 工具流 | `PERMISSION_MODES` 已有 `'plan'`，但只 deny 编辑 + 一行提示；**缺 `ExitPlanMode`**，没有「提计划→批准→执行」闭环 |
-| `AskUserQuestion` | 无（只能自由文本发问，拿不到结构化选择） |
+| `WebSearch`（本地发现） | 无（只有 `WebFetch`，能取已知 URL 不能发现）。搜索目前全部经 provider 或 MCP，见 §3 |
 | 前台命令自动后台化 | 无（参考实现有阻塞预算超时自动转后台；语义复杂，暂不做） |
 | LSP | 无（体量大，归 AR4 证据门控） |
 
-逐项独立准入，见 [ROADMAP.md](./ROADMAP.md) §14.3。
+逐项独立准入，见 [ROADMAP.md](./ROADMAP.md) §14.5。
+
+### 5.1 `AskUserQuestion`
+
+模型遇到歧义时，此前只能猜、或用自由文本发问再自己解析回答。这个工具把它变成结构化的一问一答。
+
+| 层 | 文件 |
+|----|------|
+| 契约（校验 · 投影 · 渲染） | `packages/shared/src/askUserQuestion.ts` |
+| 工具壳 | `packages/tools/src/askUserQuestion.ts` |
+| CLI 选择控件 | `packages/cli/src/tui/questionPicker.ts` |
+| CLI 句柄 | `packages/cli/src/tui/askUserQuestionTty.ts` |
+
+约束：1–4 问，每问 2–4 个选项，选项 label 在同一问内唯一。`multiSelect` 决定单选/多选。**「Other（用自己的话回答）」由 UI 提供**，不占选项额度，模型不该自己写进 `options`。
+
+**这个工具与其它工具有一处根本不同：结果不是算出来的，是人给的。** 所以契约层的核心职责不是生成答案，而是**挡住不是人给的答案**：
+
+- 输入不合样子 → 先拒绝，**不打扰用户**
+- UI 交回的答案对不上号（数量不符 · 选了没提供过的选项 · 单选给两个 · 空选择）→ **整条拒绝**
+
+为什么这么严：会话里若出现一条「用户选择了 X」而用户根本没选过，后续每一轮都会把它当既定事实，**且永远不会报错**——静默失败里最难查的一种。
+
+**没人可问时**（非交互 / 未注入句柄）返回 `errorCode:'unavailable'`，让模型带着显式假设继续，**不挂死、不编答案**。挂死比编答案更糟：编答案至少还能往下跑。
+
+> `session.askUserQuestion` **没有** fail-closed 的默认实现，缺省就是 `undefined`。
+> 这与 `askPermission` 有意不同——权限的默认 `deny` 是一个有意义的答复（不许），
+> 而「问题」没有对应的默认答复，编一个就等于替用户表态。
+
+**权限归类**：`classifyTool` 把它归进 `read`（`SIDE_EFFECT_FREE_TOOLS`）。这不是优化而是必需——落到 `unknown` 的话 **plan 模式会直接 deny 它**，而「规划时先问清需求」正是它的主场景；`acceptEdits` / `auto` 两档则会先弹一次权限审批，等于问问题之前先问一句「要不要问问题」。五档模式现在都断言为 `allow`。
+
+**验证状态**：契约 / 工具 / 权限 / 控件逻辑 / 端到端接线均有门禁测试（`test-ask-user-question*.ts` · `test-question-picker.ts`）。接线测试已实证非空断言——摘掉六处穿线中任一处即变红。
+**⚠️ 真人在真终端按键的交互尚未验证**：控件测试注入 `readKey`，覆盖不到真实 raw-mode 与 REPL 抢 stdin 的问题。

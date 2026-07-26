@@ -23,18 +23,21 @@
 
 | 顺序 | 切片 | 状态 |
 |---|---|---|
-| 15 | **AR-T3+ · 能力面续刀** | **当前** |
-| 16 | AR2A1–A2 · watermark / safe rewrite | 顺延 |
+| 15 | AR-T3+ · 能力面续刀 | ✅ 已收口 |
+| 16 | **AR2A1–A2 · watermark / safe rewrite** | **当前** |
 | 17 | AR2B–C · tokenizer / benchmark / ADR | 顺延 |
 | 18 | **AR3A–F · Desktop（Codex App 风格）** | 顺延 |
 | 19 | AR4 · 逐项 evidence gate | 顺延 |
 | 20 | AR5A–D · compatibility / security / release | 顺延 |
 
-**第 15 位的收尾工作（优先做完再往下走）：** AskUserQuestion 已完成契约层、工具壳、权限归类、CLI 选择控件与端到端接线。**尚未做**：
+**从第 16 位开始。** 契约先行：`range` / `watermark` 是纯契约，先把它和测试立住，再接 rewrite。
+compact 改动的高危点是 **tool pairing**（不能只留 `tool_calls` 不留对应结果）与 lifecycle 消息保留，
+`packages/compact/src/index.ts` 里已有 `adjustCutForToolPairing` 可参考。
 
-- 系统提示里还没告诉模型这个工具存在、什么时候该用（参考 `packages/core/src/systemPrompt.ts` 里 TodoWrite / ExitPlanMode 的写法）
-- `docs/TOOLS.md` 的能力对照表里仍写着 `AskUserQuestion | 无`，要更新
-- **真人在真终端按方向键**没验过。注入 `readKey` 的测试覆盖不到真实 raw-mode 与 REPL 抢 stdin 的问题。若你无法真正手动验证，就在文档与 ROADMAP 里**如实标注「未经真实 TTY 验证」**，不要写成已完成
+**一条已知的遗留（不阻塞，顺手可做）：** `AskUserQuestion` 的**真人在真终端按键**没验过——
+控件测试注入 `readKey`，覆盖不到真实 raw-mode 与 REPL 抢 stdin 的问题。
+文档与 ROADMAP 已如实标注「真 TTY 交互未验」。**不要在没有真正验证的情况下把这个标注抹掉。**
+§14.5 里其余条目（headless 放行粒度、本地搜索路径、Desktop 侧句柄等）均为可选续刀。
 
 ### 关于 Electron / GUI（第 18 位）
 
@@ -61,10 +64,9 @@
 ① 红灯测试先写  → 运行它，确认它**真的失败**，且失败信息说得清问题
 ② 实现
 ③ 定向测试通过
-④ npm run typecheck
-⑤ 完整 npm test（必须 EXIT=0）
-⑥ git diff --check（空白符）
-⑦ 提交并 push
+④ 完整 npm test（必须 EXIT=0；已包含 typecheck）
+⑤ git diff --check（空白符）
+⑥ 提交并 push
 ```
 
 **关于第①步：** 一个从来没红过的测试不算测试。写完实现后，若想确认某条断言有效，**临时破坏实现、确认它变红、再恢复**——本项目已多次靠这招发现空断言。

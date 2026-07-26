@@ -125,7 +125,8 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 
 **已闭环：** Diff · Hooks · Compact · Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR-T1 TodoWrite / AR-T2 Bash background / AR-T3a ExitPlanMode / AR-T3b Web search** · **AR5C-early CLI 分发**。
 
-**当前主线：** **AR-T3+ 能力面续刀**（ROADMAP §14.3）：WebSearch · plan 工具流（`ExitPlanMode` 缺位）· AskUserQuestion，逐项独立准入。
+**当前主线：** **AR2A1–A2 range/watermark + safe rewrite**（ROADMAP §13.10.2 · 看板第 16 位）。
+AR-T3+ 能力面续刀已收口：WebSearch 五条线路 · `ExitPlanMode` · `AskUserQuestion` 均已落地（后者的真 TTY 交互未验，见 TOOLS.md §5.1）。
 
 **为什么 AR2 顺延：** AR-T 轨的准入证据是「基础设施深度远超能力广度」——DR0–DR4 + AR1 建成了长时自主工作的底座，但当时 agent 记不住跨步骤计划、起不了活过一次工具调用的进程。而现有 full compact 已保 tool pair（`compact/index.ts` `adjustCutForToolPairing`）+ DR2C1 lifecycle preservation，AR2A1/A2 是为**尚不存在的** partial-range 压缩预建契约，不是修 bug。详见 ROADMAP §14 抬头。
 

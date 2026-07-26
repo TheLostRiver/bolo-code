@@ -13,7 +13,7 @@
 |----|------|------|
 | **Headless 核心** | **~82–90%** | loop/STE/权限/auto/snip/policy/OS sandbox；partial stream fail-closed |
 | **分发（CLI）** | **~85–92%** | `npm i -g` / `npx` 单文件产物 · 零运行时依赖 · pack→install→run E2E 进门禁；见 §15 与 [RELEASE.md](./RELEASE.md) |
-| **Agent 能力面（工具集）** | **~78–85%** | 13 工具 + **Web search**（anthropic / openai-responses 已活体验证）：Bash（含 `run_in_background`）· BashOutput · KillShell · Read/Write/Edit/apply_patch · Glob/Grep · Skill · WebFetch · Agent · **TodoWrite**；见 §14 |
+| **Agent 能力面（工具集）** | **~82–88%** | 15 工具 + **Web search**（五条线路全部活体验证）：Bash（含 `run_in_background`）· BashOutput · KillShell · Read/Write/Edit/apply_patch · Glob/Grep · Skill · WebFetch · Agent · **TodoWrite** · **ExitPlanMode** · **AskUserQuestion**；见 §14 |
 | 会话与 CLI | **~90–96%** | JSONL · new/resume 同构 runtime · durable controls/tasks · background FIFO/promotion · versioned runtime protocol |
 | **扩展面** | **~80–88%** | MCP×3 · Skills · Plugins · WebFetch · OAuth 本地 |
 | **Subagent** | **~89–95%** | Spec v0；durable task/result · overflow FIFO/cancel · safe-boundary delivery · worktree fail-closed |
@@ -33,7 +33,7 @@
 
 **已闭环主线：** headless 日用 → Diff（D0–D7 / U0–U4）· Hooks（H0–H5）· Compact（C0–C5）· Provider（P0–P4.1）· Effort（E0–E9）· Provider UX（CX0–CX8）· 可靠性（R0–R4）· **Durable Runtime（DR0–DR4）** · **Autonomous Road AR1 CLI/TUI runtime UX**。切片明细 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
 
-**当前主线：** **AR-T3 · 能力面续刀**（§14）。AR-T1/AR-T2/AR-T3a/AR-T3b 与 **AR5C-early 分发**（§15）已收口。
+**当前主线：** **AR2A1–A2 · Compact 深化**（§13.10.2 · 看板第 16 位）。AR-T1/AR-T2/AR-T3a/AR-T3b/AR-T3+ 与 **AR5C-early 分发**（§15）已收口。
 
 **已插队并收口：** **AR-T · Agent 能力面**（§14）。准入证据：基础设施深度（DR0–DR4 + AR1）已远超能力广度——彼时 agent 无法跨步骤记住计划，也无法启动任何活过一次工具调用的进程。AR2 压缩深化顺延，A0a/A0b 成果不受影响。
 
@@ -100,7 +100,7 @@
 | **AR-T1 TodoWrite · AR-T2 Bash background**（§14） | ✅ |
 | **AR-T3a ExitPlanMode · AR-T3b Web search**（§14） | ✅ |
 | **AR5C-early · CLI 可分发**（§15） | ✅ |
-| **AR-T3+ 能力面续刀**（WebSearch · plan 工具流 · AskUserQuestion） | 🔄 当前 |
+| **AR-T3+ 能力面续刀**（WebSearch · plan 工具流 · AskUserQuestion） | ✅ 三项均已落地（AskUserQuestion 的真 TTY 交互未验，见 §14.5） |
 | AR2 Compact depth（A0a/A0b ✅ → A1/A2 → B → C） | 📋 顺延 |
 | AR3 Desktop shell · AR4 证据深水 · AR5 release hardening | 📋 |
 | 无遥测 | ✅ 永不 |
@@ -113,7 +113,7 @@
 
 **一句话：** 主路径、Diff、Hooks、Compact、多 Provider、Effort、Provider UX、可靠性 R0–R4、Durable Runtime DR0–DR4、AR1 runtime UX、**AR-T1/AR-T2 能力面**已收口。
 
-**下一刀（当前主线）：** **AR-T3+ 能力面续刀**（§14.5），逐项独立准入。AR2A1 range/watermark 顺延（§13.10.2）。
+**下一刀（当前主线）：** **AR2A1–A2 range/watermark + safe rewrite**（§13.10.2 · 看板第 16 位）。AR-T3+ 的三项命名交付已完成；§14.5 余下条目为可选续刀，不构成阻塞。
 
 ---
 
@@ -350,8 +350,8 @@ AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 regis
 | 12 | **AR-T1 · TodoWrite** | `packages/shared` todo 契约 + 工具 + session/transcript 接线 | 多步任务可跨 compact/resume 追踪 | compact 存活 + resume 投影 + 提醒双阈值 | ✅ |
 | 13 | **AR-T2 · Bash background** | `BackgroundShell` 契约 + 原生进程树 kill + BashOutput/KillShell | dev server / 长构建不再阻塞 turn | 真实进程 kill + endSession 无僵尸 + 前台回归 | ✅ |
 | 14 | **AR5C-early · CLI 分发** | esbuild 单文件 + 发布元数据 + 双布局资产 | `npm i -g bolo-code` 可用 | pack→install→run E2E + 零依赖 + tarball 清单 | ✅ |
-| 15 | **AR-T3+ · 能力面续刀** | `bolo search enable` · OpenRouter plugin · AskUserQuestion（逐项） | 见 §14.5 | 每项独立红灯 + 全量门禁 | **当前** |
-| 16 | **AR2A1–A2 · watermark/safe rewrite** | range/watermark 纯契约 → rewrite 接线 | partial compact 主路径 | tool pairing + lifecycle 保留 | 📋 顺延 |
+| 15 | **AR-T3+ · 能力面续刀** | `bolo search enable` · OpenRouter plugin · AskUserQuestion（逐项） | 见 §14.5 | 每项独立红灯 + 全量门禁 | ✅（AskUserQuestion 真 TTY 交互未验） |
+| 16 | **AR2A1–A2 · watermark/safe rewrite** | range/watermark 纯契约 → rewrite 接线 | partial compact 主路径 | tool pairing + lifecycle 保留 | **当前** |
 | 17 | **AR2B–C · tokenizer/benchmark/ADR** | registry（重估）+ 语料基准 + remote 决策 | 可量化 token/cost | 偏差阈值 + fail-closed | 📋 |
 | 18 | **AR3A–F** | protocol client/store；无 renderer 状态机 | Codex App 风格 Desktop | mock/core IPC + crash/restart + Windows package | 📋 |
 | 19 | **AR4** | 逐项 evidence gate | 有证据实施；无证据书面关闭 | 场景/基准/兼容证据 | 📋 |
@@ -472,7 +472,8 @@ MCP 工具失败只吐 `fetch failed`（补 `describeMcpCallError`：指名 serv
 
 | 候选 | 现状 | 备注 |
 |------|------|------|
-| **AskUserQuestion** | 无 | 结构化澄清；与 CLI picker / Desktop 对话框对接。**自包含、不依赖外部端点** |
+| **AskUserQuestion** | ✅ 已实现（**真 TTY 交互未验**） | 契约 + 工具 + 权限归类 + CLI 控件 + 端到端接线 + 系统提示，全部进门禁。详见 [TOOLS.md](./TOOLS.md) §5.1。**遗留**：控件测试注入 `readKey`，真人在真终端按键、以及 raw-mode 与 REPL 抢 stdin 的问题没验过 |
+| **Desktop 侧 AskUserQuestion** | 无 | core 只持句柄，CLI 已注入一个；Desktop 需注入自己的对话框实现（`session.askUserQuestion`）。归 AR3 |
 | **headless 工具放行粒度** | 只能整档 `bypassPermissions` | 活体暴露：`-p` 下想放行单个 MCP 工具，只能把**全部**权限一起放开。参考实现有 `--allowedTools` 粒度 |
 | **真·本地搜索路径** | preset 位已留，但需用户自建桥 | SearXNG 不讲 MCP，须自跑桥；真「不出本机」只有 YaCy/自建 Marginalia。Bolo **不代跑第三方进程**（供应链 + 零依赖红线），能做的是把配置写对、去向说清。缺一份可照抄的 compose 文档 |
 | **本地抓取 preset** | 无 | `fetcher-mcp`/`mcp-server-fetch` 可完全本地抓取，但均为 stdio，需先扩 preset 支持 stdio 形状 |
