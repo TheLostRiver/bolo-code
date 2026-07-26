@@ -214,6 +214,64 @@ HelsincyCode 用 Anthropic 服务端 `web_search`；codex 发 OpenAI hosted Tool
 
 `off` 表示**没有这个能力**，不是坏了。用户明确要开时，plan 带 `unsupportedReason` 供 CLI 解释。
 
+### 3.1b 开源边界与「查询去哪」（2026-07 调研，20 条主张过对抗验证，0 条被证伪）
+
+用户会问「这些第三方是不是开源的」。答案必须**分两层**说，否则等于误导：
+
+| 层 | Exa 的情况 |
+|----|-----------|
+| **MCP 协议壳**（`exa-labs/exa-mcp-server`） | ✅ 开源 **MIT** |
+| **搜索/抓取后端**（`api.exa.ai`） | ❌ **闭源商业服务** |
+
+开源的那层是**一个转发壳**——`web_fetch_exa` 的实现就是 `exa.request('/contents','POST',…)`，
+没有任何本地抓取或索引。所以「Exa MCP 开源」字面成立，但**不解决信任问题**。
+
+两条实测要点：
+
+- **`web_fetch_exa` 的抓取发生在 Exa 服务器上**，不在本地。你读哪个 URL，Exa 知道。
+- Exa 隐私政策原文：*"Query Data is used to improve our products and technology,
+  **including by training and fine-tuning models** that power our Services."*
+  未区分免密层与付费层，也未给留存期限。免密 ≠ 匿名，只是限流的免费额度。
+
+**同行都是这样**：Tavily / Brave / Serper / Perplexity / DuckDuckGo 的搜索后端**全部闭源**，无一例外。
+Jina Reader（Apache-2.0）与 Firecrawl（AGPL-3.0）有自托管版，但它们是**抓取工具不是搜索引擎**，
+且都不与云版功能对等。
+
+**真想「查询不出本机」的实际选项：**
+
+| 方案 | license | 查询实际去哪 |
+|------|---------|-------------|
+| SearXNG + MCP 桥 | AGPL-3.0 / 桥多为 MIT | ⚠️ **仍到 Google/Bing 等**，只隐藏你的 IP 与 cookie |
+| YaCy（intranet 模式） | GPL-2.0 | ✅ 自建索引，**真的不出本机** · 代价：结果质量与资源开销 |
+| 自建 Marginalia | AGPL-3.0 | ✅ 本地 · 代价：索引数据量巨大 |
+
+抓取侧反而容易做到全本地：`jae-jae/fetcher-mcp`(MIT)、官方 `mcp-server-fetch`、
+`zcaceres/fetch-mcp`(MIT) 都在**你本地**抓取，只连目标站点，无第三方 API、无遥测。
+
+**参考项目对照：** HC 走 Anthropic 服务端工具（无第三方、无单独 key）；codex 走 OpenAI 自家
+`alpha/search`，默认 `Cached` 不出网；opencode 是唯一在客户端直连第三方 SaaS 的，
+源码注释自称 *"this compromise"*。**三家都没有提供自托管/开源后端选项。**
+
+### 3.1c preset 必须声明「查询去哪」——一条假承诺的教训
+
+`SearchPreset.privacy` 是**机器可读**字段（`vendor` | `upstream-engines` | `local-only`），
+不是散文。它的由来是一条真实的假承诺：searxng preset 的 notes 曾写着
+
+> ~~`Nothing leaves your network if you run SearXNG yourself.`~~ ← **错的**
+
+SearXNG **自己没有索引**，它是元搜索代理：自托管后查询字符串仍由你的服务器转发给
+Google / Bing / DuckDuckGo / Brave。自托管隐藏的是**你的 IP 与 cookie，不是查询内容**。
+
+这类错误比功能 bug 严重——**有人会因为这句话把本不该外发的查询发出去**，而且它不会以任何形式报错。
+所以现在由 `test-search-preset-privacy.ts` 守住：privacy 不是 `local-only` 的 preset，
+其面向用户文案里**不得出现**「nothing leaves」这类绝对措辞。
+
+同一条 preset 还有第二个坑：**SearXNG 原生不讲 MCP 协议**，直接指向它的端口永远连不上，
+必须在前面架一个桥（如 `ihor-sokoliuk/mcp-searxng`，MIT）。文案已改为明说这一点。
+
+> Bolo **不附带也不代跑**任何第三方桥接进程——那等于替用户引入供应链风险，
+> 与零运行时依赖红线相悖。preset 只负责把配置写对、把去向说清。
+
 ### 3.2 三条不可违反的规则
 
 **① 服务端块绝不能进本地工具通道。**
@@ -299,6 +357,18 @@ OpenRouter Chat Completions 是**嵌套** `annotations[].url_citation.url`。
 | 中转返回 `HTTP 503` 却包着 `{"code":"model_not_found"}` | 错误解释改为 **body 优先于 status**；否则会告诉用户「是上游问题不是你的配置」，把人往反方向指 |
 | 状态提示写着 `run 'bolo search enable exa'`，而该命令**当时不存在** | 补 `searchCli.ts`，并加断言：**文案里承诺的命令必须真能跑** |
 | MCP 工具失败时只吐两个词 `fetch failed` | `describeMcpCallError()`：指名 server、分类网络/超时、标注可重试；**原文一律保留**（`test-mcp-tool-error.ts`） |
+| 启用「搜索」搭售了一个**远程抓取**工具，模型拿它顶掉了本地 `WebFetch` | `McpServerConfig.allowTools` / `excludeTools`；exa preset 只注册 `web_search_exa`（`test-mcp-tool-filter.ts`） |
+
+倒数第二条同样是端到端跑出来的：`bolo search enable exa` 会一次带进
+`web_search_exa` **和** `web_fetch_exa`，而实测中模型**选了后者**——于是用户的
+**抓取**也一并出了机器，他并没要求这个。过滤落在 `listTools()` 之后那**一个**咽喉点，
+并存进 `ConnectedMcpServer.toolFilter`：只在 connect 处过滤的话，`list_changed`
+重列时被排除的工具会悄悄复活（该回归已由测试第 8 步实证，摘掉过滤即变红）。
+
+`allowTools` 最危险的失败模式是**打错名字**——白名单一个字母错 → 零工具注册 →
+模型完全不知道有这个能力 → 用户以为「配了但没用」，而哪里都不报错。
+所以名字对不上时必须告警并列出 server 实际提供了什么；`excludeTools` 打错则相反
+（你以为排掉了其实没有），同样告警。
 
 最后一条是端到端跑出来的，值得展开——它同时坑了人和模型：
 

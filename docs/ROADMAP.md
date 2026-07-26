@@ -451,7 +451,15 @@ openai-compatible ✅（DeepSeek 官方 API，确认**无** hosted 搜索且不 
 
 **只有真跑才发现的缺陷：** 引用逐句重复（渲染层按 turn 去重）；
 中转 `HTTP 503` 包着 `model_not_found`（错误解释改为 **body 优先于 status**）；
-MCP 工具失败只吐 `fetch failed`（补 `describeMcpCallError`：指名 server + 分类 + 可重试标注）。
+MCP 工具失败只吐 `fetch failed`（补 `describeMcpCallError`：指名 server + 分类 + 可重试标注）；
+启用「搜索」搭售远程抓取工具、模型拿它顶掉本地 `WebFetch`（补 `allowTools`/`excludeTools`）。
+
+**信任边界与开源调研（2026-07）→ TOOLS.md §3.1b/§3.1c。** 结论两条：
+① 第三方搜索的「开源」通常只到 **MCP 协议壳**（Exa 的壳是 MIT），**后端一律闭源**——
+分不清这两层就等于误导用户；② 我们自己曾有一条**假隐私承诺**（searxng preset 声称
+`Nothing leaves your network`，而 SearXNG 是元搜索代理，自托管只隐藏 IP 不隐藏查询）。
+现已引入机器可读的 `SearchPreset.privacy` 字段并由测试守住散文与字段一致。
+三个参考项目**都没有**提供自托管/开源搜索后端选项，Bolo 的 preset 位是唯一留了口子的。
 
 **活体脚本不进门禁：** `scripts/live-mcp-search.ts` 依赖公网与第三方可用性，
 实测 3 跑挂 1（Exa 免密层按 IP 限速）。放进 `npm test` 会让 CI 因别人家限速变红，
@@ -466,6 +474,8 @@ MCP 工具失败只吐 `fetch failed`（补 `describeMcpCallError`：指名 serv
 |------|------|------|
 | **AskUserQuestion** | 无 | 结构化澄清；与 CLI picker / Desktop 对话框对接。**自包含、不依赖外部端点** |
 | **headless 工具放行粒度** | 只能整档 `bypassPermissions` | 活体暴露：`-p` 下想放行单个 MCP 工具，只能把**全部**权限一起放开。参考实现有 `--allowedTools` 粒度 |
+| **真·本地搜索路径** | preset 位已留，但需用户自建桥 | SearXNG 不讲 MCP，须自跑桥；真「不出本机」只有 YaCy/自建 Marginalia。Bolo **不代跑第三方进程**（供应链 + 零依赖红线），能做的是把配置写对、去向说清。缺一份可照抄的 compose 文档 |
+| **本地抓取 preset** | 无 | `fetcher-mcp`/`mcp-server-fetch` 可完全本地抓取，但均为 stdio，需先扩 preset 支持 stdio 形状 |
 | **前台命令自动后台化** | 无 | 参考实现有阻塞预算超时自动转后台；语义复杂，暂不做 |
 | **LSP** | 无 | 体量大，归 AR4 证据门控 |
 
