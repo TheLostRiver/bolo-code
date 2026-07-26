@@ -222,6 +222,45 @@ export {
 } from './runtimeProtocol.ts'
 
 export {
+  BACKGROUND_SHELL_STATUSES,
+  DEFAULT_BACKGROUND_SHELL_OUTPUT_CAP_BYTES,
+  advanceShellReadOffset,
+  applyShellExit,
+  createBackgroundShellRecord,
+  createBackgroundShellStore,
+  formatBackgroundShellStatusLine,
+  getBackgroundShell,
+  isTerminalShellStatus,
+  listBackgroundShells,
+  markShellKilled,
+  registerBackgroundShell,
+  shouldKillForOutputSize,
+  type BackgroundShellRecord,
+  type BackgroundShellStatus,
+  type BackgroundShellStore,
+} from './backgroundShell.ts'
+
+export {
+  TODO_REMINDER_CLOSE_TAG,
+  TODO_REMINDER_OPEN_TAG,
+  TODO_REMINDER_TURNS_BETWEEN,
+  TODO_REMINDER_TURNS_SINCE_WRITE,
+  TODO_STATUSES,
+  applyTodoWrite,
+  formatTodoReminder,
+  shouldRemindTodos,
+  summarizeTodoList,
+  validateTodoList,
+  type TodoItem,
+  type TodoReminderInput,
+  type TodoStatus,
+  type TodoSummary,
+  type TodoValidationErrorCode,
+  type TodoValidationResult,
+  type TodoWriteApplication,
+} from './todo.ts'
+
+export {
   RUNTIME_QUERY_ENTITIES,
   isRuntimeQueryEntity,
   queryRuntimeSnapshot,
