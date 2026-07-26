@@ -25,7 +25,8 @@
 
 | 层 | 粗估 | 说明 |
 |----|------|------|
-| Headless 核心 | ~80–88% | queryLoop · 权限 · tools · STE；partial stream fail-closed |
+| Headless 核心 | ~82–90% | queryLoop · 权限 · tools · STE；partial stream fail-closed |
+| **Agent 能力面（工具集）** | **~72–80%** | 13 工具；**TodoWrite** 计划追踪 · **Bash 后台三件套** |
 | 会话 / CLI | ~92–97% | JSONL · durable runtime · query/action CLI · TTY pager · pipe/JSON automation |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
 | Subagent | ~89–95% | `config.agents` + `agents/*.md` · durable task/result · overflow FIFO/cancel · safe delivery · worktree 保全 |
@@ -39,11 +40,11 @@
 | Electron GUI | ~65–75% | 壳 + 流式 + 权限 + Settings + 多 provider |
 | 相对 HC 全家桶 UI | 另计 | 不设 100% |
 
-**已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Runtime DR0–DR4 · **Autonomous Road AR1 CLI/TUI runtime UX**。
+**已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Runtime DR0–DR4 · Autonomous Road AR1 CLI/TUI runtime UX · **AR-T1 TodoWrite / AR-T2 Bash background**。
 
-**当前主线：** Autonomous Road **AR2A1 range/watermark 纯契约**（AR2A0a 混合 usage 锚定计数、AR2A0b 中段截断 + 防重摘要已落地）。
+**当前主线：** **AR-T3+ Agent 能力面续刀**（WebSearch · plan 工具流 · AskUserQuestion）——见 [ROADMAP §14](docs/ROADMAP.md)。
 
-**非阻塞开放轨：** Compact §8.9 · U5 真·Ink/IDE · adaptive thinking · Desktop 体验打磨。
+**非阻塞开放轨：** AR2A1 watermark（顺延）· Compact §8.9 · U5 真·Ink/IDE · adaptive thinking · Desktop 体验打磨。
 
 进度真源：[docs/ROADMAP.md](docs/ROADMAP.md)
 
@@ -139,6 +140,25 @@ npm start
 
 ---
 
+## 内置工具
+
+| 工具 | 说明 |
+|------|------|
+| `Bash` | 跑 shell；`run_in_background: true` 转后台（dev server / watcher / 长构建） |
+| `BashOutput` | 读后台 shell 的**增量**输出（游标不重不漏） |
+| `KillShell` | 停后台 shell；杀整棵进程树；对已结束的 shell 是安全 no-op |
+| `Read` · `Write` · `Edit` · `apply_patch` | 文件读写与补丁 |
+| `Glob` · `Grep` | 查找 |
+| `TodoWrite` | 多步任务的待办表；**存在会话状态里而非消息历史**，因此 compact 后不丢，resume 可恢复 |
+| `Skill` | 按 id 载入 skill 全文 |
+| `WebFetch` | 取 http(s) 文本 |
+| `Agent` | 拉起 subagent |
+
+后台 shell **跨 turn 存活，但绝不越过会话**：`endSession` 统一收尸，不留僵尸进程。
+实现无任何运行时依赖（进程树 kill 走 POSIX 进程组 / Windows `taskkill /T /F`）。
+
+---
+
 ## 配置 Agent（摘要）
 
 两层概念：
@@ -184,7 +204,8 @@ You are a careful reviewer. Do not modify files.
 packages/
   core/        会话 · queryLoop · slash · subagent · diff · ultrathink
   providers/   compatible · responses · anthropic · effort 方言 · caps
-  tools/       Bash · 读写 · apply_patch · textDiff · gitDiff
+  tools/       Bash（含后台）· BashOutput · KillShell · 读写 · apply_patch
+               TodoWrite · textDiff · gitDiff
   config/      ~/.bolo · .bolo · providers · preset
   hooks/ compact/ skills/ mcp/ plugins/ permissions/ shared/ cli/
 apps/
@@ -214,6 +235,7 @@ scripts/       单测与 smoke
 | [docs/HOOKS.md](docs/HOOKS.md) | Hook 事件（含 SessionEnd） |
 | [docs/COMPACTION.md](docs/COMPACTION.md) | 压缩管道 |
 | [docs/FILE_DIFF_SPEC.md](docs/FILE_DIFF_SPEC.md) | 文件 Diff 日用 + UI |
+| **[docs/TOOLS.md](docs/TOOLS.md)** | **内置工具契约**（TodoWrite · 后台 shell · 权限分类） |
 | [docs/PERMISSIONS.md](docs/PERMISSIONS.md) | 权限四档 |
 | [docs/AGENT_LOOP.md](docs/AGENT_LOOP.md) | Agent loop |
 | [docs/SESSIONS.md](docs/SESSIONS.md) | 会话落盘 · resume |
@@ -238,6 +260,10 @@ pnpm typecheck
 npm run test:runtime-cli-renderer
 npm run test:runtime-cli-pager
 npm run test:runtime-cli-automation
+npx tsx scripts/test-todo.ts
+npx tsx scripts/test-todo-session.ts
+npx tsx scripts/test-bash-background.ts
+npx tsx scripts/test-bash-background-runtime.ts
 npx tsx scripts/test-multi-provider.ts
 npx tsx scripts/test-provider-ux.ts
 npx tsx scripts/test-ultrathink.ts

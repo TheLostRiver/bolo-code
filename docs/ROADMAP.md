@@ -11,7 +11,8 @@
 
 | 层 | 粗估 | 说明 |
 |----|------|------|
-| **Headless 核心** | **~80–88%** | loop/STE/权限/auto/snip/policy/OS sandbox；partial stream fail-closed |
+| **Headless 核心** | **~82–90%** | loop/STE/权限/auto/snip/policy/OS sandbox；partial stream fail-closed |
+| **Agent 能力面（工具集）** | **~72–80%** | 13 工具：Bash（含 `run_in_background`）· BashOutput · KillShell · Read/Write/Edit/apply_patch · Glob/Grep · Skill · WebFetch · Agent · **TodoWrite**；见 §14 |
 | 会话与 CLI | **~90–96%** | JSONL · new/resume 同构 runtime · durable controls/tasks · background FIFO/promotion · versioned runtime protocol |
 | **扩展面** | **~80–88%** | MCP×3 · Skills · Plugins · WebFetch · OAuth 本地 |
 | **Subagent** | **~89–95%** | Spec v0；durable task/result · overflow FIFO/cancel · safe-boundary delivery · worktree fail-closed |
@@ -23,7 +24,7 @@
 | **CLI TUI（壳）** | **~70–80%** | 文本框布局/picker/主题；active Ctrl-C 取消本轮；**非**真 React Ink |
 | **Electron GUI** | **~65–75%** | 壳 + 流式 + 权限 + 设置 + 多 provider（CX7） |
 | **Hooks · 日用契约** | **~96–98%** | **H0–H5 已落地**（SessionEnd · exit 语义 · updatedInput · `/hooks recent`） |
-| **Compact · 日用管道** | **~93–96%** | **C0–C5 + AR2A0a/A0b 已落地**（hybrid 计数 · 中段截断 · 防重摘要）；当前 **AR2A1 watermark** → A2 safe rewrite（§13.10.2） |
+| **Compact · 日用管道** | **~93–96%** | **C0–C5 + AR2A0a/A0b 已落地**（hybrid 计数 · 中段截断 · 防重摘要）；AR2A1 watermark → A2 safe rewrite **顺延**（§13.10.2） |
 | **Provider · 多实例热切** | **~92–96%** | **P0–P4.1 + CX7 Desktop** |
 | **Effort · 推理强度方言** | **~92–95%** | **E0–E9 已落地**；adaptive thinking 归 AR4 |
 | **Provider UX · 便利层** | **~95–98%** | **CX0–CX8 已落地**（ultrathink 默认 off）· [PROVIDER_UX.md](./PROVIDER_UX.md) |
@@ -31,9 +32,11 @@
 
 **已闭环主线：** headless 日用 → Diff（D0–D7 / U0–U4）· Hooks（H0–H5）· Compact（C0–C5）· Provider（P0–P4.1）· Effort（E0–E9）· Provider UX（CX0–CX8）· 可靠性（R0–R4）· **Durable Runtime（DR0–DR4）** · **Autonomous Road AR1 CLI/TUI runtime UX**。切片明细 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
 
-**当前主线：** **AR2A1 · range/watermark 纯契约**（§13.10.2）：用固定 message/transcript fixture 定义 partial range、stable watermark、保留区间与拒绝原因；证明 tool pair、lifecycle、resolution 保留边界前不接 rewrite/provider。（AR2A0a 混合计数、AR2A0b 中段截断/防重摘要已落地。）
+**当前主线：** **AR-T3 · 能力面续刀**（§14）。AR-T1 TodoWrite 与 AR-T2 Bash background 已收口。
 
-**非阻塞开放项：** U5 真·Ink/IDE · adaptive thinking · Desktop 打磨（均按 AR3/AR4 排期与证据门控）。
+**已插队并收口：** **AR-T · Agent 能力面**（§14）。准入证据：基础设施深度（DR0–DR4 + AR1）已远超能力广度——彼时 agent 无法跨步骤记住计划，也无法启动任何活过一次工具调用的进程。AR2 压缩深化顺延，A0a/A0b 成果不受影响。
+
+**非阻塞开放项：** AR2A1 watermark · U5 真·Ink/IDE · adaptive thinking · Desktop 打磨（均按 AR3/AR4 排期与证据门控）。
 
 ---
 
@@ -93,7 +96,9 @@
 | Diff 日用 D0–D7 · 交互 UI U0–U4 | ✅ |
 | Hooks H0–H5 · Compact C0–C5 · Provider P0–P4.1 · Effort E0–E9 · Provider UX CX0–CX8 | ✅ |
 | CLI / Agent 可靠性 R0–R4 · Durable Runtime DR0–DR4 · AR1 runtime UX | ✅ |
-| **AR2 Compact depth（A0a/A0b → A1/A2 → B → C）** | 🔄 当前 |
+| **AR-T1 TodoWrite · AR-T2 Bash background**（§14） | ✅ |
+| **AR-T3+ 能力面续刀**（WebSearch · plan 工具流 · AskUserQuestion） | 🔄 当前 |
+| AR2 Compact depth（A0a/A0b ✅ → A1/A2 → B → C） | 📋 顺延 |
 | AR3 Desktop shell · AR4 证据深水 · AR5 release hardening | 📋 |
 | 无遥测 | ✅ 永不 |
 
@@ -103,9 +108,9 @@
 
 状态真源见 **§0**；里程碑逐项明细已并入 §0 与 [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
 
-**一句话：** 主路径、Diff、Hooks、Compact、多 Provider、Effort、Provider UX、可靠性 R0–R4、Durable Runtime DR0–DR4、AR1 runtime UX 已收口；当前进入 **AR2 Compact 深化**（上下文正确性先于节省率）。
+**一句话：** 主路径、Diff、Hooks、Compact、多 Provider、Effort、Provider UX、可靠性 R0–R4、Durable Runtime DR0–DR4、AR1 runtime UX、**AR-T1/AR-T2 能力面**已收口。
 
-**下一刀（当前主线）：** **AR2A1 range/watermark 纯契约**（A0a/A0b ✅ 已落地）→ AR2A2 safe rewrite（见 §13.10.2）。
+**下一刀（当前主线）：** **AR-T3+ 能力面续刀**（§14.3），逐项独立准入。AR2A1 range/watermark 顺延（§13.10.2）。
 
 ---
 
@@ -121,6 +126,7 @@
 | [PROVIDER_UX.md](./PROVIDER_UX.md) | CX 便利层（preset · caps · ultrathink） |
 | [EFFORT.md](./EFFORT.md) / [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md) | Effort 方言 |
 | [COMPACTION.md](./COMPACTION.md) | Compact **实现真源** |
+| [TOOLS.md](./TOOLS.md) | **内置工具契约**（TodoWrite · 后台 shell） |
 | [HOOKS.md](./HOOKS.md) | Hook 契约 |
 | [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) | Diff 契约与阶段 |
 | [TUI.md](./TUI.md) | CLI TUI 壳与 U 挂载 |
@@ -129,6 +135,7 @@
 | [SUBAGENT_SPEC.md](./SUBAGENT_SPEC.md) | Subagent 契约 |
 | [ENGINEERING_PRINCIPLES.md](./ENGINEERING_PRINCIPLES.md) | 工程原则 · 禁止遥测 |
 | `apps/desktop/README.md` | 桌面 |
+| 本文 §14 | **AR-T Agent 能力面**（TodoWrite · Bash background · 续刀候选） |
 | `TODO*.md` | 历史轨（**只读**，非现行真源） |
 
 ---
@@ -257,7 +264,7 @@ Safe boundary 只承诺：provider 调用前/完整响应归约后 · 每个 too
 | 阶段 | 准入条件 | 交付切片 | 完成定义 |
 |------|----------|----------|----------|
 | **AR1 · CLI/TUI runtime UX** ✅ | DR4 protocol 稳定 | AR1A query · AR1B safe actions/queue edit · AR1C pager/automation | ✅ 全部收口；详情 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md) §H7 |
-| **AR2 · Compact depth（当前）** | Durable lifecycle 不再改写 transcript 基本形状 | **A0a/A0b 借鉴增强 → A1/A2 watermark → B tokenizer/budget → C remote ADR**（§13.10.2） | 旧 transcript 可读；tool pairing/lifecycle 不被 compact 擦除；token/cost 回归可量化；失败回退 C0–C5 |
+| **AR2 · Compact depth（顺延）** | Durable lifecycle 不再改写 transcript 基本形状 | **A0a/A0b 借鉴增强 → A1/A2 watermark → B tokenizer/budget → C remote ADR**（§13.10.2） | 旧 transcript 可读；tool pairing/lifecycle 不被 compact 擦除；token/cost 回归可量化；失败回退 C0–C5 |
 | **AR3 · Desktop product shell** | DR4 view-model 被 CLI 稳定消费一个阶段 | AR3A client/store → AR3B 导航 → AR3C cards → AR3D composer → AR3E settings → AR3F hardening | Codex App 风格信息架构；renderer 不重算状态；mock + 真 core IPC 冒烟；Windows 打包可复现 |
 | **AR4 · Evidence-driven depth** | AR1–AR3 暴露真实痛点或可测收益 | U5 Ink/IDE · adaptive thinking · hook trust UI · 远程模型列表——逐项 `implement / defer / reject` | 每项有场景/基准/兼容证据；无证据则书面关闭 |
 | **AR5 · Release hardening** | 所有已选产品轨完成 | 迁移/兼容矩阵 · 故障注入 · 安装生命周期 · release gate | clean clone 可安装；默认门禁全绿；无密钥/遥测；恢复手册可独立执行 |
@@ -274,7 +281,7 @@ Safe boundary 只承诺：provider 调用前/完整响应归约后 · 每个 too
 |------|---------------------------|------------|----------------|
 | **AR2A0a · 混合 token 计数** ✅ | `UsageAnchor` + `hybridTokenCount` 纯函数 · `shouldAutoCompact`/`resolveAutoCompactTokenCount` opt-in 扩展 | sessionUsage 记 `messageCountAtCall`/指纹；deps/queryLoop/mid-turn 传锚；`/context` `pressure source: hybrid`；锚失效回退全量估算 | ✅ 旧 usage/estimate 路径不变；micro 改写不毁锚 |
 | **AR2A0b · 中段截断 + 防重摘要** ✅ | `truncateMiddle`（保头尾 + 原始规模标注 + 幂等）· per-tool 预算表 · `COMPACT_SUMMARY_MARKER` / merge 提示 | toolExecution exec 边界 + microcompact 共用；spill 全量落盘不动；boundary `mergedPriorSummary` | ✅ 截断只在产出时一次，不回溯改写历史 |
-| **AR2A1 · range/watermark（当前）** | 定义 partial range、stable watermark、保留区间与拒绝原因的纯类型/纯函数（参考 HC `lastSummarizedMessageId` 与 Codex window 链语义） | 仅用固定 message/transcript fixture 验证边界、幂等、空范围、重复 compact；尚不接 provider | 契约无法表达 tool pair、lifecycle 或 resolution 保留时停止集成，先修契约 |
+| **AR2A1 · range/watermark（顺延）** | 定义 partial range、stable watermark、保留区间与拒绝原因的纯类型/纯函数（参考 HC `lastSummarizedMessageId` 与 Codex window 链语义） | 仅用固定 message/transcript fixture 验证边界、幂等、空范围、重复 compact；尚不接 provider | 契约无法表达 tool pair、lifecycle 或 resolution 保留时停止集成，先修契约 |
 | **AR2A2 · safe rewrite** | A1 全绿；把 range 接入现有 C0–C5 compact/rewrite barrier | tool call/result 不拆对；durable turn/control/task/resolution 不丢；旧 transcript 可读；写失败完整回退 | 任一 fixture 出现不可恢复丢失、半写或自动 replay，立即回退并停止本刀 |
 | **AR2B1 · tokenizer registry** | A2 稳定；**先重估必要性**（A0a 已显著提升精度）；若仍需要：providers/shared 契约层 provider/model→tokenizer/budget，unknown 保守 fallback | renderer/core 不出现 provider 分支；mock 与至少两类方言 fixture；预算错误 fail-closed | 若必须联网或引入不可审计 native 依赖，只保留接口与 fallback，不引入实现 |
 | **AR2B2 · measurable budget** | B1 可复现；固定中英文本、tool/diff、长 JSON 语料 | 记录 token 偏差、compact 后成本、延迟与峰值内存；设回归阈值 | 没有相对当前估算的稳定收益，不替换默认算法，只保留基准结论 |
@@ -336,11 +343,14 @@ AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 regis
 | 7–9 | **AR1A–AR1C2** | runtime query/action/renderer/pager/automation | CLI 全链 | golden + 真实 bin | ✅ 存档 §H7 |
 | 10 | **AR2A0a · 混合 token 计数** | `UsageAnchor` + `hybridTokenCount` + opt-in 阈值 | `/context` hybrid 来源；auto compact 不再迟触发 | 锚失效回退 + 旧路径回归 | ✅ |
 | 11 | **AR2A0b · 中段截断/防重摘要** | `truncateMiddle` + 预算表 + summary marker | 工具长输出保头尾；re-compact 不重新叙述 | 幂等 + spill 完整 + cache 稳定 | ✅ |
-| 12 | **AR2A1–A2 · watermark/safe rewrite** | range/watermark 纯契约 → rewrite 接线 | partial compact 主路径 | tool pairing + lifecycle 保留 | **当前（AR2A1）** |
-| 13 | **AR2B–C · tokenizer/benchmark/ADR** | registry（重估）+ 语料基准 + remote 决策 | 可量化 token/cost | 偏差阈值 + fail-closed | 📋 |
-| 14 | **AR3A–F** | protocol client/store；无 renderer 状态机 | Codex App 风格 Desktop | mock/core IPC + crash/restart + Windows package | 📋 |
-| 15 | **AR4** | 逐项 evidence gate | 有证据实施；无证据书面关闭 | 场景/基准/兼容证据 | 📋 |
-| 16 | **AR5A–D** | compatibility/security/release contracts | clean clone 安装、升级、恢复手册 | full test + cross-platform smoke + security audit | 📋 |
+| 12 | **AR-T1 · TodoWrite** | `packages/shared` todo 契约 + 工具 + session/transcript 接线 | 多步任务可跨 compact/resume 追踪 | compact 存活 + resume 投影 + 提醒双阈值 | ✅ |
+| 13 | **AR-T2 · Bash background** | `BackgroundShell` 契约 + 原生进程树 kill + BashOutput/KillShell | dev server / 长构建不再阻塞 turn | 真实进程 kill + endSession 无僵尸 + 前台回归 | ✅ |
+| 14 | **AR-T3+ · 能力面续刀** | WebSearch · plan 工具流 · AskUserQuestion（逐项） | 见 §14.3 | 每项独立红灯 + 全量门禁 | **当前** |
+| 15 | **AR2A1–A2 · watermark/safe rewrite** | range/watermark 纯契约 → rewrite 接线 | partial compact 主路径 | tool pairing + lifecycle 保留 | 📋 顺延 |
+| 16 | **AR2B–C · tokenizer/benchmark/ADR** | registry（重估）+ 语料基准 + remote 决策 | 可量化 token/cost | 偏差阈值 + fail-closed | 📋 |
+| 17 | **AR3A–F** | protocol client/store；无 renderer 状态机 | Codex App 风格 Desktop | mock/core IPC + crash/restart + Windows package | 📋 |
+| 18 | **AR4** | 逐项 evidence gate | 有证据实施；无证据书面关闭 | 场景/基准/兼容证据 | 📋 |
+| 19 | **AR5A–D** | compatibility/security/release contracts | clean clone 安装、升级、恢复手册 | full test + cross-platform smoke + security audit | 📋 |
 
 固定 checkpoint：
 
@@ -348,3 +358,66 @@ AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 regis
 2. 代码与测试单独 commit/push；再同步 ROADMAP、专题文档、AGENT_HANDOFF、USAGE/README 并 commit/push。
 3. push 后核对 `HEAD == origin/main`；只从看板最前面的未完成安全切片继续。
 4. 触发 §13.8 停止条件时，更新本看板 blocker、保留可恢复工作区，不扩大权限或架构范围。
+
+---
+
+## 14. AR-T · Agent 能力面（Capability Surface）
+
+> **准入证据（2026-07-26 实测）：** DR0–DR4 + AR1 投入了 7+ 个切片构建「长时、可中断、崩溃可恢复的自主工作」基础设施，
+> 但驱动它的模型当时只有 10 个工具：**记不住跨步骤的计划，也起不了任何活过一次工具调用的进程**。
+> 判据：`docs/*.md` 全文检索 `TodoWrite` / `background bash` / `WebSearch` / plan 工具流 —— **零命中**；
+> 而 `cache_edits`、`remote compaction` 等都有明确 🚫 决策记录。**说明这是盲区，不是取舍。**
+>
+> 因此在 AR2 压缩深化（当时已 93–96%）之前插入本轨。AR2A0a/A0b 成果不受影响，A1 顺延。
+
+### 14.1 AR-T1 · TodoWrite ✅
+
+模型可持久追踪多步计划。**关键设计：表存在 session 上，不进 messages** —— 因此 compact 改写历史时不会被摘要吞掉。
+
+| 面 | 落点 |
+|----|------|
+| 契约 | `packages/shared/src/todo.ts`：`TodoItem{content,status,activeForm}` · `validateTodoList` · `applyTodoWrite` · `summarizeTodoList` · `shouldRemindTodos` · `formatTodoReminder` |
+| 工具 | `packages/tools/src/todoWrite.ts`：免审批 · 非并发安全 · 整表替换 · 无 store 时显式失败 |
+| 接线 | `packages/core/src/sessionTodo.ts`（live store + 锚点）· `queryLoop` `before_provider` 注入 · `sessionTranscript` `todo` entry · `sessionPersist.appendSessionTodos` · resume 投影 |
+| 提示词 | `systemPrompt` 新增 cache-stable `# Task tracking` 段 |
+| UI | `packages/core/src/todoCell.ts` core 预渲染，壳只打印（不重算状态） |
+| 门禁 | `scripts/test-todo.ts` · `scripts/test-todo-session.ts` |
+
+**语义要点：**
+
+- `in_progress` 基数是 **warning 不是拒绝** —— 硬拒会让模型陷入重试循环
+- 全部 `completed` → 存储清空，下一段工作从干净状态开始
+- 提醒策略双阈值（距上次写 ≥N assistant 轮 **且** 距上次提醒 ≥N 轮），**外加锚点丢失快速路径**：
+  compact / resume 之后两个锚点同时消失 ⇒ 模型已失去视野 ⇒ 立即重注入一次
+
+### 14.2 AR-T2 · Bash background ✅
+
+`Bash.run_in_background` + `BashOutput` + `KillShell`。dev server / watcher / 长构建不再阻塞 turn。
+
+| 面 | 落点 |
+|----|------|
+| 契约 | `packages/shared/src/backgroundShell.ts`：4 档状态机 `running\|completed\|failed\|killed` · 注册表 · 游标 · 体积熔断 |
+| 运行时 | `packages/tools/src/backgroundShellRuntime.ts`：spawn · 输出落盘 · 增量游标读 · **原生进程树 kill** |
+| 工具 | `packages/tools/src/backgroundShellTools.ts`：`BashOutput`（只读免审批）· `KillShell`（只作用于本会话注册的 shell，越权面为零） |
+| 接线 | `Bash` 后台分支走完**同一套** policy/sandbox 门禁后才分流；`session.backgroundShells`；`endSession` 收尸 + 日志目录清理 |
+| 门禁 | `scripts/test-bash-background.ts` · `scripts/test-bash-background-runtime.ts`（真实进程） |
+
+**语义要点：**
+
+- **零运行时依赖红线**：不引入 `tree-kill`。POSIX 用 `detached` 建独立进程组 → `kill(-pid)` SIGTERM→SIGKILL 两级升级；Windows 用 `taskkill /T /F`
+- 后台进程**跨 turn 存活**（不吃单轮 abort、不套 timeout），但**绝不越过会话**：`endSession` 统一收尸
+- 输出落盘不驻内存；超过体积上限熔断杀进程，防止死循环 append 打满磁盘
+- 沙箱临时文件延后到进程退出才清理（前台是 `finally` 清理，后台不能照搬）
+- terminal 状态幂等：kill 之后进程自然退出的那次 exit 必须被忽略，否则「用户杀掉的」会被记成「正常完成」
+
+### 14.3 AR-T3+ · 续刀候选（当前）
+
+按 §13.10 固定规则「一次一个最小切片」，逐项独立准入：
+
+| 候选 | 现状 | 备注 |
+|------|------|------|
+| **WebSearch** | 只有 `WebFetch`（能取已知 URL，不能发现） | 需先定 provider 中立的检索后端与离线降级 |
+| **plan 工具流** | `PERMISSION_MODES` 已有 `'plan'`，但只 deny 编辑 + 一行提示；**无 `ExitPlanMode`** ⇒ 没有「提计划→批准→执行」闭环 | 与权限档联动，需谨慎设计 |
+| **AskUserQuestion** | 无 | 结构化澄清；与 CLI picker / Desktop 对话框对接 |
+| **前台命令自动后台化** | 无 | 参考实现有阻塞预算超时自动转后台；语义复杂，暂不做 |
+| **LSP** | 无 | 体量大，归 AR4 证据门控 |

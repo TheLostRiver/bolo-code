@@ -159,6 +159,16 @@ idle
 
 执行类型（v1）：`command`（shell）→ 后续 `http` / `prompt`。
 
+### 6.3b 工具能力面
+
+内置 13 个工具，契约真源 [TOOLS.md](./TOOLS.md)。两条与架构相关的约束：
+
+- **待办表（TodoWrite）存在 session 状态里，不进 messages** —— 否则会被 compact 摘要吞掉。
+  模型通过 core 在 safe boundary 注入的 `<todo_reminder>` 块看见它。
+- **后台 shell 跨 turn 存活，但绝不越过会话** —— `endSession` 统一收尸。
+  进程树 kill 原生实现（POSIX 进程组 / Windows `taskkill /T /F`），
+  **不引入运行时依赖**：`package.json` 的 `dependencies` 恒为空。
+
 ### 6.4 子代理
 
 - 类型：至少 `explore` / `shell` / `general`（可配置扩展）
