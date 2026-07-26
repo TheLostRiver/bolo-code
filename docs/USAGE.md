@@ -146,9 +146,10 @@ npx bolo --list
 npx bolo --resume <id>
 npx bolo --continue
 
-# AR1A：只查询既有会话的 runtime，不调用模型
+# AR1：查询/处置既有会话的 runtime，不隐式调用模型
 npx bolo runtime list --resume <id>
 npx bolo runtime list task --continue --json
+npx bolo runtime inspect turn <turnId> --resume <id>
 npx bolo runtime inspect turn <turnId> --resume <id> --json
 npx bolo runtime discard turn <turnId> --resume <id> --json
 npx bolo runtime retry-safe control <controlId> --continue --json
@@ -156,7 +157,11 @@ npx bolo runtime retry-safe control <controlId> --continue --json
 
 REPL 中，模型或工具正在运行时按 `Ctrl-C` 会针对 coordinator 当前 active turn 请求 interrupt 并返回提示符；空闲提示符下按 `Ctrl-C` 才退出。若取消发生在权限问答或 diff 审批面板，core 默认按拒绝处理。
 
-`bolo runtime list|inspect` 必须显式给 `--resume <id|path>` 或 `--continue`，不会进入 picker、创建新会话或调用 provider。每个 item 的 `availableActions` 由当前 snapshot 纯推导，并携带执行所需 expected state；空数组表示当前不应尝试动作。`--json` 成功时 stdout 只有一个 view payload；load/not-found 等查询失败也只有一个 `{ "ok": false, "code": "...", "detail": "..." }` payload。成功 exit 0，查询/加载失败 exit 1，参数使用错误 exit 2。
+`bolo runtime list|inspect` 必须显式给 `--resume <id|path>` 或 `--continue`，不会进入 picker、创建新会话或调用 provider。每个 item 的 `availableActions` 由当前 snapshot 纯推导，并携带执行所需 expected state；空数组表示当前不应尝试动作。
+
+文本模式只有在 **stdin 与 stdout 都是 TTY** 且结果超过一页时才启用 pager。`n/j/↓/→` 下一页，`p/k/↑/←` 上一页，`q/Esc` 正常退出；`Ctrl-C` 返回 130，EOF 正常退出。空结果/单页、pipe 或 `--json` 都不会读取 stdin；pipe/JSON 一次性输出完整结果，不带 ANSI、clear-screen、banner 或 summary。`NO_COLOR` 会禁用 renderer 颜色，但不改变分页和退出语义。
+
+`--json` 成功时 stdout 只有一个原始 `runtime.list|runtime.inspect` view payload；load/not-found 等查询失败只有一个 `{ "ok": false, "code": "...", "detail": "..." }` payload。JSON 参数错误同样只向 stdout 写一个 failure payload、stderr 为空并 exit 2；成功 exit 0，查询/加载失败 exit 1。非 JSON 参数错误仍向 stderr 输出诊断/help 并 exit 2。
 
 顶层 `runtime discard|retry-safe` 使用同一 resume/continue 隔离路径，只执行恢复后仍有明确语义的 append-only action。command JSON 是一个 protocol `runtime.result`；accepted（含 warning）exit 0，rejected/load failure exit 1，usage exit 2。requestId 默认按 session/action/target 稳定派生，也可用 `--request-id <id>` 覆盖。顶层 retry-safe 只 admission、不调用模型；命令退出后 replacement 在再次 resume 时是 interrupted diagnostic，不会自动执行。
 
@@ -474,6 +479,9 @@ npm run test:runtime-closeout
 npm run test:runtime-cli-query
 npm run test:runtime-queue-edit
 npm run test:runtime-cli-command
+npm run test:runtime-cli-renderer
+npm run test:runtime-cli-pager
+npm run test:runtime-cli-automation
 npx tsx scripts/test-slash.ts
 npx tsx scripts/test-multi-provider.ts
 npx tsx scripts/test-ultrathink.ts

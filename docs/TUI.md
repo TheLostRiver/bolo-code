@@ -15,6 +15,8 @@
 | `BOLO_MASCOT=0` | 去掉 Bolot 行 |
 | `--resume` 无 id | **箭头键 picker**（↑↓ Enter；`BOLO_ARROW_PICKER=0` 用编号） |
 | 非 TTY resume | 表格式列表 + 要求 `--resume <id>` |
+| `runtime list\|inspect` + stdin/stdout 双 TTY + 多页 | 进入轻量 runtime pager |
+| runtime pipe / `--json` / 空结果或单页 | 一次性完整输出；不启 pager、不读 stdin |
 
 ---
 
@@ -29,11 +31,34 @@
 | `tui/formatSessionEvent.ts` | 流式事件 · tool_end 摘要 |
 | `tui/diffPane.ts` | U1 browse · U2 approve 面板 |
 | `tui/askPermissionTty.ts` | 权限 y/a/N；有 files 时进审批面板 |
+| `packages/core/src/runtimeTextView.ts` | AR1C：纯 runtime text page renderer；CLI 与 slash 共用 |
+| `tui/runtimePager.ts` | AR1C：页状态 reducer · raw key reader · TTY pager driver |
+| `runtimeCli.ts` | AR1：顶层 runtime query/action consumer 与 automation 输出 |
 | `newSessionCli.ts` · `resumeCli.ts` · `main.ts` | 入口 |
 
 ---
 
-## 3. Diff 展示水位
+## 3. Runtime query pager（AR1C）
+
+`bolo runtime list|inspect` 的 renderer 只消费共享 `RuntimeQueryView`，不会读取 coordinator、provider 或 session 私有对象。分页状态、终端尺寸、filter 和 cursor 只存在当前函数调用栈，不写入 snapshot、protocol、JSONL 或磁盘。
+
+只有 text 模式、stdin/stdout 都是 TTY 且渲染结果超过一页时才读键：
+
+| 动作 | 键 / 结果 |
+|------|-----------|
+| 下一页 | `n` · `j` · `↓` · `→` |
+| 上一页 | `p` · `k` · `↑` · `←` |
+| 正常退出 | `q` · `Esc` · EOF；exit 0 |
+| 中断 | `Ctrl-C`；exit 130 |
+| reader/driver 错误 | `pager_failed`；exit 1 |
+
+0/1 页直接输出，不等待键盘。pager 在 data、end、error、abort/Ctrl-C 的全部终态移除 listener，并把 stdin raw mode 恢复到进入前状态。
+
+pipe 与 `--json` 永不启用 pager、永不读取 stdin，也不输出 ANSI、clear-screen、banner 或 summary。JSON query success 保留原始 `runtime.list|runtime.inspect` view；failure 固定为 `{ok:false,code,detail}`。JSON usage failure 只向 stdout 输出一个 payload、stderr 为空并 exit 2。
+
+---
+
+## 4. Diff 展示水位
 
 | 层 | 状态 | 说明 |
 |----|------|------|
@@ -49,7 +74,7 @@
 
 ---
 
-## 4. U 轨挂载点
+## 5. U 轨挂载点
 
 ```text
 packages/core/src/diffViewModel.ts   ← U0 VM · approve 键
@@ -101,7 +126,7 @@ npx tsx scripts/test-file-diff.ts
 
 ---
 
-## 5. 与 Electron
+## 6. 与 Electron
 
 - Desktop **不**实现第二套 diff 算法。  
 - U3：renderer 消费与 CLI 相同的 `DiffViewModel` JSON（IPC）。  
@@ -109,9 +134,13 @@ npx tsx scripts/test-file-diff.ts
 
 ---
 
-## 6. 测试
+## 7. 测试
 
 ```bash
+pnpm test
+npm run test:runtime-cli-renderer
+npm run test:runtime-cli-pager
+npm run test:runtime-cli-automation
 node --import tsx/esm scripts/test-full-track.ts
 node --import tsx/esm scripts/test-product-track.ts
 npx tsx scripts/test-file-diff.ts
@@ -120,7 +149,7 @@ npx tsx scripts/test-diff-view.ts
 
 ---
 
-## 7. 后置 / 非目标
+## 8. 后置 / 非目标
 
 | 项 | 说明 |
 |----|------|

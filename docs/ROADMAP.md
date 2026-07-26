@@ -29,9 +29,9 @@
 | **Provider UX · 便利层** | **~95–98%** | **CX0–CX8 已落地**（含 ultrathink 默认 off）· [PROVIDER_UX.md](./PROVIDER_UX.md) |
 | **产品整体（相对 HC）** | **~74–88%** | 日用高；UI 全家桶另计 |
 
-**已闭环主线：** headless 日用 → Diff · Hooks · Compact · Provider · Effort · **Provider UX CX0–CX8** · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4**。
+**已闭环主线：** headless 日用 → Diff · Hooks · Compact · Provider · Effort · **Provider UX CX0–CX8** · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX**。
 
-**当前主线：** **Autonomous Road AR1C1**（§13.10–§13.11：runtime text renderer / pager 与非 TTY 收口）。AR1A–AR1B3 已完成。
+**当前主线：** **Autonomous Road AR2A1**（§13.10–§13.11）：先定义 Compact partial range / stable watermark 的纯契约与保留边界，尚不接 provider。
 
 **开放轨：**
 
@@ -196,9 +196,9 @@ apps/desktop       消费同一 DiffViewModel                 （U3）
 | 官方市场 / 遥测 | 🚫 | 永不 |
 
 **一句话：**  
-主路径、Diff、Hooks、Compact、**多 Provider、Effort、Provider UX（含 CX8）、CLI/Agent 可靠性 R0–R4、Durable Runtime DR0–DR4**已收口；当前从协议正确性进入 CLI 可操作性优化。
+主路径、Diff、Hooks、Compact、**多 Provider、Effort、Provider UX（含 CX8）、CLI/Agent 可靠性 R0–R4、Durable Runtime DR0–DR4、AR1 CLI/TUI runtime UX**已收口；当前进入 Compact 深度与上下文边界优化。
 
-**下一刀（当前主线）：** **AR1C1 text/pager**：让 renderer 只消费 AR1 view-model，覆盖 0/1/N 行、窄终端、NO_COLOR、pipe、Ctrl-C/EOF；AR1B command surface 已收口。
+**下一刀（当前主线）：** **AR2A1 range/watermark**：先用固定 message/transcript fixture 定义 partial range、stable watermark、保留区间与拒绝原因，证明 tool pair、lifecycle、resolution 的保留边界后再考虑接入 rewrite/provider。
 
 **非阻塞加深：** Compact §8.9 · U5 · adaptive thinking · Desktop 体验打磨。
 
@@ -1136,8 +1136,8 @@ DR0–DR4 收口后进入 Autonomous Road（AR）。一次只推进一个可独�
 | **AR1B1 · action discovery** | 只由 snapshot/target/state 推导 `availableActions`；每个动作携带 expected state，不读取 coordinator 私有结构 | inspect/list 能告诉用户“现在可安全做什么”；非法动作在执行前可解释 | completed/interrupted/pending/ready/running/queued 矩阵；旧 snapshot additive 兼容 | ✅ `673df59` |
 | **AR1B2 · queue remove/edit** | remove 复用 durable cancel；edit 是“cancel 旧 control + append 新 queue/turn”，新 ID、旧历史保留，禁止原地改 prompt | protocol executor 与同进程 `/runtime edit\|remove` 可替换/删除尚未开始的 live queue；running/promoted/interrupted 默认拒绝 | FIFO、duplicate request、stale expected state、cancel 成功/new append 失败的 partial-accept warning | ✅ `3643530` |
 | **AR1B3 · command closeout** | query/command 共享稳定 result/error envelope；accepted + warning 不诱导换 requestId 重试 | text/JSON 都能区分 usage、rejected、accepted-with-warning | persistence failure、restart 后非 executable queue、并发 target 变化、exit 0/1/2 | ✅ `9f9a9f8` |
-| **AR1C1 · text/pager** | renderer 输入仅为 AR1 view-model；分页状态不进入 core/session | 大列表可分页/筛选；窄屏、NO_COLOR、非 TTY 不挂起 | 0/1/N 行、窄终端、重定向、Ctrl-C/EOF | **当前** |
-| **AR1C2 · automation closeout** | JSON schema/排序/错误码稳定；原 `/runtime json` 保持 protocol snapshot 兼容 | 脚本无需清洗 ANSI/banner/summary；help/USAGE 完整 | golden snapshot、stdout/stderr 分离、参数排列、旧会话 | 📋 |
+| **AR1C1 · text/pager** | renderer 输入仅为 AR1 view-model；分页状态不进入 core/session | 大列表可分页/筛选；窄屏、NO_COLOR、非 TTY 不挂起 | 0/1/N 行、窄终端、重定向、Ctrl-C/EOF | ✅ `89309e6` / `136ac2e` / `30ea8ea` |
+| **AR1C2 · automation closeout** | JSON schema/排序/错误码稳定；原 `/runtime json` 保持 protocol snapshot 兼容 | 脚本无需清洗 ANSI/banner/summary；help/USAGE 完整 | golden snapshot、stdout/stderr 分离、参数排列、旧会话 | ✅ `d26aef4` / `58e0d66` |
 
 AR1C 内部执行顺序与提交边界：
 
@@ -1155,6 +1155,13 @@ AR1C 明确非目标：
 - 不为 pager 引入 Ink/React/ratatui；若现有 TypeScript primitive 无法通过验收，再按 AR4 独立举证。
 - 不改变 interrupted 默认只诊断、不 replay 的语义；renderer 不根据按钮可见性自行执行动作。
 - 不让 JSON/pipe 路径输出 ANSI、clear-screen、banner、provider warning 或人类摘要。
+
+AR1A–AR1C2 已完成。AR1C 的落地契约如下：
+
+- 纯 renderer 位于 `packages/core/src/runtimeTextView.ts`，CLI 与 `/runtime list` 共用 `RuntimeQueryView → RuntimeTextPage`，不复制 selector/formatter。
+- pager 位于 `packages/cli/src/tui/runtimePager.ts`；page 只存在当前调用栈，只有 text + stdin/stdout 双 TTY + 多页才读键。`n/j/↓/→` 与 `p/k/↑/←` 翻页，`q/Esc/EOF` 正常退出，`Ctrl-C` exit 130，reader error exit 1，所有终态恢复 raw mode。
+- pipe 与 `--json` 永不读 stdin，均一次性输出完整结果且不带 ANSI/banner；JSON success 保持原始 query view，failure 固定为 `{ok:false,code,detail}`，JSON usage failure 也只向 stdout 写单 payload 并 exit 2。
+- 默认 `npm test` 已纳入 runtime query/action/queue/command、renderer、pager、automation 全部专项；参数排列、help、旧 snapshot 与真实 bin 兼容均有回归。
 
 #### AR1B2 已落地契约
 
@@ -1247,8 +1254,8 @@ AR3 视觉原则：深浅主题都保持高对比、窄侧栏 + 单一主时间�
 | 6 | **DR4C** | 真实 consumer 反馈与兼容收紧 | new/resume 共用协议投影 | crash/restart E2E + old transcript | ✅ |
 | 7 | **AR1A** | runtime list/inspect query view-model | resume/continue + text/纯 JSON | real bin + no banner/provider + old session | ✅ `4c3db76` |
 | 8 | **AR1B1–B3** | action discovery + append-only queue replace/remove | 只显示并执行 expected-state 安全动作 | state matrix + persistence/race/restart | ✅ B1–B3 |
-| 9 | **AR1C1–C2** | renderer/pager + automation schema closeout | 大列表、窄屏、pipe/JSON 均可用 | TTY + non-TTY + golden snapshots | **当前（AR1C1）** |
-| 10 | **AR2A–C** | compact range/watermark/token budget | 可量化上下文成本与稳定回退 | lifecycle/tool pairing + token/cost baseline | 📋 |
+| 9 | **AR1C1–C2** | renderer/pager + automation schema closeout | 大列表、窄屏、pipe/JSON 均可用 | TTY + non-TTY + golden snapshots | ✅ |
+| 10 | **AR2A–C** | compact range/watermark/token budget | 可量化上下文成本与稳定回退 | lifecycle/tool pairing + token/cost baseline | **当前（AR2A1）** |
 | 11 | **AR3A–F** | protocol client/store；无 renderer 状态机 | Codex App 风格 Desktop 完整主路径 | mock/core IPC + crash/restart + Windows package | 📋 |
 | 12 | **AR4** | 逐项 evidence gate | 有证据实施；无证据书面关闭 | 场景/基准/兼容证据 | 📋 |
 | 13 | **AR5A–D** | compatibility/security/release contracts | clean clone 安装、升级、恢复手册 | full test + cross-platform smoke + security audit | 📋 |

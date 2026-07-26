@@ -121,21 +121,20 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | Electron GUI | ~65–75% | 薄壳；非 HC 级 IDE |
 | 产品相对 HC 全家桶 | ~74–88% | 日用高；UI 密度另计 |
 
-**已闭环：** Diff · Hooks · Compact · Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4**。
+**已闭环：** Diff · Hooks · Compact · Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX**。
 
-**当前主线：** Autonomous Road **AR1C1 text/pager**：renderer 只消费 AR1 view-model，收口大列表、窄屏、NO_COLOR 与非 TTY。AR1A–AR1B3 已完成。
+**当前主线：** Autonomous Road **AR2A1 range/watermark**：先用固定 fixture 定义 Compact partial range、stable watermark、保留区间与拒绝原因；证明 tool pair、lifecycle、resolution 边界前不接 rewrite/provider。
 
 **其它开放轨（非阻塞）：**
 
 | 项 | 说明 |
 |----|------|
-| Compact §8.9 | partial / remote / 真 tokenizer 等 |
+| Compact §8.9 / AR2 | partial range · watermark · tokenizer budget；remote 只做证据门控 |
 | U5 | 真 React Ink / IDE diff 推送（可选） |
 | adaptive thinking | 与 effort 深联动 |
 | Desktop 打磨 | effort UI · session list · markdown/tool cards 等 |
-| AR1 CLI/TUI runtime UX | turn/task list · inspect · queue edit/remove · pager/自动化输出 |
 
-Durable Runtime 的长期执行顺序以 [ROADMAP.md](./ROADMAP.md) §13.4–§13.10 为准：
+Durable Runtime 的长期执行顺序以 [ROADMAP.md](./ROADMAP.md) §13.4–§13.11 为准：
 
 ```text
 DR2A 单 session runner ✅
@@ -155,9 +154,10 @@ DR2A 单 session runner ✅
 → AR1B1 safe action discovery ✅
 → AR1B2 queue remove/edit ✅
 → AR1B3 command closeout ✅
-→ AR1C1 text/pager（当前）
-→ AR1C2 automation closeout
-→ AR2 Compact depth
+→ AR1C1 text/pager ✅
+→ AR1C2 automation closeout ✅
+→ AR2A1 range/watermark（当前）
+→ AR2A2–C Compact depth
 → AR3 Codex App 风格 Desktop
 → AR4 证据驱动深水项
 → AR5 release hardening
@@ -262,6 +262,9 @@ DR2A 单 session runner ✅
 ```bash
 npm test
 npm run typecheck
+npm run test:runtime-cli-renderer
+npm run test:runtime-cli-pager
+npm run test:runtime-cli-automation
 npx tsx scripts/smoke-turn.ts
 npx tsx scripts/test-model-retry.ts
 npx tsx scripts/test-cli-events.ts
@@ -277,7 +280,7 @@ npx tsx scripts/test-file-diff.ts
 npx tsx scripts/test-config.ts
 ```
 
-`npm test` 已覆盖 R0–R4、Durable Runtime DR0–DR4、AR1A 与 AR1B1–B3（`test-runtime-cli-query` / `test-runtime-actions` / `test-runtime-queue-edit` / `test-runtime-cli-command`）；其它新轨仍以对应 `test-*` 脚本为准。
+`npm test` 已覆盖 R0–R4、Durable Runtime DR0–DR4 与完整 AR1：query/actions/queue/command、text renderer、TTY pager、automation golden、参数排列/help 和真实 bin/pipe。其它新轨仍以对应 `test-*` 脚本为准。
 
 ### 7.3 Git
 
@@ -354,6 +357,8 @@ cd apps/desktop && npm install && set BOLO_DESKTOP_MOCK=1 && npm start
 | AR1B1 | snapshot-only available-actions 矩阵 · action target 含 expectedState · CLI/slash text+JSON · DR4C 顶层 inspect 兼容 |
 | AR1B2 | `control.replace` · cancel+replacement append-only edit · requestId 稳定 ID/FIFO 尾插 · `/runtime edit\|remove` · partial accepted warning |
 | AR1B3 | 顶层 `runtime discard\|retry-safe` · 稳定/显式 requestId · text/JSON envelope · exit 0/1/2 · restart non-executable warning |
+| AR1C1 | 共享纯 text renderer · 窄屏/NO_COLOR · 双 TTY 多页 pager · next/previous/q/Esc/Ctrl-C/EOF · raw-mode 恢复 |
+| AR1C2 | pipe/JSON 永不读 stdin · query success 原始 view · failure 单 payload · usage exit 2 · automation/help/参数排列默认回归 |
 
 最新 commit 以 `git log` 为准。
 

@@ -26,7 +26,7 @@
 | 层 | 粗估 | 说明 |
 |----|------|------|
 | Headless 核心 | ~80–88% | queryLoop · 权限 · tools · STE；partial stream fail-closed |
-| 会话 / CLI | ~90–96% | JSONL · new/resume 同构 runtime · durable controls/tasks · background FIFO/promotion · versioned runtime protocol |
+| 会话 / CLI | ~92–97% | JSONL · durable runtime · query/action CLI · TTY pager · pipe/JSON automation |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
 | Subagent | ~89–95% | `config.agents` + `agents/*.md` · durable task/result · overflow FIFO/cancel · safe delivery · worktree 保全 |
 | 文件 Diff 日用 | ~95%+ | D0–D7 · U0–U4 |
@@ -39,9 +39,9 @@
 | Electron GUI | ~65–75% | 壳 + 流式 + 权限 + Settings + 多 provider |
 | 相对 HC 全家桶 UI | 另计 | 不设 100% |
 
-**已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Runtime DR0–DR4。
+**已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Runtime DR0–DR4 · **Autonomous Road AR1 CLI/TUI runtime UX**。
 
-**当前主线：** Autonomous Road **AR1C1**：runtime text renderer/pager 与非 TTY 收口；AR1A–AR1B3 已完成。
+**当前主线：** Autonomous Road **AR2A1**：先定义 Compact partial range / stable watermark 的纯契约与保留边界，尚不接 provider。
 
 **非阻塞开放轨：** Compact §8.9 · U5 真·Ink/IDE · adaptive thinking · Desktop 体验打磨。
 
@@ -99,9 +99,14 @@ npx bolo --list
 npx bolo --resume <id>
 npx bolo runtime list --resume <id>
 npx bolo runtime list task --continue --json
+npx bolo runtime inspect turn <turnId> --resume <id>
 npx bolo runtime discard turn <turnId> --resume <id> --json
 npx bolo runtime retry-safe control <controlId> --continue --json
 ```
+
+`runtime list|inspect` 的文本输出在 **stdin/stdout 都是 TTY** 且内容超过一页时自动分页：`n/j/↓/→` 下一页，`p/k/↑/←` 上一页，`q/Esc` 退出，`Ctrl-C` 返回 130。0/1 页不读键盘；pipe 与 `--json` 永不进入 pager、不会输出 ANSI/banner，也不会因为大列表挂起。
+
+`--json` 成功时 stdout 是单个原始 `runtime.list|runtime.inspect` view；失败是单个 `{ "ok": false, "code": "...", "detail": "..." }`。usage / load / query failure 分别 exit 2 / 1 / 1。顶层 recovery command 成功仍输出 protocol `runtime.result`。
 
 ### 常用斜杠
 
@@ -226,8 +231,12 @@ scripts/       单测与 smoke
 ## 开发与测试
 
 ```bash
+pnpm test
 pnpm typecheck
 
+npm run test:runtime-cli-renderer
+npm run test:runtime-cli-pager
+npm run test:runtime-cli-automation
 npx tsx scripts/test-multi-provider.ts
 npx tsx scripts/test-provider-ux.ts
 npx tsx scripts/test-ultrathink.ts
@@ -238,7 +247,7 @@ npx tsx scripts/test-file-diff.ts
 npx tsx scripts/smoke-turn.ts
 ```
 
-`pnpm test` 跑 package.json 登记脚本（未覆盖全部轨；新轨以对应 `scripts/test-*.ts` 为准）。
+`pnpm test` 是默认总门禁，已包含 Durable Runtime 与 AR1 query/action/renderer/pager/automation 专项；未登记的新实验仍须显式运行对应 `scripts/test-*.ts`。
 
 临时文件只写 **`.bolo-tmp/`**（已 gitignore，勿提交）。
 
