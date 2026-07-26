@@ -3,11 +3,12 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "description": "Electron GUI host for Bolo Code (M4 minimal)",
-  "main": "src/main/index.mjs",
+  "description": "Electron GUI host for Bolo Code",
+  "main": "dist/main.mjs",
   "scripts": {
-    "start": "electron .",
-    "dev": "cross-env BOLO_DESKTOP_MOCK=1 electron .",
+    "build": "node --import tsx/esm ../../scripts/build-desktop.ts",
+    "start": "npm run build && electron .",
+    "dev": "npm run build && cross-env BOLO_DESKTOP_MOCK=1 electron .",
     "test:smoke": "node --import tsx/esm scripts/smoke-ipc.mjs"
   },
   "devDependencies": {

@@ -17,6 +17,24 @@
  * 运行：npx tsx scripts/test-desktop-ipc-contract.ts
  */
 import { promises as fs } from 'node:fs'
+
+/**
+ * 文件读不到时给出**可诊断**的失败，而不是让 ENOENT 冒出来。
+ * 这些测试按路径读源码，一旦文件被改名/移动，ENOENT 只会说
+ * 「没这个文件」，不会说「契约测试失去了它要守的对象」——
+ * 后者才是真正发生的事。（本刀就踩到了：index.mjs → index.ts。）
+ */
+async function readOrExplain(file: string, why: string): Promise<string> {
+  try {
+    return await fs.readFile(file, 'utf8')
+  } catch {
+    console.error(
+      `FAIL: cannot read ${file} — ${why}. ` +
+        'If the file moved, update this test rather than deleting the check.',
+    )
+    process.exit(1)
+  }
+}
 import path from 'node:path'
 
 function assert(cond: unknown, msg: string): asserts cond {
@@ -26,7 +44,7 @@ function assert(cond: unknown, msg: string): asserts cond {
   }
 }
 
-const MAIN = path.join('apps', 'desktop', 'src', 'main', 'index.mjs')
+const MAIN = path.join('apps', 'desktop', 'src', 'main', 'index.ts')
 const PRELOAD = path.join('apps', 'desktop', 'src', 'preload', 'index.cjs')
 
 function collect(source: string, re: RegExp): Set<string> {
@@ -36,8 +54,8 @@ function collect(source: string, re: RegExp): Set<string> {
 }
 
 async function main() {
-  const mainSrc = await fs.readFile(MAIN, 'utf8')
-  const preloadSrc = await fs.readFile(PRELOAD, 'utf8')
+  const mainSrc = await readOrExplain(MAIN, 'the IPC handler side of the contract')
+  const preloadSrc = await readOrExplain(PRELOAD, 'the renderer-facing side of the contract')
 
   const handlers = collect(
     mainSrc,

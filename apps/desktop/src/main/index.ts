@@ -5,16 +5,17 @@
 
 import { app, BrowserWindow, ipcMain } from 'electron'
 import path from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
-import { register } from 'tsx/esm/api'
+import { fileURLToPath } from 'node:url'
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-// src/main → src → desktop → apps → repo root
-const repoRoot = path.resolve(__dirname, '../../../..')
-
-register()
-
-const {
+// AR3F：静态导入而非 tsx + 计算路径的动态 import。
+//
+// 原先是 `register()` 之后再 `await import(pathToFileURL(join(repoRoot, '…/*.ts')))`，
+// 那样 **esbuild 静态分析不了**，打包后四级相对路径也必然失效——
+// 设计文档把打包列为「唯一必须从零搭的板块」，根因就在这里。
+//
+// 改成静态导入后 dev 与 prod 走**同一条路**（都跑打包产物），
+// 不再维护两个会漂移的入口。
+import {
   createSessionFromWorkspace,
   submitUserInput,
   closeSessionMcp,
@@ -28,21 +29,17 @@ const {
   loadSessionListEntries,
   getSessionPersistMeta,
   buildRuntimeSnapshot,
-} = await import(
-  pathToFileURL(path.join(repoRoot, 'packages/core/src/index.ts')).href
-)
-const { buildTimelineCards, redactSecretsDeep } = await import(
-  pathToFileURL(path.join(repoRoot, 'packages/shared/src/index.ts')).href
-)
-const {
+} from '../../../../packages/core/src/index.ts'
+import {
+  buildTimelineCards,
+  redactSecretsDeep,
+} from '../../../../packages/shared/src/index.ts'
+import {
   createMockProvider,
   detectEffortDialectId,
   listEffortChoosable,
-  listBuiltinEffortDialectIds,
-} = await import(
-  pathToFileURL(path.join(repoRoot, 'packages/providers/src/index.ts')).href
-)
-const {
+} from '../../../../packages/providers/src/index.ts'
+import {
   listProviderPresets,
   addProviderProfileToConfigFile,
   loadConfigJson,
@@ -50,16 +47,40 @@ const {
   getUserLayout,
   getProjectLayout,
   normalizeProviderRegistry,
-} = await import(
-  pathToFileURL(path.join(repoRoot, 'packages/config/src/index.ts')).href
-)
+} from '../../../../packages/config/src/index.ts'
 
-let mainWindow = null
-let session = null
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+// 主进程改成 .ts 之后第一次进入 typecheck（此前是 .mjs，完全没检查）。
+// 这几处显式类型不是形式主义：session 是全局可空单例，
+// 少了它每个用点都得靠人记得判空。
+let mainWindow: BrowserWindow | null = null
+let session: Awaited<ReturnType<typeof createSessionFromWorkspace>>['session'] | null =
+  null
 const pendingPermissions = new Map()
 
 /** 桌面设置（会话级，重启窗口保留进程内） */
-const desktopSettings = {
+const PERMISSION_MODES = [
+  'default',
+  'acceptEdits',
+  'plan',
+  'auto',
+  'bypassPermissions',
+] as const
+type DesktopPermissionMode = (typeof PERMISSION_MODES)[number]
+
+function toPermissionMode(v: unknown): DesktopPermissionMode | undefined {
+  return typeof v === 'string' &&
+    (PERMISSION_MODES as readonly string[]).includes(v)
+    ? (v as DesktopPermissionMode)
+    : undefined
+}
+
+const desktopSettings: {
+  cwd: string
+  useMock: boolean
+  permissionMode: DesktopPermissionMode
+} = {
   cwd: process.env.BOLO_DESKTOP_CWD?.trim() || process.cwd(),
   useMock:
     process.env.BOLO_PROVIDER === 'mock' ||
@@ -67,12 +88,19 @@ const desktopSettings = {
   permissionMode: 'default',
 }
 
-function send(channel, payload) {
+function send(channel: string, payload: unknown) {
   mainWindow?.webContents.send(channel, payload)
 }
 
+type DesktopPermissionDecision = 'allow' | 'deny' | 'allow_always'
+
 function createDesktopAskPermission() {
-  return async (req) => {
+  return async (req: {
+    toolName: string
+    toolInput?: unknown
+    toolUseId?: string
+    preview?: unknown
+  }): Promise<DesktopPermissionDecision> => {
     const id = req.toolUseId || `p_${Date.now()}`
     return await new Promise((resolve) => {
       pendingPermissions.set(id, resolve)
@@ -111,7 +139,7 @@ async function destroySession(reason = 'other') {
 /**
  * 从磁盘刷新 registry 并挂到 session（add provider 后用）。
  */
-async function refreshSessionRegistry(s) {
+async function refreshSessionRegistry(s: NonNullable<typeof session>) {
   try {
     const user = await loadConfigJson(getUserLayout())
     const project = await loadConfigJson(getProjectLayout(s.cwd))
@@ -124,7 +152,7 @@ async function refreshSessionRegistry(s) {
   }
 }
 
-function effortSnapshot(s) {
+function effortSnapshot(s: NonNullable<typeof session>) {
   try {
     const dialect =
       s.effortDialect ??
@@ -140,7 +168,9 @@ function effortSnapshot(s) {
         : dialect && typeof dialect === 'object' && dialect.id
           ? String(dialect.id)
           : 'max-tokens'
-    const choosable = listEffortChoosable(dialect, {
+    // 上面已把 dialect 归一成 id 字符串（dialectId）；listEffortChoosable
+    // 只接受 id 或完整 EffortDialect，传原始的松散对象会类型不符
+    const choosable = listEffortChoosable(dialectId, {
       isAgent: true,
       model: s.model ?? s.providerProfile?.model,
     })
@@ -158,7 +188,7 @@ function effortSnapshot(s) {
   }
 }
 
-function sessionStatusPayload(s) {
+function sessionStatusPayload(s: NonNullable<typeof session>) {
   const effort = effortSnapshot(s)
   return {
     id: s.id,
@@ -186,7 +216,9 @@ async function ensureSession(forceNew = false) {
     ensureDefaults: true,
     connectMcp: false,
     systemPrompt: true,
-    permissionMode: desktopSettings.permissionMode,
+    // 注意：createSessionFromWorkspace **不接受** permissionMode——
+    // 此处曾传过一个会被静默忽略的同名选项。真正生效的是下面那次
+    // setPermissionMode，所以别再把它加回来。
     askPermission: createDesktopAskPermission(),
     onEvent: (e) => send('bolo:event', e),
   })
@@ -216,14 +248,17 @@ function createWindow() {
     width: 1000,
     height: 760,
     webPreferences: {
-      preload: path.join(__dirname, '../preload/index.cjs'),
+      // 产物布局是 dist/{main.mjs, preload.cjs, renderer/}——与源码布局
+      // (src/main, src/preload, src/renderer) 不同。这两条路径按**产物**算，
+      // 因为跑起来的永远是打包产物（dev 也先 build 再 electron）。
+      preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
     },
     title: 'Bolo Code',
   })
-  mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
+  mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'))
   mainWindow.on('closed', () => {
     mainWindow = null
   })
@@ -260,11 +295,12 @@ function registerIpc() {
         needRecreate = true
       }
     }
-    if (typeof patch.permissionMode === 'string' && patch.permissionMode) {
-      desktopSettings.permissionMode = patch.permissionMode
+    const nextMode = toPermissionMode(patch.permissionMode)
+    if (nextMode) {
+      desktopSettings.permissionMode = nextMode
       if (session && !needRecreate) {
         try {
-          setPermissionMode(session, patch.permissionMode)
+          setPermissionMode(session, nextMode)
         } catch {
           session.permissionMode = patch.permissionMode
         }
@@ -391,7 +427,7 @@ function registerIpc() {
 
   ipcMain.handle('bolo:listMessages', async () => {
     const s = await ensureSession()
-    return s.messages.map((m) => ({
+    return s.messages.map((m: { role: string; content?: unknown }) => ({
       role: m.role,
       content: String(m.content ?? '').slice(0, 4000),
     }))
@@ -429,7 +465,7 @@ function registerIpc() {
   // 其余会话没有快照 —— 视图模型会把它们标成 unknown 而不是 idle。
   ipcMain.handle('bolo:listSessions', async () => {
     const s = await ensureSession()
-    let snapshots = []
+    let snapshots: ReturnType<typeof buildRuntimeSnapshot>[] = []
     try {
       snapshots = [buildRuntimeSnapshot(s)]
     } catch {

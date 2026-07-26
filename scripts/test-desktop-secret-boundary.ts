@@ -21,6 +21,24 @@
  * 运行：npx tsx scripts/test-desktop-secret-boundary.ts
  */
 import { promises as fs } from 'node:fs'
+
+/**
+ * 文件读不到时给出**可诊断**的失败，而不是让 ENOENT 冒出来。
+ * 这些测试按路径读源码，一旦文件被改名/移动，ENOENT 只会说
+ * 「没这个文件」，不会说「契约测试失去了它要守的对象」——
+ * 后者才是真正发生的事。（本刀就踩到了：index.mjs → index.ts。）
+ */
+async function readOrExplain(file: string, why: string): Promise<string> {
+  try {
+    return await fs.readFile(file, 'utf8')
+  } catch {
+    console.error(
+      `FAIL: cannot read ${file} — ${why}. ` +
+        'If the file moved, update this test rather than deleting the check.',
+    )
+    process.exit(1)
+  }
+}
 import path from 'node:path'
 import { redactSecretsDeep } from '../packages/shared/src/secretBoundary.ts'
 
@@ -142,9 +160,9 @@ function main() {
 
 async function sourceCheck() {
   // ── 8) 主进程不得把环境变量里的原始密钥放进 IPC 返回体 ──
-  const src = await fs.readFile(
-    path.join('apps', 'desktop', 'src', 'main', 'index.mjs'),
-    'utf8',
+  const src = await readOrExplain(
+    path.join('apps', 'desktop', 'src', 'main', 'index.ts'),
+    'the main process payloads being checked for secrets',
   )
   const leaks = [...src.matchAll(/\b(apiKey|token|secret)\s*:\s*([^\n,}]+)/gi)]
     .map((m) => `${m[1]}: ${m[2]!.trim()}`)
