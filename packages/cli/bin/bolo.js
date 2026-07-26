@@ -1,7 +1,14 @@
 #!/usr/bin/env node
 /**
- * bolo 可执行入口：用 tsx 跑 TypeScript main。
- * 用法：bolo --resume [id]
+ * **仓库内**可执行入口：用 tsx 直接跑 TypeScript 源。
+ *
+ * 这不是发布产物的入口。发布出去的 bin 是 `dist/bolo.mjs`（esbuild 单文件、
+ * 零运行时依赖），见 docs/RELEASE.md —— 用户装到的包里没有 tsx，也没有本文件。
+ *
+ * 保留本文件的原因：改源码即时生效，且 scripts/test-runtime-cli-*.ts 用它做
+ * 「真实 bin」E2E。删掉会同时打断开发回路与那三个测试。
+ *
+ * 用法：node packages/cli/bin/bolo.js --resume [id]   （或 npm run dev --）
  */
 import { spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'

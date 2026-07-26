@@ -15,7 +15,7 @@
  * Frontmatter 契约：S-PORT-1 → `./frontmatter.ts`
  */
 
-import { promises as fs } from 'node:fs'
+import { promises as fs, existsSync } from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import { fileURLToPath } from 'node:url'
@@ -79,12 +79,25 @@ export type SkillCatalogEntry = {
 }
 
 /**
- * 仓库内置 skills 根目录（packages/bundled-skills）。
- * 相对本文件：packages/skills/src → ../../bundled-skills
+ * 内置 skills 根目录。
+ *
+ * 两种布局都要认（AR5C）：
+ *   开发     packages/skills/src/index.ts → ../../bundled-skills
+ *   发布产物 dist/bolo.mjs               → ./bundled-skills（构建时拷入）
+ *
+ * 打包会把模块路径压平，所以不能只按源码布局算；这里按存在性探测。
  */
 export function getBundledSkillsDir(): string {
   const here = path.dirname(fileURLToPath(import.meta.url))
-  return path.resolve(here, '..', '..', 'bundled-skills')
+  const candidates = [
+    path.resolve(here, '..', '..', 'bundled-skills'),
+    path.resolve(here, 'bundled-skills'),
+  ]
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate
+  }
+  // 都不存在时返回开发布局，调用方会得到「目录不存在」而不是错目录
+  return candidates[0]!
 }
 
 export function describeSkillLayout(userRoot?: string) {
