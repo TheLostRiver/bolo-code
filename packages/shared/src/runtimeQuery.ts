@@ -35,7 +35,10 @@ type RuntimeActionCommand = Exclude<
 >
 
 type RuntimeCommandIntent<T> = T extends RuntimeCommand
-  ? Pick<T, 'action' | 'target'>
+  ? Pick<T, 'action' | 'target'> &
+      (T extends { action: 'control.replace' }
+        ? { requiredInput: ['prompt'] }
+        : {})
   : never
 
 export type RuntimeAvailableAction =
@@ -180,6 +183,17 @@ function listItems(snapshot: RuntimeSnapshot): RuntimeListItem[] {
                 expectedState: record.state,
               },
             })
+            if (record.kind === 'queue') {
+              actions.push({
+                action: 'control.replace',
+                target: {
+                  sessionId,
+                  controlId: record.controlId,
+                  expectedState: record.state,
+                },
+                requiredInput: ['prompt'],
+              })
+            }
           }
           if (record.state === 'interrupted' && !record.resolution) {
             actions.push({

@@ -7,6 +7,7 @@ import {
   type RuntimeCommandAction,
   type RuntimeCommandErrorCode,
   type RuntimeCommandResult,
+  type RuntimeControlReplacementView,
   type RuntimeControlView,
   type RuntimeSnapshot,
   type RuntimeTaskView,
@@ -64,6 +65,7 @@ function success(
   session: RuntimeCommandSession,
   command: RuntimeCommand,
   warnings?: readonly string[],
+  replacement?: RuntimeControlReplacementView,
 ): RuntimeCommandResult {
   const nextWarnings = [...(warnings ?? [])]
   try {
@@ -72,6 +74,7 @@ function success(
       ok: true,
       snapshot: buildRuntimeSnapshot(session),
       ...(nextWarnings.length ? { warnings: nextWarnings } : {}),
+      ...(replacement ? { replacement } : {}),
     }
   } catch (error) {
     nextWarnings.push(
@@ -83,6 +86,7 @@ function success(
       ...resultBase(command),
       ok: true,
       warnings: nextWarnings,
+      ...(replacement ? { replacement } : {}),
     }
   }
 }
@@ -163,6 +167,20 @@ function retryIds(requestId: string): {
   return {
     controlId: `runtime_retry_control_${digest}`,
     turnId: `runtime_retry_turn_${digest}`,
+  }
+}
+
+function replaceIds(requestId: string): {
+  controlId: string
+  turnId: string
+} {
+  const digest = createHash('sha256')
+    .update(`control.replace:${requestId}`, 'utf8')
+    .digest('hex')
+    .slice(0, 32)
+  return {
+    controlId: `runtime_replace_control_${digest}`,
+    turnId: `runtime_replace_turn_${digest}`,
   }
 }
 
@@ -433,6 +451,148 @@ export async function executeRuntimeCommand(
       command,
       result.persistenceWarning ? [result.persistenceWarning] : undefined,
     )
+  }
+
+  if (command.action === 'control.replace') {
+    const target = current.session.controls.find(
+      (control) => control.controlId === command.target.controlId,
+    )
+    if (!target) {
+      return failure(
+        command,
+        'not_found',
+        `control "${command.target.controlId}" was not found`,
+      )
+    }
+
+    const ids = replaceIds(command.requestId)
+    const replacement: RuntimeControlReplacementView = {
+      replacedControlId: target.controlId,
+      controlId: ids.controlId,
+      turnId: ids.turnId,
+    }
+    const querySource =
+      command.replacement.querySource ?? 'runtime_control_replace'
+    const existingReplacement = current.session.controls.find(
+      (control) => control.controlId === ids.controlId,
+    )
+    if (existingReplacement) {
+      const sameReplacement =
+        existingReplacement.kind === 'queue' &&
+        existingReplacement.turnId === ids.turnId &&
+        existingReplacement.prompt === command.replacement.prompt &&
+        existingReplacement.querySource === querySource
+      if (!sameReplacement) {
+        return failure(
+          command,
+          'state_conflict',
+          `replacement control "${ids.controlId}" already has a different payload`,
+        )
+      }
+      if (target.state !== 'cancelled') {
+        return failure(
+          command,
+          'state_conflict',
+          `control "${target.controlId}" is ${target.state}, expected cancelled after replacement`,
+        )
+      }
+      if (
+        existingReplacement.state === 'cancelled' &&
+        existingReplacement.detail?.includes('control persistence failed')
+      ) {
+        return success(session, command, [
+          `control "${target.controlId}" was cancelled but replacement was not admitted`,
+        ])
+      }
+      return success(session, command, undefined, replacement)
+    }
+
+    if (target.state !== command.target.expectedState) {
+      return failure(
+        command,
+        'state_conflict',
+        `control "${target.controlId}" is ${target.state}, expected ${command.target.expectedState}`,
+      )
+    }
+    if (target.kind !== 'queue') {
+      return failure(
+        command,
+        'not_cancellable',
+        `control "${target.controlId}" is ${target.kind}, not a queue`,
+      )
+    }
+
+    let expectedTurnId: string | undefined
+    if (target.state === 'pending') {
+      const runner = current.session.runner
+      if (
+        runner.state !== 'running' ||
+        !target.expectedTurnId ||
+        target.expectedTurnId !== runner.active.turnId
+      ) {
+        return failure(
+          command,
+          'state_conflict',
+          `pending queue "${target.controlId}" no longer belongs to the active turn`,
+        )
+      }
+      expectedTurnId = runner.active.turnId
+    } else if (current.session.runner.state !== 'idle') {
+      return failure(
+        command,
+        'state_conflict',
+        `ready queue "${target.controlId}" requires an idle session`,
+      )
+    }
+
+    const conflictingTurn =
+      current.session.turns.some((turn) => turn.turnId === ids.turnId) ||
+      current.session.controls.some(
+        (control) =>
+          control.controlId !== ids.controlId &&
+          control.turnId === ids.turnId,
+      )
+    if (conflictingTurn) {
+      return failure(
+        command,
+        'state_conflict',
+        `replacement turn "${ids.turnId}" already exists`,
+      )
+    }
+
+    const warnings: string[] = []
+    const cancelled = await cancelSessionControl(session, {
+      controlId: target.controlId,
+    })
+    if (!cancelled.ok) return controlFailure(command, cancelled)
+    if (cancelled.persistenceWarning) {
+      warnings.push(cancelled.persistenceWarning)
+    }
+
+    const queued = await requestSessionControl(session, {
+      controlId: ids.controlId,
+      kind: 'queue',
+      sessionId: session.id,
+      ...(expectedTurnId ? { expectedTurnId } : {}),
+      turnId: ids.turnId,
+      prompt: command.replacement.prompt,
+      querySource,
+    })
+    if (!queued.ok) {
+      warnings.push(
+        `control "${target.controlId}" was cancelled but replacement was not admitted: ${queued.detail}`,
+      )
+      return success(session, command, warnings)
+    }
+    if (queued.persistenceWarning) {
+      warnings.push(queued.persistenceWarning)
+    }
+    if (queued.control.state !== command.target.expectedState) {
+      warnings.push(
+        `control "${target.controlId}" was cancelled but replacement was admitted as ${queued.control.state}, expected ${command.target.expectedState}`,
+      )
+    }
+    return success(session, command, warnings, replacement)
   }
 
   if (

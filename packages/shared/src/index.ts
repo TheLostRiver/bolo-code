@@ -188,6 +188,8 @@ export {
   type RuntimeCommandResult,
   type RuntimeControlBoundary,
   type RuntimeControlCancelCommand,
+  type RuntimeControlReplaceCommand,
+  type RuntimeControlReplacementView,
   type RuntimeControlKind,
   type RuntimeControlState,
   type RuntimeControlView,

@@ -94,6 +94,16 @@ function fixture(runner: RuntimeSnapshot['session']['runner']): RuntimeSnapshot 
           prompt: 'ready input',
         },
         {
+          controlId: 'control_steer_pending',
+          sessionId: 'runtime_actions',
+          kind: 'steer',
+          state: 'pending',
+          requestedAt: timestamp,
+          updatedAt: timestamp,
+          prompt: 'pending steer',
+          expectedTurnId: 'turn_active',
+        },
+        {
           controlId: 'control_retry_safe',
           sessionId: 'runtime_actions',
           kind: 'queue',
@@ -206,8 +216,13 @@ assert.deepEqual(actionNames(runningItems, 'turn_resolved'), [])
 assert.deepEqual(actionNames(runningItems, 'turn_completed'), [])
 assert.deepEqual(actionNames(runningItems, 'control_pending'), [
   'control.cancel',
+  'control.replace',
 ])
 assert.deepEqual(actionNames(runningItems, 'control_ready'), [
+  'control.cancel',
+  'control.replace',
+])
+assert.deepEqual(actionNames(runningItems, 'control_steer_pending'), [
   'control.cancel',
 ])
 assert.deepEqual(actionNames(runningItems, 'control_retry_safe'), [

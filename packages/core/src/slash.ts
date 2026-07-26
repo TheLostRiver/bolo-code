@@ -1119,6 +1119,13 @@ function runtimeResultMessage(result: RuntimeCommandResult): string {
     return `runtime command rejected [${result.code}]: ${result.detail}`
   }
   const lines = [`runtime command accepted: ${result.action}`]
+  if (result.replacement) {
+    lines.push(
+      `replacement: control=${result.replacement.controlId} ` +
+        `turn=${result.replacement.turnId} ` +
+        `replaced=${result.replacement.replacedControlId}`,
+    )
+  }
   for (const warning of result.warnings ?? []) {
     lines.push(`warning: ${warning}`)
   }
@@ -1318,6 +1325,77 @@ async function cmdRuntime(
     const result = await executeRuntimeCommand(runtimeSession, command)
     return { ok: result.ok, message: runtimeResultMessage(result) }
   }
+  if (action === 'edit') {
+    const controlId = parts[1]
+    const prompt = parts.slice(2).join(' ').trim()
+    if (!controlId || !prompt) {
+      return {
+        ok: false,
+        message: 'Usage: /runtime edit <controlId> <prompt>',
+      }
+    }
+    const control = snapshot.session.controls.find(
+      (row) => row.controlId === controlId,
+    )
+    if (
+      control?.kind !== 'queue' ||
+      (control.state !== 'pending' && control.state !== 'ready')
+    ) {
+      return {
+        ok: false,
+        message: `runtime control "${controlId}" is not editable`,
+      }
+    }
+    const result = await executeRuntimeCommand(runtimeSession, {
+      protocolVersion: RUNTIME_PROTOCOL_VERSION,
+      kind: 'runtime.command',
+      requestId: runtimeCommandId(),
+      action: 'control.replace',
+      target: {
+        sessionId: session.id,
+        controlId,
+        expectedState: control.state,
+      },
+      replacement: {
+        prompt,
+        querySource: 'runtime_edit',
+      },
+    })
+    return { ok: result.ok, message: runtimeResultMessage(result) }
+  }
+  if (action === 'remove') {
+    const controlId = parts[1]
+    if (!controlId || parts.length !== 2) {
+      return {
+        ok: false,
+        message: 'Usage: /runtime remove <controlId>',
+      }
+    }
+    const control = snapshot.session.controls.find(
+      (row) => row.controlId === controlId,
+    )
+    if (
+      control?.kind !== 'queue' ||
+      (control.state !== 'pending' && control.state !== 'ready')
+    ) {
+      return {
+        ok: false,
+        message: `runtime control "${controlId}" is not removable`,
+      }
+    }
+    const result = await executeRuntimeCommand(runtimeSession, {
+      protocolVersion: RUNTIME_PROTOCOL_VERSION,
+      kind: 'runtime.command',
+      requestId: runtimeCommandId(),
+      action: 'control.cancel',
+      target: {
+        sessionId: session.id,
+        controlId,
+        expectedState: control.state,
+      },
+    })
+    return { ok: result.ok, message: runtimeResultMessage(result) }
+  }
   if (action === 'discard' || action === 'retry-safe') {
     const entity = parts[1]?.toLowerCase()
     const id = parts[2]
@@ -1354,7 +1432,7 @@ async function cmdRuntime(
   return {
     ok: false,
     message:
-      'Usage: /runtime [list|json|inspect [turn|control|task] [id]|interrupt <turnId>|cancel <control|task> <id>|discard <turn|control|task> <id>|retry-safe <turn|control|task> <id>]',
+      'Usage: /runtime [list|json|inspect [turn|control|task] [id]|interrupt <turnId>|cancel <control|task> <id>|edit <controlId> <prompt>|remove <controlId>|discard <turn|control|task> <id>|retry-safe <turn|control|task> <id>]',
   }
 }
 
@@ -3546,9 +3624,9 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
   {
     name: 'runtime',
     summary:
-      'Protocol v1 runtime inspect/control/discard/retry-safe',
+      'Protocol v1 runtime inspect/control/edit/remove/discard/retry-safe',
     usage:
-      '[list [turn|control|task]|json|inspect <turn|control|task> <id>|interrupt <turnId>|cancel <control|task> <id>|discard <turn|control|task> <id>|retry-safe <turn|control|task> <id>]',
+      '[list [turn|control|task]|json|inspect <turn|control|task> <id>|interrupt <turnId>|cancel <control|task> <id>|edit <controlId> <prompt>|remove <controlId>|discard <turn|control|task> <id>|retry-safe <turn|control|task> <id>]',
     group: 'session',
     run: cmdRuntime,
   },

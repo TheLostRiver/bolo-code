@@ -22,6 +22,7 @@ export const RUNTIME_PROTOCOL_FEATURES = [
   'commands.discard',
   'commands.retry-safe',
   'views.resolutions',
+  'commands.replace',
 ] as const
 
 export type RuntimeProtocolVersion = typeof RUNTIME_PROTOCOL_VERSION
@@ -259,6 +260,7 @@ export const RUNTIME_COMMAND_ACTIONS = [
   'runtime.inspect',
   'turn.interrupt',
   'control.cancel',
+  'control.replace',
   'task.cancel',
   'runtime.discard',
   'runtime.retry-safe',
@@ -294,6 +296,19 @@ export type RuntimeControlCancelCommand = RuntimeCommandBase & {
   }
 }
 
+export type RuntimeControlReplaceCommand = RuntimeCommandBase & {
+  action: 'control.replace'
+  target: {
+    sessionId: string
+    controlId: string
+    expectedState: 'pending' | 'ready'
+  }
+  replacement: {
+    prompt: string
+    querySource?: string
+  }
+}
+
 export type RuntimeTaskCancelCommand = RuntimeCommandBase & {
   action: 'task.cancel'
   target: {
@@ -317,6 +332,7 @@ export type RuntimeCommand =
   | RuntimeInspectCommand
   | RuntimeTurnInterruptCommand
   | RuntimeControlCancelCommand
+  | RuntimeControlReplaceCommand
   | RuntimeTaskCancelCommand
   | RuntimeRecoveryCommand
 
@@ -339,11 +355,18 @@ type RuntimeCommandResultBase = {
   action: RuntimeCommandAction
 }
 
+export type RuntimeControlReplacementView = {
+  replacedControlId: string
+  controlId: string
+  turnId: string
+}
+
 export type RuntimeCommandResult =
   | (RuntimeCommandResultBase & {
       ok: true
       snapshot?: RuntimeSnapshot
       warnings?: string[]
+      replacement?: RuntimeControlReplacementView
     })
   | (RuntimeCommandResultBase & {
       ok: false
@@ -1091,7 +1114,7 @@ export function parseRuntimeCommand(
     }
   }
   try {
-    const { requestId, action, target } = parseCommandBase(input)
+    const { record, requestId, action, target } = parseCommandBase(input)
     const sessionId = requiredString(
       target.sessionId,
       'command.target.sessionId',
@@ -1152,6 +1175,53 @@ export function parseRuntimeCommand(
               'command.target.controlId',
             ),
             expectedState: target.expectedState,
+          },
+        },
+      }
+    }
+    if (action === 'control.replace') {
+      if (target.expectedState !== 'pending' && target.expectedState !== 'ready') {
+        return {
+          ok: false,
+          code: 'invalid_transition',
+          detail:
+            'control.replace requires expectedState="pending" or "ready"',
+        }
+      }
+      const replacement = requiredRecord(
+        record.replacement,
+        'command.replacement',
+      )
+      const prompt = requiredText(
+        replacement.prompt,
+        'command.replacement.prompt',
+      ).trim()
+      if (!prompt) {
+        throw new Error('command.replacement.prompt is empty')
+      }
+      const querySource =
+        replacement.querySource === undefined
+          ? undefined
+          : requiredString(
+              replacement.querySource,
+              'command.replacement.querySource',
+            )
+      return {
+        ok: true,
+        value: {
+          ...base,
+          action,
+          target: {
+            sessionId,
+            controlId: requiredString(
+              target.controlId,
+              'command.target.controlId',
+            ),
+            expectedState: target.expectedState,
+          },
+          replacement: {
+            prompt,
+            ...(querySource ? { querySource } : {}),
           },
         },
       }
@@ -1263,6 +1333,7 @@ export function parseRuntimeCommandResult(
     if (record.ok) {
       let snapshot: RuntimeSnapshot | undefined
       let warnings: string[] | undefined
+      let replacement: RuntimeControlReplacementView | undefined
       if (record.snapshot !== undefined) {
         const parsed = parseRuntimeSnapshot(record.snapshot)
         if (!parsed.ok) throw new Error(parsed.detail)
@@ -1280,6 +1351,26 @@ export function parseRuntimeCommandResult(
           ),
         )
       }
+      if (record.replacement !== undefined) {
+        const value = requiredRecord(
+          record.replacement,
+          'result.replacement',
+        )
+        replacement = {
+          replacedControlId: requiredString(
+            value.replacedControlId,
+            'result.replacement.replacedControlId',
+          ),
+          controlId: requiredString(
+            value.controlId,
+            'result.replacement.controlId',
+          ),
+          turnId: requiredString(
+            value.turnId,
+            'result.replacement.turnId',
+          ),
+        }
+      }
       return {
         ok: true,
         value: {
@@ -1287,6 +1378,7 @@ export function parseRuntimeCommandResult(
           ok: true,
           ...(snapshot ? { snapshot } : {}),
           ...(warnings?.length ? { warnings } : {}),
+          ...(replacement ? { replacement } : {}),
         },
       }
     }
