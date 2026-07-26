@@ -34,6 +34,8 @@ npm-debug.log*
 .cache/
 .turbo/
 coverage/
+__pycache__/
+*.py[cod]
 
 # Local scratch / agent temp outputs — never commit (local-only)
 .bolo-tmp/
@@ -47,10 +49,19 @@ tmp_*.out
 # scripts local scratch outputs (not product code)
 scripts/_notes.out
 scripts/*.out
+scripts/_commit-push-once.cmd
+scripts/_fix_subagent_cwd.py
+scripts/stop-hook-fixed.ps1
 
 # Local planning scratch (agent session notes; not product docs)
 findings.md
 progress.md
 task_plan.md
 *.local.md
-.planning/.active_plan
+.planning/
+
+# Project-local Codex/PWF integration and state (keep local)
+.codex/
+
+# Nested Desktop runtime config/session data
+apps/desktop/.bolo/
