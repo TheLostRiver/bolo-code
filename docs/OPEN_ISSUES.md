@@ -15,11 +15,11 @@
 
 ## 1. Agent 可直接解决
 
-当前开放主线为 OI-10。以下已关闭条目继续保留关闭证据，防止后续重复实现或状态回退。
+当前 agent 可闭环开放主线为空。以下已关闭条目继续保留关闭证据，防止后续重复实现或状态回退。
 
 ### OI-10 · CLI 命令发现与 TUI 一致性
 
-**状态：IN PROGRESS**
+**状态：CLOSED（代码 `67421bb`；文档同步批次）**
 
 准入证据：
 
@@ -40,24 +40,37 @@
 
 | 切片 | packages-first 交付 | 人类可见结果 | 自动关闭条件 | 状态 |
 |------|---------------------|--------------|--------------|------|
-| **OI-10A · frame width** | 欢迎页、输入框和用户消息共享终端 frame width helper | 宽屏时上下框同宽；窄屏不破框 | 24/38/56/96/超宽 golden + CJK/NO_COLOR | OPEN |
-| **OI-10B · activity animation** | 确定性 frame glyph 契约，继续每帧单次完整写入 | Thinking/Running 有平滑动画，elapsed 继续更新且无空白帧 | 多 frame 输出不同；每 tick 单 write；窄屏/NO_COLOR 回归 | OPEN |
-| **OI-10C · slash catalog** | 从 `SLASH_COMMANDS` 投影只读候选，提供前缀过滤与稳定排序 | `/` 显示命令，`/d` 首选 `/doctor` | hidden/alias/精确/前缀/无匹配/稳定顺序 | OPEN |
-| **OI-10D · input menu** | reducer/renderer 增加菜单显隐、选中索引、可视窗口和补全动作 | ↑/↓ 选择，Tab/Enter 补全，Esc 关闭且保留输入；菜单关闭后 ↑/↓ 仍是历史 | 编辑/删除/光标移动刷新；CJK/窄屏；raw listener/清理回归 | OPEN |
-| **OI-10E · 动态贡献** | Plugin command 与 user-invocable Skill 投影进同一 catalog，复用既有 precedence/conflict 结果 | 插件命令和 Skill 可从 `/` 菜单发现；reload 后下一次输入立即更新 | 来源标签、禁用 Skill、重名、reload/session projection | OPEN |
-| **OI-10F · 验收与文档** | 默认门禁注册新契约；ROADMAP/TUI/SLASH/USAGE/handoff 同步 | 源码与 dist 行为一致，非 TTY 无动态控制符 | 专项、typecheck、完整 `npm test`、dist smoke 全绿 | OPEN |
+| **OI-10A · frame width** | 欢迎页、输入框和用户消息共享终端 frame width helper | 宽屏时上下框同宽；窄屏不破框 | 24/38/56/96/超宽 golden + CJK/NO_COLOR | CLOSED |
+| **OI-10B · activity animation** | 确定性 frame glyph 契约，继续每帧单次完整写入 | Thinking/Running 有平滑动画，elapsed 继续更新且无空白帧 | 多 frame 输出不同；每 tick 单 write；窄屏/NO_COLOR 回归 | CLOSED |
+| **OI-10C · slash catalog** | 从 `SLASH_COMMANDS` 投影只读候选，提供前缀过滤与稳定排序 | `/` 显示命令，`/d` 首选 `/doctor` | hidden/alias/精确/前缀/无匹配/稳定顺序 | CLOSED |
+| **OI-10D · input menu** | reducer/renderer 增加菜单显隐、选中索引、可视窗口和补全动作 | ↑/↓ 选择，Tab/Enter 补全，Esc 关闭且保留输入；菜单关闭后 ↑/↓ 仍是历史 | 编辑/删除/光标移动刷新；CJK/窄屏；raw listener/清理回归 | CLOSED |
+| **OI-10E · 动态贡献** | Plugin command 与 user-invocable Skill 投影进同一 catalog，复用既有 precedence/conflict 结果 | 插件命令和 Skill 可从 `/` 菜单发现；reload 后下一次输入立即更新 | 来源标签、禁用 Skill、重名、reload/session projection | CLOSED |
+| **OI-10F · 验收与文档** | 默认门禁注册新契约；ROADMAP/TUI/SLASH/USAGE/handoff 同步 | 源码与 dist 行为一致，非 TTY 无动态控制符 | 专项、typecheck、完整 `npm test`、dist smoke 全绿 | CLOSED |
 
-关闭条件：
+关闭证据：
+
+- `67421bb` 在 core 提供只读候选 projection/filter，在 CLI 提供本地
+  `/exit`/`/quit` 适配层、共享 frame、菜单 reducer/renderer 与多帧 activity；
+  欢迎页、输入框、用户消息不再维护互相冲突的宽度上限。
+- 裸 `/` 隐藏 alias，明确前缀仍可发现；内置命令优先于 Plugin/Skill 重名项，
+  `user-invocable: false` Skill 不进入菜单；每次 idle editor 重建候选，plugin reload
+  后无需重启会话。
+- Codex PTY 动态实测中裸 `/` 显示 36 个可见项，`/d` 首选 `/doctor` 并显示真实
+  Plugin 来源；Down、Tab、Esc 与 `/exit` 两阶段提交均正常且未见残留行。
+- `test:slash-completion`、扩展后的 `test:cli-tui`、typecheck、114 个脚本完整
+  `npm test`、dist build/install 与 Electron launch 全部通过；根依赖仍为 `{}`。
+
+已满足的关闭条件：
 
 - 输入框只消费窄 `SlashCommandCandidate[]`，不依赖整个 session，也不复制第二份内置
-  命令清单或执行器。
+  执行清单或执行器；CLI 仅单列自己拥有的 `/exit`/`/quit`。
 - `/` 只在整行命令名上下文显示；出现参数、普通文本、`//` 或无匹配时正确关闭/显示
   空态，不把普通提示误判为命令。
 - Tab/Enter 只接受候选并补成 `/<name> `；命令提交仍走现有
   `submitUserInput`，reducer 不执行副作用。
 - 继续保持根 `dependencies: {}`；新测试有独立 npm script 并进入默认门禁。
-- 自动验证完成后 OI-10 可关闭；真实 Windows Terminal 字体、光标、resize、残影和
-  真人按键观感仍属于 OI-H3，不能以快照或注入按键冒充。
+- 自动验证与文档同步已完成，OI-10 已关闭；真实 Windows Terminal 字体、光标、
+  resize、残影和真人按键观感仍属于 OI-H3，不能以快照或注入按键冒充。
 
 ### OI-01 · 状态真源与使用文档漂移
 
@@ -67,7 +80,7 @@
 
 - ROADMAP §0/§13.11、handoff、README 与 autonomous prompt 使用同一队列，
   并在 OI-04 关闭后统一把 OI-06 标为当前，同时保留外部/人工阻塞标记。
-- AR4 ADR 已按正文改为六个候选；RELEASE 与默认门禁现统一为 113 个脚本。
+- AR4 ADR 已按正文改为六个候选；RELEASE 与默认门禁现统一为 114 个脚本。
 - USAGE 已补 `--allowed-tools`、`--disallowed-tools`、`AskUserQuestion`
   与 Web search 的最短入口。
 - `test-dist-build.ts` 守住默认门禁条目和 package manager；
@@ -339,10 +352,12 @@ Ctrl-C/Esc 以及 REPL 是否抢占 stdin。需要人在真实终端按键确认
 
 **状态：BLOCKED: HUMAN**
 
-OI-09 已自动覆盖宽/中/紧凑欢迎 renderer、Bolot/NO_COLOR、输入 reducer、
-raw-mode listener/恢复、CJK/emoji cell 宽度、固定 `✦` 与原子 activity writer、
-首 token 前 Thinking、Running/warning 恢复、非 TTY 回落与完整 `npm test`。
-Codex PTY 也已确认源码入口实际接入欢迎页，但不具备项目要求的 raw-mode 能力。
+OI-09/OI-10 已自动覆盖宽/中/紧凑欢迎 renderer、Bolot/NO_COLOR、共享 frame、
+slash reducer/menu、raw-mode listener/恢复、CJK/emoji cell 宽度、确定性多帧 glyph
+与原子 activity writer、首 token 前 Thinking、Running/warning 恢复、非 TTY 回落与
+完整 `npm test`。Codex PTY 默认因 `TERM=dumb` 降级；仅对子进程覆盖
+`TERM=xterm-256color` 后，已实测 `/`/`/d`、Plugin 来源、方向键、Tab、Esc 与
+`/exit` 两阶段提交，但该 PTY 仍不能代表真人 Windows Terminal。
 自动化不能替代真人确认 Windows Terminal 字体/颜色下的实际光标位置、重绘残影、
 窗口 resize、Ctrl+J/历史/删除组合键、权限面板切换和长回答滚动。
 

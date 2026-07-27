@@ -178,19 +178,25 @@ npx bolo runtime retry-safe control <controlId> --continue --json
 
 ```text
 ╭─ Message ─────────────────────────────────────────╮
-│ ❯                                                 │
+│ ❯ /d                                              │
+├─ Commands · 4 ────────────────────────────────────┤
+│ ❯ /doctor        Local diagnostics                │
+│   /diff          File changes                     │
 ╰───────────────────────────────────────────────────╯
   default · provider/model · effort high
-  Enter send · Ctrl+J newline · ↑↓ history · Ctrl+C exit
+  ↑↓ select · Tab/Enter complete · Esc close
 ```
 
-`Enter` 发送，`Ctrl+J` 换行，`↑/↓` 浏览本进程历史；支持 `←/→`、`Home/End`、
-`Backspace/Delete` 和常见 Emacs 编辑键。提交后用户消息立即进入时间线；provider
-首 token 到达前显示固定 `✦ Thinking`、耗时和中断提示，工具运行时显示
-`Running <tool>`，最终正文带 `Bolo` 角色层级。完整键位见 [TUI.md](./TUI.md) §3。
+输入 `/` 会显示内置、CLI-local、Plugin 与 user-invocable Skill，继续输入实时按
+exact/prefix 过滤。菜单打开时 `↑/↓` 选择，Tab/Enter 只补成 `/<name> `，Esc 关闭并
+保留文本；再次 Enter 才提交。菜单关闭后 `Enter` 发送、`Ctrl+J` 换行、`↑/↓` 浏览
+本进程历史；支持 `←/→`、`Home/End`、`Backspace/Delete` 和常见 Emacs 编辑键。
+提交后用户消息立即进入时间线；provider 首 token 到达前显示
+`✦ → ✧ → ✶ → ✧` Thinking、耗时和中断提示，工具运行时显示 `Running <tool>`，
+最终正文带 `Bolo` 角色层级。完整键位见 [TUI.md](./TUI.md) §3。
 
-活动行每次把完整内容与擦尾控制合成一次原位写入，不会先清空再绘制；耗时以
-250ms 节奏刷新。`BOLO_MASCOT=0` 可隐藏 Bolot；`NO_COLOR` 只去颜色并保留欢迎页结构，
+活动行每次把完整内容与擦尾控制合成一次原位写入，不会先清空再绘制；glyph 与耗时
+以 250ms 节奏刷新。`BOLO_MASCOT=0` 可隐藏 Bolot；`NO_COLOR` 只去颜色并保留欢迎页结构，
 显式 `BOLO_THEME=plain` / `BOLO_PLAIN=1` 才简化欢迎页。
 
 REPL 中，模型或工具正在运行时按 `Ctrl-C` 会针对 coordinator 当前 active turn 请求 interrupt 并返回提示符；空闲提示符下按 `Ctrl-C` 才退出。若取消发生在权限问答或 diff 审批面板，core 默认按拒绝处理。
@@ -318,8 +324,13 @@ Steer 的提示只在请求已到达安全边界并真正注入后显示为 appl
 
 ## 4. 常用斜杠（日用）
 
+空输入时先键入 `/` 可浏览所有可执行项；例如 `/d` 会优先选中 `/doctor`。Plugin
+command 与 user-invocable Skill 使用同一列表并显示来源。菜单是会话输入补全，不是
+PowerShell/Bash 外壳补全。
+
 | 命令 | 作用 |
 |------|------|
+| `/exit` · `/quit` | 关闭交互 REPL；`/quit` 是只在明确前缀时显示的隐藏别名 |
 | `/help` | 命令列表 |
 | `/provider` · `/provider use <id>` · `/provider add …` | 后端列表 / 热切 / preset |
 | `/model` · `/model name` · `/model id/name` | 模型 |
@@ -632,7 +643,9 @@ npm run test:session-settings
 npm run test:desktop-session-settings
 npm run test:searxng-setup
 npm run test:searxng-setup-cli
-npx tsx scripts/test-slash.ts
+npm run test:slash
+npm run test:slash-completion
+npm run test:cli-tui
 npx tsx scripts/test-multi-provider.ts
 npx tsx scripts/test-ultrathink.ts
 ```

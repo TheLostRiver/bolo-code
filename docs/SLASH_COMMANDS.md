@@ -15,6 +15,20 @@
 - 命令：本地执行，返回 `{ type: 'slash', message }`，**不**调用 `submitPrompt`。
 - 普通输入：走现有 `submitPrompt` → `{ type: 'prompt', terminal }`。
 
+## 输入发现与补全（OI-10）
+
+- `getSlashCommandCandidates(session)` 从 `SLASH_COMMANDS`、Plugin command 与
+  user-invocable Skill 投影只读展示对象；按真实 dispatch precedence 去重：
+  built-in → Plugin → Skill。`user-invocable: false` Skill 不进入候选。
+- CLI 通过 `getCliSlashCommandCandidates(session)` 追加自己拥有的 `/exit` 与 hidden
+  `/quit`；输入框只消费 `SlashCommandCandidate[]`，不依赖整个 session 或执行函数。
+- 裸 `/` 显示全部可见命令；继续输入使用大小写不敏感的 exact/prefix 过滤，精确命中
+  优先。不做 substring/fuzzy；`//`、参数和普通文本关闭菜单。
+- 菜单打开时 `↑/↓` 循环选择，Tab/Enter 只补为 `/<name> `，Esc 关闭并保留输入；
+  菜单关闭后 ↑/↓ 才恢复历史。无匹配显示空态，Enter 仍可提交给未知命令诊断。
+- `/plugins reload` 会原位刷新 `session.pluginCommands` 与 `session.skills`；每次进入
+  idle editor 都重新生成候选，所以热加载后的下一次输入立即可发现新命令。
+
 ## 内置命令（P0）
 
 | 命令 | 行为 |
@@ -54,13 +68,15 @@
 | `/allow [ToolName \| path:GLOB \| bash:PATTERN]` | 会话 always-allow：工具名 / 路径 glob / Bash 模式（前缀·通配·`:*`）；无参列出 |
 | `/deny [ToolName \| path:GLOB \| bash:PATTERN \| prefix:PFX]` | 会话 **always-deny**（硬规则，赢过 bypass/allow）；无参列出 |
 
-REPL 额外：`/exit` `/quit` 由 CLI 处理（退出循环，不进总线）。
+REPL 额外：`/exit` `/quit` 由 CLI 处理（退出循环，不进总线）；`/exit` 在裸 `/`
+可见，hidden `/quit` 只在明确输入 `/q…` 时出现。
 
 ## 体验打磨（SL-polish）
 
 - **未知命令**：提示 `/help`、`/skills`；对相近内置名给出 `Did you mean: /x, /y?`（编辑距离 / 前缀）。
 - **参数错误**：`/effort`、`/thinking`、`/permissions` 等返回明确 Usage，而非含糊 “unknown”。
-- **别名**：`/status`→`/doctor`，`/usage`→`/cost`；`/help` 不单独占行，脚注说明。
+- **别名**：`/status`→`/doctor`，`/usage`→`/cost`，`/quit`→`/exit`；hidden alias
+  不占裸 `/` 菜单行，明确输入前缀时仍可发现。
 
 ## 思考链显示（`/thinking`）— RC2 + RC3
 
@@ -95,7 +111,9 @@ REPL 额外：`/exit` `/quit` 由 CLI 处理（退出循环，不进总线）。
 - `/runtime edit|remove` 只操作当前进程 live queue；顶层 `list|inspect` 仍为只读 query，顶层 recovery command 也不会把重启后的 interrupted control 重建为可编辑 live queue。
 - 顶层 `bolo runtime discard|retry-safe <entity> <id> --resume|--continue [--json]` 复用同一 executor；默认 requestId 稳定派生，`--request-id` 可显式覆盖。accepted/accepted-with-warning/rejected/usage 分别使用 exit 0/0/1/2。
 - 顶层 retry-safe 不调用 provider或执行 queue；进程退出后 replacement 在下次 resume 只显示 interrupted diagnostic。交互式执行仍走同进程 `/runtime retry-safe` + REPL FIFO drain。
-- 模块：`packages/core/src/slash.ts`；导出见 `@bolo/core`。
+- 模块：`packages/core/src/slash.ts`（执行 + candidate projection）；
+  `packages/cli/src/slashCandidates.ts`（CLI-local 合并）；导出见 `@bolo/core` /
+  `@bolo/cli`。
 
 ## 插件 slash（PL2 最小）
 

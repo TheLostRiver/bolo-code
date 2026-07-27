@@ -1,8 +1,9 @@
 # CLI TUI
 
 > 无遥测。品牌见 `docs/BRAND.md`。  
-> **现状：** OI-09 零运行时依赖 TTY controller：响应式 Bolot 欢迎页 · 真实输入框 ·
-> 稳定 turn 活动态 · 结构化时间线 · 箭头 picker · Diff/权限面板。
+> **现状：** OI-09/OI-10 零运行时依赖 TTY controller：响应式 Bolot 欢迎页 ·
+> 共享 frame 的真实输入框 · slash 菜单/补全 · 原子多帧 turn 活动态 · 结构化时间线 ·
+> 箭头 picker · Diff/权限面板。
 > **框架选择：** 没有依赖 React Ink；完成标准是交互和输出契约，不是框架名称。
 > Diff 轨见 [ROADMAP.md](./ROADMAP.md) §3 ·
 > [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) 轨 B。
@@ -37,7 +38,8 @@
 | 文件 | 角色 |
 |------|------|
 | `tui/inkLayout.ts` | 一次性响应式品牌/workspace 欢迎页；绝不伪装成输入框 |
-| `tui/inputBox.ts` | 输入 reducer、CJK-safe renderer、短生命周期 raw-mode driver |
+| `tui/frame.ts` | 欢迎页、输入框与用户消息共用的终端 frame width 契约 |
+| `tui/inputBox.ts` | 输入/slash reducer、CJK-safe 菜单 renderer、短生命周期 raw-mode driver |
 | `tui/terminalText.ts` | ANSI/CJK/emoji grapheme cell 宽度、裁切、补齐与折行 |
 | `tui/turnActivity.ts` | 首 token 前与工具间隙的 Thinking/Running/elapsed 单行状态 |
 | `tui/terminalMarkdown.ts` | 流式 inline emphasis/code renderer |
@@ -49,12 +51,13 @@
 | `tui/askPermissionTty.ts` | 权限 y/a/N；有 files 时进审批面板 |
 | `packages/core/src/runtimeTextView.ts` | AR1C：纯 runtime text page renderer；CLI 与 slash 共用 |
 | `tui/runtimePager.ts` | AR1C：页状态 reducer · raw key reader · TTY pager driver |
+| `slashCandidates.ts` | core 候选与 CLI-local `/exit`/`/quit` 的无副作用合并层 |
 | `runtimeCli.ts` | AR1：顶层 runtime query/action consumer 与 automation 输出 |
 | `newSessionCli.ts` · `resumeCli.ts` · `main.ts` | 入口 |
 
 ---
 
-## 3. 会话交互（OI-09）
+## 3. 会话交互（OI-09/OI-10）
 
 ### 3.1 欢迎首页
 
@@ -62,6 +65,8 @@
 欢迎语、吉祥物、model/workspace，右栏负责 Start here、当前会话和常用命令；
 中宽度改为完整单栏，紧凑宽度改为一行 Bolot。所有动态文本都先移除外来 ANSI，
 再按 grapheme cell 宽度裁切/补齐，所以 CJK、emoji、长模型名和长路径不会破框。
+欢迎页、输入框与用户消息统一通过 `resolveTuiFrameWidth()` 计算外框；超宽终端共同
+封顶 160 列并保留两列 gutter，不再出现上框 160、输入框 120 的右缘错位。
 
 `NO_COLOR` 只移除颜色，不删除结构；`BOLO_THEME=plain` / `BOLO_PLAIN=1` 才显式
 简化为纯文本。`BOLO_MASCOT=0` 只隐藏 Bolot，不影响环境与会话信息。
@@ -70,10 +75,12 @@
 
 | 键 | 动作 |
 |----|------|
-| `Enter` | 发送当前输入 |
+| `Enter` | slash 菜单打开且有选中项时补成 `/<name> `；否则发送当前输入 |
 | `Ctrl+J` | 插入换行 |
 | `←/→` · `Home/End` | 按 grapheme 移动光标 |
-| `↑/↓` | 浏览本进程最近 100 条输入 |
+| `↑/↓` | slash 菜单打开时循环选择候选；否则浏览本进程最近 100 条输入 |
+| `Tab` | slash 菜单打开时补全选中项；否则插入两个空格 |
+| `Esc` | 关闭 slash 菜单并保留输入 |
 | `Backspace/Delete` | 删除前/后一个 grapheme |
 | `Ctrl+A/E` | 整个输入 buffer 首/尾 |
 | `Ctrl+U/K/W` | 删除光标前/后/前一个词 |
@@ -81,16 +88,21 @@
 | `Ctrl+D` | 空输入退出；非空时删除光标后的字符 |
 | `Ctrl+C` | 空闲输入时退出 REPL；turn 运行时请求 interrupt |
 
-Tab 规范为两个空格；其它不可见 C0/C1 控制符不会进入输入框。输入框最多显示四行并
-围绕光标滚动，长文本仍完整保留在 state 中。每次 turn 开始前 raw editor 都会释放
-stdin，权限/picker/`Ctrl+C` 不与空闲输入 listener 竞争。
+整行以单个 `/` 开始、光标位于命令 token 尾部且尚无参数时打开菜单：裸 `/` 显示
+可见全量，继续输入按 exact/prefix 过滤；`//`、普通文本和带参数输入不会触发。
+内置、CLI-local、Plugin command 与 user-invocable Skill 使用同一菜单，动态来源显示
+短标签；无匹配显示明确空态。Tab/Enter 只写回 `/<name> `，第二次 Enter 才走既有
+submit/dispatch，reducer 不执行命令副作用。其它不可见 C0/C1 控制符不会进入输入框。
+输入框最多显示四行，菜单默认最多显示六项并随选中项滚动；完整文本与候选仍保留在
+state 中。每次 turn 开始前 raw editor 都会释放 stdin，权限/picker/`Ctrl+C` 不与
+空闲输入 listener 竞争。
 
 ### 3.3 Turn 时间线
 
 | 时点 / 事件 | 人类可见结果 |
 |-------------|--------------|
 | 提交普通消息 | 立即以 `❯` 回显用户消息；不等 provider 首 token |
-| provider 尚未输出 | `✦ Thinking · elapsed · Ctrl+C interrupt` 原位刷新 |
+| provider 尚未输出 | `✦/✧/✶/✧ Thinking · elapsed · Ctrl+C interrupt` 原位刷新 |
 | reasoning | `◇ Thinking` 段；`/thinking off` 可关闭 |
 | `tool_start/end` | 进入永久工具时间线；结束后回到 Thinking |
 | `tool_progress` | 只在 activity 原位更新“工具名 · 进度”，不把每个 tick 刷成永久消息 |
@@ -98,7 +110,7 @@ stdin，权限/picker/`Ctrl+C` 不与空闲输入 listener 竞争。
 | turn 完成 | 清掉活动行并显示 `Done · elapsed`；随后重新出现输入框 |
 | slash command | 回显用户命令但不启动虚假的模型 Thinking |
 
-activity 使用固定 `✦` 状态符号，每 250ms 更新耗时；每帧把
+activity 使用确定性 `✦ → ✧ → ✶ → ✧` 状态帧，每 250ms 更新 glyph 与耗时；每帧把
 `\r + 完整状态行 + erase-to-end` 合成一次 writer 调用，不再先清空整行再绘制，
 因此不会周期性出现空白帧。每帧仍读取当前终端列宽，完整文案放不下时依次退化为
 紧凑/最小文案，避免自动换行残影。`NO_COLOR` 只移除 SGR，不移除必要的
@@ -111,8 +123,8 @@ cursor-control。
   cursor move 或用户回显，旧自动化无需清洗 TUI。
 - `formatSessionEventChunks()` 等旧追加式 formatter 继续保留；新时间线复用事件语义，
   不在 CLI 重建 core 状态机。
-- 当前没有 shell completion、鼠标输入或跨进程持久命令历史；它们不是 OI-09 的完成
-  条件。
+- 当前已实现会话输入框内的 slash completion；尚无 PowerShell/Bash 外壳级 shell
+  completion、鼠标输入或跨进程持久命令历史，它们不是 OI-10 的完成条件。
 
 ---
 
@@ -231,10 +243,11 @@ npx tsx scripts/test-file-diff.ts
 npx tsx scripts/test-diff-view.ts
 ```
 
-`test:cli-tui` 覆盖 grapheme/CJK/emoji cell 宽度、输入 reducer、raw-mode 清理、
-宽/中/紧凑欢迎页、Bolot/NO_COLOR、宽窄输入框、首 token gate、固定活动符号与
-原子 writer、Thinking/Running、warning 恢复和非 TTY 追加式输出。完整门禁当前包含
-113 个 `scripts/*.ts`。
+`test:cli-tui` 覆盖 grapheme/CJK/emoji cell 宽度、输入/slash reducer、菜单可视窗口、
+raw-mode 清理、共享 frame、宽/中/紧凑欢迎页、Bolot/NO_COLOR、24 列输入菜单、
+首 token gate、多帧活动符号与原子 writer、Thinking/Running、warning 恢复和非 TTY
+追加式输出。`test:slash-completion` 覆盖内置/Plugin/Skill projection、重名、
+hidden alias、exact/prefix 与空匹配。完整门禁当前包含 114 个 `scripts/*.ts`。
 
 **仍需真人验收：** Windows Terminal 中的字体观感、实际光标位置、窗口 resize、
 Ctrl+J/历史/删除组合键和长回答滚动。自动测试与静态快照不能替代肉眼/真人按键，

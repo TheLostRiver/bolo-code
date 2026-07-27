@@ -21,8 +21,8 @@
 | **成本与缓存** | **~94–97%** | /cost 日用近满 |
 | **文件 Diff · 日用契约** | **~95%+** | **D0–D7 已收口**；见 [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) |
 | **文件 Diff · 交互 UI** | **~90–95%** | **U0–U4 已落地**；U5 真·Ink/IDE 可选（AR4 证据门控） |
-| **斜杠** | **~72–82%** | 执行面日用，但 **OI-10 进行中**：输入 `/` 没有命令发现、前缀过滤或补全，Plugin/Skill 已可执行却不可从输入菜单发现 |
-| **CLI TUI** | **~78–85%** | OI-09 已建立响应式欢迎页、raw-mode 输入、即时回显和结构化时间线；**OI-10 进行中**：统一上下 frame width、恢复无空白帧 Thinking 动画、补 slash 菜单/键盘补全/动态贡献；真实 Windows Terminal 观感仍需真人验 |
+| **斜杠** | **~88–94%** | OI-10 已收口：内置、CLI-local、Plugin command 与 user-invocable Skill 共用候选投影；`/` 全量发现、精确/前缀过滤、hidden alias 与键盘补全均有契约 |
+| **CLI TUI** | **~88–93%** | OI-09/OI-10：响应式 Bolot 欢迎页、共享 frame、raw-mode 输入、slash 菜单、原子多帧 Thinking/Running、即时回显和结构化时间线；真实 Windows Terminal 观感仍需真人验 |
 | **Electron GUI** | **~80–88%** | 壳 + 流式 + 权限 + 多 provider（CX7）+ runtime v1 + **会话切换/恢复 + composer controls + model/effort 设置 + control/tool progress 投影** + AskUserQuestion；真人点击/视觉仍未验 |
 | **Hooks · 日用契约** | **~96–98%** | **H0–H5 已落地**（SessionEnd · exit 语义 · updatedInput · `/hooks recent`） |
 | **Compact · 日用管道** | **~96–98%** | **C0–C5 + AR2 全段已落地**（hybrid 计数 · 中段截断 · 防重摘要 · range/watermark 契约 · 切分不拆对穷举验证 · 写失败完整回退 · durable 条目不丢 · **估算按字符类别分档**（CJK 1.3 / 散文 4.5 / 其余 3.5；实测推翻了「密文 = token 密」的旧前提，最差高估 109% → 19.5%）· 管道基准）；中段压缩与远端压缩均**显式关闭**（§13.10.2 · [ADR](./ADR_COMPACT_REMOTE.md)） |
@@ -31,19 +31,18 @@
 | **Provider UX · 便利层** | **~95–98%** | **CX0–CX8 已落地**（ultrathink 默认 off）· [PROVIDER_UX.md](./PROVIDER_UX.md) |
 | **产品整体（相对 HC）** | **~74–88%** | 日用高；UI 全家桶另计 |
 
-**已闭环主线：** headless 日用 → Diff（D0–D7 / U0–U4）· Hooks（H0–H5）· Compact（C0–C5）· Provider（P0–P4.1）· Effort（E0–E9）· Provider UX（CX0–CX8）· 可靠性（R0–R4）· **Durable Runtime（DR0–DR4）** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR3 Desktop 产品接线** · **OI-07 SearXNG 上游诊断、`search doctor` 与可选 Docker setup** · **OI-08B CLI 零步骤首次启动** · **OI-09 CLI TUI 交互重构**。切片明细 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
+**已闭环主线：** headless 日用 → Diff（D0–D7 / U0–U4）· Hooks（H0–H5）· Compact（C0–C5）· Provider（P0–P4.1）· Effort（E0–E9）· Provider UX（CX0–CX8）· 可靠性（R0–R4）· **Durable Runtime（DR0–DR4）** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR3 Desktop 产品接线** · **OI-07 SearXNG 上游诊断、`search doctor` 与可选 Docker setup** · **OI-08B CLI 零步骤首次启动** · **OI-09 CLI TUI 交互重构** · **OI-10 CLI 命令发现与 TUI 一致性**。切片明细 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
 
-**当前主线：OI-10 CLI 命令发现与 TUI 一致性。** 已复核的缺口包括：欢迎框 160 列
-上限与输入框 120 列上限不一致；activity 的 `frame` 自增却未参与渲染；输入 reducer
-没有 slash 候选或菜单状态，Tab 仍是两个空格；内置、Plugin command 与
-user-invocable Skill 已可执行，但没有统一发现入口。按 OI-10A–F 先共享契约和红灯，
-再接 raw-mode 菜单、动态贡献、动画与文档；保持零运行时依赖。
+**当前主线：默认 agent 可闭环队列为空。** OI-10 已以 `67421bb` 落地：欢迎页、
+输入框与用户消息共用 160 列上限的 frame helper；Thinking 保持单次完整写入并使用
+确定性多帧 glyph；core 投影内置/Plugin/Skill，CLI 追加 `/exit`/`/quit`，raw editor
+提供 `/` 展示、前缀过滤、菜单导航与两阶段补全。根 `dependencies` 仍为 `{}`。
 
 **外部或人工阻塞项单列，不与 agent 队列混淆：**
 
 | 待办 | 卡在哪 |
 |------|--------|
-| CLI TUI 真实 Windows Terminal 观感/光标/按键 | 自动契约覆盖三档欢迎 renderer、Bolot/NO_COLOR、raw driver、原子活动行、ANSI 与首 token gate；只能由真人确认实际终端呈现 |
+| CLI TUI 真实 Windows Terminal 观感/光标/按键 | 自动契约覆盖三档欢迎 renderer、Bolot/NO_COLOR、共享 frame、slash reducer/raw driver、原子多帧活动行、ANSI 与首 token gate；只能由真人确认实际终端呈现 |
 | 桌面窗口视觉 · AskUserQuestion 真人按键/点击 | 只能人工验，自动化覆盖不到 |
 | LSP | 暂缓，触发条件已写死 → [ADR_AR4_EVIDENCE_GATE.md](./ADR_AR4_EVIDENCE_GATE.md) §6 |
 
@@ -52,7 +51,7 @@ user-invocable Skill 已可执行，但没有统一发现入口。按 OI-10A–F
 
 **已插队并收口：** **AR-T · Agent 能力面**（§14）。准入证据：基础设施深度（DR0–DR4 + AR1）已远超能力广度——彼时 agent 无法跨步骤记住计划，也无法启动任何活过一次工具调用的进程。AR2 压缩深化顺延，A0a/A0b 成果不受影响。
 
-**agent 可闭环开放项：** OI-10A–F；任务、证据与关闭条件见
+**agent 可闭环开放项：** 当前为空；已关闭问题与证据见
 [OPEN_ISSUES.md](./OPEN_ISSUES.md)。CLI init 不再是默认安装步骤，SearXNG Docker
 管理也只是显式可选能力；真人验收状态仍单列。
 
@@ -118,7 +117,7 @@ user-invocable Skill 已可执行，但没有统一发现入口。按 OI-10A–F
 | **AR-T3a ExitPlanMode · AR-T3b Web search**（§14） | ✅ |
 | **AR5C-early · CLI 可分发**（§15） | ✅ |
 | **OI-09 · CLI TUI 交互重构** | ✅ 响应式 Bolot 欢迎页、真实输入框、稳定即时活动态、结构化时间线、窄终端/非 TTY 契约；真人 Windows Terminal 验收单列 |
-| **OI-10 · CLI 命令发现与 TUI 一致性** | 🚧 frame width、原子动画、slash catalog/menu、Plugin/Skill 动态候选与键盘补全进行中 |
+| **OI-10 · CLI 命令发现与 TUI 一致性** | ✅ 共享 frame、原子多帧动画、slash catalog/menu、CLI-local/Plugin/Skill 动态候选与键盘补全；真人 Windows Terminal 验收单列 |
 | **AR-T3+ 能力面续刀**（WebSearch · plan 工具流 · AskUserQuestion） | ✅ 三项均已落地（AskUserQuestion 的真 TTY 交互未验，见 §14.5） |
 | **AR2 Compact depth（A0a/A0b/A1/A2/B1/B2/C 全段）** | ✅ |
 | AR3 Desktop shell | ✅ runtime 生产桥/会话切换恢复/视图模型/composer/model-effort/control-tool progress/NSIS 已收口；真人点击/视觉仍未验 |
@@ -131,11 +130,11 @@ user-invocable Skill 已可执行，但没有统一发现入口。按 OI-10A–F
 
 状态真源见 **§0**；里程碑逐项明细已并入 §0 与 [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
 
-**一句话：** 主路径、Diff、Hooks、Compact、多 Provider、Effort、Provider UX、可靠性 R0–R4、Durable Runtime DR0–DR4、AR1 runtime UX、**AR-T1/AR-T2 能力面**已收口。
+**一句话：** 主路径、Diff、Hooks、Compact、多 Provider、Effort、Provider UX、可靠性 R0–R4、Durable Runtime DR0–DR4、AR1 runtime UX、**AR-T1/AR-T2 能力面**与 OI-10 slash/TUI 发现体验已收口。
 
-**当前主线：** OI-10 CLI 命令发现与 TUI 一致性。先统一 frame/activity/catalog
-纯契约，再接输入菜单与 Plugin/Skill 动态候选；专项、typecheck、完整门禁和 dist
-smoke 全绿后同步文档。真人 Windows Terminal 验收仍单列，不以自动快照冒充完成。
+**当前主线：** 默认 agent 可闭环队列为空。OI-10 的专项、typecheck、114 个脚本
+完整门禁、dist smoke 与 Codex PTY 动态交互均已通过；真人 Windows Terminal 验收
+仍单列，不以自动快照或注入按键冒充完成。
 中段压缩与远端压缩按证据门控**显式关闭**
 （后者见 [ADR_COMPACT_REMOTE.md](./ADR_COMPACT_REMOTE.md)）。
 
@@ -410,7 +409,7 @@ AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 regis
 | 22 | **OI-07 · SearXNG 诊断/部署体验** | A ✅ `unresponsive_engines` 契约 · B ✅ `search doctor` · C ✅ 可选 Docker setup | 区分正常空结果/全故障/部分成功；一键只读诊断；显式 setup 不安装 Docker | fixture + 非空 smoke + rollback/端口预检/零依赖护栏 + 源码/dist live | ✅ A `7754525` · B `3e96573` · C `ef03f3d` / `f623ad9` |
 | 23 | **OI-08B · CLI 零步骤首次启动** | 用户状态 materialize / 项目只读发现 · workspace session store · legacy discovery · 显式 init | 安装后直接 `bolo`；普通启动不创建项目 `.bolo`；旧会话可恢复 | first-run 真实 CLI + spill/subagent 路径 + 112 项完整门禁 | ✅ 代码 `22c0d0c`；文档已同步 |
 | 24 | **OI-09 · CLI TUI 交互重构** | terminal width/input reducer/activity/timeline 纯契约 · raw/plain 双路径 · 原子 activity writer | 宽/中/紧凑 Bolot 欢迎页 · 真实输入框 · 提交即时回显 · 稳定 `✦ Thinking`/Running/elapsed · Markdown 与原位工具进度 | `test:cli-tui` + CLI 兼容轨 + typecheck + 113 脚本完整门禁 | ✅ 代码 `843f593` + `1413da3` + follow-up `10879ec`；文档已同步。⚠️ 真实 Windows Terminal 观感/按键仍需真人验 |
-| 25 | **OI-10 · CLI 命令发现与 TUI 一致性** | A frame width helper · B activity frame · C slash candidate projection · D menu reducer/renderer · E Plugin/Skill 动态贡献 · F 门禁/文档 | `/` 全量、`/d` 过滤 `/doctor` · ↑↓/Tab/Enter/Esc · 上下框同宽 · Thinking 有动画且无空白帧 | `test:cli-tui` + 新 catalog/menu 专项 + typecheck + 完整门禁 + dist smoke | 🚧 IN PROGRESS；详细关闭条件见 OPEN_ISSUES OI-10 |
+| 25 | **OI-10 · CLI 命令发现与 TUI 一致性** | A frame width helper · B activity frame · C slash candidate projection · D menu reducer/renderer · E CLI-local/Plugin/Skill 动态贡献 · F 门禁/文档 | `/` 全量、`/d` 过滤 `/doctor` · ↑↓/Tab/Enter/Esc · 上下框同宽 · Thinking 有动画且无空白帧 | `test:cli-tui` + `test:slash-completion` + typecheck + 114 脚本完整门禁 + dist smoke | ✅ 代码 `67421bb`；文档已同步。⚠️ 真实 Windows Terminal 观感/按键仍需真人验 |
 
 固定 checkpoint：
 
