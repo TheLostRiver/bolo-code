@@ -135,7 +135,7 @@ git push --follow-tags
 | 把 `tsx` 或 `esbuild` 放进 `dependencies` | 零依赖红线 |
 | postinstall / preinstall 脚本 | 发布包不该靠生命周期脚本才能用；也会撞上收紧了脚本策略的用户环境 |
 | 遥测 / 安装统计 | 项目红线，永不 |
-| Electron 安装包 | **受阻**，非「不做」：根因已查清，见 [DESKTOP_DESIGN.md](./DESKTOP_DESIGN.md) §7c |
+| Electron 安装包 | 已交付 Windows NSIS；仍不自动发布、不伪造代码签名 |
 
 ---
 
@@ -157,7 +157,7 @@ git push --follow-tags
 | `esbuild` | 打 CLI 与桌面主进程单文件 | 打包器本身不随产物分发 |
 | `typescript` | `npm run typecheck` | 仅类型检查，不产出 JS |
 | `tsx` | 跑 `scripts/*.ts` 测试 | 只在开发/测试期 |
-| `electron-builder` | Windows 安装包（**当前受阻**） | 构建工具 |
+| `electron-builder` | Windows NSIS 安装包 | 构建工具 |
 
 > 核对命令（任何人可跑）：
 > ```bash
@@ -204,7 +204,7 @@ git push --follow-tags
 
 | 限制 | 状态 | 详情 |
 |---|---|---|
-| **Windows 安装包（NSIS）** | ⛔ 受阻 | 上游 electron-builder 与 Node/Windows 的不兼容（CVE-2024-27980 加固禁止直接 spawn `.CMD`）。根因已确证并附最小复现 → [DESKTOP_DESIGN §7c](./DESKTOP_DESIGN.md) |
+| **Windows 安装包（NSIS）** | ✅ 构建已验证 | Node 24 / npm 11.17.0 / electron-builder 26.15.3 已生成安装包与 blockmap；没有证书，用户仍会看到 SmartScreen 提示 → [DESKTOP_DESIGN §7c](./DESKTOP_DESIGN.md) |
 | **桌面窗口的视觉呈现** | ❌ 未验证 | 应用**能启动**且 renderer 挂载已由 `test-desktop-launch.ts` 实证；但布局观感、Windows 主题切换与 maximize 渲染、键盘走查、长会话滚动**没有肉眼验证过** |
 | **`AskUserQuestion` 的真 TTY 交互** | ❌ 未验证 | 控件逻辑测试注入 `readKey`，覆盖不到真实 raw-mode 与 REPL 抢 stdin |
 | **`mcp-external` 搜索** | ⚠️ 仅验过 Exa | `searxng` preset 指向的桥需用户自建，**从未真连过** |
@@ -229,7 +229,7 @@ git push --follow-tags
 ### 6.6 发布 checklist（逐项可执行）
 
 ```bash
-npm test                              # typecheck + 92 个测试脚本，必须 EXIT=0
+npm test                              # typecheck + 99 个测试脚本，必须 EXIT=0
 node -e "console.log(JSON.stringify(require('./package.json').dependencies))"
                                       # 必须输出 {}
 npm pack --dry-run                    # 清单只应有 6 项

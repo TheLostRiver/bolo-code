@@ -26,7 +26,7 @@
 | 层 | 粗估 | 说明 |
 |----|------|------|
 | Headless 核心 | ~82–90% | queryLoop · 权限 · tools · STE；partial stream fail-closed |
-| **Agent 能力面（工具集）** | **~78–85%** | 13 工具 + **Web search**（Anthropic / OpenAI Responses 已实测）· TodoWrite · Bash 后台三件套 · ExitPlanMode |
+| **Agent 能力面（工具集）** | **~78–85%** | 14 个基础工具 + 可选 `Agent` + **Web search**（Anthropic / OpenAI Responses 已实测） |
 | 会话 / CLI | ~92–97% | JSONL · durable runtime · query/action CLI · TTY pager · pipe/JSON automation |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
 | Subagent | ~89–95% | `config.agents` + `agents/*.md` · durable task/result · overflow FIFO/cancel · safe delivery · worktree 保全 |
@@ -40,11 +40,11 @@
 | Electron GUI | ~65–75% | 壳 + 流式 + 权限 + Settings + 多 provider |
 | 相对 HC 全家桶 UI | 另计 | 不设 100% |
 
-**已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Runtime DR0–DR4 · Autonomous Road AR1 CLI/TUI runtime UX · **AR-T1 TodoWrite / AR-T2 Bash background**。
+**已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Runtime DR0–DR4 · Autonomous Road AR1 CLI/TUI runtime UX · **AR-T1–T3+ Agent 能力面** · AR2 Compact depth · AR4 evidence gate · AR5 release hardening。
 
-**当前主线：** **AR-T3+ Agent 能力面续刀**（WebSearch · plan 工具流 · AskUserQuestion）——见 [ROADMAP §14](docs/ROADMAP.md)。
+**当前主线：** 按 [开放问题清单](docs/OPEN_ISSUES.md) 先解决 **OI-04 SearXNG 契约矛盾**，随后完成 **OI-06 Desktop runtime 生产接线**。
 
-**非阻塞开放轨：** AR2A1 watermark（顺延）· Compact §8.9 · U5 真·Ink/IDE · adaptive thinking · Desktop 体验打磨。
+**外部或人工项：** SearXNG live smoke 需要真实实例；AskUserQuestion 真 TTY、Desktop 点击与视觉走查需要真人验证，不以自动测试冒充完成。
 
 进度真源：[docs/ROADMAP.md](docs/ROADMAP.md)
 
@@ -85,7 +85,7 @@ BOLO_PROVIDER=mock bolo -p "hello"
 ```bash
 git clone https://github.com/TheLostRiver/bolo-code.git
 cd bolo-code
-npm install           # 或 pnpm install
+npm install
 npm run dev           # 直接跑 TS 源（tsx）
 npm run build         # 打出 dist/bolo.mjs
 npm test              # 完整门禁
@@ -188,6 +188,7 @@ npm start
 | `Skill` | 按 id 载入 skill 全文 |
 | `WebFetch` | 取 http(s) 文本 |
 | `ExitPlanMode` | 提交计划请用户批准，退出 plan 模式 |
+| `AskUserQuestion` | 在交互会话中向用户展示结构化单选/多选/自由文本问题 |
 | `Agent` | 拉起 subagent |
 
 **Web search** 由你正在对话的 provider 服务端执行——不引入新的第三方接收方，
@@ -294,8 +295,8 @@ scripts/       单测与 smoke
 ## 开发与测试
 
 ```bash
-pnpm test
-pnpm typecheck
+npm test
+npm run typecheck
 
 npm run test:runtime-cli-renderer
 npm run test:runtime-cli-pager
@@ -314,7 +315,9 @@ npx tsx scripts/test-file-diff.ts
 npx tsx scripts/smoke-turn.ts
 ```
 
-`pnpm test` 是默认总门禁，已包含 Durable Runtime 与 AR1 query/action/renderer/pager/automation 专项；未登记的新实验仍须显式运行对应 `scripts/test-*.ts`。
+`npm test` 是默认总门禁，已包含 Durable Runtime、AR1
+query/action/renderer/pager/automation、PTL 恢复与真实 Electron 启动专项；
+未登记的新实验仍须显式运行对应 `scripts/test-*.ts`。
 
 临时文件只写 **`.bolo-tmp/`**（已 gitignore，勿提交）。
 

@@ -17,27 +17,21 @@
 
 ### OI-01 · 状态真源与使用文档漂移
 
-**状态：OPEN**
+**状态：CLOSED（文档同步批次）**
 
-证据：
+关闭证据：
 
-- `AGENT_HANDOFF.md` §3 仍把主线写成 AR2A1/A2，执行水位落后于当前代码。
-- `ROADMAP.md` §0 说自治队列为空，但 §4、§5、§13.11、§14.5 仍同时使用
-  “待做”“当前”等旧口径。
-- `ADR_AR4_EVIDENCE_GATE.md` 标题称四个候选，正文实际已有六项。
-- `RELEASE.md` §6.6 写默认门禁有 92 个测试脚本，基线实际为 97 个。
-- `USAGE.md` 缺 `--allowed-tools`、`--disallowed-tools`、`AskUserQuestion`
+- ROADMAP §0/§13.11、handoff、README 与 autonomous prompt 统一把当前队列写为
+  OI-04 → OI-06，并保留外部/人工阻塞标记。
+- AR4 ADR 已按正文改为六个候选；RELEASE 与默认门禁统一为 99 个脚本。
+- USAGE 已补 `--allowed-tools`、`--disallowed-tools`、`AskUserQuestion`
   与 Web search 的最短入口。
-
-关闭条件：
-
-- ROADMAP §0 与 §13.11 只保留一套一致状态。
-- handoff、README、USAGE、RELEASE、相关 ADR 与当前实现和门禁一致。
-- 文档测试覆盖容易再次漂移的数字和命令。
+- `test-dist-build.ts` 守住默认门禁条目和 package manager；
+  `test-docs-config-snippets.ts` / `test-search-cli.ts` 守住配置片段与文案承诺的命令。
 
 ### OI-02 · 两个核心回归测试没有进入默认门禁
 
-**状态：OPEN**
+**状态：CLOSED（`5800f05`）**
 
 证据：
 
@@ -47,15 +41,16 @@
   与 CSS；命名脚本 `test:desktop-bundle` 会串联它，但默认门禁直接执行
   `test-desktop-bundle.ts` 文件，不会展开命名脚本。
 
-关闭条件：
+关闭证据：
 
-- 两项都在默认 `npm test` 中执行。
-- 门禁自身有断言防止它们再次被移出。
-- 完整门禁在有 Electron 二进制的 Windows 环境明确跑到真实启动检查。
+- 两项都已进入默认 `npm test`。
+- `test-dist-build.ts` 会断言它们不能再次被移出。
+- 完整门禁在 Windows 实际输出 `PASS: ptl-retry` 与
+  `launched, renderer mounted ... PASS: desktop launch`，`EXIT=0`。
 
 ### OI-03 · 包管理器声明与仓库现实不一致
 
-**状态：OPEN**
+**状态：CLOSED（`5800f05`）**
 
 证据：
 
@@ -64,12 +59,13 @@
 - electron-builder 因根声明先选择 pnpm，失败后才回退 traversal。
 - ARCHITECTURE、AGENT_HANDOFF、TUI、USAGE、README 等仍混用 pnpm 口径。
 
-关闭条件：
+关闭证据：
 
-- 根声明改为与 lockfile 和实际工具链一致的 npm 版本。
-- 自动测试断言 package manager 与 lockfile 一致。
-- 开发文档统一以 npm 为默认入口，不再给出不存在的 pnpm workspace 事实。
-- NSIS 重跑时直接识别 npm，不依赖 traversal 回退。
+- 根与 Desktop 均声明 `npm@11.17.0`，并保留唯一 `package-lock.json`。
+- 发行契约断言 package manager、lockfile 与默认门禁。
+- 开发文档已统一以 npm 为默认入口。
+- NSIS 日志直接识别 `pm=npm config=npm@11.17.0` 并 exit 0；空生产依赖时的
+  traversal 是 collector 的空树回退，不是包管理器误判。
 
 ### OI-04 · SearXNG 产品契约互相矛盾
 
@@ -92,7 +88,7 @@
 
 ### OI-05 · CLI 构建会吞掉 bundled skills 复制失败
 
-**状态：OPEN**
+**状态：CLOSED（`5800f05`）**
 
 证据：
 
@@ -100,11 +96,11 @@
   `.catch(() => {})`。
 - 发布 `prepack` 只跑 build；复制失败时可能 exit 0，随后发布缺技能资产的包。
 
-关闭条件：
+关闭证据：
 
-- 资产复制失败使 build 非零退出。
-- 发布契约测试守住该错误不能再被吞。
-- `npm run build`、dist contract 与真实 pack/install 全绿。
+- `fs.cp` 错误会自然抛出并使 build 非零退出。
+- 发行契约静态守住复制调用不能再挂空 catch。
+- dist contract、真实 pack/install 与完整门禁全绿。
 
 ### OI-06 · Desktop runtime 能力只完成了契约，没有完成产品接线
 
@@ -159,7 +155,7 @@ Ctrl-C/Esc 以及 REPL 是否抢占 stdin。需要人在真实终端按键确认
 
 | 候选 | 结论 |
 |---|---|
-| Windows NSIS 打包 | 2026-07-27 已用 `electron-builder@26.15.3` 成功生成约 80 MB 安装包和 blockmap；旧阻塞来自过期判断，待 OI-01/03 同步文档 |
+| Windows NSIS 打包 | 2026-07-27 已用 `electron-builder@26.15.3` 成功生成约 80 MB 安装包和 blockmap；根工具链与文档已同步 |
 | LSP | 有意暂缓；当前没有满足 ADR 中的重开证据，不因“重量级 agent 都有”自动立项 |
 | 任意中段 compact | 契约保留、产品显式不启用；参考实现也没有可靠先例 |
 | 远端 compaction | ADR 明确不实施，符合隐私与可恢复性边界 |

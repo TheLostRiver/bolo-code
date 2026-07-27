@@ -19,16 +19,12 @@ appId: com.helsincy.bolo
 productName: Bolo Code
 copyright: Bolo Code
 
-# 不做原生模块重建，也不让它去收集生产依赖树。
+# 不做原生模块重建。根 packageManager 与 package-lock 都是 npm；
+# `dependencies` 本就是 `{}`，没有生产依赖需要重建或装进 asar。
 #
-# 根 package.json 声明的是 `packageManager: pnpm@9.15.0`，而本仓库实际用
-# **npm** 安装（只有 package-lock.json，没有 pnpm-lock.yaml）——那个字段是陈旧的。
-# electron-builder 会照它去跑 pnpm 收集依赖，输出不是 JSON，于是报
-# 「No JSON content found in output」。
-#
-# 这里不改根 package.json 的声明（影响面超出打包这一刀），而是从源头绕开：
-# `dependencies` 本就是 `{}`，压根没有生产依赖要收；`files` 又是白名单，
-# node_modules 根本不进 asar。收集这一步对本项目纯属多余。
+# electron-builder 仍会执行依赖收集流程；空依赖时它可能回退 traversal，
+# 但这不改变产物。2026-07-27 已在 Node 24 / npm 11.17.0 /
+# electron-builder 26.15.3 上真实生成 NSIS 与 blockmap。
 npmRebuild: false
 nodeGypRebuild: false
 buildDependenciesFromSource: false

@@ -1,5 +1,5 @@
 
-你在 `E:\DEV\HelsincyAgent` 上自主迭代 **Bolo Code**——一个约 8.2 万行 TypeScript 的 AI coding agent（pnpm workspaces 单仓：`packages/*` → CLI → Desktop）。仓库 `TheLostRiver/bolo-code`，主分支 `main`。
+你在 `E:\DEV\HelsincyAgent` 上自主迭代 **Bolo Code**——一个约 8.2 万行 TypeScript 的 AI coding agent（npm workspaces 单仓：`packages/*` → CLI → Desktop）。仓库 `TheLostRiver/bolo-code`，主分支 `main`。
 
 我（项目所有者）不在场。你要自己选任务、自己做、自己验、自己提交。
 
@@ -13,33 +13,34 @@
 
 ## 1. 任务从哪来
 
-**只从 §13.11 看板最前面的、未完成的、安全的切片继续。** 不要跳号插队。
+**先按 ROADMAP §0 的当前主线，再取 OPEN_ISSUES 中最前面的、未完成且可由
+agent 独立解决的问题。** 不要越过外部/人工阻塞项，也不要从历史 TODO 发明任务。
 
-看板当前形态（以文件实际内容为准，下面只是方位感）：
+当前队列（以文件实际内容为准，下面只是方位感）：
 
-| 顺序 | 切片 | 状态 |
+| 顺序 | 问题 | 状态 |
 |---|---|---|
-| 15 | AR-T3+ · 能力面续刀 | ✅ 已收口 |
-| 16 | **AR2A1–A2 · watermark / safe rewrite** | **当前** |
-| 17 | AR2B–C · tokenizer / benchmark / ADR | 顺延 |
-| 18 | **AR3A–F · Desktop（Codex App 风格）** | 顺延 |
-| 19 | AR4 · 逐项 evidence gate | 顺延 |
-| 20 | AR5A–D · compatibility / security / release | 顺延 |
+| 1 | OI-01 · 跨文档状态漂移 | ✅ 已收口 |
+| 2 | **OI-04 · SearXNG 产品契约矛盾** | **当前** |
+| 3 | **OI-06 · Desktop runtime 生产接线** | 下一项 |
+| 4 | OI-X1 · 真实 SearXNG live smoke | 外部阻塞 |
+| 5 | OI-H1/H2 · 真 TTY、真人点击与视觉走查 | 人工阻塞 |
 
-**从第 16 位开始。** 契约先行：`range` / `watermark` 是纯契约，先把它和测试立住，再接 rewrite。
-compact 改动的高危点是 **tool pairing**（不能只留 `tool_calls` 不留对应结果）与 lifecycle 消息保留，
-`packages/compact/src/index.ts` 里已有 `adjustCutForToolPairing` 可参考。
+**从 OI-04 开始。** 契约先行：先在 `packages/*` 定义零依赖、显式配置、
+fail-closed 的 SearXNG JSON 搜索契约与 fixture 测试，再接 CLI/配置入口。
 
 **一条已知的遗留（不阻塞，顺手可做）：** `AskUserQuestion` 的**真人在真终端按键**没验过——
 控件测试注入 `readKey`，覆盖不到真实 raw-mode 与 REPL 抢 stdin 的问题。
 文档与 ROADMAP 已如实标注「真 TTY 交互未验」。**不要在没有真正验证的情况下把这个标注抹掉。**
-§14.5 里其余条目（headless 放行粒度、本地搜索路径、Desktop 侧句柄等）均为可选续刀。
+其余能力面候选已经落地、书面关闭或写明重开条件，不再作为隐含队列。
 
-### 关于 Electron / GUI（第 18 位）
+### 关于 Electron / GUI（OI-06）
 
-- **不急，排在后面。** 前面的切片没做完不要提前动它。
-- 现有 Electron 外观很差，要重做。目标风格：**Codex App 那种**（市面上不少 agent 都在仿它）。
-- 动它之前先做视觉与交互调研，把方案写进 `docs/` 再实现；不要直接堆 CSS。
+- 排在 OI-04 后；不要把两项混成一个大提交。
+- 现有壳、视图模型、IPC 契约与 NSIS 已有；缺口是 runtime client 的生产
+  adapter、会话切换、composer control、model/effort 修改和完整事件投影。
+- 视觉与交互方案已有 [DESKTOP_DESIGN.md](./DESKTOP_DESIGN.md)，先按现有方案和
+  `OPEN_ISSUES.md` 的关闭条件接线，不重新发明一套设计。
 - Desktop 是**薄壳**：契约与逻辑必须先在 `packages/*` 里成立，壳只做渲染与 IPC。
 
 ## 2. 硬红线（任何情况下都不得违反）

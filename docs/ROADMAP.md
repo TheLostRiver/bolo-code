@@ -33,18 +33,16 @@
 
 **已闭环主线：** headless 日用 → Diff（D0–D7 / U0–U4）· Hooks（H0–H5）· Compact（C0–C5）· Provider（P0–P4.1）· Effort（E0–E9）· Provider UX（CX0–CX8）· 可靠性（R0–R4）· **Durable Runtime（DR0–DR4）** · **Autonomous Road AR1 CLI/TUI runtime UX**。切片明细 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
 
-**当前主线：** **自治队列为空。** 看板 20 项、[RELEASE.md](./RELEASE.md) §6.4 中可独立推进的部分、
-以及 **§14.5 AR-T3+ 续刀候选全部走完**——七条里四条落地、两条书面关闭、一条暂缓并写死触发条件。
+**当前主线：** 按 [OPEN_ISSUES.md](./OPEN_ISSUES.md) 清理首轮全仓核验结果。
+发行门禁、npm 工具链和 NSIS 已收口；agent 可推进的下一项是
+**OI-04 直连 SearXNG**，随后是 **OI-06 Desktop 生产接线**。
 
-**剩下的每一条都需要你**，不是被遗忘：
+**外部或人工阻塞项单列，不与 agent 队列混淆：**
 
 | 待办 | 卡在哪 |
 |------|--------|
-| NSIS 安装包 | 根因已确证（electron-builder 在现代 Node 下 spawn `npm.CMD` 失败）。需决定：加 PATH shim，还是等上游 27 稳定 |
 | 桌面窗口视觉 · AskUserQuestion 真人按键/点击 | 只能人工验，自动化覆盖不到 |
-| SearXNG 桥端点 | 需你自建实例与桥；做法已写全 → [LOCAL_SEARCH_AND_FETCH.md](./LOCAL_SEARCH_AND_FETCH.md) |
-| Bolo 直连 SearXNG（省掉桥） | **已评估，推荐实施**，但它反转 `searchPresets.ts` 里一条已写下的架构决定 → 同上 §5 |
-| 根 `packageManager: pnpm@9.15.0` | 与实际的 npm workspaces 不符，属仓库级决定，故刻意未改 |
+| SearXNG live smoke | 需可访问的真实实例；本地 fixture 不能冒充 live |
 | LSP | 暂缓，触发条件已写死 → [ADR_AR4_EVIDENCE_GATE.md](./ADR_AR4_EVIDENCE_GATE.md) §6 |
 
 > AR-T1/AR-T2/AR-T3a/AR-T3b/**AR-T3+ 全段** · **AR2 全段（A0a/A0b/A1/A2/B1/B2/C）** 与
@@ -52,7 +50,8 @@
 
 **已插队并收口：** **AR-T · Agent 能力面**（§14）。准入证据：基础设施深度（DR0–DR4 + AR1）已远超能力广度——彼时 agent 无法跨步骤记住计划，也无法启动任何活过一次工具调用的进程。AR2 压缩深化顺延，A0a/A0b 成果不受影响。
 
-**非阻塞开放项：** AR2A1 watermark · U5 真·Ink/IDE · adaptive thinking · Desktop 打磨（均按 AR3/AR4 排期与证据门控）。
+**非阻塞开放项：** OI-04 SearXNG 直连 · OI-06 Desktop 生产接线；
+其余状态见 [OPEN_ISSUES.md](./OPEN_ISSUES.md)。
 
 ---
 
@@ -117,7 +116,8 @@
 | **AR5C-early · CLI 可分发**（§15） | ✅ |
 | **AR-T3+ 能力面续刀**（WebSearch · plan 工具流 · AskUserQuestion） | ✅ 三项均已落地（AskUserQuestion 的真 TTY 交互未验，见 §14.5） |
 | **AR2 Compact depth（A0a/A0b/A1/A2/B1/B2/C 全段）** | ✅ |
-| AR3 Desktop shell · AR4 证据深水 · AR5 release hardening | 📋 |
+| AR3 Desktop shell | ⏳ 契约/视图模型/NSIS 已有，生产 runtime、会话切换、composer 与设置仍在 OI-06 |
+| AR4 证据深水 · AR5 release hardening | ✅ |
 | 无遥测 | ✅ 永不 |
 
 ---
@@ -128,8 +128,9 @@
 
 **一句话：** 主路径、Diff、Hooks、Compact、多 Provider、Effort、Provider UX、可靠性 R0–R4、Durable Runtime DR0–DR4、AR1 runtime UX、**AR-T1/AR-T2 能力面**已收口。
 
-**下一刀（当前主线）：** **§14.5 AR-T3+ 续刀候选**，一次一个最小切片。
-看板 20 项与 AR2 全段均已收口；中段压缩与远端压缩按证据门控**显式关闭**
+**下一刀（当前主线）：** [OPEN_ISSUES.md](./OPEN_ISSUES.md) OI-04，
+删除误导性的 SearXNG 桥 preset，改为零依赖直连 JSON API。
+随后推进 OI-06 Desktop 生产接线。中段压缩与远端压缩按证据门控**显式关闭**
 （后者见 [ADR_COMPACT_REMOTE.md](./ADR_COMPACT_REMOTE.md)）。
 
 ---
@@ -148,7 +149,7 @@
 | [COMPACTION.md](./COMPACTION.md) | Compact **实现真源** |
 | [DESKTOP_DESIGN.md](./DESKTOP_DESIGN.md) | **AR3 设计方案**（信息架构 · 交互 · 视觉 · 不做什么） |
 | [ADR_COMPACT_REMOTE.md](./ADR_COMPACT_REMOTE.md) | **AR2C 决定**：compaction 保持 local-only（含重开条件） |
-| [ADR_AR4_EVIDENCE_GATE.md](./ADR_AR4_EVIDENCE_GATE.md) | **AR4 决定**：四个候选逐条书面关闭（含证据与重开条件） |
+| [ADR_AR4_EVIDENCE_GATE.md](./ADR_AR4_EVIDENCE_GATE.md) | **AR4 决定**：六个候选逐条书面决定（含证据与重开条件） |
 | [LOCAL_SEARCH_AND_FETCH.md](./LOCAL_SEARCH_AND_FETCH.md) | **本地搜索/抓取**：可照抄的配置 · 每条路径查询去哪 · 为何不做成 preset |
 | [TOOLS.md](./TOOLS.md) | **内置工具契约**（TodoWrite · 后台 shell） |
 | [RELEASE.md](./RELEASE.md) | **发布契约**（构建 · tarball · 门禁 · 发布流程） |
@@ -396,8 +397,8 @@ AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 regis
 | 15 | **AR-T3+ · 能力面续刀** | `bolo search enable` · OpenRouter plugin · AskUserQuestion（逐项） | 见 §14.5 | 每项独立红灯 + 全量门禁 | ✅（AskUserQuestion 真 TTY 交互未验） |
 | 16 | **AR2A1–A2 · watermark/safe rewrite** | range/watermark 纯契约 ✅ · 契约作为验证者接线 ✅ | compact 安全面收口 | tool pairing + lifecycle 保留 | ✅ 四条验收全过（`3e918ea` · `948061c` · `b5c7112`）；**中段压缩按证据门控显式不启用**，理由见 §13.10.2 |
 | 17 | **AR2B–C · tokenizer/benchmark/ADR** | 启发式修正 ✅ + 语料基准 ✅ + remote ADR ✅ | 可量化 token/cost | 偏差阈值 + fail-closed | ✅ B1 不引入 tokenizer（`661fc7d`）· B2 基准（`28f70fc`）· C 决定 local-only |
-| 18 | **AR3A–F** | A ✅ client/store · B ✅ 会话列表+timeline 视图模型与 IPC · C ✅ 卡片+三栏外壳；D/E/F 待做 | Codex App 风格 Desktop（[设计方案](./DESKTOP_DESIGN.md)） | mock/core IPC + crash/restart + Windows package | **当前**。A–F 代码面均已交付且 **应用真跑得起来**（`test-desktop-launch.ts` 启动真实 Electron 并确认 renderer 挂载）。⛔ **Windows NSIS 安装包受阻**，根因与已排除项见 DESKTOP_DESIGN §7c；⚠️ 窗口**视觉呈现**仍未肉眼验证（§7b），不要未开窗就改成 ✅ |
-| 19 | **AR4** | 逐项 evidence gate | 有证据实施；无证据书面关闭 | 场景/基准/兼容证据 | ✅ **四条全部书面关闭**（含重开条件）→ [ADR_AR4_EVIDENCE_GATE.md](./ADR_AR4_EVIDENCE_GATE.md) |
+| 18 | **AR3A–F** | A ✅ client/store 契约 · B/C ✅ 视图模型与薄壳 · F ✅ NSIS；A 的生产 adapter、B 的会话切换、D/E 待接 | Codex App 风格 Desktop（[设计方案](./DESKTOP_DESIGN.md)） | mock/core IPC + crash/restart + Windows package | ⏳ **OI-06 当前开放**。应用可真启动、NSIS 可构建；runtime client 仍无生产调用者，composer 与设置不完整。⚠️ 窗口视觉仍未肉眼验证 |
+| 19 | **AR4** | 逐项 evidence gate | 有证据实施；无证据书面关闭 | 场景/基准/兼容证据 | ✅ **六条全部书面决定**（含重开条件）→ [ADR_AR4_EVIDENCE_GATE.md](./ADR_AR4_EVIDENCE_GATE.md) |
 | 20 | **AR5A–D**（AR5C 已提前完成） | A ✅ 迁移幂等/失败不覆盖源 · B ✅ 故障注入 · D ✅ 发布门 | clean clone 安装、升级、恢复手册 | full test + cross-platform smoke + security audit | ✅ **看板走完**。发布门含 SBOM · 性能预算 · 安全自查 · **已知限制** · 恢复手册 · 可执行 checklist → [RELEASE.md](./RELEASE.md) §6 |
 
 固定 checkpoint：
@@ -509,7 +510,7 @@ MCP 工具失败只吐 `fetch failed`（补 `describeMcpCallError`：指名 serv
 继而所有人开始无视红灯——**比没有这个测试更糟**。契约面由
 `test-search-cli.ts` / `test-mcp-tool-error.ts` 等门禁测试覆盖。
 
-### 14.5 AR-T3+ · 续刀候选（当前）
+### 14.5 AR-T3+ · 续刀候选（已完成历史）
 
 按 §13.10 固定规则「一次一个最小切片」，逐项独立准入：
 

@@ -107,7 +107,7 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | 层 | 粗估 | 状态摘要 |
 |----|------|----------|
 | Headless 核心 | ~82–90% | queryLoop · STE · 权限 · tools；partial stream fail-closed |
-| **Agent 能力面（工具集）** | **~78–85%** | 13 工具 + **Web search**；TodoWrite · Bash 后台三件套 · ExitPlanMode（ROADMAP §14 · [TOOLS.md](./TOOLS.md)） |
+| **Agent 能力面（工具集）** | **~78–85%** | 14 个基础工具 + 可选 `Agent` + **Web search**（ROADMAP §14 · [TOOLS.md](./TOOLS.md)） |
 | **分发（CLI）** | **~85–92%** | `npm i -g` / `npx` 单文件产物；零运行时依赖（ROADMAP §15 · [RELEASE.md](./RELEASE.md)） |
 | 会话 / CLI | ~90–96% | JSONL · new/resume 同构 runtime · durable controls/tasks · background FIFO/promotion · versioned runtime protocol |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
@@ -115,29 +115,28 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | 文件 Diff 日用 | ~95%+ | **D0–D7** |
 | 文件 Diff UI | ~90–95% | **U0–U4**；U5 真 Ink/IDE 可选 |
 | Hooks 日用 | ~96–98% | **H0–H5**（含 SessionEnd） |
-| Compact 日用 | ~93–96% | **C0–C5 + AR2A0a/A0b**（hybrid 计数 · 中段截断 · 防重摘要）；AR2A1 **顺延**（ROADMAP §13.10.2） |
+| Compact 日用 | ~93–96% | **C0–C5 + AR2 全段**（hybrid 计数 · 中段截断 · 防重摘要 · range/watermark 契约）；任意中段 rewrite 按证据门控不启用 |
 | 多 Provider 热切 | ~92–96% | **P0–P4.1 + CX7 Desktop** |
 | Effort 方言 | ~92–95% | **E0–E9** |
 | Provider UX | ~95–98% | **CX0–CX8**（ultrathink 默认 off） |
 | Durable Runtime | DR0–DR4 ✅ | 输入先落盘 · recovery · 单 runner · durable control/task · FIFO/promotion · v1 protocol/resolution · crash/restart closeout |
-| Electron GUI | ~65–75% | 薄壳；非 HC 级 IDE |
+| Electron GUI | ~65–75% | 薄壳可启动且 NSIS 可构建；生产 runtime、会话切换、composer 与设置仍在 OI-06 |
 | 产品相对 HC 全家桶 | ~74–88% | 日用高；UI 密度另计 |
 
-**已闭环：** Diff · Hooks · Compact · Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR-T1 TodoWrite / AR-T2 Bash background / AR-T3a ExitPlanMode / AR-T3b Web search** · **AR5C-early CLI 分发**。
+**已闭环：** Diff · Hooks · Compact（含 AR2 全段）· Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR-T1–T3+ Agent 能力面** · **AR4 evidence gate** · **AR5 release hardening**。
 
-**当前主线：** **AR2A1–A2 range/watermark + safe rewrite**（ROADMAP §13.10.2 · 看板第 16 位）。
-AR-T3+ 能力面续刀已收口：WebSearch 五条线路 · `ExitPlanMode` · `AskUserQuestion` 均已落地（后者的真 TTY 交互未验，见 TOOLS.md §5.1）。
-
-**为什么 AR2 顺延：** AR-T 轨的准入证据是「基础设施深度远超能力广度」——DR0–DR4 + AR1 建成了长时自主工作的底座，但当时 agent 记不住跨步骤计划、起不了活过一次工具调用的进程。而现有 full compact 已保 tool pair（`compact/index.ts` `adjustCutForToolPairing`）+ DR2C1 lifecycle preservation，AR2A1/A2 是为**尚不存在的** partial-range 压缩预建契约，不是修 bug。详见 ROADMAP §14 抬头。
+**当前主线：** 按 [OPEN_ISSUES.md](./OPEN_ISSUES.md) 清理全仓核验发现：
+先解决 **OI-04 SearXNG 产品契约矛盾**，再推进 **OI-06 Desktop runtime
+生产接线**。发行门禁、npm 工具链与 NSIS 已收口。
 
 **其它开放轨（非阻塞）：**
 
 | 项 | 说明 |
 |----|------|
-| Compact §8.9 / AR2 | partial range · watermark · tokenizer budget；remote 只做证据门控 |
-| U5 | 真 React Ink / IDE diff 推送（可选） |
-| adaptive thinking | 与 effort 深联动 |
-| Desktop 打磨 | effort UI · session list · markdown/tool cards 等 |
+| OI-X1 | SearXNG live smoke；需要真实实例，fixture 不能冒充 |
+| OI-H1 | `AskUserQuestion` 真 TTY 按键；自动化未覆盖真人终端 |
+| OI-H2 | Desktop 点击、键盘与视觉走查；自动化只证明窗口与 IPC 可用 |
+| LSP / remote compact / 任意中段 rewrite | 已按证据门控关闭；满足专题 ADR 的重开条件前不立项 |
 
 Durable Runtime 与 Autonomous Road 的长期执行顺序以 [ROADMAP.md](./ROADMAP.md) §13.10–§13.11 为准（已完成切片详情存档于 [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)）：
 
@@ -166,12 +165,13 @@ DR2A 单 session runner ✅
 → AR-T1 TodoWrite ✅
 → AR-T2 Bash background ✅
 → AR5C-early CLI 分发 ✅
-→ AR-T3+ 能力面续刀（当前）
-→ AR2A1 range/watermark（顺延）
-→ AR2A2–C Compact depth
-→ AR3 Codex App 风格 Desktop
-→ AR4 证据驱动深水项
-→ AR5 release hardening
+→ AR-T3+ 能力面续刀 ✅
+→ AR2A1–C Compact depth ✅
+→ AR3 Codex App 风格 Desktop（OI-06 生产接线开放）
+→ AR4 证据驱动深水项 ✅
+→ AR5 release hardening ✅
+→ OI-04 SearXNG 契约收口（当前）
+→ OI-06 Desktop 生产接线
 ```
 
 每刀都必须先改 `packages/*` 契约和失败测试，再接 CLI/Desktop；定向测试、typecheck、完整 `npm test`、scoped `diff --check` 全绿后，代码与文档分批 commit/push。遇到需要数据库/daemon/RPC、用户脏文件冲突、数据丢失或副作用自动重放风险时停止扩张。
@@ -333,8 +333,8 @@ npx tsx scripts/test-config.ts
 ## 8. 环境与运行速记
 
 ```bash
-pnpm install
-pnpm bolo:init
+npm install
+npm run bolo:init
 # 配置 ~/.bolo/config.json + API key env
 npx bolo
 
@@ -408,7 +408,7 @@ cd apps/desktop && npm install && set BOLO_DESKTOP_MOCK=1 && npm start
 - [ ] 确认目标轨在 ROADMAP 是 📋 还是已 ✅（避免重复）  
 - [ ] 单测或 smoke 路径已想好  
 - [ ] 不提交 `.bolo-tmp`、密钥、无关脏改动  
-- [ ] 文档水位与代码同批更新  
+- [ ] 文档水位与代码同一切片更新，但按规定分开 commit/push
 
 **人类使用说明** → [USAGE.md](./USAGE.md)  
 **进度真源** → [ROADMAP.md](./ROADMAP.md)  

@@ -145,7 +145,7 @@ Codex App 的一手资料**没拿到**：OpenAI 官方发布页 WebFetch 返回 
 | 打包产物自包含 | ✅ `test-desktop-bundle.ts`（无 tsx/`.ts` 残留 · electron external · 资源齐全） |
 | **应用真的能启动、renderer 真的挂上** | ✅ `test-desktop-launch.ts` —— **真跑一次 Electron** |
 | **窗口里的视觉呈现** | ❌ **仍未验证** |
-| **Windows 安装包（NSIS）** | ⛔ **受阻**——见 §7c |
+| **Windows 安装包（NSIS）** | ✅ **构建已验证**——见 §7c |
 
 `test-desktop-launch.ts` 关掉了「白屏」那一类：它启动真实 Electron，
 在页面里确认三栏容器挂上、`window.bolo` 存在（**即 preload 路径没写错**）、
@@ -158,64 +158,47 @@ maximize 后的渲染稳定性、焦点环与键盘走查、长会话滚动性�
 
 > **不要在没有真正肉眼看过窗口的情况下把「视觉呈现」那一行改成 ✅。**
 
-## 7c. NSIS 安装包受阻（记录，供接手者不必重走）
+## 7c. NSIS 安装包（已解除阻塞）
 
-`electron-builder@26.15.3` 已进 devDependencies，配置已写
-（`apps/desktop/electron-builder.yml`），`npm run package` 仍失败于：
+2026-07-27 在以下环境真实执行：
 
-```
-⨯ No JSON content found in output   failedTask=build
-  at PnpmNodeModulesCollector.extractJsonFromPollutedOutput
-```
-
-**已排除的（不必重试）：**
-
-| 排查 | 结果 |
-|---|---|
-| electron 版本是范围而非固定值 | ✅ 已修：配置里写 `electronVersion: 33.4.11` |
-| 根 `packageManager: pnpm@9.15.0` 与实际不符 | ✅ 已定位——**无 `pnpm-lock.yaml`、无 `pnpm-workspace.yaml`**，根用的是 npm 风格 `workspaces` 字段且有 `package-lock.json`。已在 `apps/desktop/package.json` 就近声明 `npm@11.17.0`（不动根声明，影响面超出本刀） |
-| `npmRebuild` / `nodeGypRebuild` / `buildDependenciesFromSource` 关掉 | ❌ 无效，依赖收集是无条件跑的 |
-| collector 实际执行的命令本身坏了 | ❌ 手动跑均正常：`npm prefix -w` 返回仓库根；`npm list -a --include prod --include optional --omit dev --json --long --silent --loglevel=error` 从 `apps/desktop` 与仓库根都输出干净 JSON（12.5 KB / 22 KB，首字符均为 `{`） |
-
-**根因已查清（不再是假设）：上游与 Node/Windows 的不兼容。**
-
-`which.sync('npm')` 在本机解析到 **`npm.CMD`**，而 electron-builder 直接 spawn 它。
-现代 Node 出于安全加固（CVE-2024-27980）**拒绝不带 shell 直接 spawn `.CMD`/`.bat`**。
-最小复现：
-
-```js
-spawnSync(whichSync('npm'), ['list', '--json'], { encoding: 'utf8' })
-// → status=null · error=EINVAL · stdout 长度=0
+```text
+Node 24.15.0
+npm 11.17.0
+electron-builder 26.15.3
+Electron 33.4.11
 ```
 
-空输出正是 `No JSON content found in output` 的来源。**与配置无关**——
-手动执行同样的命令一切正常（22 KB 干净 JSON）。
+命令与结果：
 
-**为什么绕不过去：**
+```bash
+npm --prefix apps/desktop run package
+# → apps/desktop/release/Bolo Code-0.0.1-x64.exe
+# → apps/desktop/release/Bolo Code-0.0.1-x64.exe.blockmap
+```
 
-| 尝试 | 结果 |
-|---|---|
-| 在 `apps/desktop` 声明 `packageManager: npm@…` | ❌ 仍失败：detection 会**从 workspace 根重新检测**，根的声明压过一切 |
-| 声明 `packageManager: traversal@…`（该值在 PM 枚举里合法，走文件遍历、不 spawn） | ❌ 同上，被根重新检测覆盖 |
-| 把**根**声明改成 `traversal` | 🚫 不做：那不是包管理器，写上去就是对人和工具撒谎 |
-| 把**根**声明改成 `npm` | 🚫 无用：正好回到 `npm.CMD` 的 EINVAL |
-| 升到 electron-builder 27 | 🚫 仅有 alpha（27.0.0-alpha.6）。不为打包把构建链压在 alpha 上 |
+安装包约 80 MB，electron-builder 完成 Electron 展开、asar integrity、uninstaller、
+NSIS 和 blockmap，命令明确 exit 0。
 
-**建议的解法（需所有者决定，故未擅自实施）：** 让 `which` 解析到可直接 spawn 的
-`npm` 而非 `npm.CMD`（例如 PATH 里提供一个 `npm.exe` 垫片），或等 electron-builder 27 稳定版。
+**为什么旧记录会判断成受阻：**
 
-> 顺带查明：根 `package.json` 的 `packageManager: pnpm@9.15.0` **与实际不符**——
-> 无 `pnpm-lock.yaml`、无 `pnpm-workspace.yaml`，根用的是 npm 风格 `workspaces`
-> 字段且有 `package-lock.json`。这是一处独立于打包的陈旧声明，**未擅自修改**
-> （影响全仓，属所有者决定），但它确实是本次排查绕不过去的那道墙。
+- 根 `packageManager` 当时误写成 `pnpm@9.15.0`，collector 因而选错包管理器。
+- 旧排查把 Node 对 `.CMD` 的 CVE-2024-27980 限制当作仍未修的上游问题。
+- 实际发布的 `app-builder-lib@26.15.3` 已通过
+  `powershell.exe -EncodedCommand` 包装 Windows 包管理器调用，不再直接 spawn
+  `npm.CMD`；registry tarball 与本地安装代码一致。
 
-**已确认打包并未真正成功**：`release/win-unpacked/resources/` 是空的，
-即只下载了 Electron 外壳，应用文件从未被拷入。失败产物已清理。
+根声明现已改为 `npm@11.17.0`，与 `package-lock.json` 和 Desktop 声明一致。
+打包日志会直接显示：
 
-> 机器上 `~/.npmrc` 有 `allow-scripts=oh-my-codex` 策略。安装时确有
-> 3 个包的 install script 被拦（electron / esbuild / electron-winstaller）。
-> 这**可能**相关，但**未证实**——且放行第三方安装脚本属于机器级安全决定，
-> 不应由自治流程替所有者做。
+```text
+detected workspace root ... pm=npm config=npm@11.17.0
+```
+
+空生产依赖时 collector 仍可能回退到 traversal；这是空依赖树的处理，不是打包失败。
+
+**仍然没有代码签名证书。** electron-builder 的签名步骤能完成资源处理，
+但发行给用户时 Windows SmartScreen 仍可能警告。没有证书就不能把这一项写成“已签名”。
 
 ## 8. 不做
 

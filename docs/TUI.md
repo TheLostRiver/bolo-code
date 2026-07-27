@@ -137,7 +137,7 @@ npx tsx scripts/test-file-diff.ts
 ## 7. 测试
 
 ```bash
-pnpm test
+npm test
 npm run test:runtime-cli-renderer
 npm run test:runtime-cli-pager
 npm run test:runtime-cli-automation

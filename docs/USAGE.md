@@ -8,15 +8,15 @@
 
 ## 1. 安装与初始化
 
-**要求：** Node ≥ 20 · 建议 pnpm 9+（npm 也可）
+**要求：** Node ≥ 20 · npm 11（根 `packageManager` 锁定 11.17.0）
 
 ```bash
 git clone https://github.com/TheLostRiver/bolo-code.git
 cd bolo-code
-pnpm install          # 或 npm install
+npm install
 
 # 创建全局 ~/.bolo 与项目 .bolo（不覆盖已有文件）
-pnpm bolo:init
+npm run bolo:init
 # 或
 npx tsx scripts/bolo-init.ts
 ```
@@ -141,6 +141,10 @@ node packages/cli/bin/bolo.js
 # 单轮
 npx bolo -p "列出当前目录结构"
 
+# headless 精确放行/拒绝；可重复传，逗号分隔
+npx bolo -p "只读检查源码" --allowed-tools Read,Glob,Grep
+npx bolo -p "检查但不要执行删除" --disallowed-tools "Bash(rm *)"
+
 # 会话
 npx bolo --list
 npx bolo --resume <id>
@@ -164,6 +168,30 @@ REPL 中，模型或工具正在运行时按 `Ctrl-C` 会针对 coordinator 当�
 `--json` 成功时 stdout 只有一个原始 `runtime.list|runtime.inspect` view payload；load/not-found 等查询失败只有一个 `{ "ok": false, "code": "...", "detail": "..." }` payload。JSON 参数错误同样只向 stdout 写一个 failure payload、stderr 为空并 exit 2；成功 exit 0，查询/加载失败 exit 1。非 JSON 参数错误仍向 stderr 输出诊断/help 并 exit 2。
 
 顶层 `runtime discard|retry-safe` 使用同一 resume/continue 隔离路径，只执行恢复后仍有明确语义的 append-only action。command JSON 是一个 protocol `runtime.result`；accepted（含 warning）exit 0，rejected/load failure exit 1，usage exit 2。requestId 默认按 session/action/target 稳定派生，也可用 `--request-id <id>` 覆盖。顶层 retry-safe 只 admission、不调用模型；命令退出后 replacement 在再次 resume 时是 interrupted diagnostic，不会自动执行。
+
+`--allowed-tools` 接受工具名、工具名前缀和 `Bash(pattern)`；它只放行命中的
+工具，不会把整档权限切成 `bypassPermissions`。`--disallowed-tools` 是硬拒绝，
+优先于 bypass，也会在 `--resume` 时叠加到已恢复规则上。规格写错会在 turn 开始前
+exit 2，不会静默忽略。完整语法见 [TOOLS.md](./TOOLS.md) §3.3。
+
+**Web search 最短入口：**
+
+```text
+/websearch                 # 看当前线路与 on/off/auto 意图
+/websearch auto            # provider 支持时按模型需要启用
+/websearch off             # 本会话禁用
+```
+
+Anthropic、OpenAI Responses 等 hosted 线路不需要本地工具；其它 provider 可先运行
+`bolo search status` 查看状态，再用 `bolo search enable exa` 配置内置的 MCP
+搜索 preset。SearXNG 的本地直连方式以
+[LOCAL_SEARCH_AND_FETCH.md](./LOCAL_SEARCH_AND_FETCH.md) 为准。
+
+`AskUserQuestion` 不是斜杠命令：在 `npx bolo` 的真实 TTY 会话里，模型遇到会
+实质改变结果的歧义时会调用它并显示选择面板。`-p`、pipe 等非交互会话会立即返回
+`unavailable`，agent 应说明假设并继续，不能等待不存在的回答。自动化已经覆盖协议和
+picker；真人终端的 raw mode/按键仍需人工验收，见
+[OPEN_ISSUES.md](./OPEN_ISSUES.md) OI-H1。
 
 ### 3.2 Desktop（Electron）
 
@@ -205,6 +233,7 @@ npm start
 | `/hooks` · `/hooks recent` | Hooks |
 | `/doctor` | 本地诊断 |
 | `/thinking on\|off` | 是否渲染思考链 |
+| `/websearch [on\|off\|auto]` | 查看或切换本会话 Web search 意图 |
 
 完整表：[SLASH_COMMANDS.md](./SLASH_COMMANDS.md)。
 

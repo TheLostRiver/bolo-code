@@ -20,7 +20,7 @@ cd apps/desktop
 # 若 electron 二进制下载失败（TLS），用镜像再装：
 #   set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
 #   node node_modules/electron/install.js
-npm install          # 或 pnpm install
+npm install
 set BOLO_DESKTOP_MOCK=1
 npm start            # 等价 electron . ；dev 脚本同 mock
 ```

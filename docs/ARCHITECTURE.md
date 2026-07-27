@@ -12,7 +12,7 @@
 | 核心 | **Headless Agent Runtime**（与 UI 解耦） |
 | 扩展 | Skill / MCP / Hook / 子代理 / 插件 一等公民 |
 | 语言 | TypeScript（全栈一致，Electron 天然友好） |
-| 包管理 | pnpm workspaces monorepo |
+| 包管理 | npm workspaces monorepo（`package-lock.json`） |
 
 ### 明确不做（v0）
 
