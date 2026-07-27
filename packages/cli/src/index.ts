@@ -132,4 +132,10 @@ export {
   type AskPermissionRequest,
   type AskPermissionDecision,
 } from './tui/askPermissionTty.ts'
+export {
+  applyPermissionPanelKey,
+  formatPermissionPanelScreen,
+  runPermissionPanel,
+  type PermissionPanelKeyResult,
+} from './tui/permissionPanel.ts'
 export { createCliProvider, NO_KEY_MSG } from './provider.ts'

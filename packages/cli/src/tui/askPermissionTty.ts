@@ -6,6 +6,7 @@
 import * as readline from 'node:readline'
 import { buildDiffViewModelFromPreview } from '../../../core/src/diffViewModel.ts'
 import { runDiffApprovePane } from './diffPane.ts'
+import { runPermissionPanel } from './permissionPanel.ts'
 
 export type AskPermissionDecision = 'allow' | 'deny' | 'allow_always'
 
@@ -35,6 +36,8 @@ export type AskPermissionRequest = {
   toolName: string
   toolInput: unknown
   toolUseId: string
+  /** 执行工具时的真实工作目录；旧调用可不传。 */
+  cwd?: string
   preview?: PermissionPreview
   /** core 合并后的 turn/runner signal；优先于创建 helper 时的 signal。 */
   signal?: AbortSignal
@@ -94,6 +97,8 @@ export type CreateTtyAskPermissionOptions = {
    * 默认 true；`BOLO_PERM_DIFF_PANEL=0` 或 false 关闭。
    */
   useDiffPanel?: boolean
+  /** 非文件工具使用结构化选择面板；默认 true。 */
+  usePermissionPanel?: boolean
   writeOut?: (s: string) => void
   /** 测试注入 raw key */
   readKey?: () => Promise<string>
@@ -106,6 +111,8 @@ export type CreateTtyAskPermissionOptions = {
   signal?: AbortSignal
   /** raw diff panel 收到 Ctrl-C 时通知 turn owner */
   onInterrupt?: () => void
+  columns?: number
+  color?: boolean
 }
 
 function resolveOnAbort<T>(
@@ -147,6 +154,9 @@ export function createTtyAskPermission(
   const nonTty = opts.nonTtyDecision ?? 'deny'
   const usePanel =
     opts.useDiffPanel !== false && process.env.BOLO_PERM_DIFF_PANEL !== '0'
+  const usePermissionPanel =
+    opts.usePermissionPanel !== false &&
+    process.env.BOLO_PERM_PANEL !== '0'
 
   const defaultRead = async (
     prompt: string,
@@ -210,6 +220,24 @@ export function createTtyAskPermission(
         }
       } catch {
         /* fall through to text prompt */
+      }
+    }
+
+    if (usePermissionPanel && !opts.readAnswer) {
+      opts.pauseInput?.()
+      try {
+        return await runPermissionPanel({
+          request: req,
+          writeOut,
+          readKey: opts.readKey,
+          isTty: true,
+          columns: opts.columns,
+          color: opts.color,
+          signal,
+          onInterrupt: opts.onInterrupt,
+        })
+      } finally {
+        opts.resumeInput?.()
       }
     }
 

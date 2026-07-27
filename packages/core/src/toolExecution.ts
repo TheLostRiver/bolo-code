@@ -167,6 +167,8 @@ export type AskPermissionFn = (req: {
   toolName: string
   toolInput: unknown
   toolUseId: string
+  /** 执行工具时的真实工作目录；可选以兼容旧 UI。 */
+  cwd?: string
   preview?: PermissionPreviewPayload
   /** 当前 tool/turn 的合并取消信号；自定义 UI 应按 deny 收口。 */
   signal?: AbortSignal
@@ -808,6 +810,7 @@ export async function runToolUse(
               toolName: name,
               toolInput,
               toolUseId,
+              cwd: ctx.cwd,
               ...(previewPayload ? { preview: previewPayload } : {}),
               ...(ctx.signal ? { signal: ctx.signal } : {}),
             }),
