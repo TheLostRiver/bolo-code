@@ -12,6 +12,7 @@ import {
   measureTerminalText,
   padTerminalText,
   splitTerminalGraphemes,
+  stripTerminalAnsi,
   terminalGraphemeWidth,
   wrapTerminalText,
 } from './terminalText.ts'
@@ -56,6 +57,14 @@ export type TuiInputStatus = {
   providerKind?: string
   model?: string
   effortLevel?: string
+  usage?: TuiInputUsage
+}
+
+export type TuiInputUsage = {
+  inputTokens: number
+  outputTokens: number
+  totalTokens?: number
+  estimated?: boolean
 }
 
 export type RenderedTuiInputBox = {
@@ -381,7 +390,59 @@ function borderLine(
   return `${left}${text}${'─'.repeat(Math.max(0, inner - measureTerminalText(text)))}${right}`
 }
 
-function formatInputStatus(status?: TuiInputStatus): string {
+export function formatTuiTokenCount(value: number): string {
+  const normalized = Number.isFinite(value)
+    ? Math.max(0, Math.round(value))
+    : 0
+  if (normalized < 1_000) return String(normalized)
+  const divisor = normalized >= 1_000_000 ? 1_000_000 : 1_000
+  const suffix = divisor === 1_000_000 ? 'm' : 'k'
+  const scaled = normalized / divisor
+  const precision = scaled < 100 ? 1 : 0
+  return `${scaled.toFixed(precision).replace(/\.0$/u, '')}${suffix}`
+}
+
+type FooterSegment = {
+  text: string
+  tone?: 'bold' | 'dim'
+}
+
+function footerSegmentsWidth(segments: readonly FooterSegment[]): number {
+  return measureTerminalText(segments.map((segment) => segment.text).join(''))
+}
+
+function renderFooterSegments(
+  segments: readonly FooterSegment[],
+  color: boolean,
+): string {
+  if (!color) return segments.map((segment) => segment.text).join('')
+  return segments
+    .map((segment) => {
+      const start =
+        segment.tone === 'bold'
+          ? '\u001b[1m'
+          : segment.tone === 'dim'
+            ? '\u001b[2m'
+            : ''
+      return start ? `${start}${segment.text}\u001b[0m` : segment.text
+    })
+    .join('')
+}
+
+function valueSegment(text: string): FooterSegment {
+  return { text, tone: 'bold' }
+}
+
+function separatorSegment(text = ' · '): FooterSegment {
+  return { text, tone: 'dim' }
+}
+
+function renderStatusFooter(options: {
+  status?: TuiInputStatus
+  width: number
+  color: boolean
+}): string {
+  const { status, width, color } = options
   if (!status) return ''
   const mode = status.permissionMode?.trim() || 'default'
   const provider = status.providerId?.trim() || status.providerKind?.trim() || ''
@@ -391,7 +452,153 @@ function formatInputStatus(status?: TuiInputStatus): string {
       ? `${provider}/${model}`
       : provider || model || '(no model)'
   const effort = status.effortLevel?.trim() || 'auto'
-  return `${mode} · ${target} · effort ${effort}`
+  const full = [
+    valueSegment(mode),
+    separatorSegment(),
+    valueSegment(target),
+    separatorSegment(' · effort '),
+    valueSegment(effort),
+  ]
+  const identityCandidates: FooterSegment[][] = [
+    full,
+    [
+      valueSegment(target),
+      separatorSegment(' · effort '),
+      valueSegment(effort),
+    ],
+    [valueSegment(target)],
+    [
+      valueSegment(mode),
+      separatorSegment(),
+      valueSegment(effort),
+    ],
+    [valueSegment(mode)],
+  ]
+  const usage = status.usage
+  const usageSegments = usage
+    ? [
+        valueSegment(
+          `${usage.estimated ? '~' : ''}↓${formatTuiTokenCount(
+            usage.inputTokens,
+          )} ↑${formatTuiTokenCount(usage.outputTokens)}`,
+        ),
+      ]
+    : []
+  const available = Math.max(0, width - 2)
+  const usageWidth = footerSegmentsWidth(usageSegments)
+  let selected: FooterSegment[] = []
+  for (const candidate of identityCandidates) {
+    const gap = candidate.length > 0 && usageSegments.length > 0 ? 2 : 0
+    if (
+      footerSegmentsWidth(candidate) + gap + usageWidth <=
+      available
+    ) {
+      selected = candidate
+      break
+    }
+  }
+
+  if (!usageSegments.length && !selected.length) {
+    const clipped = clipTerminalText(target, available)
+    selected = clipped ? [valueSegment(clipped)] : []
+  }
+  const leftWidth = footerSegmentsWidth(selected)
+  const gap =
+    selected.length > 0 && usageSegments.length > 0
+      ? Math.max(2, available - leftWidth - usageWidth)
+      : usageSegments.length > 0
+        ? Math.max(0, available - usageWidth)
+        : 0
+  return `  ${renderFooterSegments(selected, color)}${' '.repeat(
+    gap,
+  )}${renderFooterSegments(usageSegments, color)}`
+}
+
+function keySegment(text: string): FooterSegment {
+  return { text, tone: 'bold' }
+}
+
+function actionSegment(text: string): FooterSegment {
+  return { text, tone: 'dim' }
+}
+
+function renderShortcutFooter(options: {
+  menuOpen: boolean
+  mode?: 'idle' | 'running'
+  width: number
+  color: boolean
+}): string {
+  const { menuOpen, mode, width, color } = options
+  const enterSend = [keySegment('Enter'), actionSegment(' send')]
+  const interrupt = [keySegment('Ctrl+C'), actionSegment(' interrupt')]
+  const candidates: FooterSegment[][] = menuOpen
+    ? [
+        [
+          keySegment('↑↓'),
+          actionSegment(' select'),
+          separatorSegment(),
+          keySegment('Tab/Enter'),
+          actionSegment(' complete'),
+          separatorSegment(),
+          keySegment('Esc'),
+          actionSegment(' close'),
+        ],
+        [
+          keySegment('Tab/Enter'),
+          actionSegment(' complete'),
+          separatorSegment(),
+          keySegment('Esc'),
+          actionSegment(' close'),
+        ],
+        [keySegment('Esc'), actionSegment(' close')],
+      ]
+    : mode === 'running'
+      ? [
+          [
+            actionSegment('Working'),
+            separatorSegment(),
+            ...interrupt,
+          ],
+          interrupt,
+          [actionSegment('Working')],
+        ]
+      : [
+          [
+            ...enterSend,
+            separatorSegment(),
+            keySegment('Ctrl+J'),
+            actionSegment(' newline'),
+            separatorSegment(),
+            keySegment('↑↓'),
+            actionSegment(' history'),
+            separatorSegment(),
+            keySegment('Ctrl+C'),
+            actionSegment(' exit'),
+          ],
+          [
+            ...enterSend,
+            separatorSegment(),
+            keySegment('↑↓'),
+            actionSegment(' history'),
+            separatorSegment(),
+            keySegment('Ctrl+C'),
+            actionSegment(' exit'),
+          ],
+          [
+            ...enterSend,
+            separatorSegment(),
+            keySegment('Ctrl+C'),
+            actionSegment(' exit'),
+          ],
+          enterSend,
+          [keySegment('Ctrl+C'), actionSegment(' exit')],
+        ]
+  const available = Math.max(0, width - 2)
+  const selected =
+    candidates.find(
+      (candidate) => footerSegmentsWidth(candidate) <= available,
+    ) ?? []
+  return `  ${renderFooterSegments(selected, color)}`
 }
 
 function formatSlashCandidateLabel(candidate: SlashCommandCandidate): string {
@@ -533,17 +740,19 @@ export function renderTuiInputBox(options: {
   }
   lines.push(`${border}${borderLine('╰', '╯', frameWidth)}${reset}`)
 
-  const status = clipTerminalText(`  ${formatInputStatus(options.status)}`, frameWidth)
-  if (status.trim()) lines.push(`${dim}${status}${reset}`)
+  const status = renderStatusFooter({
+    status: options.status,
+    width: frameWidth,
+    color,
+  })
+  if (stripTerminalAnsi(status).trim()) lines.push(status)
   lines.push(
-    `${dim}${clipTerminalText(
-      options.state.slashMenu
-        ? '  ↑↓ select · Tab/Enter complete · Esc close'
-        : options.mode === 'running'
-          ? '  Working · Ctrl+C interrupt'
-          : '  Enter send · Ctrl+J newline · ↑↓ history · Ctrl+C exit',
-      frameWidth,
-    )}${reset}`,
+    renderShortcutFooter({
+      menuOpen: options.state.slashMenu !== null,
+      mode: options.mode,
+      width: frameWidth,
+      color,
+    }),
   )
 
   const cursorRow = 1 + wrapped.cursorLine - start
@@ -560,18 +769,18 @@ export function renderUserMessage(
   prompt: string,
   options?: { columns?: number; color?: boolean },
 ): string {
-  const columns = resolveTuiFrameWidth(options?.columns ?? 80)
-  const contentWidth = Math.max(8, columns - 3)
+  const frameWidth = resolveTuiFrameWidth(options?.columns ?? 80)
+  const contentWidth = Math.max(1, frameWidth - 4)
   const lines = wrapTerminalText(prompt.trim(), contentWidth)
   const color = options?.color !== false
-  const accent = color ? '\u001b[38;5;81m' : ''
+  const userStyle = color ? '\u001b[48;5;236m\u001b[38;5;252m' : ''
   const reset = color ? '\u001b[0m' : ''
   return lines
-    .map((line, index) =>
-      index === 0
-        ? `${accent}❯${reset} ${line}`
-        : `  ${line}`,
-    )
+    .map((line, index) => {
+      const prefix = index === 0 ? ' ❯ ' : '   '
+      const row = `${prefix}${padTerminalText(line, contentWidth)} `
+      return `${userStyle}${row}${reset}`
+    })
     .join('\n')
 }
 

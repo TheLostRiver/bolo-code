@@ -220,14 +220,32 @@ export function createSessionEventPrinter(opts: {
   let streamedText = false
   let reasoningPrefixDone = false
   let assistantHeaderDone = false
+  let timelineLineStart = true
+
+  const withTimelineGutter = (text: string): string => {
+    if (!timeline || !text) return text
+    let rendered = ''
+    for (const char of text) {
+      if (timelineLineStart && char !== '\n' && char !== '\r') {
+        rendered += '  '
+        timelineLineStart = false
+      }
+      rendered += char
+      if (char === '\n') timelineLineStart = true
+      else if (char !== '\r') timelineLineStart = false
+    }
+    return rendered
+  }
+  const emitOut = (text: string) => writeOut(withTimelineGutter(text))
+  const emitErr = (text: string) => writeErr(withTimelineGutter(text))
 
   const ensureLineBreak = () => {
     if (openTextLine || openReasoningLine) {
       if (openTextLine && timeline) {
         const tail = markdown.finish()
-        if (tail) writeOut(tail)
+        if (tail) emitOut(tail)
       }
-      writeOut('\n')
+      emitOut('\n')
       openTextLine = false
       openReasoningLine = false
     }
@@ -242,6 +260,7 @@ export function createSessionEventPrinter(opts: {
       openReasoningLine = false
       reasoningPrefixDone = false
       assistantHeaderDone = false
+      timelineLineStart = true
       markdown.reset()
       if (
         timeline &&
@@ -255,6 +274,7 @@ export function createSessionEventPrinter(opts: {
             color,
           })}\n\n`,
         )
+        timelineLineStart = true
       }
       if (timeline && options?.activity !== false) {
         opts.activity?.start('Thinking')
@@ -263,10 +283,10 @@ export function createSessionEventPrinter(opts: {
     endTurn(options) {
       if (openTextLine && timeline) {
         const tail = markdown.finish()
-        if (tail) writeOut(tail)
+        if (tail) emitOut(tail)
       }
       if (openTextLine || openReasoningLine) {
-        writeOut('\n')
+        emitOut('\n')
         openTextLine = false
         openReasoningLine = false
       }
@@ -289,20 +309,20 @@ export function createSessionEventPrinter(opts: {
           if (openTextLine) {
             if (timeline) {
               const tail = markdown.finish()
-              if (tail) writeOut(tail)
+              if (tail) emitOut(tail)
             }
-            writeOut('\n')
+            emitOut('\n')
             openTextLine = false
           }
           if (!reasoningPrefixDone) {
-            writeOut(
+            emitOut(
               timeline
                 ? `${dim}◇ Thinking${reset}\n`
                 : `${DIM}thinking ${RESET}`,
             )
             reasoningPrefixDone = true
           }
-          writeOut(`${dim}${e.text}${reset}`)
+          emitOut(`${dim}${e.text}${reset}`)
           openReasoningLine = !e.text.endsWith('\n')
           return
         }
@@ -312,15 +332,15 @@ export function createSessionEventPrinter(opts: {
           e.text.length > 0
         ) {
           if (openReasoningLine) {
-            writeOut('\n')
+            emitOut('\n')
             openReasoningLine = false
           }
           if (timeline && !assistantHeaderDone) {
-            writeOut(`${accent}●${reset} Bolo\n`)
+            emitOut(`${accent}●${reset} Bolo\n`)
             assistantHeaderDone = true
           }
           const text = timeline ? markdown.push(e.text) : e.text
-          if (text) writeOut(text)
+          if (text) emitOut(text)
           streamedText = true
           openTextLine = !e.text.endsWith('\n')
           return
@@ -335,11 +355,7 @@ export function createSessionEventPrinter(opts: {
           const renderedToolLine = color
             ? toolLine
             : stripTerminalAnsi(toolLine)
-          writeOut(
-            timeline
-              ? `  ${renderedToolLine}\n`
-              : `${renderedToolLine}\n`,
-          )
+          emitOut(`${renderedToolLine}\n`)
           return
         }
         if (e.type === 'error' && typeof e.message === 'string') {
@@ -347,12 +363,12 @@ export function createSessionEventPrinter(opts: {
           const explained = opts.explainError
             ? opts.explainError(e.message)
             : e.message
-          writeErr(`error: ${explained}\n`)
+          emitErr(`error: ${explained}\n`)
           return
         }
         if (e.type === 'warning' && typeof e.message === 'string') {
           ensureLineBreak()
-          writeErr(`warn: ${e.message}\n`)
+          emitErr(`warn: ${e.message}\n`)
           return
         }
         // provider 侧搜索：写 stdout（是内容不是诊断），但用不同前缀标明
@@ -362,10 +378,10 @@ export function createSessionEventPrinter(opts: {
           if (e.phase === 'query') {
             const q =
               typeof e.query === 'string' && e.query ? ` "${e.query}"` : ''
-            writeOut(`${dim}⌕ web search${q}${reset}\n`)
+            emitOut(`${dim}⌕ web search${q}${reset}\n`)
           } else if (e.phase === 'results') {
             const n = typeof e.resultCount === 'number' ? e.resultCount : '?'
-            writeOut(`${dim}⌕ ${n} result(s)${reset}\n`)
+            emitOut(`${dim}⌕ ${n} result(s)${reset}\n`)
           } else if (
             e.phase === 'citation' &&
             typeof e.url === 'string'
@@ -374,7 +390,7 @@ export function createSessionEventPrinter(opts: {
               citedUrls.add(e.url)
               const t =
                 typeof e.title === 'string' && e.title ? `${e.title} — ` : ''
-              writeOut(`${dim}  ↳ ${t}${e.url}${reset}\n`)
+              emitOut(`${dim}  ↳ ${t}${e.url}${reset}\n`)
             }
           }
           return
@@ -384,7 +400,7 @@ export function createSessionEventPrinter(opts: {
           const attempt = typeof e.attempt === 'number' ? e.attempt : '?'
           const max = typeof e.maxRetries === 'number' ? e.maxRetries : '?'
           const reason = typeof e.reason === 'string' ? e.reason : 'retry'
-          writeErr(`retry ${attempt}/${max} (${reason})\n`)
+          emitErr(`retry ${attempt}/${max} (${reason})\n`)
         }
       } finally {
         opts.activity?.afterEvent(e)

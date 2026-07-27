@@ -103,6 +103,7 @@ export {
   applyTuiInputKey,
   canUseTuiInput,
   createTuiInputState,
+  formatTuiTokenCount,
   readTuiInput,
   renderTuiInputBox,
   renderUserMessage,
@@ -114,6 +115,7 @@ export {
   type TuiInputKey,
   type TuiInputState,
   type TuiInputStatus,
+  type TuiInputUsage,
   type TuiSlashMenuState,
 } from './tui/inputBox.ts'
 export {

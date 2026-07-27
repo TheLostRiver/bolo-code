@@ -1031,6 +1031,7 @@ export async function runRepl(
             providerKind: session.provider?.id,
             model: session.model,
             effortLevel: session.effortLevel,
+            ...(session.usage ? { usage: session.usage } : {}),
           },
         })
         if (input.type !== 'submit') {
@@ -1070,6 +1071,7 @@ export async function runRepl(
             providerKind: session.provider?.id,
             model: session.model,
             effortLevel: session.effortLevel,
+            ...(session.usage ? { usage: session.usage } : {}),
           },
         })
         surface.setDock({
