@@ -47,6 +47,7 @@ let selectingSession = false
 let composerRequestPending = false
 let composerRefreshRevision = 0
 let lastComposerActions = []
+const toolRuntimeRows = new Map()
 
 const composerButtons = {
   submit: sendBtn,
@@ -291,6 +292,7 @@ async function reloadTimeline() {
     return false
   }
   const cards = (r.cards ?? []).slice()
+  toolRuntimeRows.clear()
   logEl.replaceChildren()
   for (const c of cards) logEl.appendChild(renderCard(c))
   logEl.scrollTop = logEl.scrollHeight
@@ -304,6 +306,26 @@ function appendMsg(role, text) {
   logEl.appendChild(div)
   logEl.scrollTop = logEl.scrollHeight
   return div
+}
+
+function renderRuntimeEvent(e) {
+  if (e.type === 'tool_progress') {
+    let row = toolRuntimeRows.get(e.id)
+    if (!row) {
+      row = appendMsg('system', e.text)
+      toolRuntimeRows.set(e.id, row)
+    }
+    row.dataset.runtimeEvent = 'tool_progress'
+    row.dataset.state = e.state
+    row.textContent = e.text
+    logEl.scrollTop = logEl.scrollHeight
+    return
+  }
+  if (e.type === 'control') {
+    const row = appendMsg('system', e.text)
+    row.dataset.runtimeEvent = 'control'
+    row.dataset.state = e.state
+  }
 }
 
 function stripAnsi(s) {
@@ -496,6 +518,7 @@ async function refreshStatus() {
 
 async function reloadMessages() {
   const list = await window.bolo.listMessages()
+  toolRuntimeRows.clear()
   logEl.innerHTML = ''
   endStreamBubble()
   for (const m of list) {
@@ -713,9 +736,21 @@ window.bolo.onEvent((e) => {
     logEl.scrollTop = logEl.scrollHeight
   }
   if (e.type === 'tool_start' && e.name) {
-    appendMsg('system', `→ ${e.name}`)
+    const row = appendMsg('system', `→ ${e.name}`)
+    if (e.id) {
+      row.dataset.runtimeEvent = 'tool_start'
+      row.dataset.state = 'started'
+      toolRuntimeRows.set(e.id, row)
+    }
+  }
+  if (e.type === 'tool_progress' && e.id && e.text) {
+    renderRuntimeEvent(e)
+  }
+  if (e.type === 'control' && e.controlId && e.text) {
+    renderRuntimeEvent(e)
   }
   if (e.type === 'tool_end' && e.name) {
+    toolRuntimeRows.delete(e.id)
     if (
       e.cellCollapsed ||
       e.cellExpanded ||

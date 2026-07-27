@@ -42,6 +42,8 @@ import {
   takeNextSessionQueued,
   getSessionModelEffortSettings,
   updateSessionModelEffort,
+  projectSessionRuntimeEventView,
+  type SessionEvent,
 } from '../../../../packages/core/src/index.ts'
 import {
   buildTimelineCards,
@@ -102,6 +104,20 @@ const desktopSettings: {
 
 function send(channel: string, payload: unknown) {
   mainWindow?.webContents.send(channel, payload)
+}
+
+function forwardDesktopSessionEvent(
+  event: SessionEvent,
+  ownsSession: () => boolean,
+) {
+  if (!ownsSession()) return
+  const view = projectSessionRuntimeEventView(event)
+  if (view) {
+    send('bolo:event', view)
+    return
+  }
+  if (event.type === 'control' || event.type === 'tool_progress') return
+  send('bolo:event', event)
 }
 
 /**
@@ -253,7 +269,7 @@ async function createDesktopSession(scope: string): Promise<DesktopSession> {
     // setPermissionMode，所以别再把它加回来。
     askPermission,
     onEvent: (event) => {
-      if (ownsSession()) send('bolo:event', event)
+      forwardDesktopSessionEvent(event, ownsSession)
     },
   })
   ownedSession = created.session
@@ -276,7 +292,7 @@ async function resumeDesktopSession(
     systemPrompt: true,
     askPermission,
     onEvent: (event) => {
-      if (ownsSession()) send('bolo:event', event)
+      forwardDesktopSessionEvent(event, ownsSession)
     },
   })
   ownedSession = resumed.session

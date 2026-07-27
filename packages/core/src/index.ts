@@ -345,6 +345,10 @@ export {
   type DiffViewKeyResult,
 } from './diffViewModel.ts'
 export {
+  projectSessionRuntimeEventView,
+  type SessionRuntimeEventView,
+} from './sessionRuntimeEventView.ts'
+export {
   formatFileChangeHistoryCell,
   fileChangeCellFromMeta,
   shouldExpandFileChangeCell,
