@@ -15,7 +15,49 @@
 
 ## 1. Agent 可直接解决
 
-当前无未关闭项。以下条目保留关闭证据，防止后续重复实现或状态回退。
+当前开放主线为 OI-10。以下已关闭条目继续保留关闭证据，防止后续重复实现或状态回退。
+
+### OI-10 · CLI 命令发现与 TUI 一致性
+
+**状态：IN PROGRESS**
+
+准入证据：
+
+- 2026-07-28 的真实 Windows Terminal 截图中，欢迎框基本铺满终端，输入框却只占
+  约四分之三；`inkLayout.ts` 的上限为 160 列，`inputBox.ts` 的上限为 120 列，
+  两套 frame width 契约直接造成右边缘错位。
+- `turnActivity.ts` 每 250ms 递增 `frame`，但 renderer 始终输出固定 `✦`，所以只有
+  elapsed 在变化；此前的一闪一闪已由“每帧单次原子写入”修复，恢复动画不能退回
+  erase-then-draw。
+- `TuiInputState` 没有候选、选中项或菜单状态；↑/↓ 无条件浏览历史，Tab 被写成两个
+  空格，Esc 没有菜单语义。输入 `/` 或 `/d` 时完全没有命令展示或补全。
+- core 已有结构化 `SLASH_COMMANDS`，session 已有 `pluginCommands` 与 `skills`；
+  执行层支持内置、Plugin command 和 `/<skill-id>`，但输入层没有把这些已有能力投影
+  为统一候选。
+- Pi、OpenCode、HelsincyCode 与 Codex 的相关实现虽框架不同，但都具备同一最低交互
+  契约：`/` 展示、输入过滤、菜单态优先接管方向键、Tab/Enter 接受、Esc 关闭，以及
+  动态命令与内置命令共享发现入口。
+
+| 切片 | packages-first 交付 | 人类可见结果 | 自动关闭条件 | 状态 |
+|------|---------------------|--------------|--------------|------|
+| **OI-10A · frame width** | 欢迎页、输入框和用户消息共享终端 frame width helper | 宽屏时上下框同宽；窄屏不破框 | 24/38/56/96/超宽 golden + CJK/NO_COLOR | OPEN |
+| **OI-10B · activity animation** | 确定性 frame glyph 契约，继续每帧单次完整写入 | Thinking/Running 有平滑动画，elapsed 继续更新且无空白帧 | 多 frame 输出不同；每 tick 单 write；窄屏/NO_COLOR 回归 | OPEN |
+| **OI-10C · slash catalog** | 从 `SLASH_COMMANDS` 投影只读候选，提供前缀过滤与稳定排序 | `/` 显示命令，`/d` 首选 `/doctor` | hidden/alias/精确/前缀/无匹配/稳定顺序 | OPEN |
+| **OI-10D · input menu** | reducer/renderer 增加菜单显隐、选中索引、可视窗口和补全动作 | ↑/↓ 选择，Tab/Enter 补全，Esc 关闭且保留输入；菜单关闭后 ↑/↓ 仍是历史 | 编辑/删除/光标移动刷新；CJK/窄屏；raw listener/清理回归 | OPEN |
+| **OI-10E · 动态贡献** | Plugin command 与 user-invocable Skill 投影进同一 catalog，复用既有 precedence/conflict 结果 | 插件命令和 Skill 可从 `/` 菜单发现；reload 后下一次输入立即更新 | 来源标签、禁用 Skill、重名、reload/session projection | OPEN |
+| **OI-10F · 验收与文档** | 默认门禁注册新契约；ROADMAP/TUI/SLASH/USAGE/handoff 同步 | 源码与 dist 行为一致，非 TTY 无动态控制符 | 专项、typecheck、完整 `npm test`、dist smoke 全绿 | OPEN |
+
+关闭条件：
+
+- 输入框只消费窄 `SlashCommandCandidate[]`，不依赖整个 session，也不复制第二份内置
+  命令清单或执行器。
+- `/` 只在整行命令名上下文显示；出现参数、普通文本、`//` 或无匹配时正确关闭/显示
+  空态，不把普通提示误判为命令。
+- Tab/Enter 只接受候选并补成 `/<name> `；命令提交仍走现有
+  `submitUserInput`，reducer 不执行副作用。
+- 继续保持根 `dependencies: {}`；新测试有独立 npm script 并进入默认门禁。
+- 自动验证完成后 OI-10 可关闭；真实 Windows Terminal 字体、光标、resize、残影和
+  真人按键观感仍属于 OI-H3，不能以快照或注入按键冒充。
 
 ### OI-01 · 状态真源与使用文档漂移
 
