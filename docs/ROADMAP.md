@@ -13,8 +13,8 @@
 |----|------|------|
 | **Headless 核心** | **~82–90%** | loop/STE/权限/auto/snip/policy/OS sandbox；partial stream fail-closed |
 | **分发（CLI）** | **~85–92%** | `npm i -g` / `npx` 单文件产物 · 零运行时依赖 · pack→install→run E2E 进门禁；见 §15 与 [RELEASE.md](./RELEASE.md) |
-| **Agent 能力面（工具集）** | **~82–88%** | 15 工具 + **Web search**（五条线路全部活体验证）：Bash（含 `run_in_background`）· BashOutput · KillShell · Read/Write/Edit/apply_patch · Glob/Grep · Skill · WebFetch · Agent · **TodoWrite** · **ExitPlanMode** · **AskUserQuestion**；见 §14 |
-| 会话与 CLI | **~90–96%** | JSONL · new/resume 同构 runtime · durable controls/tasks · background FIFO/promotion · versioned runtime protocol |
+| **Agent 能力面（工具集）** | **~82–88%** | 15 工具 + **Web search**（五条线路全部活体验证）：Bash（含 `run_in_background`）· BashOutput · KillShell · Read/Write/Edit/apply_patch · Glob/Grep · Skill · WebFetch · Agent · **TodoWrite** · **ExitPlanMode** · **AskUserQuestion**；Bash 超时错误会指出 `run_in_background` 这条出路（只在超时时）；见 §14 |
+| 会话与 CLI | **~91–96%** | JSONL · new/resume 同构 runtime · durable controls/tasks · background FIFO/promotion · versioned runtime protocol · **`--allowed-tools` / `--disallowed-tools` 工具级放行**（headless 不必再整档开 bypass） |
 | **扩展面** | **~80–88%** | MCP×3 · Skills · Plugins · WebFetch · OAuth 本地 |
 | **Subagent** | **~89–95%** | Spec v0；durable task/result · overflow FIFO/cancel · safe-boundary delivery · worktree fail-closed |
 | **Rules / Creators** | **~75–85%** | 日用齐 |
@@ -23,9 +23,9 @@
 | **文件 Diff · 交互 UI** | **~90–95%** | **U0–U4 已落地**；U5 真·Ink/IDE 可选（AR4 证据门控） |
 | **斜杠** | **~80–88%** | 日用 + polish |
 | **CLI TUI（壳）** | **~70–80%** | 文本框布局/picker/主题；active Ctrl-C 取消本轮；**非**真 React Ink |
-| **Electron GUI** | **~65–75%** | 壳 + 流式 + 权限 + 设置 + 多 provider（CX7） |
+| **Electron GUI** | **~70–78%** | 壳 + 流式 + 权限 + 设置 + 多 provider（CX7）+ **AskUserQuestion 对话框**（桥不 import electron，可离线验；真人点击仍未验） |
 | **Hooks · 日用契约** | **~96–98%** | **H0–H5 已落地**（SessionEnd · exit 语义 · updatedInput · `/hooks recent`） |
-| **Compact · 日用管道** | **~96–98%** | **C0–C5 + AR2 全段已落地**（hybrid 计数 · 中段截断 · 防重摘要 · range/watermark 契约 · 切分不拆对穷举验证 · 写失败完整回退 · durable 条目不丢 · **CJK/密文估算修正** · 管道基准）；中段压缩与远端压缩均**显式关闭**（§13.10.2 · [ADR](./ADR_COMPACT_REMOTE.md)） |
+| **Compact · 日用管道** | **~96–98%** | **C0–C5 + AR2 全段已落地**（hybrid 计数 · 中段截断 · 防重摘要 · range/watermark 契约 · 切分不拆对穷举验证 · 写失败完整回退 · durable 条目不丢 · **估算按字符类别分档**（CJK 1.3 / 散文 4.5 / 其余 3.5；实测推翻了「密文 = token 密」的旧前提，最差高估 109% → 19.5%）· 管道基准）；中段压缩与远端压缩均**显式关闭**（§13.10.2 · [ADR](./ADR_COMPACT_REMOTE.md)） |
 | **Provider · 多实例热切** | **~92–96%** | **P0–P4.1 + CX7 Desktop** |
 | **Effort · 推理强度方言** | **~92–95%** | **E0–E9 已落地**；adaptive thinking 归 AR4 |
 | **Provider UX · 便利层** | **~95–98%** | **CX0–CX8 已落地**（ultrathink 默认 off）· [PROVIDER_UX.md](./PROVIDER_UX.md) |
