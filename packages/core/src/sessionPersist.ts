@@ -6,8 +6,9 @@
  * J-C+：同 id 同时有 `.json` + `.jsonl` 时 messages 优先 jsonl，meta 可从 json 补；无遥测。
  *
  * 路径：
- * - 项目：`<cwd>/.bolo/sessions/<id>.jsonl`（默认写）+ 可选旁路旧 `<id>.json`（只读）
- * - 用户：`~/.bolo/sessions/<id>.jsonl`（或 BOLO_CONFIG_DIR）
+ * - workspace：`~/.bolo/sessions/workspaces/<hash>/<id>.jsonl`（默认写）
+ * - 项目：`<cwd>/.bolo/sessions/<id>.jsonl`（旧位置，只读兼容）
+ * - 用户：`~/.bolo/sessions/<id>.jsonl`（旧 user scope，兼容）
  */
 
 import { promises as fs } from 'node:fs'
@@ -15,6 +16,7 @@ import path from 'node:path'
 import {
   getProjectLayout,
   getUserLayout,
+  getWorkspaceSessionsDir,
 } from '../../config/src/index.ts'
 import {
   nowIso,
@@ -132,7 +134,7 @@ export type PersistableSession = {
 /** 快照格式版本；破坏性变更时递增 */
 export const SESSION_SNAPSHOT_VERSION = 1 as const
 
-export type SessionScope = 'project' | 'user'
+export type SessionScope = 'workspace' | 'project' | 'user'
 
 export type SessionSnapshot = {
   version: typeof SESSION_SNAPSHOT_VERSION
@@ -173,7 +175,7 @@ export type SessionSnapshot = {
 }
 
 export type SaveSessionOptions = {
-  /** 默认 project */
+  /** 默认 workspace（用户目录下按 cwd 分桶） */
   scope?: SessionScope
   /** 覆盖 sessions 目录（测试用） */
   sessionsDir?: string
@@ -237,11 +239,17 @@ export function resolveSessionFilePath(
   if (options?.sessionsDir) {
     return path.join(path.resolve(options.sessionsDir), sessionFileName(sessionId))
   }
-  const scope = options?.scope ?? 'project'
+  const scope = options?.scope ?? 'workspace'
+  const cwd = options?.cwd ?? process.cwd()
+  if (scope === 'workspace') {
+    return path.join(
+      getWorkspaceSessionsDir(cwd),
+      sessionFileName(sessionId),
+    )
+  }
   if (scope === 'user') {
     return path.join(getUserLayout().sessionsDir, sessionFileName(sessionId))
   }
-  const cwd = options?.cwd ?? process.cwd()
   return path.join(getProjectLayout(cwd).sessionsDir, sessionFileName(sessionId))
 }
 
@@ -1343,7 +1351,7 @@ export async function loadSessionPair(
 /**
  * 读会话快照（J-C+：同 id 有 jsonl 时 messages 优先 jsonl）。
  * - 路径 / filePath / sessionsDir / 显式 scope：只查该处
- * - 纯 id 且未指定 scope/sessionsDir：先 project（cwd），再 user（~/.bolo）
+ * - 纯 id 且未指定 scope/sessionsDir：workspace → 旧 project → 旧 user
  * - 显式 `.jsonl`：读 transcript，meta 可从旁路 `.json` 补
  */
 export async function loadSession(
@@ -1414,7 +1422,25 @@ export async function loadSession(
     }
   }
 
-  // 纯 id：project → user
+  // 纯 id：workspace → legacy project → legacy user
+  const workspacePath = resolveSessionFilePath(idOrPath, {
+    scope: 'workspace',
+    cwd: options?.cwd,
+  })
+  try {
+    const loaded = await loadSessionPair(workspacePath, {
+      idHint: idOrPath,
+      cwd: options?.cwd,
+    })
+    return {
+      path: loaded.path,
+      snapshot: loaded.snapshot,
+      ...(loaded.recovered ? { recovered: loaded.recovered } : {}),
+    }
+  } catch (err) {
+    if (!isMissingFileError(err)) throw err
+  }
+
   const projectPath = resolveSessionFilePath(idOrPath, {
     scope: 'project',
     cwd: options?.cwd,
@@ -1446,7 +1472,7 @@ export async function loadSession(
   } catch (err) {
     if (isMissingFileError(err)) {
       throw new Error(
-        `session not found: ${idOrPath} (looked in project and user sessions)`,
+        `session not found: ${idOrPath} (looked in workspace, legacy project, and user sessions)`,
       )
     }
     throw err
@@ -1530,7 +1556,7 @@ export function setSessionPersistMeta(
 ): void {
   const prev = persistMeta.get(session) ?? {
     autoSave: false,
-    scope: 'project' as SessionScope,
+    scope: 'workspace' as SessionScope,
   }
   persistMeta.set(session, { ...prev, ...meta })
 }
@@ -1768,7 +1794,7 @@ export async function maybeAutoSaveSession(
   }
 }
 
-/** 项目会话列表项（对齐 HC listSessions 轻量字段，无遥测） */
+/** workspace 会话列表项（对齐 HC listSessions 轻量字段，无遥测） */
 export type SessionListItem = {
   id: string
   filePath: string
@@ -1848,21 +1874,19 @@ function newerIso(a: string, b: string): string {
 }
 
 /**
- * 列出当前项目 `.bolo/sessions` 下 `*.json` 与 `*.jsonl`（可覆盖 sessionsDir）。
+ * 列出单个 sessions 目录下的 `*.json` 与 `*.jsonl`。
  * 同 id 去重（J-D）：
  * - 配置/path：优先 JSON 路径与 model/cwd
  * - messageCount / preview：有可用 jsonl messages 时跟 jsonl（R1）
  * - updatedAt：取 JSON updatedAt 与 jsonl mtime 较新者
  * 按 updatedAt 降序；坏文件跳过。
  */
-export async function listProjectSessions(opts: {
-  cwd: string
-  sessionsDir?: string
+async function listSessionsInDir(opts: {
+  sessionsDir: string
   limit?: number
 }): Promise<SessionListItem[]> {
-  const sessionsDir =
-    opts.sessionsDir ?? getProjectLayout(opts.cwd).sessionsDir
-  const limit = opts.limit ?? 50
+  const sessionsDir = opts.sessionsDir
+  const limit = opts.limit
 
   let names: string[]
   try {
@@ -1991,5 +2015,87 @@ export async function listProjectSessions(opts: {
     return b.updatedAt.localeCompare(a.updatedAt)
   })
 
-  return items.slice(0, Math.max(0, limit))
+  return limit == null ? items : items.slice(0, Math.max(0, limit))
+}
+
+function normalizeWorkspaceForComparison(cwd: string): string {
+  const resolved = path.resolve(cwd).normalize('NFC')
+  return process.platform === 'win32'
+    ? resolved.toLocaleLowerCase('en-US')
+    : resolved
+}
+
+function sortSessionItems(items: SessionListItem[]): void {
+  items.sort((a, b) => {
+    const ta = Date.parse(a.updatedAt)
+    const tb = Date.parse(b.updatedAt)
+    if (Number.isFinite(tb) && Number.isFinite(ta) && tb !== ta) {
+      return tb - ta
+    }
+    return b.updatedAt.localeCompare(a.updatedAt)
+  })
+}
+
+/**
+ * List sessions for a workspace without creating any directory.
+ *
+ * Discovery order also defines collision precedence:
+ * 1. new user-level workspace bucket
+ * 2. legacy project `.bolo/sessions`
+ * 3. legacy user entries whose stored cwd matches
+ */
+export async function listWorkspaceSessions(opts: {
+  cwd: string
+  sessionsDir?: string
+  limit?: number
+}): Promise<SessionListItem[]> {
+  const limit = opts.limit ?? 50
+  if (opts.sessionsDir) {
+    return listSessionsInDir({
+      sessionsDir: opts.sessionsDir,
+      limit,
+    })
+  }
+
+  const [workspaceItems, projectItems, userItems] = await Promise.all([
+    listSessionsInDir({
+      sessionsDir: getWorkspaceSessionsDir(opts.cwd),
+    }),
+    listSessionsInDir({
+      sessionsDir: getProjectLayout(opts.cwd).sessionsDir,
+    }),
+    listSessionsInDir({
+      sessionsDir: getUserLayout().sessionsDir,
+    }),
+  ])
+  const normalizedCwd = normalizeWorkspaceForComparison(opts.cwd)
+  const matchingUserItems = userItems.filter(
+    (item) =>
+      typeof item.cwd === 'string' &&
+      normalizeWorkspaceForComparison(item.cwd) === normalizedCwd,
+  )
+
+  const byId = new Map<string, SessionListItem>()
+  for (const item of [
+    ...workspaceItems,
+    ...projectItems,
+    ...matchingUserItems,
+  ]) {
+    if (!byId.has(item.id)) byId.set(item.id, item)
+  }
+  const merged = [...byId.values()]
+  sortSessionItems(merged)
+  return merged.slice(0, Math.max(0, limit))
+}
+
+/**
+ * @deprecated Use listWorkspaceSessions. Kept while legacy project session
+ * directories remain readable.
+ */
+export async function listProjectSessions(opts: {
+  cwd: string
+  sessionsDir?: string
+  limit?: number
+}): Promise<SessionListItem[]> {
+  return listWorkspaceSessions(opts)
 }

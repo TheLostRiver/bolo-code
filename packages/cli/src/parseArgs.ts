@@ -35,7 +35,7 @@ export type CliArgs = {
    */
   resume?: string | true
   /**
-   * `true` = 恢复 listProjectSessions 第一条（最新）
+   * `true` = 恢复 listWorkspaceSessions 第一条（最新）
    * 与 --resume 同时出现时 continue 优先
    */
   continue?: boolean
@@ -391,6 +391,8 @@ export function formatHelp(): string {
 用法:
   bolo                               新会话（TTY：欢迎 banner + REPL）
   bolo "question"                    新会话单轮 prompt
+  bolo init [--project]              显式创建当前项目 .bolo（普通启动不需要）
+  bolo init --user                   显式补齐用户 ~/.bolo 模板
   bolo --list                        列出当前项目会话（非交互）
   bolo -l                            同上
   bolo --continue                    恢复当前项目最新一条会话
@@ -411,8 +413,9 @@ export function formatHelp(): string {
   bolo --migrate-session <id> --force --delete-json
 
 查找路径（纯 id）:
-  1. <cwd>/.bolo/sessions/<id>.jsonl（主）/ .json（只读兼容）
-  2. ~/.bolo/sessions/<id>.*（或 $BOLO_CONFIG_DIR/sessions/）
+  1. ~/.bolo/sessions/workspaces/<hash>/<id>.jsonl（新会话主路径）
+  2. <cwd>/.bolo/sessions/<id>.*（旧项目会话，只读兼容）
+  3. ~/.bolo/sessions/<id>.*（旧 user scope，兼容）
   也可用绝对/相对 .json / .jsonl 路径作为 id。
 
 REPL 斜杠命令（会话内）:
@@ -420,9 +423,9 @@ REPL 斜杠命令（会话内）:
   详见 docs/SLASH_COMMANDS.md
 
 选项:
-  -l, --list               非交互打印 listProjectSessions
-  -c, --continue           恢复 listProjectSessions 第一条（最新）
-  -r, --resume [id|path]   恢复会话；无 id 时列项目 .bolo/sessions
+  -l, --list               非交互打印当前 workspace 会话
+  -c, --continue           恢复当前 workspace 最新会话
+  -r, --resume [id|path]   恢复会话；无 id 时列 workspace 会话
       --migrate-session    旧 JSON 旁路写出 jsonl
       --force              migrate：强制 rewrite 已有非空 jsonl
       --delete-json        migrate：写出后删除旧 .json
@@ -435,7 +438,7 @@ REPL 斜杠命令（会话内）:
                            非交互下没人可问，工具默认被拒；这是**不整档开
                            bypassPermissions** 就放行单个工具的办法
       --disallowed-tools <s>  硬拒指定工具；优先于 bypassPermissions
-      --cwd <dir>          解析 project sessions 的工作目录
+      --cwd <dir>          解析 workspace sessions 的工作目录
   -h, --help               帮助
 
 环境:

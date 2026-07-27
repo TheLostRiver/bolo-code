@@ -32,6 +32,7 @@ import {
 } from '../../compact/src/index.ts'
 import { nowIso, type ChatMessage, type HooksConfig } from '../../shared/src/index.ts'
 import type { LoadedSkill } from '../../skills/src/index.ts'
+import { getWorkspaceSessionsDir } from '../../config/src/index.ts'
 import {
   createBuiltinTools,
   findToolByName,
@@ -67,7 +68,7 @@ async function maybeSpillTruncatedToolResult(opts: {
   fullOutput: string
 }): Promise<string | undefined> {
   try {
-    const dir = path.join(opts.cwd, '.bolo', 'sessions', 'tool-results')
+    const dir = path.join(getWorkspaceSessionsDir(opts.cwd), 'tool-results')
     await fs.mkdir(dir, { recursive: true })
     const safeId = opts.toolUseId.replace(/[^a-zA-Z0-9._-]+/g, '_')
     const filePath = path.join(dir, `${safeId || 'tool'}.txt`)
@@ -184,7 +185,7 @@ export type RunToolUseContext = {
   /** tool_result 字符预算；默认 DEFAULT_MAX_TOOL_RESULT_CHARS */
   maxToolResultChars?: number
   /**
-   * 截断后是否把全文落到 `.bolo/sessions/tool-results/<id>.txt`。
+   * 截断后是否把全文落到用户 workspace sessions 的 `tool-results/`。
    * 默认 true。
    */
   spillTruncatedToolResults?: boolean

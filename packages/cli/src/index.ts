@@ -30,6 +30,11 @@ export {
 } from './resumeCli.ts'
 export { runNewSessionCli, type NewSessionCliOptions } from './newSessionCli.ts'
 export {
+  runInitCli,
+  type InitCliOptions,
+  type InitCliResult,
+} from './initCli.ts'
+export {
   renderWelcomeBanner,
   shouldUsePlainBanner,
   isNarrowTerminal,

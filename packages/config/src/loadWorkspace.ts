@@ -30,7 +30,7 @@ import {
   type LlmProvider,
   type ProviderKind,
 } from '../../providers/src/index.ts'
-import { ensureAllLayouts } from './ensure.ts'
+import { ensureUserLayout } from './ensure.ts'
 import {
   loadConfigJsonWithWarnings,
   loadHooksJson,
@@ -141,7 +141,11 @@ export function resolveProviderFromConfig(config: BoloConfigJson): {
 
 export type LoadWorkspaceOptions = {
   cwd: string
-  ensureDefaults?: boolean
+  /**
+   * Create the user layout and default files before loading.
+   * Project `.bolo` is always discovery-only and is never materialized here.
+   */
+  materializeUserState?: boolean
   loadPlugins?: boolean
 }
 
@@ -149,13 +153,13 @@ export async function loadWorkspace(
   options: LoadWorkspaceOptions,
 ): Promise<ResolvedWorkspace> {
   const cwd = options.cwd
-  const ensureDefaults = options.ensureDefaults !== false
+  const materializeUserState = options.materializeUserState !== false
   const loadPluginsFlag = options.loadPlugins !== false
 
-  const ensured = await ensureAllLayouts(cwd, {
-    writeDefaults: ensureDefaults,
-  })
-  const createdPaths = [...ensured.user.created, ...ensured.project.created]
+  const ensuredUser = materializeUserState
+    ? await ensureUserLayout({ writeDefaults: true })
+    : undefined
+  const createdPaths = ensuredUser?.created ?? []
 
   const user = getUserLayout()
   const project = getProjectLayout(cwd)

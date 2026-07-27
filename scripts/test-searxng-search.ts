@@ -406,7 +406,7 @@ async function main() {
     )
     const created = await createSessionFromWorkspace({
       cwd: project,
-      ensureDefaults: false,
+      materializeUserState: false,
       connectMcp: false,
       systemPrompt: false,
       wireCompactSummarizer: false,
@@ -470,7 +470,7 @@ async function main() {
     )
     const invalidWorkspace = await loadWorkspace({
       cwd: invalidProject,
-      ensureDefaults: false,
+      materializeUserState: false,
       loadPlugins: false,
     })
     assert(!invalidWorkspace.searxngSearch, 'invalid config does not resolve a tool config')
@@ -483,7 +483,7 @@ async function main() {
     const invalidEvents: string[] = []
     const invalidSession = await createSessionFromWorkspace({
       cwd: invalidProject,
-      ensureDefaults: false,
+      materializeUserState: false,
       connectMcp: false,
       systemPrompt: false,
       wireCompactSummarizer: false,
@@ -514,7 +514,7 @@ async function main() {
     )
     const malformedRoot = await loadWorkspace({
       cwd: malformedRootProject,
-      ensureDefaults: false,
+      materializeUserState: false,
       loadPlugins: false,
     })
     assert(!malformedRoot.searxngSearch, 'malformed search root cannot register a tool')

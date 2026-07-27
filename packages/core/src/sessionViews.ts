@@ -33,7 +33,7 @@ import {
   loadTranscriptFile,
   messagesFromTranscriptEntries,
 } from './sessionTranscript.ts'
-import { listProjectSessions } from './sessionPersist.ts'
+import { listWorkspaceSessions } from './sessionPersist.ts'
 
 export type LoadTimelineResult =
   | { ok: true; turns: TimelineTurn[]; usedCompactBoundary: boolean }
@@ -94,9 +94,9 @@ export type LoadSessionListOptions = {
 export async function loadSessionListEntries(
   opts: LoadSessionListOptions,
 ): Promise<SessionListEntry[]> {
-  // 「项目里还没有任何会话」是正常状态，listProjectSessions 已按此返回空表；
+  // 「workspace 还没有任何会话」是正常状态，listWorkspaceSessions 返回空表；
   // 不该把它表现成故障
-  const items = await listProjectSessions({
+  const items = await listWorkspaceSessions({
     cwd: opts.cwd,
     ...(opts.sessionsDir ? { sessionsDir: opts.sessionsDir } : {}),
     ...(opts.limit != null ? { limit: opts.limit } : {}),

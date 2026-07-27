@@ -279,7 +279,7 @@ async function main() {
     const { runNewSessionCli } = await import('../packages/cli/src/newSessionCli.ts')
     const { promises: fsp } = await import('node:fs')
     const path = await import('node:path')
-    // ensureDefaults 会在 cwd 下脚手架出 .bolo/——不能落在仓库根目录
+    // 会话会写用户级状态；测试仍使用隔离 cwd，避免与仓库配置互相影响
     const tmpCwd = path.join(process.cwd(), '.bolo-tmp', 'allowed-tools-seam')
     await fsp.rm(tmpCwd, { recursive: true, force: true }).catch(() => {})
     await fsp.mkdir(tmpCwd, { recursive: true })

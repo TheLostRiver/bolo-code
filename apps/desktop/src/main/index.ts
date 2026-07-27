@@ -261,7 +261,7 @@ async function createDesktopSession(scope: string): Promise<DesktopSession> {
   const askPermission = createDesktopAskPermission(scope, ownsSession)
   const created = await createSessionFromWorkspace({
     cwd: desktopSettings.cwd,
-    ensureDefaults: true,
+    materializeUserState: true,
     connectMcp: false,
     systemPrompt: true,
     // 注意：createSessionFromWorkspace **不接受** permissionMode——
@@ -287,7 +287,7 @@ async function resumeDesktopSession(
   const resumed = await resumeSessionFromWorkspace({
     idOrPath: sessionId,
     cwd: desktopSettings.cwd,
-    ensureDefaults: true,
+    materializeUserState: true,
     connectMcp: false,
     systemPrompt: true,
     askPermission,

@@ -173,7 +173,7 @@ export async function runSearchCli(
   if (sub === 'status') {
     const workspace = await loadWorkspace({
       cwd: options.cwd ?? process.cwd(),
-      ensureDefaults: false,
+      materializeUserState: false,
     })
     for (const warning of workspace.configWarnings ?? []) {
       writeErr(`warn: ${warning}\n`)
@@ -225,7 +225,7 @@ export async function runSearchCli(
 
     const workspace = await loadWorkspace({
       cwd: options.cwd ?? process.cwd(),
-      ensureDefaults: false,
+      materializeUserState: false,
     })
     if (!workspace.searxngSearch) {
       const warnings = workspace.configWarnings ?? []

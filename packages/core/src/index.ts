@@ -521,6 +521,7 @@ export {
   parseSessionSnapshot,
   saveSession,
   loadSession,
+  listWorkspaceSessions,
   listProjectSessions,
   sessionPreviewFromMessages,
   resolveSessionFilePath,
@@ -904,7 +905,7 @@ export type CreateSessionOptions = {
   agentPolicy?: import('./subagent.ts').AgentPolicy
   /**
    * 每轮 submitPrompt 结束后自动 saveSession。
-   * true = project scope；或传 { scope, sessionsDir, filePath }。
+   * true = user-level workspace scope；或传 { scope, sessionsDir, filePath }。
    */
   autoSave?: boolean | {
     scope?: SessionScope
@@ -1438,11 +1439,11 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
   if (opts.autoSave) {
     const as =
       opts.autoSave === true
-        ? { scope: 'project' as SessionScope }
+        ? { scope: 'workspace' as SessionScope }
         : opts.autoSave
     setSessionPersistMeta(session, {
       autoSave: true,
-      scope: as.scope ?? 'project',
+      scope: as.scope ?? 'workspace',
       sessionsDir: as.sessionsDir,
       filePath: as.filePath,
     })
@@ -1477,7 +1478,8 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
 
 export type CreateSessionFromWorkspaceOptions = {
   cwd: string
-  ensureDefaults?: boolean
+  /** Create user-level state before loading; project `.bolo` stays read-only. */
+  materializeUserState?: boolean
   askPermission?: AskPermissionFn
   onEvent?: (e: SessionEvent) => void
   source?: SessionStartSource
@@ -1724,7 +1726,7 @@ export async function createSessionFromWorkspace(
 }> {
   const workspace = await loadWorkspace({
     cwd: opts.cwd,
-    ensureDefaults: opts.ensureDefaults,
+    materializeUserState: opts.materializeUserState,
   })
 
   const session = await createSession(
@@ -1772,7 +1774,7 @@ export async function reloadSessionPlugins(
 
   const workspace = await loadWorkspace({
     cwd: session.cwd,
-    ensureDefaults: false,
+    materializeUserState: false,
   })
   for (const warning of workspace.configWarnings ?? []) {
     warnings.push(warning)
@@ -2641,7 +2643,7 @@ export async function resumeSession(
   setSessionPersistMeta(session, {
     createdAt: snapshot.createdAt,
     filePath,
-    scope: opts.scope ?? 'project',
+    scope: opts.scope ?? 'workspace',
   })
 
   return {
@@ -2653,7 +2655,7 @@ export async function resumeSession(
 }
 
 export type ResumeSessionFromWorkspaceOptions = ResumeSessionOptions & {
-  ensureDefaults?: boolean
+  materializeUserState?: boolean
   wireCompactSummarizer?: boolean
   injectSkills?: boolean
   autoCompactEnabled?: boolean
@@ -2692,11 +2694,11 @@ export async function resumeSessionFromWorkspace(
   }
   const workspace = await loadWorkspace({
     cwd: workspaceCwd,
-    ensureDefaults: opts.ensureDefaults,
+    materializeUserState: opts.materializeUserState,
   })
   const workspaceOptions: CreateSessionFromWorkspaceOptions = {
     cwd: workspaceCwd,
-    ensureDefaults: opts.ensureDefaults,
+    materializeUserState: opts.materializeUserState,
     askPermission: opts.askPermission,
     onEvent: opts.onEvent,
     source: opts.source,

@@ -2,7 +2,7 @@
  * bolo CLI 入口
  */
 import {
-  listProjectSessions,
+  listWorkspaceSessions,
   migrateSessionToJsonl,
 } from '../../core/src/index.ts'
 import { formatHelp, isResumePicker, parseArgs } from './parseArgs.ts'
@@ -65,6 +65,14 @@ async function readStdinIfPiped(idleMs = 80): Promise<string | undefined> {
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2)
+
+  // Explicit scaffolding must never fall through as a model prompt.
+  if (argv[0] === 'init') {
+    const { runInitCli } = await import('./initCli.ts')
+    const result = await runInitCli(argv.slice(1))
+    process.exitCode = result.exitCode
+    return
+  }
 
   // `search` owns its subcommand argv, including doctor `--json`. Dispatch it
   // before the generic runtime parser so flags cannot be stolen by another
@@ -182,9 +190,9 @@ async function main(): Promise<void> {
   // ── --list / -l：非交互列项目会话 ──
   if (args.list) {
     try {
-      const items = await listProjectSessions({ cwd, limit: 50 })
+      const items = await listWorkspaceSessions({ cwd, limit: 50 })
       if (!items.length) {
-        process.stdout.write('(no sessions in project .bolo/sessions)\n')
+        process.stdout.write('(no sessions for this workspace)\n')
         process.exit(0)
       }
       process.stdout.write(`${formatSessionList(items)}\n`)

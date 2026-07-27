@@ -10,6 +10,7 @@ export {
   layoutPaths,
   getUserLayout,
   getProjectLayout,
+  getWorkspaceSessionsDir,
   describeLayout,
   type BoloLayoutPaths,
 } from './paths.ts'

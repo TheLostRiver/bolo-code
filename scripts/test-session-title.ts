@@ -100,7 +100,7 @@ async function main() {
       `slash set msg: ${slashSet.message}`,
     )
   }
-  // submitUserInput /title 走 setSessionTitle，默认 project layout；测试用 sessionsDir 需再写一次
+  // submitUserInput /title 走 setSessionTitle；测试用 sessionsDir 需再写一次
   await setSessionTitle(s2, 'My Slash Title', { sessionsDir })
   const slashShow = await submitUserInput(s2, '/title')
   // 无 sessionsDir 时可能读不到；核心 API 已验

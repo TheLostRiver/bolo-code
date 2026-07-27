@@ -91,7 +91,7 @@ async function main() {
   const { session } = await createSessionFromWorkspace({
     cwd: projectCwd,
     connectMcp: false,
-    ensureDefaults: true,
+    materializeUserState: true,
   })
   assert((session.plugins?.length ?? 0) === 0, 'start with no plugins')
   assert((session.pluginCommands?.length ?? 0) === 0, 'no plugin commands yet')

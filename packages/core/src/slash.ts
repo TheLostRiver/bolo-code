@@ -604,7 +604,7 @@ async function cmdTitle(
       const jsonSide =
         saveOpts.filePath ??
         resolveSessionFilePath(session.id, {
-          scope: meta?.scope ?? 'project',
+          scope: meta?.scope ?? 'workspace',
           cwd: session.cwd,
           sessionsDir: meta?.sessionsDir,
         })
@@ -681,7 +681,7 @@ async function cmdNote(
       const jsonSide =
         saveOpts.filePath ??
         resolveSessionFilePath(session.id, {
-          scope: meta?.scope ?? 'project',
+          scope: meta?.scope ?? 'workspace',
           cwd: session.cwd,
           sessionsDir: meta?.sessionsDir,
         })

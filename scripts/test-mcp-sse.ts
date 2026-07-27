@@ -258,7 +258,7 @@ async function testSessionAndSlash(sseUrl: string) {
 
   const { session, mcp } = await createSessionFromWorkspace({
     cwd: projectCwd,
-    ensureDefaults: true,
+    materializeUserState: true,
     systemPrompt: false,
     connectMcp: true,
   })

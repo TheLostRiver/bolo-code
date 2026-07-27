@@ -514,6 +514,9 @@ export async function getVolatileSections(
       (await buildMemorySystemSection({
         userBoloDir: opts.userConfigDir,
         cwd: opts.cwd,
+        // Startup is discovery-only for project state. Memory directories are
+        // materialized by explicit memory writes, not while assembling prompt.
+        ensureDir: false,
       }))
     if (mem?.trim()) sections.push(mem.trim())
   }

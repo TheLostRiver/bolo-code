@@ -320,7 +320,7 @@ async function testSessionWiring() {
   const events: SessionEvent[] = []
   const { session, mcp } = await createSessionFromWorkspace({
     cwd: projectCwd,
-    ensureDefaults: true,
+    materializeUserState: true,
     systemPrompt: false,
     connectMcp: true,
   })

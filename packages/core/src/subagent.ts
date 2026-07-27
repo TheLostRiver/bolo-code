@@ -5,7 +5,10 @@
 
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
-import { getBoloHomeDir, getProjectLayout } from '../../config/src/paths.ts'
+import {
+  getBoloHomeDir,
+  getWorkspaceSessionsDir,
+} from '../../config/src/paths.ts'
 import { runHooks } from '../../hooks/src/index.ts'
 import {
   newId,
@@ -973,7 +976,7 @@ export type RunSubagentParams = {
   onEvent?: (e: QueryLoopEvent) => void
   /**
    * 结束后写侧链 transcript。
-   * - true：`{cwd}/.bolo/sessions/agent-{id}.jsonl`
+   * - true：用户级 workspace sessions 下的 `agent-{id}.jsonl`
    * - string：sessions 目录（写 `agent-{id}.jsonl`）
    * - 默认 false
    */
@@ -1665,7 +1668,7 @@ export function resolveSubagentTranscriptPath(opts: {
   const sessionsDir =
     typeof wt === 'string' && wt.trim()
       ? path.resolve(wt.trim())
-      : getProjectLayout(opts.cwd).sessionsDir
+      : getWorkspaceSessionsDir(opts.cwd)
   const safeId = opts.agentId.replace(/[^\w.-]+/g, '_')
   return path.join(sessionsDir, `agent-${safeId}.jsonl`)
 }

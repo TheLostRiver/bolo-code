@@ -1,13 +1,13 @@
 /**
  * resume 接线：load/resumeSession + 摘要 + 可选单轮 submit / 极简 REPL
- * 无 id 时 listProjectSessions → TTY 选择 / 非 TTY 列表
+ * 无 id 时 listWorkspaceSessions → TTY 选择 / 非 TTY 列表
  * T4 流式 text/tool 行；T5 TTY 权限 y/N；T6 slash 经 submitUserInput
  */
 
 import { randomUUID } from 'node:crypto'
 import * as readline from 'node:readline'
 import {
-  listProjectSessions,
+  listWorkspaceSessions,
   productionDeps,
   resumeSessionFromWorkspace,
   requestSessionControl,
@@ -242,21 +242,21 @@ export function resolveSessionPickerChoice(
 }
 
 /**
- * `--continue` / `-c`：取 listProjectSessions 第一条（已按 mtime/updatedAt 降序）。
+ * `--continue` / `-c`：取 listWorkspaceSessions 第一条（已按 updatedAt 降序）。
  * 空列表 → exit 1（与 picker 一致）。
  */
 export async function resolveContinueSessionId(opts: {
   cwd: string
   sessionsDir?: string
 }): Promise<string> {
-  const items = await listProjectSessions({
+  const items = await listWorkspaceSessions({
     cwd: opts.cwd,
     sessionsDir: opts.sessionsDir,
     limit: 1,
   })
   if (items.length === 0) {
     throw new ResumePickerError(
-      'No sessions in this project. Start a new session with: bolo',
+      'No sessions in this workspace. Start a new session with: bolo',
       1,
     )
   }
@@ -282,14 +282,14 @@ export async function pickProjectSessionId(opts: {
 }): Promise<string> {
   const writeOut = opts.writeOut ?? ((s) => process.stdout.write(s))
   const writeErr = opts.writeErr ?? ((s) => process.stderr.write(s))
-  let items = await listProjectSessions({
+  let items = await listWorkspaceSessions({
     cwd: opts.cwd,
     sessionsDir: opts.sessionsDir,
   })
 
   if (items.length === 0) {
     throw new ResumePickerError(
-      'No sessions in this project. Start a new session with: bolo',
+      'No sessions in this workspace. Start a new session with: bolo',
       1,
     )
   }

@@ -6,6 +6,7 @@
  */
 
 import { homedir } from 'node:os'
+import { createHash } from 'node:crypto'
 import path from 'node:path'
 
 export const BOLO_DIR_NAME = '.bolo'
@@ -57,6 +58,24 @@ export function getUserLayout(): BoloLayoutPaths {
 
 export function getProjectLayout(cwd: string): BoloLayoutPaths {
   return layoutPaths(getProjectBoloDir(cwd))
+}
+
+/**
+ * Stable user-level session bucket for a workspace.
+ *
+ * Hashing keeps deeply nested/non-ASCII workspace paths out of filenames and
+ * avoids Windows path-length growth. Windows paths are case-insensitive for
+ * identity so drive-letter/casing differences do not split one workspace.
+ */
+export function getWorkspaceSessionsDir(cwd: string): string {
+  const resolved = path.resolve(cwd).normalize('NFC')
+  const identity =
+    process.platform === 'win32' ? resolved.toLocaleLowerCase('en-US') : resolved
+  const workspaceId = createHash('sha256')
+    .update(identity)
+    .digest('hex')
+    .slice(0, 32)
+  return path.join(getUserLayout().sessionsDir, 'workspaces', workspaceId)
 }
 
 /** 文档/错误提示用 */

@@ -87,7 +87,7 @@ export async function runNewSessionCli(
 
   const { session, workspace } = await createSessionFromWorkspace({
     cwd,
-    ensureDefaults: true,
+    materializeUserState: true,
     askPermission,
     onEvent,
   })
@@ -122,7 +122,7 @@ export async function runNewSessionCli(
 
   setSessionPersistMeta(session, {
     autoSave: true,
-    scope: 'project',
+    scope: 'workspace',
   })
 
   if (!opts.skipBanner) {
