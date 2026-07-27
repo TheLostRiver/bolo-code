@@ -47,7 +47,7 @@ Provider / 多后端配置仍读 `~/.bolo` 与项目 `.bolo`（与 headless 同�
 |------|------|
 | **runtimeHello / runtimeQuery / runtimeCommand** | runtime v1 协商、当前 snapshot、expected-state 安全动作 |
 | getStatus / submit / listMessages | 会话（status 含 providerId · effort） |
-| getTimeline / listSessions | 结构化 timeline 与会话列表；切换/resume 尚在 OI-06 |
+| getTimeline / listSessions / selectSession | 结构化 timeline、会话列表与 fail-closed 切换/resume |
 | getSettings / setSettings | mode · mock · cwd（可重建会话） |
 | **listProviders** | providers 列表 + presets + effort tip |
 | **useProvider** | 热切命名后端（`switchSessionProvider`） |
@@ -61,11 +61,14 @@ Provider / 多后端配置仍读 `~/.bolo` 与项目 `.bolo`（与 headless 同�
 
 ```bash
 npm run test:runtime-core-transport
+npm run test:session-selection
+npm run test:desktop-session-selection
 npm run test:desktop-ipc-contract
 npm run test:desktop-bundle
 ```
 
 最后一项会真实启动 Electron，并要求 renderer 的 RuntimeClient 完成 hello/query
-握手到 `ready`。窗口视觉、真人点击、会话切换和 composer controls 仍未因此自动验收。
+握手到 `ready`，再自动点击 session row 并恢复目标会话。窗口视觉、真人点击和
+composer controls 仍未因此自动验收。
 
 总进度与后置项见仓库根 [README.md](../../README.md) · [docs/ROADMAP.md](../../docs/ROADMAP.md) · [docs/PROVIDER_UX.md](../../docs/PROVIDER_UX.md)。

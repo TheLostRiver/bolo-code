@@ -221,6 +221,11 @@ set BOLO_DESKTOP_MOCK=1    # 先 mock；真网则 =0 并配好 key
 npm start
 ```
 
+左侧会话列表支持鼠标点击，也支持聚焦后按 `Enter` / `Space`，会从当前项目的
+`.bolo/sessions` 恢复所选会话。当前会话仍在 running、compacting、等待审批或
+stopping 时会拒绝切换；先完成/中断当前工作再切换。恢复只加载历史与 durable
+诊断，**不会自动 replay interrupted work**。
+
 见 [apps/desktop/README.md](../apps/desktop/README.md)。
 
 ---

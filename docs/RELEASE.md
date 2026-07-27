@@ -231,7 +231,7 @@ git push --follow-tags
 ### 6.6 发布 checklist（逐项可执行）
 
 ```bash
-npm test                              # typecheck + 101 个测试脚本，必须 EXIT=0
+npm test                              # typecheck + 103 个门禁脚本，必须 EXIT=0
 node -e "console.log(JSON.stringify(require('./package.json').dependencies))"
                                       # 必须输出 {}
 npm pack --dry-run                    # 清单只应有 6 项

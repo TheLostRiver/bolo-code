@@ -23,7 +23,7 @@
 
 - ROADMAP §0/§13.11、handoff、README 与 autonomous prompt 使用同一队列，
   并在 OI-04 关闭后统一把 OI-06 标为当前，同时保留外部/人工阻塞标记。
-- AR4 ADR 已按正文改为六个候选；RELEASE 与默认门禁现统一为 101 个脚本。
+- AR4 ADR 已按正文改为六个候选；RELEASE 与默认门禁现统一为 103 个脚本。
 - USAGE 已补 `--allowed-tools`、`--disallowed-tools`、`AskUserQuestion`
   与 Web search 的最短入口。
 - `test-dist-build.ts` 守住默认门禁条目和 package manager；
@@ -96,7 +96,7 @@
 - `bolo search status` 同时列出 hosted、SearXNG direct 与 MCP 线路；配置 warning
   在 CLI 与 Desktop 都可见。
 - `test-searxng-search.ts` 使用本地 HTTP fixture 覆盖请求、解析、错误、预算和生产
-  接线，并已进入独立 script 与 101 项默认门禁。真实实例仍单列 OI-X1。
+  接线，并已进入独立 script 与 103 项默认门禁。真实实例仍单列 OI-X1。
 
 ### OI-05 · CLI 构建会吞掉 bundled skills 复制失败
 
@@ -114,15 +114,16 @@
 - 发行契约静态守住复制调用不能再挂空 catch。
 - dist contract、真实 pack/install 与完整门禁全绿。
 
-### OI-06 · Desktop runtime 已接入，产品工作流尚未完成
+### OI-06 · Desktop runtime 与会话恢复已接入，产品工作流尚未完成
 
-**状态：IN PROGRESS（首切片 `74997ab`）**
+**状态：IN PROGRESS（`74997ab` · `c76123e`）**
 
 证据：
 
 - `packages/shared/src/runtimeClient.ts` 的 client/transport/store 已由 Desktop
   renderer 生产调用；core adapter 和 hello/query/command IPC 已接通。
-- 会话侧栏只渲染列表项，没有 click/keyboard resume；主进程仍是单 session。
+- 会话侧栏已支持 click/Enter/Space resume；core active-session manager 串行化
+  create/resume/recreate/close，忙态 fail-closed。
 - composer 没有 queue/steer/interrupt，提交时只有 Send。
 - 设置页不能修改 model/effort；effort 只有只读提示。
 - renderer 处理 17 类 SessionEvent 中的 text/tool start/tool end/error/warning；
@@ -140,11 +141,14 @@
 
 - `createSessionRuntimeTransport` 统一协议 hello、当前 session snapshot、边界命令解析
   与 `executeRuntimeCommand`，没有另造 executor。
-- Desktop 通过 15 request + 3 push IPC、browser ESM `RuntimeClient` 和单一 store
+- Desktop 通过 16 request + 3 push IPC、browser ESM `RuntimeClient` 和单一 store
   显示 ready/incompatible/error；错误不会伪装成空会话。
-- `test-runtime-core-transport.ts` 覆盖生产 adapter；真实 Electron smoke 已返回
-  `runtime:"ready"`；101 项默认门禁 EXIT=0。
-- 下一切片是会话切换/恢复；OI-06 在 navigation、composer、settings 完成前不关闭。
+- `test-session-selection.ts` 覆盖忙态、并发、load failure、candidate 清理与
+  scoped approval id；旧 session 回包不能认领新实例。
+- 真实 Electron smoke 已返回 `runtime:"ready"`，并自动点击 session row 恢复
+  指定目标；103 项默认门禁 EXIT=0。
+- 下一切片是 composer queue/steer/interrupt 与 model/effort；OI-06 在
+  composer、settings 与关键运行态事件投影完成前不关闭。
 
 ## 2. 需要外部资源
 
@@ -190,7 +194,7 @@ Ctrl-C/Esc 以及 REPL 是否抢占 stdin。需要人在真实终端按键确认
 
 - ROADMAP、RELEASE、AGENT_HANDOFF、USAGE、ARCHITECTURE、AR4 ADR、
   Desktop 与本地搜索专题文档；
-- 根与 Desktop package metadata、101 项默认测试串及 136 个 `test-*.ts` 的注册差集；
+- 根与 Desktop package metadata、103 项默认测试串及 138 个 `test-*.ts` 的注册差集；
 - 历史 SearXNG preset、WebFetch、工具注册、权限分类、runtime client、Desktop IPC/renderer；
 - 代码中的 TODO/FIXME、空 catch 与未实现标记；
 - 当前完整门禁、electron-builder registry 版本与真实 NSIS 构建。
