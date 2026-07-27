@@ -38,8 +38,8 @@ SearXNG JSON 搜索契约、fixture、CLI/Desktop warning 与文档收口；不�
 
 - OI-04 已完成；本轮只推进 OI-06 的最小切片。
 - 现有壳、视图模型、NSIS、runtime client 生产桥（`74997ab`）、
-  会话切换/恢复（`c76123e`）与 composer controls（`c08254a`）已完成；
-  下一刀从 model/effort 开始，随后补关键运行态事件投影。
+  会话切换/恢复（`c76123e`）、composer controls（`c08254a`）与
+  model/effort 设置（`ce918ef`）已完成；下一刀补关键运行态事件投影。
 - 视觉与交互方案已有 [DESKTOP_DESIGN.md](./DESKTOP_DESIGN.md)，先按现有方案和
   `OPEN_ISSUES.md` 的关闭条件接线，不重新发明一套设计。
 - Desktop 是**薄壳**：契约与逻辑必须先在 `packages/*` 里成立，壳只做渲染与 IPC。

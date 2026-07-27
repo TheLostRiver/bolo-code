@@ -23,7 +23,7 @@
 | **文件 Diff · 交互 UI** | **~90–95%** | **U0–U4 已落地**；U5 真·Ink/IDE 可选（AR4 证据门控） |
 | **斜杠** | **~80–88%** | 日用 + polish |
 | **CLI TUI（壳）** | **~70–80%** | 文本框布局/picker/主题；active Ctrl-C 取消本轮；**非**真 React Ink |
-| **Electron GUI** | **~76–85%** | 壳 + 流式 + 权限 + 多 provider（CX7）+ runtime v1 + **会话切换/恢复 + composer controls** + AskUserQuestion；model/effort 与关键运行态事件待接，真人点击仍未验 |
+| **Electron GUI** | **~80–88%** | 壳 + 流式 + 权限 + 多 provider（CX7）+ runtime v1 + **会话切换/恢复 + composer controls + model/effort 设置** + AskUserQuestion；关键运行态事件待接，真人点击仍未验 |
 | **Hooks · 日用契约** | **~96–98%** | **H0–H5 已落地**（SessionEnd · exit 语义 · updatedInput · `/hooks recent`） |
 | **Compact · 日用管道** | **~96–98%** | **C0–C5 + AR2 全段已落地**（hybrid 计数 · 中段截断 · 防重摘要 · range/watermark 契约 · 切分不拆对穷举验证 · 写失败完整回退 · durable 条目不丢 · **估算按字符类别分档**（CJK 1.3 / 散文 4.5 / 其余 3.5；实测推翻了「密文 = token 密」的旧前提，最差高估 109% → 19.5%）· 管道基准）；中段压缩与远端压缩均**显式关闭**（§13.10.2 · [ADR](./ADR_COMPACT_REMOTE.md)） |
 | **Provider · 多实例热切** | **~92–96%** | **P0–P4.1 + CX7 Desktop** |
@@ -116,7 +116,7 @@ agent 可推进的下一项是 **OI-06 Desktop 生产接线**。
 | **AR5C-early · CLI 可分发**（§15） | ✅ |
 | **AR-T3+ 能力面续刀**（WebSearch · plan 工具流 · AskUserQuestion） | ✅ 三项均已落地（AskUserQuestion 的真 TTY 交互未验，见 §14.5） |
 | **AR2 Compact depth（A0a/A0b/A1/A2/B1/B2/C 全段）** | ✅ |
-| AR3 Desktop shell | ⏳ runtime 生产桥/会话切换恢复/视图模型/composer/NSIS 已有，model/effort 与关键运行态事件仍在 OI-06 |
+| AR3 Desktop shell | ⏳ runtime 生产桥/会话切换恢复/视图模型/composer/model-effort/NSIS 已有，关键运行态事件仍在 OI-06 |
 | AR4 证据深水 · AR5 release hardening | ✅ |
 | 无遥测 | ✅ 永不 |
 
@@ -129,8 +129,8 @@ agent 可推进的下一项是 **OI-06 Desktop 生产接线**。
 **一句话：** 主路径、Diff、Hooks、Compact、多 Provider、Effort、Provider UX、可靠性 R0–R4、Durable Runtime DR0–DR4、AR1 runtime UX、**AR-T1/AR-T2 能力面**已收口。
 
 **下一刀（当前主线）：** [OPEN_ISSUES.md](./OPEN_ISSUES.md) OI-06，
-runtime 生产桥、会话切换/恢复与 composer queue/steer/interrupt 已完成，
-下一切片接 model/effort 设置，随后补齐关键运行态事件投影。
+runtime 生产桥、会话切换/恢复、composer queue/steer/interrupt 与
+model/effort 设置已完成，下一切片补齐关键运行态事件投影。
 OI-04 已以
 零依赖 SearXNG JSON 直连收口。中段压缩与远端压缩按证据门控**显式关闭**
 （后者见 [ADR_COMPACT_REMOTE.md](./ADR_COMPACT_REMOTE.md)）。
@@ -347,7 +347,7 @@ AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 regis
 | **AR3B · navigation/recovery** | session/turn/control/task selector 与 selection route 纯模型 | 左侧 session 导航、主区 turn timeline、诊断抽屉；interrupted 可 inspect/discard/retry-safe | 大会话、旧 transcript、missing target、crash/restart；默认不 replay |
 | **AR3C · content cards** | markdown/tool/diff/approval view-model 继续来自 packages | 克制的信息密度：消息流、tool 状态、diff、approval、错误与复制 | unsafe HTML、超长输出、折叠、键盘/屏幕阅读；权限与 diff 不在 renderer 重算 |
 | **AR3D · composer/runtime actions** ✅ | composer intent→queue/steer/interrupt/command；携带 expected state/requestId | active turn 时可排队、修正或中断；partial acceptance/warning 可恢复 | double submit、stale target、offline、cancel/replace race |
-| **AR3E · settings** | provider/model/effort/capabilities/config schema 共用 packages | provider/model/effort 可搜索与切换，能力/缺 key 可解释 | secret 不回传 renderer/transcript；切换失败保留旧值 |
+| **AR3E · settings** ✅ | provider/model/effort/capabilities/config schema 共用 packages | provider/model/effort 可搜索与切换，能力/缺 key 可解释 | secret 不回传 renderer/transcript；切换/持久化失败保留旧值 |
 | **AR3F · hardening/package** | telemetry-free perf counters 仅本地测试；打包配置 | crash 后可重新打开并诊断；Windows 安装包可复现 | cold/warm start、10k events、内存、renderer crash、Windows package/smoke |
 
 视觉原则：高对比、窄侧栏 + 单一主时间线 + 右侧按需诊断；先信息架构和状态正确性，再动效装饰。每切片先落 packages/IPC fixture，后改 `apps/desktop`。
@@ -399,7 +399,7 @@ AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 regis
 | 15 | **AR-T3+ · 能力面续刀** | `bolo search enable` · OpenRouter plugin · AskUserQuestion（逐项） | 见 §14.5 | 每项独立红灯 + 全量门禁 | ✅（AskUserQuestion 真 TTY 交互未验） |
 | 16 | **AR2A1–A2 · watermark/safe rewrite** | range/watermark 纯契约 ✅ · 契约作为验证者接线 ✅ | compact 安全面收口 | tool pairing + lifecycle 保留 | ✅ 四条验收全过（`3e918ea` · `948061c` · `b5c7112`）；**中段压缩按证据门控显式不启用**，理由见 §13.10.2 |
 | 17 | **AR2B–C · tokenizer/benchmark/ADR** | 启发式修正 ✅ + 语料基准 ✅ + remote ADR ✅ | 可量化 token/cost | 偏差阈值 + fail-closed | ✅ B1 不引入 tokenizer（`661fc7d`）· B2 基准（`28f70fc`）· C 决定 local-only |
-| 18 | **AR3A–F** | A ✅ client/store + core adapter + 生产 IPC · B/C ✅ 会话切换恢复/视图模型/薄壳 · D ✅ composer · F ✅ NSIS；E 待接 | Codex App 风格 Desktop（[设计方案](./DESKTOP_DESIGN.md)） | mock/core IPC + crash/restart + Windows package | ⏳ **OI-06 当前开放**。真实 Electron 已完成 runtime hello/query 与自动化 session-row click/resume；下一刀 model/effort，再补关键运行态事件。⚠️ 真人点击与窗口视觉仍未验 |
+| 18 | **AR3A–F** | A ✅ client/store + core adapter + 生产 IPC · B/C ✅ 会话切换恢复/视图模型/薄壳 · D ✅ composer · E ✅ model/effort · F ✅ NSIS | Codex App 风格 Desktop（[设计方案](./DESKTOP_DESIGN.md)） | mock/core IPC + crash/restart + Windows package | ⏳ **OI-06 当前开放**。真实 Electron 已完成 runtime hello/query、自动化 session-row click/resume 与 model/effort IPC mutation；下一刀补关键运行态事件。⚠️ 真人点击与窗口视觉仍未验 |
 | 19 | **AR4** | 逐项 evidence gate | 有证据实施；无证据书面关闭 | 场景/基准/兼容证据 | ✅ **六条全部书面决定**（含重开条件）→ [ADR_AR4_EVIDENCE_GATE.md](./ADR_AR4_EVIDENCE_GATE.md) |
 | 20 | **AR5A–D**（AR5C 已提前完成） | A ✅ 迁移幂等/失败不覆盖源 · B ✅ 故障注入 · D ✅ 发布门 | clean clone 安装、升级、恢复手册 | full test + cross-platform smoke + security audit | ✅ **看板走完**。发布门含 SBOM · 性能预算 · 安全自查 · **已知限制** · 恢复手册 · 可执行 checklist → [RELEASE.md](./RELEASE.md) §6 |
 | 21 | **OI-04 · SearXNG 直连** | 显式配置 · fail-closed endpoint · 零依赖 JSON 工具 · 动态启用 | `bolo search status` · CLI/Desktop warning · 无第三方桥 | 本地 HTTP fixture + reload/预算/错误 + 完整门禁 | ✅ `c058998`；真实实例 live smoke 仍为 OI-X1 |

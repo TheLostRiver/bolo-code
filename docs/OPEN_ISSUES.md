@@ -96,7 +96,7 @@
 - `bolo search status` 同时列出 hosted、SearXNG direct 与 MCP 线路；配置 warning
   在 CLI 与 Desktop 都可见。
 - `test-searxng-search.ts` 使用本地 HTTP fixture 覆盖请求、解析、错误、预算和生产
-  接线，并已进入独立 script 与 105 项默认门禁。真实实例仍单列 OI-X1。
+  接线，并已进入独立 script 与 107 项默认门禁。真实实例仍单列 OI-X1。
 
 ### OI-05 · CLI 构建会吞掉 bundled skills 复制失败
 
@@ -116,7 +116,7 @@
 
 ### OI-06 · Desktop runtime 与会话恢复已接入，产品工作流尚未完成
 
-**状态：IN PROGRESS（`74997ab` · `c76123e`）**
+**状态：IN PROGRESS（`74997ab` · `c76123e` · `c08254a` · `ce918ef`）**
 
 证据：
 
@@ -126,9 +126,11 @@
   create/resume/recreate/close，忙态 fail-closed。
 - composer 已显式提供 Send/Queue/Steer/Interrupt，并经 durable control 接入；
   queue terminal 后由 Desktop FIFO drain。
-- 设置页不能修改 model/effort；effort 只有只读提示。
-- renderer 处理 17 类 SessionEvent 中的 text/tool start/tool end/error/warning；
-  phase、tool progress 等运行态信息仍未呈现。
+- 设置页已可修改 model/effort：model preset 只作建议且允许自定义名称，effort
+  只显示当前 dialect/model 可选档；写盘失败恢复 model/effort/classifier/cache，
+  renderer 保留原输入与错误提示。
+- renderer 只处理 17 类 SessionEvent 中的 6 类；`control`、`tool_progress` 等
+  关键运行态信息仍未呈现。
 
 关闭条件：
 
@@ -136,22 +138,24 @@
 - Desktop 接入 runtime client，能够切换/恢复会话并显示协议不兼容与读取失败。
 - composer 明确区分 send、queue、steer、interrupt。
 - model/effort 设置可用且 secret 不进入 renderer。
+- control/tool progress 等 OI-06 关键运行态事件有稳定 packages 投影与 Desktop 呈现。
 - 定向测试、IPC 契约、真实 Electron 启动与完整门禁全绿。
 
 当前进度：
 
 - `createSessionRuntimeTransport` 统一协议 hello、当前 session snapshot、边界命令解析
   与 `executeRuntimeCommand`，没有另造 executor。
-- Desktop 通过 18 request + 3 push IPC、browser ESM `RuntimeClient` 和单一 store
+- Desktop 通过 19 request + 3 push IPC、browser ESM `RuntimeClient` 和单一 store
   显示 ready/incompatible/error；错误不会伪装成空会话。
 - `test-session-selection.ts` 覆盖忙态、并发、load failure、candidate 清理与
   scoped approval id；旧 session 回包不能认领新实例。
 - `composerIntentToControl` 为 queue 分配稳定的新 turn ID；core adapter 统一
   runner snapshot、意图翻译与 durable admission，拒绝未知 IPC action/text。
-- 真实 Electron smoke 已返回 `runtime:"ready"`，并自动点击 session row 恢复
-  指定目标；105 项默认门禁 EXIT=0。
-- 下一切片是 model/effort，随后补关键运行态事件；OI-06 在 settings 与事件
-  投影完成前不关闭。
+- `getSessionModelEffortSettings` 与 `updateSessionModelEffort` 统一 slash/Desktop
+  suggestions、choosable、输入校验、即时持久化及失败回滚；secret 不进 snapshot。
+- 真实 Electron smoke 已返回 `runtime:"ready"`，自动点击 session row 恢复目标，
+  并经真实 IPC 修改/回读 `desktop-smoke-model/high`；107 项默认门禁 EXIT=0。
+- 下一切片补关键运行态事件；OI-06 在事件投影完成前不关闭。
 
 ## 2. 需要外部资源
 

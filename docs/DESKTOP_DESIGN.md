@@ -22,17 +22,18 @@ Codex App 的一手资料**没拿到**：OpenAI 官方发布页 WebFetch 返回 
 | 项 | 事实 |
 |---|---|
 | 规模 | main/renderer 仍是单文件薄壳；协议、状态、view-model 与安全判断均在 `packages/*` |
-| IPC 面 | **18 request + 3 push**；`test-desktop-ipc-contract.ts` 双向守住 |
+| IPC 面 | **19 request + 3 push**；`test-desktop-ipc-contract.ts` 双向守住 |
 | 分层 | ✅ **已达标**：renderer 无业务状态机，不重算权限、不重算 diff，只消费 core 预算好的 cell/preview |
 | 事件覆盖 | ⏳ core 发 **17 种**事件，renderer 处理 **6 种**；tool progress/control 等仍待投影 |
 | 流式 | ❌ **曾经是假的**——事件名 `text_delta` 与 core 的 `text` 对不上，分支从未执行（已修 `d32d4cd`，并加契约测试守住） |
 | 历史回看 | ✅ `getTimeline` 返回 packages 生成的结构化卡片；旧 `listMessages` 只作失败回退 |
 | 会话 | ✅ core active-session manager + `selectSession` IPC；列表 click/Enter/Space 可恢复，忙态拒绝切换，默认不 replay |
+| 设置 | ✅ packages-first model suggestions/effort choosable + `setModelEffort` IPC；即时持久化，失败回滚并保留 modal 输入 |
 | 布局 | ✅ 三栏骨架、按需右栏、light/dark 主题已落地；视觉仍未真人验收 |
 | 打包 | ✅ main 自包含 bundle + browser RuntimeClient bundle + Electron smoke + Windows NSIS |
 
-**结论：基础架构、生产协议桥、会话导航与 composer 已成立，剩余工作是把
-model/effort 与关键运行态事件接完整。**
+**结论：基础架构、生产协议桥、会话导航、composer 与 model/effort 已成立，
+剩余工作是把关键运行态事件接完整。**
 
 ## 2. 从 Codex App 借什么（借语义，不抄实现）
 

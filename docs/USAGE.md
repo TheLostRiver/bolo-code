@@ -231,6 +231,12 @@ composer 在空闲时使用 **Send**。turn 运行中仍可输入，并显式选
 **Interrupt**（不需要输入文本）。这些动作携带当前 turn 的 expected state；
 目标已变化时会拒绝，不会误打到下一轮。
 
+Settings 中的 **Model** 输入会列出当前 provider 的内置建议，但不是白名单，
+自定义兼容端点可直接填写自己的 model 名。**Effort** 只列出当前 dialect/model
+可选档，`auto` 清除会话 override。Save 会把 model/effort 立即写入当前 durable
+session；校验或写盘失败时设置窗口保持打开、原输入不丢，并显示错误。密钥仍只从
+环境变量/`apiKeyEnv` 读取，不进入 renderer snapshot。
+
 见 [apps/desktop/README.md](../apps/desktop/README.md)。
 
 ---
@@ -537,6 +543,8 @@ npm run test:runtime-cli-command
 npm run test:runtime-cli-renderer
 npm run test:runtime-cli-pager
 npm run test:runtime-cli-automation
+npm run test:session-settings
+npm run test:desktop-session-settings
 npx tsx scripts/test-slash.ts
 npx tsx scripts/test-multi-provider.ts
 npx tsx scripts/test-ultrathink.ts

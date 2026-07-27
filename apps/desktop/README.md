@@ -1,7 +1,8 @@
 # Desktop (Electron)
 
 > 可用壳：流式对话 · 权限弹窗 · 基础设置 · **多 provider（CX7）** ·
-> **runtime v1 生产 IPC/client** · **durable composer controls**。**无遥测。**
+> **runtime v1 生产 IPC/client** · **durable composer controls** ·
+> **model/effort 可修改设置**。**无遥测。**
 > 产品逻辑在 `packages/*`；本目录只做 IPC 编排。
 
 ## 结构
@@ -41,6 +42,10 @@ npm start            # 等价 electron . ；dev 脚本同 mock
 Provider / 多后端配置仍读 `~/.bolo` 与项目 `.bolo`（与 headless 同一套）。  
 **CX7：** 顶栏与 Settings 可选 active backend、Add preset（只写 `apiKeyEnv`）；热切 tip 显示 dialect/choosable。关 mock 后才打真网。
 
+Settings 的 Model 使用 suggestions datalist，但允许自定义兼容端点的任意合法
+model 名；Effort select 只列当前 dialect/model 的 choosable 档位。Save 在最终
+active session 上立即持久化；校验或写盘失败时保持窗口与原输入，并显示错误。
+
 ## IPC（摘要）
 
 | 通道 | 作用 |
@@ -52,6 +57,7 @@ Provider / 多后端配置仍读 `~/.bolo` 与项目 `.bolo`（与 headless 同�
 | getSettings / setSettings | mode · mock · cwd（可重建会话） |
 | **listProviders** | providers 列表 + presets + effort tip |
 | **useProvider** | 热切命名后端（`switchSessionProvider`） |
+| **setModelEffort** | packages-first model/effort 校验、即时持久化与失败回滚 |
 | **addProvider** | preset 写入 config（同 `/provider add`） |
 | event | 流式事件 |
 | permission_request / response | 权限 UI（可带 diff preview） |
@@ -67,11 +73,14 @@ npm run test:desktop-session-selection
 npm run test:desktop-ipc-contract
 npm run test:composer-runtime
 npm run test:desktop-composer
+npm run test:session-settings
+npm run test:desktop-session-settings
 npm run test:desktop-bundle
 ```
 
 最后一项会真实启动 Electron，并要求 renderer 的 RuntimeClient 完成 hello/query
-握手到 `ready`，再自动点击 session row 并恢复目标会话。composer 契约与接线由
-专项门禁覆盖；窗口视觉与真人点击仍未因此自动验收。
+握手到 `ready`，自动点击 session row 并恢复目标会话，再经 IPC 修改/回读
+model/effort。composer/settings 契约与接线由专项门禁覆盖；窗口视觉与真人点击仍未
+因此自动验收。
 
 总进度与后置项见仓库根 [README.md](../../README.md) · [docs/ROADMAP.md](../../docs/ROADMAP.md) · [docs/PROVIDER_UX.md](../../docs/PROVIDER_UX.md)。
