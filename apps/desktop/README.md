@@ -2,7 +2,7 @@
 
 > 可用壳：流式对话 · 权限弹窗 · 基础设置 · **多 provider（CX7）** ·
 > **runtime v1 生产 IPC/client** · **durable composer controls** ·
-> **model/effort 可修改设置**。**无遥测。**
+> **model/effort 可修改设置** · **control/tool progress 运行态投影**。**无遥测。**
 > 产品逻辑在 `packages/*`；本目录只做 IPC 编排。
 
 ## 结构
@@ -59,7 +59,7 @@ active session 上立即持久化；校验或写盘失败时保持窗口与原�
 | **useProvider** | 热切命名后端（`switchSessionProvider`） |
 | **setModelEffort** | packages-first model/effort 校验、即时持久化与失败回滚 |
 | **addProvider** | preset 写入 config（同 `/provider add`） |
-| event | 流式事件 |
+| event | 流式事件；`control/tool_progress` 经 packages 窄投影后呈现 |
 | permission_request / response | 权限 UI（可带 diff preview） |
 
 ## 测试
@@ -71,6 +71,8 @@ npm run test:runtime-core-transport
 npm run test:session-selection
 npm run test:desktop-session-selection
 npm run test:desktop-ipc-contract
+npm run test:desktop-event-contract
+npm run test:desktop-runtime-events
 npm run test:composer-runtime
 npm run test:desktop-composer
 npm run test:session-settings
@@ -80,7 +82,8 @@ npm run test:desktop-bundle
 
 最后一项会真实启动 Electron，并要求 renderer 的 RuntimeClient 完成 hello/query
 握手到 `ready`，自动点击 session row 并恢复目标会话，再经 IPC 修改/回读
-model/effort。composer/settings 契约与接线由专项门禁覆盖；窗口视觉与真人点击仍未
-因此自动验收。
+model/effort。composer/settings/runtime-event 契约与接线由专项门禁覆盖；
+`tool_progress` 原位更新工具行，Steer 只在 safe boundary 真正应用后显示。
+窗口视觉与真人点击仍未因此自动验收。
 
 总进度与后置项见仓库根 [README.md](../../README.md) · [docs/ROADMAP.md](../../docs/ROADMAP.md) · [docs/PROVIDER_UX.md](../../docs/PROVIDER_UX.md)。

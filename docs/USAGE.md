@@ -237,6 +237,10 @@ Settings 中的 **Model** 输入会列出当前 provider 的内置建议，但�
 session；校验或写盘失败时设置窗口保持打开、原输入不丢，并显示错误。密钥仍只从
 环境变量/`apiKeyEnv` 读取，不进入 renderer snapshot。
 
+工具运行时，`tool_progress` 会在同一条工具行原位更新，不会每个 tick 刷一条消息。
+Steer 的提示只在请求已到达安全边界并真正注入后显示为 applied；它不是“已排队”的
+提前回执。两类文案都由 packages 投影，renderer 不自行猜 safe-boundary 状态。
+
 见 [apps/desktop/README.md](../apps/desktop/README.md)。
 
 ---

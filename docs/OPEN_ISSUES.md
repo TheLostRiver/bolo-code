@@ -23,7 +23,7 @@
 
 - ROADMAP §0/§13.11、handoff、README 与 autonomous prompt 使用同一队列，
   并在 OI-04 关闭后统一把 OI-06 标为当前，同时保留外部/人工阻塞标记。
-- AR4 ADR 已按正文改为六个候选；RELEASE 与默认门禁现统一为 105 个脚本。
+- AR4 ADR 已按正文改为六个候选；RELEASE 与默认门禁现统一为 108 个脚本。
 - USAGE 已补 `--allowed-tools`、`--disallowed-tools`、`AskUserQuestion`
   与 Web search 的最短入口。
 - `test-dist-build.ts` 守住默认门禁条目和 package manager；
@@ -96,7 +96,7 @@
 - `bolo search status` 同时列出 hosted、SearXNG direct 与 MCP 线路；配置 warning
   在 CLI 与 Desktop 都可见。
 - `test-searxng-search.ts` 使用本地 HTTP fixture 覆盖请求、解析、错误、预算和生产
-  接线，并已进入独立 script 与 107 项默认门禁。真实实例仍单列 OI-X1。
+  接线，并已进入独立 script 与 108 项默认门禁。真实实例仍单列 OI-X1。
 
 ### OI-05 · CLI 构建会吞掉 bundled skills 复制失败
 
@@ -114,9 +114,9 @@
 - 发行契约静态守住复制调用不能再挂空 catch。
 - dist contract、真实 pack/install 与完整门禁全绿。
 
-### OI-06 · Desktop runtime 与会话恢复已接入，产品工作流尚未完成
+### OI-06 · Desktop 产品工作流接线
 
-**状态：IN PROGRESS（`74997ab` · `c76123e` · `c08254a` · `ce918ef`）**
+**状态：CLOSED（`74997ab` · `c76123e` · `c08254a` · `ce918ef` · `9f0f687`）**
 
 证据：
 
@@ -129,8 +129,8 @@
 - 设置页已可修改 model/effort：model preset 只作建议且允许自定义名称，effort
   只显示当前 dialect/model 可选档；写盘失败恢复 model/effort/classifier/cache，
   renderer 保留原输入与错误提示。
-- renderer 只处理 17 类 SessionEvent 中的 6 类；`control`、`tool_progress` 等
-  关键运行态信息仍未呈现。
+- `projectSessionRuntimeEventView` 把 `control`、`tool_progress` 投成 renderer
+  可直接显示的窄契约；renderer 事件覆盖从 6/17 提升到 8/17，不机械呈现全部事件。
 
 关闭条件：
 
@@ -141,7 +141,7 @@
 - control/tool progress 等 OI-06 关键运行态事件有稳定 packages 投影与 Desktop 呈现。
 - 定向测试、IPC 契约、真实 Electron 启动与完整门禁全绿。
 
-当前进度：
+关闭证据：
 
 - `createSessionRuntimeTransport` 统一协议 hello、当前 session snapshot、边界命令解析
   与 `executeRuntimeCommand`，没有另造 executor。
@@ -153,9 +153,12 @@
   runner snapshot、意图翻译与 durable admission，拒绝未知 IPC action/text。
 - `getSessionModelEffortSettings` 与 `updateSessionModelEffort` 统一 slash/Desktop
   suggestions、choosable、输入校验、即时持久化及失败回滚；secret 不进 snapshot。
+- critical event projector 对无效事件 fail-closed，不把原始 steer prompt 字段传给
+  renderer；tool progress 原位更新同一行，steer 只在 safe boundary 真正应用后呈现。
 - 真实 Electron smoke 已返回 `runtime:"ready"`，自动点击 session row 恢复目标，
-  并经真实 IPC 修改/回读 `desktop-smoke-model/high`；107 项默认门禁 EXIT=0。
-- 下一切片补关键运行态事件；OI-06 在事件投影完成前不关闭。
+  并经真实 IPC 修改/回读 `desktop-smoke-model/high`；108 项默认门禁 EXIT=0。
+- `test:desktop-runtime-events`、typecheck、IPC/event 契约、dist install、Desktop
+  bundle/launch 与完整 `npm test` 全绿。真人点击与视觉验收仍单列 OI-H2。
 
 ## 2. 需要外部资源
 

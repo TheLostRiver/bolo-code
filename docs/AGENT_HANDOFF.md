@@ -120,16 +120,14 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | Effort 方言 | ~92–95% | **E0–E9** |
 | Provider UX | ~95–98% | **CX0–CX8**（ultrathink 默认 off） |
 | Durable Runtime | DR0–DR4 ✅ | 输入先落盘 · recovery · 单 runner · durable control/task · FIFO/promotion · v1 protocol/resolution · crash/restart closeout |
-| Electron GUI | ~80–88% | runtime IPC/client、会话切换/恢复、composer controls 与 model/effort 已真接并经 Electron 自动化；关键运行态事件仍在 OI-06 |
+| Electron GUI | ~80–88% | runtime IPC/client、会话切换/恢复、composer controls、model/effort 与 control/tool progress 已真接并经 Electron 自动化；真人点击/视觉未验 |
 | 产品相对 HC 全家桶 | ~74–88% | 日用高；UI 密度另计 |
 
-**已闭环：** Diff · Hooks · Compact（含 AR2 全段）· Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR-T1–T3+ Agent 能力面** · **AR4 evidence gate** · **AR5 release hardening** · **OI-04 SearXNG 直连**。
+**已闭环：** Diff · Hooks · Compact（含 AR2 全段）· Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR-T1–T3+ Agent 能力面** · **AR3/OI-06 Desktop 产品接线** · **AR4 evidence gate** · **AR5 release hardening** · **OI-04 SearXNG 直连**。
 
-**当前主线：** 按 [OPEN_ISSUES.md](./OPEN_ISSUES.md) 清理全仓核验发现：
-现在推进 **OI-06 Desktop 产品接线**。runtime 生产协议桥已于 `74997ab`
-收口，会话切换/恢复已于 `c76123e` 收口，composer controls 已于 `c08254a`
-收口，model/effort 已于 `ce918ef` 收口；下一切片补关键运行态事件。OI-04、发行门禁、
-npm 工具链与 NSIS 已收口。
+**当前主线：** [OPEN_ISSUES.md](./OPEN_ISSUES.md) 的 agent 可解决项 OI-01–OI-06
+已全部关闭。Desktop 关键 `control/tool_progress` 投影以 `9f0f687` 收口；
+当前没有可由 agent 独立闭环的开放代码项。
 
 **其它开放轨（非阻塞）：**
 
@@ -169,11 +167,11 @@ DR2A 单 session runner ✅
 → AR5C-early CLI 分发 ✅
 → AR-T3+ 能力面续刀 ✅
 → AR2A1–C Compact depth ✅
-→ AR3 Codex App 风格 Desktop（OI-06 生产接线开放）
+→ AR3 Codex App 风格 Desktop ✅
 → AR4 证据驱动深水项 ✅
 → AR5 release hardening ✅
 → OI-04 SearXNG 契约收口 ✅
-→ OI-06 Desktop 生产接线（当前）
+→ OI-06 Desktop 生产接线 ✅
 ```
 
 每刀都必须先改 `packages/*` 契约和失败测试，再接 CLI/Desktop；定向测试、typecheck、完整 `npm test`、scoped `diff --check` 全绿后，代码与文档分批 commit/push。遇到需要数据库/daemon/RPC、用户脏文件冲突、数据丢失或副作用自动重放风险时停止扩张。
