@@ -1,22 +1,18 @@
 /**
- * 文档里的 mcp.json 片段必须**还能用**
+ * 文档里的 SearXNG config.json 片段必须**还能用**
  *
- * [LOCAL_SEARCH_AND_FETCH.md](../docs/LOCAL_SEARCH_AND_FETCH.md) 的卖点是
- * 「可照抄」。可照抄的配置一旦漂了，比没有文档更糟——用户会照着抄，
- * 然后得到一个静默不生效的 server（拼错的键就是被忽略的键），
- * 而他手里握着的是我们自己写的文档。
+ * [LOCAL_SEARCH_AND_FETCH.md](../docs/LOCAL_SEARCH_AND_FETCH.md) 的配置应能照抄。
+ * OI-04 删除了并不存在的 SearXNG MCP 桥，改为内置 WebSearch 直连 JSON API；
+ * 因此这里把文档当配置契约的下游，校验字段、解析结果和源码真源引用。
  *
- * 所以这里把文档当**契约的下游**来测：从 md 里抽出 jsonc 片段，
- * 逐个字段核对 `McpServerConfig` 真的有这个键。
- *
- * 只抽 `mcpServers` 片段，不做通用 md 校验——一个什么都想验的测试
- * 会因为文案改动天天变红，然后被人加进忽略名单。
+ * 只抽 `search.searxng` 片段，不做通用 md 校验——一个什么都想验的测试
+ * 会因为无关文案改动频繁变红。
  *
  * 运行：npx tsx scripts/test-docs-config-snippets.ts
  */
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
-import { resolveMcpTransport } from '../packages/mcp/src/types.ts'
+import { resolveSearxngSearchConfig } from '../packages/config/src/index.ts'
 
 function assert(cond: unknown, msg: string): asserts cond {
   if (!cond) {
@@ -26,26 +22,18 @@ function assert(cond: unknown, msg: string): asserts cond {
 }
 
 /**
- * `McpServerConfig` 的键。
+ * `SearxngSearchConfigJson` 的键。
  *
- * 手写一份而不是从类型反射：TypeScript 类型在运行时不存在，
- * 而这份清单本身就是断言的一半——它与 `packages/mcp/src/types.ts` 不一致时
- * 应该有人来改这里，那正是我们想要的提醒。
+ * TypeScript 类型在运行时不存在，所以显式维护这份字段白名单；配置契约新增
+ * 字段时，测试和文档必须一起作出决定。
  */
-const MCP_SERVER_KEYS = new Set([
-  'name',
-  'type',
-  'command',
-  'args',
-  'env',
-  'url',
-  'headers',
-  'reconnectAttempts',
-  'reconnectDelayMs',
-  'tools',
-  'allowTools',
-  'excludeTools',
-  'scope',
+const SEARXNG_CONFIG_KEYS = new Set([
+  'enabled',
+  'baseUrl',
+  'timeoutMs',
+  'maxResults',
+  'language',
+  'safeSearch',
 ])
 
 /** 去掉 // 行注释（文档里用 jsonc 便于讲解），保留字符串里的 // */
@@ -89,20 +77,20 @@ async function main() {
   const md = await fs.readFile(docPath, 'utf8')
 
   const blocks = [...md.matchAll(/```jsonc?\n([\s\S]*?)```/g)].map((m) => m[1]!)
-  const mcpBlocks = blocks.filter((b) => b.includes('mcpServers'))
+  const searxngBlocks = blocks.filter((block) => /"searxng"\s*:/.test(block))
 
-  // 裁判自检：文档里必须**真的**有可抄的片段，否则下面的循环零次通过
+  // 裁判自检：文档里必须**真的**有可抄的片段，否则下面的循环零次通过。
   assert(
-    mcpBlocks.length >= 2,
-    `the doc really does carry mcp.json snippets to check (found ${mcpBlocks.length}); ` +
+    searxngBlocks.length > 0,
+    `the doc really does carry a search.searxng config.json snippet to check (found ${searxngBlocks.length}); ` +
       `a passing run with zero snippets would prove nothing`,
   )
 
-  for (const raw of mcpBlocks) {
+  for (const raw of searxngBlocks) {
     const text = stripTrailingCommas(stripLineComments(raw))
-    let parsed: { mcpServers?: Record<string, Record<string, unknown>> }
+    let parsed: unknown
     try {
-      parsed = JSON.parse(text) as typeof parsed
+      parsed = JSON.parse(text) as unknown
     } catch (e) {
       assert(
         false,
@@ -112,40 +100,28 @@ async function main() {
       return
     }
 
-    const servers = parsed.mcpServers
-    assert(servers && Object.keys(servers).length > 0, 'the snippet defines a server')
+    assert(parsed && typeof parsed === 'object' && !Array.isArray(parsed), 'the snippet is an object')
+    const search = (parsed as Record<string, unknown>).search
+    assert(search && typeof search === 'object' && !Array.isArray(search), 'the snippet defines search')
+    const searxng = (search as Record<string, unknown>).searxng
+    assert(
+      searxng && typeof searxng === 'object' && !Array.isArray(searxng),
+      'the snippet defines search.searxng',
+    )
 
-    for (const [name, cfg] of Object.entries(servers!)) {
-      for (const key of Object.keys(cfg)) {
-        assert(
-          MCP_SERVER_KEYS.has(key),
-          `"${key}" in the documented "${name}" server is not a McpServerConfig field — ` +
-            `a key that does not exist is silently ignored, so anyone copying this doc ` +
-            `gets a server that quietly does not do what the doc says`,
-        )
-      }
-
-      // 传输方式必须解得出来，且**该传输真正需要的字段要在**。
-      //
-      // 只断言 `transport !== null` 是不够的：显式写了 `type` 时
-      // `resolveMcpTransport` 直接返回它，哪怕 command / url 一个都没有。
-      // 而真正会出事的正是那种——连得上的判断在 host 里，标准是
-      // 「stdio 要有 command，http/sse 要有 url」。
-      const transport = resolveMcpTransport({ name, ...cfg } as never)
+    for (const key of Object.keys(searxng as Record<string, unknown>)) {
       assert(
-        transport !== null,
-        `the documented "${name}" server resolves to a transport; ` +
-          `without type, command or url the host skips it entirely`,
-      )
-      const needs = transport === 'stdio' ? 'command' : 'url'
-      const value = (cfg as Record<string, unknown>)[needs]
-      assert(
-        typeof value === 'string' && value.trim().length > 0,
-        `the documented "${name}" server is ${transport}, so it needs a non-empty ` +
-          `"${needs}" — otherwise the host skips it with ` +
-          `"need command (stdio) or url (http/sse)" and the reader sees no tools`,
+        SEARXNG_CONFIG_KEYS.has(key),
+        `"${key}" in the documented search.searxng config is not a ` +
+          `SearxngSearchConfigJson field; copied unknown keys are silently ignored`,
       )
     }
+
+    const resolution = resolveSearxngSearchConfig(searxng)
+    assert(
+      resolution.status === 'enabled',
+      `the documented search.searxng config resolves to an enabled tool: ${JSON.stringify(resolution)}`,
+    )
   }
 
   // 文档里的相对链接必须指到真实文件——死链会把人送进死胡同
@@ -170,9 +146,15 @@ async function main() {
       .catch(() => false)
     assert(exists, `the doc cites ${rel}, which exists`)
   }
+  for (const required of [
+    'packages/config/src/searxng.ts',
+    'packages/tools/src/searxngSearch.ts',
+  ]) {
+    assert(srcRefs.includes(required), `the doc cites its ${required} source of truth`)
+  }
 
   console.log(
-    `PASS: documented config snippets (${mcpBlocks.length} mcp.json blocks, ` +
+    `PASS: documented config snippets (${searxngBlocks.length} search.searxng block, ` +
       `${new Set(links).size} doc links, ${new Set(srcRefs).size} source refs)`,
   )
 }
