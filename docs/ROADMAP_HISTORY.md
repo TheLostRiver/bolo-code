@@ -412,3 +412,26 @@ C4: compact 成功且非 override system 时可选刷新短 skill catalog 段（
 - `test-cli-first-run` 覆盖真实 CLI 子进程、fresh cwd 零项目副作用、existing `.bolo`
   读取、旧 session 兼容、无效用户目录失败、显式 init 幂等、subagent 与 tool spill
   路径。代码批 `22c0d0c` 已通过 112 项完整门禁。
+
+---
+
+## H9. OI-09 · CLI TUI 交互重构
+
+- 一次性欢迎区压缩为 product/workspace/model/session 三行内的信息面板；删除内部
+  `ink-equiv` 名称、巨型 ASCII logo 和伪 `bolo>` 输入提示。
+- `packages/cli/src/tui/inputBox.ts` 提供 grapheme 光标、历史、多行、编辑键、
+  四行 viewport 与短生命周期 raw-mode driver；turn 开始前释放 stdin，权限/picker
+  继续独占原有边界。
+- `terminalText.ts` 统一 ANSI/CJK/emoji/国旗/keycap cell 宽度；Tab 归一为空格并过滤
+  其它 C0/C1，窄终端不会破框。
+- `runOnePrompt()` 在调用 provider 前立即回显用户消息并启动 activity；`phase`、
+  tool、web search、retry、warning 驱动 `Thinking/Running/elapsed`，assistant 使用
+  角色头和流式 inline Markdown。
+- 动态路径只在 stdin/stdout 双 TTY + raw mode 启用；非 TTY、pipe、`-p`/`--print`
+  与 JSON 保持追加式输出。`NO_COLOR` 不再从旧 tool formatter 泄露 SGR。
+- `test:cli-tui` 同时注册独立入口和默认门禁，覆盖首 token 人工 gate、raw cleanup、
+  宽窄输入、activity 单行、warning 恢复、NO_COLOR 与 plain fallback。代码批
+  `843f593` 通过 CLI 兼容轨、typecheck 与 113 脚本完整 `npm test`；`1413da3`
+  进一步让 `tool_progress` 只原位更新 activity，避免每个 tick 污染永久时间线。
+- 真实 Windows Terminal 观感、光标/resize/组合键和长滚动仍为 OI-H3 人工项；未用
+  静态快照或被禁止的终端 UI 自动化冒充真人验收。

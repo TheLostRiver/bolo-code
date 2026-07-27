@@ -173,7 +173,27 @@ npx bolo runtime discard turn <turnId> --resume <id> --json
 npx bolo runtime retry-safe control <controlId> --continue --json
 ```
 
+真实 TTY 中，REPL 会显示稳定输入框而不是裸 `bolo>`：
+
+```text
+╭─ Message ─────────────────────────────────────────╮
+│ ❯                                                 │
+╰───────────────────────────────────────────────────╯
+  default · provider/model · effort high
+  Enter send · Ctrl+J newline · ↑↓ history · Ctrl+C exit
+```
+
+`Enter` 发送，`Ctrl+J` 换行，`↑/↓` 浏览本进程历史；支持 `←/→`、`Home/End`、
+`Backspace/Delete` 和常见 Emacs 编辑键。提交后用户消息立即进入时间线；provider
+首 token 到达前显示 `Thinking`、耗时和中断提示，工具运行时显示
+`Running <tool>`，最终正文带 `Bolo` 角色层级。完整键位见 [TUI.md](./TUI.md) §3。
+
 REPL 中，模型或工具正在运行时按 `Ctrl-C` 会针对 coordinator 当前 active turn 请求 interrupt 并返回提示符；空闲提示符下按 `Ctrl-C` 才退出。若取消发生在权限问答或 diff 审批面板，core 默认按拒绝处理。
+
+动态 TUI 只在 stdin/stdout 双 TTY 且 stdin 支持 raw mode 时启用。pipe、`-p`、
+`--print`、JSON 或不支持 raw mode 的宿主会自动回落追加式输出，不发送 spinner/
+清行/光标移动。`NO_COLOR` 关闭颜色但不关闭输入；需要彻底回落时设
+`BOLO_TUI_INPUT=0` 或 `BOLO_TUI_LAYOUT=0`。
 
 `bolo runtime list|inspect` 必须显式给 `--resume <id|path>` 或 `--continue`，不会进入 picker、创建新会话或调用 provider。每个 item 的 `availableActions` 由当前 snapshot 纯推导，并携带执行所需 expected state；空数组表示当前不应尝试动作。
 
@@ -252,7 +272,8 @@ smoke query，列出有效结果、可工作与不可用引擎。部分引擎故
 实质改变结果的歧义时会调用它并显示选择面板。`-p`、pipe 等非交互会话会立即返回
 `unavailable`，agent 应说明假设并继续，不能等待不存在的回答。自动化已经覆盖协议和
 picker；真人终端的 raw mode/按键仍需人工验收，见
-[OPEN_ISSUES.md](./OPEN_ISSUES.md) OI-H1。
+[OPEN_ISSUES.md](./OPEN_ISSUES.md) OI-H1。主输入框的真实 Windows Terminal
+光标/重绘/组合键另见 OI-H3。
 
 ### 3.2 Desktop（Electron）
 
@@ -325,6 +346,10 @@ Steer 的提示只在请求已到达安全边界并真正注入后显示为 appl
 | `BOLO_PROVIDER_PANEL=0` | `/provider` 仅文本 |
 | `BOLO_DIFF_PANEL=0` | `/diff` 仅文本 |
 | `BOLO_ARROW_PICKER=0` | 禁用箭头 picker |
+| `BOLO_TUI_INPUT=0` | 关闭真实输入框、activity 与结构化时间线，回落 readline |
+| `BOLO_TUI_LAYOUT=0` | 关闭 TUI layout/dynamic path |
+| `NO_COLOR` | 保留输入能力，只关闭颜色 |
+| `BOLO_THEME=plain` / `BOLO_PLAIN=1` | 保留输入能力，关闭颜色并简化欢迎区 |
 
 ---
 

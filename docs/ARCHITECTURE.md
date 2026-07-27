@@ -64,7 +64,7 @@ skills   mcp-host  plugins   tools    providers
 | `packages/plugins` | 插件清单、激活、贡献点合并 | 绕过 hook/permission |
 | `packages/providers` | 多模型 API 适配（OpenAI / Anthropic / 兼容端点） | 会话策略 |
 | `packages/shared` | 事件、消息、配置 schema、错误类型 | 副作用 |
-| `packages/cli` | 最小 CLI 入口（`bolo --resume` 等），复用 core | 复制 runtime / TUI |
+| `packages/cli` | CLI 入口 + 零依赖 TTY view/controller（输入、activity、picker、pager）；复用 core 事件与 runtime view | 复制 core runtime / 在 CLI 重建第二状态机 |
 | `apps/desktop` | Electron GUI | 重业务逻辑（只编排 core） |
 
 ## 4. 核心数据流

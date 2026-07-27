@@ -28,6 +28,7 @@
 | Headless 核心 | ~82–90% | queryLoop · 权限 · tools · STE；partial stream fail-closed |
 | **Agent 能力面（工具集）** | **~82–88%** | 15 个常驻/可选工具 + **Web search**（hosted、MCP、SearXNG 均已活体验证） |
 | 会话 / CLI | ~92–97% | **零步骤首次启动** · 用户级 workspace JSONL · 旧项目会话兼容 · durable runtime · query/action CLI · TTY pager · pipe/JSON automation |
+| **CLI TUI** | **~85–90%** | 紧凑欢迎区 · 真实输入框/历史/多行编辑 · 用户即时回显 · Thinking/Running/耗时 · 结构化时间线 · CJK/emoji 宽度 · 非 TTY 回落；真实 Windows Terminal 观感/按键未验 |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
 | Subagent | ~89–95% | `config.agents` + `agents/*.md` · durable task/result · overflow FIFO/cancel · safe delivery · worktree 保全 |
 | 文件 Diff 日用 | ~95%+ | D0–D7 · U0–U4 |
@@ -40,15 +41,17 @@
 | Electron GUI | ~80–88% | 壳 + 流式 + 权限 + runtime IPC/client + 会话切换/恢复 + composer controls + model/effort + control/tool progress 投影 + 多 provider；真人点击/视觉未验 |
 | 相对 HC 全家桶 UI | 另计 | 不设 100% |
 
-**已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Runtime DR0–DR4 · Autonomous Road AR1 CLI/TUI runtime UX · **AR-T1–T3+ Agent 能力面** · AR2 Compact depth · AR3 Desktop 产品接线 · AR4 evidence gate · AR5 release hardening · **OI-04 SearXNG 直连、OI-X1 真实实例 smoke、OI-07 上游诊断 / `search doctor` / 可选 Docker setup、OI-08B CLI 零步骤首次启动**。
+**已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Runtime DR0–DR4 · Autonomous Road AR1 CLI/TUI runtime UX · **AR-T1–T3+ Agent 能力面** · AR2 Compact depth · AR3 Desktop 产品接线 · AR4 evidence gate · AR5 release hardening · **OI-04 SearXNG 直连、OI-X1 真实实例 smoke、OI-07 上游诊断 / `search doctor` / 可选 Docker setup、OI-08B CLI 零步骤首次启动、OI-09 CLI TUI 交互重构**。
 
 **当前主线：** 没有默认的 agent 可闭环开放项。普通 `bolo` 已是唯一首次启动主路径：
 自动准备用户级 `~/.bolo`，新会话写入用户目录下的 workspace 分桶，不会仅因进入仓库
 就在 cwd 创建 `.bolo/`。项目模板只由显式 `bolo init [--project]` 创建；旧项目会话
 继续可 list/resume。SearXNG 的只读 doctor 与显式 Docker 管理也已落地，Docker 仍不是
-默认依赖。
+默认依赖。OI-09 已把一次性伪输入提示替换为真实 TTY 输入框和连续 turn 反馈。
 
-**人工项：** AskUserQuestion 真 TTY、Desktop 点击与视觉走查需要真人验证，不以自动测试冒充完成。SearXNG 已在真实 Docker 实例和上游引擎上完成 live smoke。
+**人工项：** CLI TUI 与 AskUserQuestion 的真实 Windows Terminal 按键/观感、Desktop
+点击与视觉走查需要真人验证，不以自动测试冒充完成。SearXNG 已在真实 Docker 实例和
+上游引擎上完成 live smoke。
 
 进度真源：[docs/ROADMAP.md](docs/ROADMAP.md)
 
@@ -154,6 +157,12 @@ bolo runtime inspect turn <turnId> --resume <id>
 bolo runtime discard turn <turnId> --resume <id> --json
 bolo runtime retry-safe control <controlId> --continue --json
 ```
+
+交互 REPL 在真实 TTY 中使用稳定输入框：`Enter` 发送，`Ctrl+J` 换行，`↑/↓`
+浏览本进程历史；提交后立即回显用户消息并显示 `Thinking`、耗时与 `Ctrl+C`
+中断提示，工具运行时切换为 `Running <tool>`。pipe、`-p`/`--print` 和 JSON
+路径保持追加式输出，不发送动态光标控制。完整键位和回落开关见
+[docs/TUI.md](docs/TUI.md)。
 
 `runtime list|inspect` 的文本输出在 **stdin/stdout 都是 TTY** 且内容超过一页时自动分页：`n/j/↓/→` 下一页，`p/k/↑/←` 上一页，`q/Esc` 退出，`Ctrl-C` 返回 130。0/1 页不读键盘；pipe 与 `--json` 永不进入 pager、不会输出 ANSI/banner，也不会因为大列表挂起。
 
@@ -351,6 +360,6 @@ query/action/renderer/pager/automation、PTL 恢复与真实 Electron 启动专�
 1. **职责分明**的模块架构优先于炫技实现  
 2. 借鉴 HC / Codex **语义**，不嵌入其本地路径、不抄遥测  
 3. 密钥走环境变量 / `apiKeyEnv`；**不**写进 transcript  
-4. 日用 95%+ ≠ Ink/ratatui 全家桶 100% — 见 ROADMAP 双轨说明  
+4. 可用 TUI 不等于必须引入 Ink/ratatui；先守住输入、状态与非 TTY 契约 — 见 ROADMAP 双轨说明
 
 License：MIT

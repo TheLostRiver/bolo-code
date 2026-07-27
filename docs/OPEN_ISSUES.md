@@ -25,7 +25,7 @@
 
 - ROADMAP §0/§13.11、handoff、README 与 autonomous prompt 使用同一队列，
   并在 OI-04 关闭后统一把 OI-06 标为当前，同时保留外部/人工阻塞标记。
-- AR4 ADR 已按正文改为六个候选；RELEASE 与默认门禁现统一为 112 个脚本。
+- AR4 ADR 已按正文改为六个候选；RELEASE 与默认门禁现统一为 113 个脚本。
 - USAGE 已补 `--allowed-tools`、`--disallowed-tools`、`AskUserQuestion`
   与 Web search 的最短入口。
 - `test-dist-build.ts` 守住默认门禁条目和 package manager；
@@ -203,7 +203,7 @@
   成功/部分成功 exit 0，网络/JSON/空结果/全故障 exit 1，用法或未配置 exit 2。
 - `test:search-doctor` 的本地 HTTP fixture 覆盖 config/search 两阶段 HTTP、timeout、
   非 JSON、坏 shape、正常非空、合法空结果、全故障、部分成功与真实 CLI 入口；
-  已进入当前 112 项默认门禁，公网可用性不进入 `npm test`。
+  已进入当前 113 项默认门禁，公网可用性不进入 `npm test`。
 - 源码 CLI 与完整门禁产出的 `dist/bolo.mjs` 均已对真实
   `2026.7.26+b060c780d` 实例运行：8 条有效结果、working engines 与部分故障，
   `partial_success`、exit 0。
@@ -254,7 +254,7 @@
   不覆盖的 CLI 子命令；`init` 在通用 prompt parser 前分发，`/init project` 保留。
 - `test-cli-first-run` 覆盖真实 CLI 子进程、fresh cwd 零项目副作用、existing `.bolo`
   读取、legacy list/resume、无效用户目录、init 幂等，以及 subagent/tool spill 路径。
-- typecheck、专项、dist pack/install、Desktop bundle/真实 launch 与当前 112 项完整
+- typecheck、专项、dist pack/install、Desktop bundle/真实 launch 与当前 113 项完整
   `npm test` 在 Windows EXIT=0。
 
 ## 2. 外部资源项（已关闭）
@@ -293,6 +293,15 @@ Ctrl-C/Esc 以及 REPL 是否抢占 stdin。需要人在真实终端按键确认
 需要在真实窗口检查 AskUserQuestion、权限对话框、明暗主题、maximize、键盘导航、
 长会话滚动与窄窗口文本溢出。
 
+### OI-H3 · CLI TUI 真实 Windows Terminal 走查
+
+**状态：BLOCKED: HUMAN**
+
+OI-09 已自动覆盖输入 reducer、raw-mode listener/恢复、CJK/emoji cell 宽度、宽窄
+renderer、首 token 前 Thinking、Running/warning 恢复、NO_COLOR、非 TTY 回落与
+完整 `npm test`。自动化不能替代真人确认 Windows Terminal 字体下的实际光标位置、
+重绘残影、窗口 resize、Ctrl+J/历史/删除组合键、权限面板切换和长回答滚动。
+
 ## 4. 已核实但不列为开放问题
 
 | 候选 | 结论 |
@@ -310,7 +319,7 @@ Ctrl-C/Esc 以及 REPL 是否抢占 stdin。需要人在真实终端按键确认
 
 - ROADMAP、RELEASE、AGENT_HANDOFF、USAGE、ARCHITECTURE、AR4 ADR、
   Desktop 与本地搜索专题文档；
-- 根与 Desktop package metadata、112 项默认测试串及 147 个 `test-*.ts` 的注册差集；
+- 根与 Desktop package metadata、113 项默认测试串及 148 个 `test-*.ts` 的注册差集；
 - 历史 SearXNG preset、WebFetch、工具注册、权限分类、runtime client、Desktop IPC/renderer；
 - 代码中的 TODO/FIXME、空 catch 与未实现标记；
 - 当前完整门禁、electron-builder registry 版本与真实 NSIS 构建。
