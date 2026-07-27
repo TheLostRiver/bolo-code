@@ -130,7 +130,14 @@ export function createTurnActivityIndicator(options: {
         if (name) activeToolName = name
         const message =
           typeof event.message === 'string' ? event.message.trim() : ''
-        start(message || (name ? `Running ${name}` : 'Running tool'))
+        const toolName = name || activeToolName
+        start(
+          message
+            ? `${toolName ? `${toolName} · ` : ''}${message}`
+            : toolName
+              ? `Running ${toolName}`
+              : 'Running tool',
+        )
       } else if (event.type === 'tool_end') {
         activeToolName = undefined
         start('Thinking')

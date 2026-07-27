@@ -278,6 +278,14 @@ async function main(): Promise<void> {
     message: 'loading',
   })
   assert(
+    !noColorOut.join('').includes('… Read loading\n'),
+    'tool progress updates the activity line instead of appending ticks',
+  )
+  assert(
+    noColorOut.join('').includes('Read · loading'),
+    'tool activity keeps tool name and progress detail',
+  )
+  assert(
     !/\u001b\[[0-9;]*m/.test(noColorOut.join('')),
     'NO_COLOR timeline does not emit SGR styles',
   )

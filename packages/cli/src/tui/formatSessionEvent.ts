@@ -325,6 +325,10 @@ export function createSessionEventPrinter(opts: {
           openTextLine = !e.text.endsWith('\n')
           return
         }
+        if (timeline && e.type === 'tool_progress') {
+          ensureLineBreak()
+          return
+        }
         const toolLine = formatToolEventLine(e)
         if (toolLine) {
           ensureLineBreak()
