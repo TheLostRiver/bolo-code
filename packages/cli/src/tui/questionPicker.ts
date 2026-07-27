@@ -20,6 +20,7 @@
  */
 
 import type { AskQuestion, AskUserQuestionSelection } from '../../../shared/src/index.ts'
+import { createLocalPanelPainter } from './localPanel.ts'
 
 export type QuestionPickerState = {
   questions: readonly AskQuestion[]
@@ -205,50 +206,54 @@ export async function runQuestionPicker(opts: {
 
   const readKey = opts.readKey ?? defaultReadKey
   const selections: AskUserQuestionSelection[] = []
+  const painter = createLocalPanelPainter(writeOut)
 
-  for (let qi = 0; qi < opts.questions.length; qi++) {
-    let s = createQuestionPickerState(opts.questions, qi)
-    const paint = () => {
-      writeOut('\x1b[2J\x1b[H')
-      writeOut(formatQuestionPickerScreen(s) + '\n')
-    }
-    paint()
+  try {
+    for (let qi = 0; qi < opts.questions.length; qi++) {
+      let s = createQuestionPickerState(opts.questions, qi)
+      const paint = () => {
+        painter.paint(formatQuestionPickerScreen(s))
+      }
+      paint()
 
-    for (;;) {
-      if (opts.signal?.aborted) return { kind: 'cancelled' }
-      const key = await readKey()
-      const r = applyQuestionPickerKey(s, key)
-      s = r.state
-      if (!r.done) {
-        paint()
-        continue
-      }
-      if (r.done.kind === 'cancelled') {
-        // 半份答案比没有更糟：模型会把没答的题当成已经问过
-        return { kind: 'cancelled' }
-      }
-      if (r.done.kind === 'custom') {
-        if (!opts.readLine) {
-          s = { ...s, notice: 'typing a custom answer is not available here' }
+      for (;;) {
+        if (opts.signal?.aborted) return { kind: 'cancelled' }
+        const key = await readKey()
+        const r = applyQuestionPickerKey(s, key)
+        s = r.state
+        if (!r.done) {
           paint()
           continue
         }
-        const text = (await opts.readLine('your answer: ')).trim()
-        if (!text) {
-          // 敲了个空的不算答案，回到列表继续选
-          s = { ...s, notice: 'nothing typed — pick an option or type an answer' }
-          paint()
-          continue
+        if (r.done.kind === 'cancelled') {
+          // 半份答案比没有更糟：模型会把没答的题当成已经问过
+          return { kind: 'cancelled' }
         }
-        selections.push({ selected: [text], custom: true })
+        if (r.done.kind === 'custom') {
+          if (!opts.readLine) {
+            s = { ...s, notice: 'typing a custom answer is not available here' }
+            paint()
+            continue
+          }
+          painter.clear()
+          const text = (await opts.readLine('your answer: ')).trim()
+          if (!text) {
+            // 敲了个空的不算答案，回到列表继续选
+            s = { ...s, notice: 'nothing typed — pick an option or type an answer' }
+            paint()
+            continue
+          }
+          selections.push({ selected: [text], custom: true })
+          break
+        }
+        selections.push(r.done.selection)
         break
       }
-      selections.push(r.done.selection)
-      break
     }
+    return { kind: 'answered', selections }
+  } finally {
+    painter.clear()
   }
-
-  return { kind: 'answered', selections }
 }
 
 async function defaultReadKey(): Promise<string> {

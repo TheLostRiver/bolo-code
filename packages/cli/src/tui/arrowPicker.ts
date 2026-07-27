@@ -3,6 +3,8 @@
  * 非 TTY / 无 raw → 调用方回落编号输入。
  */
 
+import { createLocalPanelPainter } from './localPanel.ts'
+
 export type ArrowPickItem = {
   id: string
   label: string
@@ -94,12 +96,12 @@ export async function runArrowPicker(opts: {
     opts.initialIndex != null && Number.isFinite(opts.initialIndex)
       ? Math.max(0, Math.min(max, Math.floor(opts.initialIndex)))
       : 0
+  const painter = createLocalPanelPainter(writeOut)
   const paint = () => {
-    writeOut('\x1b[2J\x1b[H') // clear
-    writeOut(
+    painter.paint(
       formatArrowPickerScreen(items, index, {
         title: opts.title,
-      }) + '\n',
+      }),
     )
   }
 
@@ -130,17 +132,21 @@ export async function runArrowPicker(opts: {
     })
 
   paint()
-  for (;;) {
-    const key = await readKey()
-    if (key === 'none') continue
-    const next = applyArrowPickerKey(index, items.length, key)
-    index = next.index
-    if (next.done === 'select') {
-      return { ok: true, id: items[index]!.id, index }
+  try {
+    for (;;) {
+      const key = await readKey()
+      if (key === 'none') continue
+      const next = applyArrowPickerKey(index, items.length, key)
+      index = next.index
+      if (next.done === 'select') {
+        return { ok: true, id: items[index]!.id, index }
+      }
+      if (next.done === 'cancel') {
+        return { ok: false, reason: 'cancel', message: 'cancelled' }
+      }
+      paint()
     }
-    if (next.done === 'cancel') {
-      return { ok: false, reason: 'cancel', message: 'cancelled' }
-    }
-    paint()
+  } finally {
+    painter.clear()
   }
 }

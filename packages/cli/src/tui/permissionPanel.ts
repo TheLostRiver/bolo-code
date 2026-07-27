@@ -16,6 +16,7 @@ import type {
   AskPermissionDecision,
   AskPermissionRequest,
 } from './askPermissionTty.ts'
+import { createLocalPanelPainter } from './localPanel.ts'
 
 export type PermissionPanelKeyResult = {
   index: number
@@ -353,30 +354,6 @@ function readKeyWithAbort(
       reject(error)
     })
   })
-}
-
-function createLocalPanelPainter(writeOut: (text: string) => void) {
-  let lineCount = 0
-  const clear = () => {
-    if (lineCount === 0) return
-    writeOut('\u001b[?25l')
-    writeOut(`\u001b[${lineCount}A\r`)
-    for (let index = 0; index < lineCount; index++) {
-      writeOut('\u001b[2K')
-      if (index < lineCount - 1) writeOut('\u001b[1B\r')
-    }
-    if (lineCount > 1) writeOut(`\u001b[${lineCount - 1}A\r`)
-    writeOut('\u001b[?25h')
-    lineCount = 0
-  }
-  return {
-    paint(screen: string) {
-      clear()
-      lineCount = screen.split('\n').length
-      writeOut(`\u001b[?25l${screen}\n\u001b[?25h`)
-    },
-    clear,
-  }
 }
 
 function formatDecisionSummary(

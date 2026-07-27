@@ -8,6 +8,7 @@ import {
   formatDiffViewScreen,
   type DiffViewModel,
 } from '../../../core/src/diffViewModel.ts'
+import { createLocalPanelPainter } from './localPanel.ts'
 
 export type DiffPaneBrowseResult =
   | { ok: true; reason: 'quit' }
@@ -147,45 +148,47 @@ async function runDiffPaneLoop(opts: {
   let toast: string | undefined
   const baseReadKey = opts.readKey ?? defaultReadKeyFactory(opts.signal)
   const readKey = () => readKeyWithAbort(baseReadKey, opts.signal)
+  const painter = createLocalPanelPainter(writeOut)
 
   const paint = () => {
-    writeOut('\x1b[2J\x1b[H')
-    writeOut(
+    painter.paint(
       formatDiffViewScreen(vm, {
         rows,
         cols,
         toast,
         mode: opts.mode,
         toolName: opts.toolName,
-      }) + '\n',
+      }),
     )
   }
 
   paint()
-  for (;;) {
-    const key = await readKey()
-    if (key === 'ctrl-c') opts.onInterrupt?.()
-    if (key === 'none') continue
-    const next = applyDiffViewKey(vm, key, { mode: opts.mode })
-    vm = next.vm
-    toast = next.toast
-    if (opts.mode === 'approve') {
-      if (
-        next.done === 'allow' ||
-        next.done === 'deny' ||
-        next.done === 'allow_always'
-      ) {
-        writeOut('\x1b[2J\x1b[H')
-        return {
-          kind: 'approve',
-          result: { ok: true, decision: next.done },
+  try {
+    for (;;) {
+      const key = await readKey()
+      if (key === 'ctrl-c') opts.onInterrupt?.()
+      if (key === 'none') continue
+      const next = applyDiffViewKey(vm, key, { mode: opts.mode })
+      vm = next.vm
+      toast = next.toast
+      if (opts.mode === 'approve') {
+        if (
+          next.done === 'allow' ||
+          next.done === 'deny' ||
+          next.done === 'allow_always'
+        ) {
+          return {
+            kind: 'approve',
+            result: { ok: true, decision: next.done },
+          }
         }
+      } else if (next.done === 'quit') {
+        return { kind: 'browse', result: { ok: true, reason: 'quit' } }
       }
-    } else if (next.done === 'quit') {
-      writeOut('\x1b[2J\x1b[H')
-      return { kind: 'browse', result: { ok: true, reason: 'quit' } }
+      paint()
     }
-    paint()
+  } finally {
+    painter.clear()
   }
 }
 
