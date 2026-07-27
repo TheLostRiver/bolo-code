@@ -60,6 +60,15 @@ export type CliArgs = {
   runtimeRequestId?: string
   /** runtime query/command 输出单行纯 JSON。 */
   json?: boolean
+  /**
+   * `--allowed-tools` 原文（可重复传；每项可含逗号）。
+   *
+   * 这里只收集，不解析——翻成权限规则是
+   * `packages/permissions/src/toolSpec.ts` 的事，argv 层不该懂权限语义。
+   */
+  allowedTools?: string[]
+  /** `--disallowed-tools` 原文；语义同上，落到硬 deny（优先于 bypass） */
+  disallowedTools?: string[]
   /** 用户输入（-p 值、位置参数拼接、或后续由 stdin 填充） */
   prompt?: string
   cwd?: string
@@ -210,6 +219,29 @@ export function parseArgs(argv: string[]): CliArgs {
     if (a.startsWith('-r=')) {
       const v = a.slice(3)
       out.resume = v === '' ? true : v
+      continue
+    }
+
+    // 工具级放行 / 拒绝：可重复传，值可含逗号（括号内的逗号不算分隔符）
+    // 语义与翻译在 packages/permissions/src/toolSpec.ts，这里只收集原文
+    if (a === '--allowed-tools' || a === '--allowedTools') {
+      const { value, next } = takeValue(argv, i)
+      ;(out.allowedTools ??= []).push(value)
+      i = next
+      continue
+    }
+    if (a.startsWith('--allowed-tools=') || a.startsWith('--allowedTools=')) {
+      ;(out.allowedTools ??= []).push(a.slice(a.indexOf('=') + 1))
+      continue
+    }
+    if (a === '--disallowed-tools' || a === '--disallowedTools') {
+      const { value, next } = takeValue(argv, i)
+      ;(out.disallowedTools ??= []).push(value)
+      i = next
+      continue
+    }
+    if (a.startsWith('--disallowed-tools=') || a.startsWith('--disallowedTools=')) {
+      ;(out.disallowedTools ??= []).push(a.slice(a.indexOf('=') + 1))
       continue
     }
 
@@ -398,6 +430,11 @@ REPL 斜杠命令（会话内）:
       --request-id <id>    runtime discard/retry-safe 幂等键（默认稳定派生）
   -p, --prompt [text]      单轮 prompt（隐含 --print）
       --print              非交互：有 prompt 则跑一轮，否则只摘要
+      --allowed-tools <s>  放行指定工具（可重复；逗号分隔）
+                           Read · mcp__ddg__search · mcp__ddg__* · Bash(git status)
+                           非交互下没人可问，工具默认被拒；这是**不整档开
+                           bypassPermissions** 就放行单个工具的办法
+      --disallowed-tools <s>  硬拒指定工具；优先于 bypassPermissions
       --cwd <dir>          解析 project sessions 的工作目录
   -h, --help               帮助
 

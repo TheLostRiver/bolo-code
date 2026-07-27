@@ -7,6 +7,7 @@ import {
 } from '../../core/src/index.ts'
 import { formatHelp, isResumePicker, parseArgs } from './parseArgs.ts'
 import { runNewSessionCli } from './newSessionCli.ts'
+import { hasToolSpecs, validateToolSpecs } from './applyToolSpecs.ts'
 import {
   formatSessionList,
   resolveContinueSessionId,
@@ -87,6 +88,21 @@ async function main(): Promise<void> {
   if (args.help) {
     process.stdout.write(formatHelp())
     process.exit(0)
+  }
+
+  // 工具规格先验后用：写错的 --disallowed-tools 若被放过，用户会以为拦住了
+  // 而实际没拦。在开会话、跑轮次之前就退出，错误才对得上他手里的命令行。
+  const toolSpecs = {
+    ...(args.allowedTools ? { allowedTools: args.allowedTools } : {}),
+    ...(args.disallowedTools ? { disallowedTools: args.disallowedTools } : {}),
+  }
+  if (hasToolSpecs(toolSpecs)) {
+    const check = validateToolSpecs(toolSpecs)
+    if (!check.ok) {
+      process.stderr.write(`error: ${check.reason}
+`)
+      process.exit(2)
+    }
   }
 
   // ── bolo search：给无 hosted 搜索的端点配 MCP 搜索后端 ──
@@ -218,6 +234,7 @@ async function main(): Promise<void> {
         cwd,
         prompt,
         print: args.print || Boolean(prompt),
+        toolSpecs,
       })
     } catch (err) {
       if (err instanceof ResumePickerError) {
@@ -243,6 +260,7 @@ async function main(): Promise<void> {
         cwd,
         prompt,
         print: args.print || Boolean(prompt),
+        toolSpecs,
       })
     } catch (err) {
       if (err instanceof ResumePickerError) {
@@ -265,7 +283,7 @@ async function main(): Promise<void> {
   // 无参 + TTY → banner + REPL
   if (!prompt && !args.print && isTty) {
     try {
-      await runNewSessionCli({ cwd })
+      await runNewSessionCli({ cwd, toolSpecs })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       process.stderr.write(`error: ${msg}\n`)
@@ -282,6 +300,7 @@ async function main(): Promise<void> {
         prompt,
         print: true,
         isTty: false,
+        toolSpecs,
       })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)

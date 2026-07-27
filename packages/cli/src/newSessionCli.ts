@@ -13,6 +13,7 @@ import {
 import { createCliProvider, isExplicitMockProvider } from './provider.ts'
 import { createSessionErrorExplainer } from './explainSessionError.ts'
 import { createTtyAskPermission } from './tui/askPermissionTty.ts'
+import { applyToolSpecsToSession, type ToolSpecCliArgs } from './applyToolSpecs.ts'
 import { createTtyAskUserQuestion } from './tui/askUserQuestionTty.ts'
 import { renderWelcomeBanner } from './tui/banner.ts'
 import { formatSessionStatusLine } from './tui/statusLine.ts'
@@ -37,6 +38,8 @@ export type NewSessionCliOptions = {
   onSessionEvent?: (e: SessionEvent) => void
   readPermissionAnswer?: (prompt: string) => Promise<string>
   nonTtyPermission?: 'allow' | 'deny'
+  /** --allowed-tools / --disallowed-tools 原文；会话建好后并入权限规则 */
+  toolSpecs?: ToolSpecCliArgs
   /** 单轮或 REPL 的外部取消信号 */
   signal?: AbortSignal
 }
@@ -90,6 +93,7 @@ export async function runNewSessionCli(
   })
 
   thinkingGate.session = session
+  if (opts.toolSpecs) applyToolSpecsToSession(session, opts.toolSpecs)
   session.askUserQuestion = askUserQuestion
   attachSessionEventPrinter(session, printer)
 

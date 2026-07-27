@@ -119,6 +119,42 @@ PreToolUse (可 block)
 /deny prefix:mcp__evil # 工具名前缀硬 deny
 ```
 
+### 命令行入口（headless 粒度）
+
+`--allowed-tools` / `--disallowed-tools` 把同一套规则从命令行种进会话。
+
+**它解决的问题：** 非交互下 `askPermission` 一律返回 `deny`（fail-closed，
+无人可问就不放行）。所以 `-p` 里想放行**一个** MCP 工具，此前只能整档开
+`bypassPermissions`——为一个工具把全部权限一起放开。
+
+```bash
+bolo -p "search it" --allowed-tools mcp__ddg__search
+bolo -p "build"     --allowed-tools "Bash(npm run build),Read"
+bolo -p "…"         --allowed-tools mcp__ddg__*         # 该 server 全部
+bolo -p "…"         --disallowed-tools "Bash(rm *)"     # 压得住 bypassPermissions
+```
+
+| 写法 | 落到 |
+|------|------|
+| `Read` / `mcp__ddg__search` | `alwaysAllow*ToolNames` |
+| `mcp__ddg__*` | `alwaysAllow*Prefixes` |
+| `Bash(git status)` | `alwaysAllow*BashPrefixes`（语义同上表） |
+
+参数可重复传，值以逗号分隔；**括号内的逗号不是分隔符**
+（`Bash(npm run a,b)` 是一条）。`--resume` 时命令行规则**叠加**在快照
+恢复出来的规则之上，不覆盖——否则用户上次点的「总是允许」会凭空失效。
+
+**解析 fail-closed，看不懂就退出（exit 2），不跳过。** 一条被静默丢弃的
+`--disallowed-tools` 会让用户以为拦住了而实际没拦，且他手里正握着一份
+「我明明写了」的命令行。
+
+**刻意不支持 `Read(src/**)`：** 本仓的 `alwaysAllowPathGlobs` 是全局的、
+不绑工具，把它翻成一条全局 path glob 会连 `Write` 对 `src/**` 也一并放行——
+用户没要的放宽。要真支持得先把规则模型改成按工具分域。
+
+契约 `packages/permissions/src/toolSpec.ts`；门禁
+`test-tool-spec.ts`（解析）+ `test-allowed-tools-cli.ts`（接线，含真进程退出码）。
+
 **硬约束：**
 
 - always-deny **优先于** always-allow 与 `bypassPermissions`  

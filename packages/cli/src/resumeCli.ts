@@ -25,6 +25,7 @@ import type { ChatMessage } from '../../shared/src/index.ts'
 import { createCliProvider, isExplicitMockProvider } from './provider.ts'
 import { createSessionErrorExplainer } from './explainSessionError.ts'
 import { createTtyAskPermission } from './tui/askPermissionTty.ts'
+import { applyToolSpecsToSession, type ToolSpecCliArgs } from './applyToolSpecs.ts'
 import { renderWelcomeBanner } from './tui/banner.ts'
 import {
   createSessionEventPrinter,
@@ -77,6 +78,8 @@ export type ResumeCliOptions = {
    */
   nonTtyPermission?: 'allow' | 'deny'
   /** 单轮或 REPL 的外部取消信号 */
+  /** --allowed-tools / --disallowed-tools 原文；并入快照恢复出来的规则之上 */
+  toolSpecs?: ToolSpecCliArgs
   signal?: AbortSignal
 }
 
@@ -495,6 +498,7 @@ export async function resumeFromIdOrPath(
   })
 
   thinkingGate.session = session
+  if (opts.toolSpecs) applyToolSpecsToSession(session, opts.toolSpecs)
   attachSessionEventPrinter(session, printer)
 
   // 快照读不了但从 append-only transcript 救回来了。

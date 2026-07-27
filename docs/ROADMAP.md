@@ -503,7 +503,7 @@ MCP 工具失败只吐 `fetch failed`（补 `describeMcpCallError`：指名 serv
 |------|------|------|
 | **AskUserQuestion** | ✅ 已实现（**真 TTY 交互未验**） | 契约 + 工具 + 权限归类 + CLI 控件 + 端到端接线 + 系统提示，全部进门禁。详见 [TOOLS.md](./TOOLS.md) §5.1。**遗留**：控件测试注入 `readKey`，真人在真终端按键、以及 raw-mode 与 REPL 抢 stdin 的问题没验过 |
 | **Desktop 侧 AskUserQuestion** | 无 | core 只持句柄，CLI 已注入一个；Desktop 需注入自己的对话框实现（`session.askUserQuestion`）。归 AR3 |
-| **headless 工具放行粒度** | 只能整档 `bypassPermissions` | 活体暴露：`-p` 下想放行单个 MCP 工具，只能把**全部**权限一起放开。参考实现有 `--allowedTools` 粒度 |
+| **headless 工具放行粒度** | ✅ 已实现 | `--allowed-tools` / `--disallowed-tools`：精确名 · `mcp__srv__*` 前缀 · `Bash(pattern)`。权限模型本身不缺东西（`SessionPermissionRules` 早就有 always-allow/deny），缺的只是命令行入口，故本刀是**纯解析 + 接线**，不碰匹配器。解析 **fail-closed**（exit 2）——静默丢弃一条 `--disallowed-tools` 会让用户以为拦住了而实际没拦。`--resume` 时与快照规则**叠加**不覆盖。刻意不支持 `Read(src/**)`：本仓 path glob 是全局的，翻过去会连 `Write` 一起放行。详见 [PERMISSIONS.md](./PERMISSIONS.md) §5 |
 | **真·本地搜索路径** | preset 位已留，但需用户自建桥 | SearXNG 不讲 MCP，须自跑桥；真「不出本机」只有 YaCy/自建 Marginalia。Bolo **不代跑第三方进程**（供应链 + 零依赖红线），能做的是把配置写对、去向说清。缺一份可照抄的 compose 文档 |
 | **本地抓取 preset** | 无 | `fetcher-mcp`/`mcp-server-fetch` 可完全本地抓取，但均为 stdio，需先扩 preset 支持 stdio 形状 |
 | **前台命令自动后台化** | 无 | 参考实现有阻塞预算超时自动转后台；语义复杂，暂不做 |

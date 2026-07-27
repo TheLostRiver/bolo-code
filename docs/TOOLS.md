@@ -326,8 +326,17 @@ Responses 侧按 `item.type` 分流即可，**永远不要按 id 前缀判断**�
 
 **端到端要在 headless 下真跑通，得显式放宽权限。** MCP 工具一律
 `requiresPermission=true`，而非交互模式下 `askPermission` 默认 `'deny'`（fail-closed，
-无人可问就不放行——设计如此）。在 `-p` 下需要项目级 `.bolo/config.json` 里配
-`"permissionMode": "bypassPermissions"`。
+无人可问就不放行——设计如此）。
+
+**现在的做法是放行那一个工具，而不是整档放开：**
+
+```bash
+bolo -p "search it" --allowed-tools mcp__ddg__search
+```
+
+> 原先只能在项目级 `.bolo/config.json` 里配 `"permissionMode": "bypassPermissions"`，
+> 即为了跑通一个搜索工具把**全部**权限一起打开。那条路仍然可用，但没有理由再走。
+> 语法与边界见 [PERMISSIONS.md](./PERMISSIONS.md) §5「命令行入口」。
 
 > 踩坑记录：起初把它写进 `BOLO_CONFIG_DIR` 指向的**用户级**配置，不生效。
 > 优先级是 `defaults < ~/.bolo/config.json < .bolo/config.json < 环境变量`，
