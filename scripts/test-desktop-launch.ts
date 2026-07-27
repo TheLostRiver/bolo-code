@@ -144,6 +144,12 @@ async function main() {
         report.beforeSessionId !== selectionTarget,
       `a real session-row click resumes the target: ${JSON.stringify(report)}`,
     )
+    assert(
+      report.settingsApplied === true &&
+        report.modelAfterSettings === 'desktop-smoke-model' &&
+        report.effortAfterSettings === 'high',
+      `a real model/effort IPC mutation is visible in status: ${JSON.stringify(report)}`,
+    )
 
     console.log(`  launched, renderer mounted: ${JSON.stringify(report)}`)
     console.log('PASS: desktop launch')

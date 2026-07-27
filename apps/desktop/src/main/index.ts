@@ -40,16 +40,14 @@ import {
   getSessionComposerActions,
   requestSessionComposerControl,
   takeNextSessionQueued,
+  getSessionModelEffortSettings,
+  updateSessionModelEffort,
 } from '../../../../packages/core/src/index.ts'
 import {
   buildTimelineCards,
   redactSecretsDeep,
 } from '../../../../packages/shared/src/index.ts'
-import {
-  createMockProvider,
-  detectEffortDialectId,
-  listEffortChoosable,
-} from '../../../../packages/providers/src/index.ts'
+import { createMockProvider } from '../../../../packages/providers/src/index.ts'
 import {
   listProviderPresets,
   addProviderProfileToConfigFile,
@@ -193,57 +191,21 @@ async function refreshSessionRegistry(s: DesktopSession) {
   }
 }
 
-function effortSnapshot(s: DesktopSession) {
-  try {
-    const dialect =
-      s.effortDialect ??
-      s.providerProfile?.effortDialect ??
-      detectEffortDialectId({
-        kind: s.provider?.id,
-        baseUrl: s.providerProfile?.baseUrl,
-        model: s.model ?? s.providerProfile?.model,
-      })
-    const dialectId =
-      typeof dialect === 'string'
-        ? dialect
-        : dialect && typeof dialect === 'object' && dialect.id
-          ? String(dialect.id)
-          : 'max-tokens'
-    // 上面已把 dialect 归一成 id 字符串（dialectId）；listEffortChoosable
-    // 只接受 id 或完整 EffortDialect，传原始的松散对象会类型不符
-    const choosable = listEffortChoosable(dialectId, {
-      isAgent: true,
-      model: s.model ?? s.providerProfile?.model,
-    })
-    return {
-      effortLevel: s.effortLevel ?? 'auto',
-      dialectId,
-      choosable,
-    }
-  } catch {
-    return {
-      effortLevel: s.effortLevel ?? 'auto',
-      dialectId: null,
-      choosable: [],
-    }
-  }
-}
-
 function sessionStatusPayload(s: DesktopSession) {
-  const effort = effortSnapshot(s)
+  const modelEffort = getSessionModelEffortSettings(s)
   return {
     id: s.id,
     cwd: s.cwd,
-    model: s.model ?? null,
+    model: modelEffort.model || null,
     permissionMode: s.permissionMode,
     messageCount: s.messages.length,
     /** 协议 kind（LlmProvider.id） */
     providerKind: s.provider?.id ?? null,
     /** 命名 profile id（config.providers key） */
     providerId: s.providerId ?? null,
-    effortLevel: effort.effortLevel,
-    effortDialect: effort.dialectId,
-    effortChoosable: effort.choosable,
+    effortLevel: modelEffort.effortLevel,
+    effortDialect: modelEffort.dialectId,
+    effortChoosable: modelEffort.choosable,
     settings: redactSecretsDeep({ ...desktopSettings }),
   }
 }
@@ -421,6 +383,10 @@ function createWindow() {
              let afterSessionId = null
              let selected = selectionTarget === ''
              let selectionError = null
+             let settingsApplied = false
+             let settingsError = null
+             let modelAfterSettings = null
+             let effortAfterSettings = null
              if (selectionTarget) {
                const before = await window.bolo.getStatus()
                beforeSessionId = before && before.id
@@ -449,6 +415,22 @@ function createWindow() {
                  }
                }
              }
+             if (selected) {
+               const changed = await window.bolo.setModelEffort({
+                 model: 'desktop-smoke-model',
+                 effort: 'high',
+               })
+               if (!changed || !changed.ok) {
+                 settingsError = changed && (changed.error || changed.code) || 'mutation failed'
+               } else {
+                 const status = await window.bolo.getStatus()
+                 modelAfterSettings = status && status.model
+                 effortAfterSettings = status && status.effortLevel
+                 settingsApplied =
+                   modelAfterSettings === 'desktop-smoke-model' &&
+                   effortAfterSettings === 'high'
+               }
+             }
              return JSON.stringify({
                log: !!document.getElementById('log'),
                sidebar: !!document.getElementById('session-list'),
@@ -461,6 +443,10 @@ function createWindow() {
                afterSessionId,
                selected,
                selectionError,
+               settingsApplied,
+               settingsError,
+               modelAfterSettings,
+               effortAfterSettings,
              })
            })()`,
         )
@@ -480,6 +466,15 @@ function createWindow() {
           ) {
             missing.push(
               `selection(${String(r.selectionError ?? 'wrong session id')})`,
+            )
+          }
+          if (
+            r.settingsApplied !== true ||
+            r.modelAfterSettings !== 'desktop-smoke-model' ||
+            r.effortAfterSettings !== 'high'
+          ) {
+            missing.push(
+              `model/effort(${String(r.settingsError ?? 'status mismatch')})`,
             )
           }
           if (missing.length) return fail(`renderer incomplete: ${missing.join(', ')}`)
@@ -584,12 +579,12 @@ function registerIpc() {
     const s = await ensureSession()
     await refreshSessionRegistry(s)
     const list = listSessionProviders(s)
+    const modelEffort = getSessionModelEffortSettings(s)
     return {
       ok: true,
       activeId: s.providerId ?? null,
       providerKind: s.provider?.id ?? null,
-      model: s.model ?? null,
-      ...effortSnapshot(s),
+      ...modelEffort,
       providers: list.map((p) => ({
         id: p.id,
         kind: p.kind ?? null,
@@ -609,6 +604,25 @@ function registerIpc() {
         notes: p.notes ?? null,
       })),
     }
+  })
+
+  ipcMain.handle('bolo:setModelEffort', async (_evt, payload) => {
+    const s = await ensureSession()
+    const result = await updateSessionModelEffort(s, payload)
+    return result.ok
+      ? {
+          ok: true,
+          persisted: result.persisted,
+          settings: result.settings,
+          status: sessionStatusPayload(s),
+        }
+      : {
+          ok: false,
+          code: result.code,
+          error: result.reason,
+          settings: result.settings,
+          status: sessionStatusPayload(s),
+        }
   })
 
   ipcMain.handle('bolo:useProvider', async (_evt, payload) => {

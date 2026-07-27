@@ -24,6 +24,8 @@ contextBridge.exposeInMainWorld('bolo', {
   listProviders: () => ipcRenderer.invoke('bolo:listProviders'),
   useProvider: (idOrPayload) =>
     ipcRenderer.invoke('bolo:useProvider', idOrPayload),
+  setModelEffort: (patch) =>
+    ipcRenderer.invoke('bolo:setModelEffort', patch),
   addProvider: (payload) => ipcRenderer.invoke('bolo:addProvider', payload),
   respondPermission: (id, decision) =>
     ipcRenderer.invoke('bolo:permission_response', { id, decision }),

@@ -140,7 +140,20 @@
         <label>Active backend
           <select id="set-provider"></select>
         </label>
-        <p id="set-effort" class="hint effort-line"></p>
+        <label>Model
+          <input
+            type="text"
+            id="set-model"
+            list="set-model-suggestions"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <datalist id="set-model-suggestions"></datalist>
+        </label>
+        <label>Effort
+          <select id="set-effort"></select>
+        </label>
+        <p id="set-effort-detail" class="hint effort-line"></p>
         <label>Add preset
           <select id="set-preset"></select>
         </label>
@@ -153,6 +166,7 @@
         </p>
 
         <p class="hint">Changing cwd or mock recreates the session.</p>
+        <p id="set-settings-error" class="settings-error" role="alert" hidden></p>
         <div class="perm-actions">
           <button type="button" id="set-cancel" class="ghost">Cancel</button>
           <button type="button" id="set-save">Save</button>

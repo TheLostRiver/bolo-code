@@ -463,6 +463,15 @@ export {
   type EffortClampSession,
 } from './effortClamp.ts'
 export {
+  suggestModelsForSession,
+  getSessionModelEffortSettings,
+  updateSessionModelEffort,
+  type SessionModelEffortSession,
+  type SessionModelEffortSettings,
+  type SessionModelEffortUpdate,
+  type SessionModelEffortUpdateResult,
+} from './sessionModelEffortSettings.ts'
+export {
   planUltrathinkTurn,
   resolveUltrathinkMode,
   normalizeUltrathinkMode,

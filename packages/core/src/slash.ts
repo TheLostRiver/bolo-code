@@ -81,9 +81,7 @@ import {
   resolveUltrathinkMode,
   type UltrathinkMode,
 } from './ultrathink.ts'
-import {
-  getProviderPreset,
-} from '../../config/src/providerPresets.ts'
+import { suggestModelsForSession } from './sessionModelEffortSettings.ts'
 import {
   formatEffortStatusLine,
   formatEffortCapabilityStatus,
@@ -2506,40 +2504,6 @@ function cmdModel(session: SlashSession, args: string): SlashDispatchResult {
     return { ok: true, message: `${m.message}\n${clamp.warning}` }
   }
   return { ok: true, message: m.message }
-}
-
-/** CX5：当前后端建议模型 */
-function suggestModelsForSession(session: SlashSession): string[] {
-  const out: string[] = []
-  const seen = new Set<string>()
-  const add = (m?: string) => {
-    const t = m?.trim()
-    if (!t || seen.has(t)) return
-    seen.add(t)
-    out.push(t)
-  }
-  add(session.model)
-  add(session.providerProfile?.model)
-  const pid = session.providerId?.trim()
-  if (pid) {
-    for (const m of getProviderPreset(pid)?.models ?? []) add(m)
-  }
-  const kind = session.provider?.id
-  if (kind === 'anthropic') {
-    for (const m of getProviderPreset('anthropic')?.models ?? []) add(m)
-  } else if (kind === 'openai-responses') {
-    for (const m of getProviderPreset('openai-responses')?.models ?? []) add(m)
-  } else if (kind === 'openai-compatible') {
-    const base = (session.providerProfile?.baseUrl ?? '').toLowerCase()
-    if (base.includes('deepseek')) {
-      for (const m of getProviderPreset('deepseek')?.models ?? []) add(m)
-    } else if (base.includes('siliconflow')) {
-      for (const m of getProviderPreset('siliconflow')?.models ?? []) add(m)
-    } else {
-      for (const m of getProviderPreset('openai')?.models ?? []) add(m)
-    }
-  }
-  return out.slice(0, 8)
 }
 
 /**

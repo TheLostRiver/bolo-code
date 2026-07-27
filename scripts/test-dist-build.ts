@@ -87,6 +87,8 @@ async function main() {
     'scripts/test-ptl-retry.ts',
     'scripts/test-desktop-launch.ts',
     'scripts/test-runtime-core-transport.ts',
+    'scripts/test-session-model-effort-settings.ts',
+    'scripts/test-desktop-model-effort-settings.ts',
   ]) {
     assert(
       defaultGate.includes(required),

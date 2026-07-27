@@ -22,7 +22,11 @@ const setMock = document.getElementById('set-mock')
 const setCwd = document.getElementById('set-cwd')
 const setProvider = document.getElementById('set-provider')
 const setPreset = document.getElementById('set-preset')
+const setModel = document.getElementById('set-model')
+const setModelSuggestions = document.getElementById('set-model-suggestions')
 const setEffort = document.getElementById('set-effort')
+const setEffortDetail = document.getElementById('set-effort-detail')
+const settingsError = document.getElementById('set-settings-error')
 const hdrProvider = document.getElementById('hdr-provider')
 const sessionListEl = document.getElementById('session-list')
 const sidePanel = document.getElementById('side-panel')
@@ -37,6 +41,7 @@ let streamBuf = ''
 let lastProviders = []
 /** @type {{ id: string, label?: string }[]} */
 let lastPresets = []
+let activeProviderId = ''
 let fillingProviderSelect = false
 let selectingSession = false
 let composerRequestPending = false
@@ -392,7 +397,7 @@ function fillSelect(sel, items, activeId, mapLabel) {
 }
 
 function updateEffortHint(data) {
-  if (!setEffort) return
+  if (!setEffortDetail) return
   const dialect = data.effortDialect || data.dialectId || '?'
   const level = data.effortLevel || 'auto'
   const ch = Array.isArray(data.effortChoosable)
@@ -400,9 +405,49 @@ function updateEffortHint(data) {
     : Array.isArray(data.choosable)
       ? data.choosable.join(', ')
       : ''
-  setEffort.textContent = ch
+  setEffortDetail.textContent = ch
     ? `effort=${level} · dialect=${dialect} · choosable: ${ch}`
     : `effort=${level} · dialect=${dialect}`
+}
+
+function fillModelSuggestions(models) {
+  if (!setModelSuggestions) return
+  setModelSuggestions.innerHTML = ''
+  for (const model of models) {
+    const option = document.createElement('option')
+    option.value = model
+    setModelSuggestions.appendChild(option)
+  }
+}
+
+function fillEffortChoices(choosable, active) {
+  if (!setEffort) return
+  const choices = ['auto', ...choosable.filter((value) => value !== 'auto')]
+  setEffort.innerHTML = ''
+  for (const effort of choices) {
+    const option = document.createElement('option')
+    option.value = effort
+    option.textContent = effort
+    setEffort.appendChild(option)
+  }
+  setEffort.value = choices.includes(active) ? active : 'auto'
+}
+
+function restoreEffortValue(value) {
+  if (!setEffort) return
+  if (![...setEffort.options].some((option) => option.value === value)) {
+    const option = document.createElement('option')
+    option.value = value
+    option.textContent = value
+    setEffort.appendChild(option)
+  }
+  setEffort.value = value
+}
+
+function setSettingsError(message) {
+  if (!settingsError) return
+  settingsError.textContent = message || ''
+  settingsError.hidden = !message
 }
 
 async function refreshProviders() {
@@ -412,6 +457,7 @@ async function refreshProviders() {
     lastProviders = data.providers || []
     lastPresets = data.presets || []
     const active = data.activeId || ''
+    activeProviderId = active
     fillSelect(
       hdrProvider,
       lastProviders,
@@ -429,6 +475,9 @@ async function refreshProviders() {
     fillSelect(setPreset, lastPresets, lastPresets[0]?.id || '', (p) =>
       `${p.id} — ${p.label || p.kind}`,
     )
+    if (setModel) setModel.value = data.model || ''
+    fillModelSuggestions(data.modelSuggestions || [])
+    fillEffortChoices(data.choosable || [], data.effortLevel || 'auto')
     updateEffortHint(data)
   } catch (e) {
     /* ignore list errors in header */
@@ -458,7 +507,7 @@ async function reloadMessages() {
 }
 
 async function switchProvider(id, { fromHeader } = {}) {
-  if (!id || fillingProviderSelect) return
+  if (!id || fillingProviderSelect) return false
   try {
     const r = await window.bolo.useProvider({ id })
     if (r?.ok) {
@@ -469,12 +518,15 @@ async function switchProvider(id, { fromHeader } = {}) {
       }
       await refreshProviders()
       await refreshStatus()
+      return true
     } else {
       appendMsg('system', `provider switch failed: ${r?.error ?? 'unknown'}`)
       await refreshProviders()
+      return false
     }
   } catch (e) {
     appendMsg('system', `provider switch error: ${e?.message ?? e}`)
+    return false
   }
 }
 
@@ -483,33 +535,74 @@ async function openSettings() {
   setMode.value = s.permissionMode || 'default'
   setMock.checked = !!s.useMock
   setCwd.value = s.cwd || ''
+  setSettingsError('')
   await refreshProviders()
   settingsEl.hidden = false
 }
 
+async function applyModelEffortSettings(modelValue, effortValue) {
+  try {
+    const result = await window.bolo.setModelEffort({
+      model: modelValue,
+      effort: effortValue,
+    })
+    if (!result?.ok) {
+      if (setModel) setModel.value = modelValue
+      restoreEffortValue(effortValue)
+      setSettingsError(result?.error || 'Model/effort update failed.')
+      return false
+    }
+    setSettingsError('')
+    return true
+  } catch (error) {
+    if (setModel) setModel.value = modelValue
+    restoreEffortValue(effortValue)
+    setSettingsError(`Model/effort update failed: ${error?.message ?? error}`)
+    return false
+  }
+}
+
 async function saveSettings() {
+  setSettingsError('')
+  const wantProvider = setProvider?.value
+  const wantModel = setModel?.value.trim() || ''
+  const wantEffort = setEffort?.value || 'auto'
   const r = await window.bolo.setSettings({
     permissionMode: setMode.value,
     useMock: setMock.checked,
     cwd: setCwd.value.trim(),
   })
-  // provider 切换即时生效，不依赖 Save；Save 只管 mode/mock/cwd
-  const wantProvider = setProvider?.value
-  settingsEl.hidden = true
-  if (r?.ok) {
-    appendMsg(
-      'system',
-      'Settings applied (session recreated if cwd/mock changed).',
-    )
-    await reloadMessages()
-    await refreshStatus()
-    await refreshProviders()
-    if (wantProvider) {
-      await switchProvider(wantProvider)
-    }
-  } else {
-    appendMsg('system', `Settings failed: ${r?.error ?? 'unknown'}`)
+  if (!r?.ok) {
+    const message = r?.error ?? 'unknown'
+    setSettingsError(`Settings failed: ${message}`)
+    appendMsg('system', `Settings failed: ${message}`)
+    return
   }
+
+  if (wantProvider && wantProvider !== activeProviderId) {
+    const providerApplied = await switchProvider(wantProvider)
+    if (!providerApplied) {
+      if (setModel) setModel.value = wantModel
+      restoreEffortValue(wantEffort)
+      setSettingsError('Provider switch failed.')
+      return
+    }
+  }
+
+  const modelEffortApplied = await applyModelEffortSettings(
+    wantModel,
+    wantEffort,
+  )
+  if (!modelEffortApplied) return
+
+  settingsEl.hidden = true
+  appendMsg(
+    'system',
+    'Settings applied (session recreated if cwd/mock changed).',
+  )
+  await reloadMessages()
+  await refreshStatus()
+  await refreshProviders()
 }
 
 async function addPreset() {
