@@ -226,6 +226,11 @@ npm start
 stopping 时会拒绝切换；先完成/中断当前工作再切换。恢复只加载历史与 durable
 诊断，**不会自动 replay interrupted work**。
 
+composer 在空闲时使用 **Send**。turn 运行中仍可输入，并显式选择 **Queue**
+（当前 turn 结束后 FIFO 执行）、**Steer**（下一个安全边界注入）或
+**Interrupt**（不需要输入文本）。这些动作携带当前 turn 的 expected state；
+目标已变化时会拒绝，不会误打到下一轮。
+
 见 [apps/desktop/README.md](../apps/desktop/README.md)。
 
 ---

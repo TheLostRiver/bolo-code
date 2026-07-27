@@ -1,7 +1,7 @@
 # Desktop (Electron)
 
 > 可用壳：流式对话 · 权限弹窗 · 基础设置 · **多 provider（CX7）** ·
-> **runtime v1 生产 IPC/client**。**无遥测。**
+> **runtime v1 生产 IPC/client** · **durable composer controls**。**无遥测。**
 > 产品逻辑在 `packages/*`；本目录只做 IPC 编排。
 
 ## 结构
@@ -47,6 +47,7 @@ Provider / 多后端配置仍读 `~/.bolo` 与项目 `.bolo`（与 headless 同�
 |------|------|
 | **runtimeHello / runtimeQuery / runtimeCommand** | runtime v1 协商、当前 snapshot、expected-state 安全动作 |
 | getStatus / submit / listMessages | 会话（status 含 providerId · effort） |
+| **getComposerActions / composerControl** | packages 计算 Send/Queue/Steer/Interrupt 可用性；durable control admission |
 | getTimeline / listSessions / selectSession | 结构化 timeline、会话列表与 fail-closed 切换/resume |
 | getSettings / setSettings | mode · mock · cwd（可重建会话） |
 | **listProviders** | providers 列表 + presets + effort tip |
@@ -64,11 +65,13 @@ npm run test:runtime-core-transport
 npm run test:session-selection
 npm run test:desktop-session-selection
 npm run test:desktop-ipc-contract
+npm run test:composer-runtime
+npm run test:desktop-composer
 npm run test:desktop-bundle
 ```
 
 最后一项会真实启动 Electron，并要求 renderer 的 RuntimeClient 完成 hello/query
-握手到 `ready`，再自动点击 session row 并恢复目标会话。窗口视觉、真人点击和
-composer controls 仍未因此自动验收。
+握手到 `ready`，再自动点击 session row 并恢复目标会话。composer 契约与接线由
+专项门禁覆盖；窗口视觉与真人点击仍未因此自动验收。
 
 总进度与后置项见仓库根 [README.md](../../README.md) · [docs/ROADMAP.md](../../docs/ROADMAP.md) · [docs/PROVIDER_UX.md](../../docs/PROVIDER_UX.md)。

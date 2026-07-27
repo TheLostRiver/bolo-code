@@ -4,7 +4,7 @@
 > 再写代码。ROADMAP §13.10.2 AR3 · 看板第 18 位。
 >
 > 实现状态持续同步：AR3A 生产桥、B 会话切换/恢复、C 视图模型与薄壳、
-> F 打包/NSIS 已落地；composer controls 与 model/effort 设置仍在 OI-06。
+> D composer controls 与 F 打包/NSIS 已落地；model/effort 与关键运行态事件仍在 OI-06。
 
 ## 0. 证据说明（先说清楚哪些是看到的、哪些是推断的）
 
@@ -22,17 +22,17 @@ Codex App 的一手资料**没拿到**：OpenAI 官方发布页 WebFetch 返回 
 | 项 | 事实 |
 |---|---|
 | 规模 | main/renderer 仍是单文件薄壳；协议、状态、view-model 与安全判断均在 `packages/*` |
-| IPC 面 | **16 request + 3 push**；`test-desktop-ipc-contract.ts` 双向守住 |
+| IPC 面 | **18 request + 3 push**；`test-desktop-ipc-contract.ts` 双向守住 |
 | 分层 | ✅ **已达标**：renderer 无业务状态机，不重算权限、不重算 diff，只消费 core 预算好的 cell/preview |
-| 事件覆盖 | ⏳ core 发 **17 种**事件，renderer 处理 **5 种**；phase/tool progress 等仍待投影 |
+| 事件覆盖 | ⏳ core 发 **17 种**事件，renderer 处理 **6 种**；tool progress/control 等仍待投影 |
 | 流式 | ❌ **曾经是假的**——事件名 `text_delta` 与 core 的 `text` 对不上，分支从未执行（已修 `d32d4cd`，并加契约测试守住） |
 | 历史回看 | ✅ `getTimeline` 返回 packages 生成的结构化卡片；旧 `listMessages` 只作失败回退 |
 | 会话 | ✅ core active-session manager + `selectSession` IPC；列表 click/Enter/Space 可恢复，忙态拒绝切换，默认不 replay |
 | 布局 | ✅ 三栏骨架、按需右栏、light/dark 主题已落地；视觉仍未真人验收 |
 | 打包 | ✅ main 自包含 bundle + browser RuntimeClient bundle + Electron smoke + Windows NSIS |
 
-**结论：基础架构、生产协议桥与会话导航已成立，剩余工作是把 composer
-与 model/effort 控制工作流接完整。**
+**结论：基础架构、生产协议桥、会话导航与 composer 已成立，剩余工作是把
+model/effort 与关键运行态事件接完整。**
 
 ## 2. 从 Codex App 借什么（借语义，不抄实现）
 
@@ -109,8 +109,8 @@ Codex App 的一手资料**没拿到**：OpenAI 官方发布页 WebFetch 返回 
 - **拉**：可回看的结构化状态——会话列表、turn timeline、diff、usage
 
 现在桌面端两套都已接：实时内容走推，启动/runtime 状态、结构化 timeline 与
-会话 selection/resume 走拉。`listMessages` 继续只作兼容回退；下一缺口是把
-composer 与 settings 映射到既有 runtime action。
+会话 selection/resume 走拉。`listMessages` 继续只作兼容回退；composer 已映射
+到 durable control，下一缺口是 settings 与关键运行态事件。
 
 ## 6. 切片顺序（对齐 ROADMAP AR3A–F）
 
@@ -119,7 +119,7 @@ composer 与 settings 映射到既有 runtime action。
 | **A ✅** | protocol client/store：传输接口 + **mock 与 core 双 adapter 同接口** + normalized store；生产 IPC 与真实握手 | 契约已就绪，净新增 client 层 |
 | **B ✅** | 会话列表 + turn timeline + fail-closed 切换/resume；interrupted 只恢复诊断，不自动 replay | A |
 | **C ✅** | 内容卡片：消息 / 工具 / diff / 审批 / 错误。**view-model 继续来自 packages**，renderer 不重算 | A · B |
-| **D ⏳** | composer：queue / steer 显式化 · 运行中可输入 · 打断 | A |
+| **D ✅** | composer：queue / steer 显式化 · 运行中可输入 · 打断 | A |
 | **E ⏳** | 设置：provider / model / effort / 能力可解释。**secret 不回传 renderer/transcript** | A |
 | **F ✅** | main/browser bundle + electron-builder + Windows NSIS | 全部 |
 
@@ -131,8 +131,9 @@ composer 与 settings 映射到既有 runtime action。
    防止 teardown/事件串线的安全边界，不冒充并行多会话执行。
 2. **审批归属已隔离**：permission id 带 live session scope，替换前统一取消
    pending；同一 persisted session 再次 resume 也不能认领旧回包。
-3. **composer/settings 仍未接生产动作**：queue/steer/interrupt 必须携带
-   expected state/requestId；model/effort 切换失败必须保留旧值。
+3. **composer 已接生产动作**：queue/steer/interrupt 携带 expected state 与
+   stable ID，经 durable admission 后执行；settings 仍须保证 model/effort
+   切换失败保留旧值。
 4. Codex App 消息流里「模型文本 / 工具调用 / 错误」的具体视觉区分方式**未找到证据**，
    diff 是否有并排视图也未找到。这两点自己定，不假装是借鉴。
 
@@ -140,8 +141,9 @@ composer 与 settings 映射到既有 runtime action。
 
 | 面 | 状态 |
 |---|---|
-| runtime 生产桥 | ✅ core adapter + 16 request/3 push IPC + browser client；真实 Electron hello/query 为 `ready` |
+| runtime 生产桥 | ✅ core adapter + 18 request/3 push IPC + browser client；真实 Electron hello/query 为 `ready` |
 | 会话切换/恢复 | ✅ manager 契约 + IPC + click/Enter/Space；真实 Electron 自动化 click/resume |
+| composer controls | ✅ packages intent/runtime adapter + durable queue/steer/interrupt + Desktop FIFO drain；真实 Electron 构建/启动通过 |
 | 视图模型（会话列表 / timeline / 卡片） | ✅ 纯函数，门禁测试覆盖，关键语义均实证过会红 |
 | IPC 两侧对齐 | ✅ `test-desktop-ipc-contract.ts`（请求与推送两个方向） |
 | 事件名对齐 | ✅ `test-desktop-event-contract.ts` |
