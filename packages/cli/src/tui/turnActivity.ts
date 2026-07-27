@@ -23,7 +23,7 @@ export type TurnActivityIndicator = {
   isActive: () => boolean
 }
 
-const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+const ACTIVITY_GLYPH = '✦'
 
 export function formatTurnActivityLine(options: {
   label: string
@@ -32,14 +32,14 @@ export function formatTurnActivityLine(options: {
   color?: boolean
   columns?: number
 }): string {
-  const spinner = SPINNER[Math.abs(options.frame) % SPINNER.length]!
+  const glyph = ACTIVITY_GLYPH
   const seconds = Math.max(0, options.elapsedMs) / 1_000
   const elapsed = seconds < 10 ? seconds.toFixed(1) : Math.round(seconds).toString()
   const variants = [
-    `${spinner} ${options.label} · ${elapsed}s · Ctrl+C interrupt`,
-    `${spinner} ${options.label} · ${elapsed}s · ^C`,
-    `${spinner} ${options.label} · ${elapsed}s`,
-    `${spinner} ${options.label}`,
+    `${glyph} ${options.label} · ${elapsed}s · Ctrl+C interrupt`,
+    `${glyph} ${options.label} · ${elapsed}s · ^C`,
+    `${glyph} ${options.label} · ${elapsed}s`,
+    `${glyph} ${options.label}`,
   ]
   const maxWidth =
     typeof options.columns === 'number' && Number.isFinite(options.columns)
@@ -56,10 +56,10 @@ export function formatTurnActivityLine(options: {
   const accent = color ? '\u001b[38;5;81m' : ''
   const dim = color ? '\u001b[2m' : ''
   const reset = color ? '\u001b[0m' : ''
-  const body = plain.slice(spinner.length)
+  const body = plain.slice(glyph.length)
   const dimAt = body.indexOf(' ·')
-  if (dimAt < 0) return `${accent}${spinner}${reset}${body}`
-  return `${accent}${spinner}${reset}${body.slice(0, dimAt)}${dim}${body.slice(dimAt)}${reset}`
+  if (dimAt < 0) return `${accent}${glyph}${reset}${body}`
+  return `${accent}${glyph}${reset}${body.slice(0, dimAt)}${dim}${body.slice(dimAt)}${reset}`
 }
 
 export function createTurnActivityIndicator(options: {
@@ -71,7 +71,7 @@ export function createTurnActivityIndicator(options: {
   showCompletion?: boolean
 }): TurnActivityIndicator {
   const now = options.now ?? Date.now
-  const intervalMs = Math.max(60, options.intervalMs ?? 90)
+  const intervalMs = Math.max(100, options.intervalMs ?? 250)
   let timer: ReturnType<typeof setInterval> | undefined
   let active = false
   let label = 'Thinking'
@@ -82,19 +82,18 @@ export function createTurnActivityIndicator(options: {
   const erase = () => options.writeOut('\r\u001b[2K')
   const draw = () => {
     if (!active || turnStartedAt == null) return
-    erase()
-    options.writeOut(
-      formatTurnActivityLine({
-        label,
-        elapsedMs: now() - turnStartedAt,
-        frame,
-        color: options.color,
-        columns:
-          typeof options.columns === 'function'
-            ? options.columns()
-            : options.columns,
-      }),
-    )
+    const line = formatTurnActivityLine({
+      label,
+      elapsedMs: now() - turnStartedAt,
+      frame,
+      color: options.color,
+      columns:
+        typeof options.columns === 'function'
+          ? options.columns()
+          : options.columns,
+    })
+    // One write avoids the visible blank frame produced by erase-then-draw.
+    options.writeOut(`\r${line}\u001b[K`)
     frame++
   }
   const stopTimer = () => {
@@ -107,7 +106,7 @@ export function createTurnActivityIndicator(options: {
     active = false
   }
   const start = (nextLabel = 'Thinking') => {
-    clear()
+    stopTimer()
     label = nextLabel
     if (turnStartedAt == null) turnStartedAt = now()
     active = true

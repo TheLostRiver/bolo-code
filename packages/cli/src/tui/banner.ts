@@ -1,7 +1,6 @@
 /**
- * BOLO 欢迎 banner（原创 Bolot 吉祥物，不抄第三方 IP）
- * plain / NO_COLOR / 窄终端 / theme=plain → 单行 BOLO
- * P-T9 + F-T9-THEME：主题与吉祥物开关
+ * BOLO welcome identity and the original Bolot terminal mascot.
+ * P-T9 + F-T9-THEME: plain mode and mascot switches remain supported.
  */
 
 import { resolveTuiTheme } from './theme.ts'
@@ -22,23 +21,22 @@ export type BannerOptions = {
 const VERSION_DEFAULT = '0.0.1'
 export const NARROW_TERMINAL_COLUMNS = 80
 
-const BANNER_ART = `
- ____   ___  _      ___  
-| __ ) / _ \\| |    / _ \\ 
-|  _ \\| | | | |   | | | |
-| |_) | |_| | |___| |_| |
-|____/ \\___/|_____|\\___/ 
-  (o)  Bolot · Bolo Code
-  /|\\  puffer · balloon fish
-`.trim()
+export const BOLOT_MASCOT_LINES = [
+  '      ▄██████▄',
+  '   ▄██  ●  ●  ██▄',
+  ' <██      ▄      ██>',
+  '   ██   ╰───╯   ██',
+  '    ▀██▄▄▄▄▄▄██▀',
+  '       ▀████▀',
+] as const
 
-const BANNER_ART_NO_MASCOT = `
- ____   ___  _      ___  
-| __ ) / _ \\| |    / _ \\ 
-|  _ \\| | | | |   | | | |
-| |_) | |_| | |___| |_| |
-|____/ \\___/|_____|\\___/ 
-`.trim()
+const BANNER_ART = [
+  'BOLO CODE',
+  ...BOLOT_MASCOT_LINES,
+  'Bolot · context puffer',
+].join('\n')
+
+const BANNER_ART_NO_MASCOT = 'BOLO CODE'
 
 export function getTerminalColumns(opts?: {
   columns?: number

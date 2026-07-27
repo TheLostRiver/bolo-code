@@ -171,19 +171,77 @@ async function main(): Promise<void> {
   assert(fakeInput.listenerCount('keypress') === 0, 'keypress listener removed')
   assert(fakeInput.paused, 'stdin paused after idle editor exits')
 
-  // 欢迎区不再伪装成输入框，也不显示巨型 logo / 内部实现名。
+  // 欢迎首页：宽屏必须有品牌焦点、Bolot 和职责明确的双栏；不能只是状态框。
   const welcome = renderInkLayout({
-    columns: 100,
+    columns: 120,
     plain: false,
     cwd: 'E:\\DEV\\HelsincyAgent',
     model: 'work/gpt-test',
     sessionId: 'sess_test',
+    session: {
+      permissionMode: 'default',
+      model: 'gpt-test',
+      effortLevel: 'high',
+      messages: [],
+      providerId: 'work',
+    },
     env: {} as NodeJS.ProcessEnv,
   })
   assert(welcome.includes('BOLO'), 'welcome identifies product')
+  assert(welcome.includes('Bolot'), 'welcome gives the mascot a visible identity')
+  assert(welcome.includes('Start here'), 'welcome has a clear action area')
+  assert(welcome.includes('Useful commands'), 'welcome exposes next actions')
   assert(!welcome.includes('ink-equiv'), 'internal renderer name is hidden')
   assert(!welcome.includes('bolo>'), 'welcome has no fake input')
   assert(!welcome.includes('____'), 'giant ASCII logo is removed')
+  const welcomeLines = welcome.split('\n')
+  assert(
+    welcomeLines.every((line) => visibleWidth(line) === 118),
+    `wide welcome uses the available frame width: ${welcomeLines
+      .map(visibleWidth)
+      .join(',')}`,
+  )
+  assert(
+    welcomeLines.some((line) => line.split('│').length >= 4),
+    'wide welcome has an internal column separator',
+  )
+
+  const mediumWelcome = renderInkLayout({
+    columns: 76,
+    plain: false,
+    cwd: 'E:\\DEV\\中文项目',
+    model: 'work/gpt-test',
+    sessionId: 'sess_medium',
+    env: { NO_COLOR: '1' } as NodeJS.ProcessEnv,
+  })
+  assert(mediumWelcome.includes('Bolot'), 'medium welcome keeps the mascot')
+  assert(mediumWelcome.includes('╭'), 'NO_COLOR keeps the structured layout')
+  assert(
+    !/\u001b\[[0-9;]*m/.test(mediumWelcome),
+    'NO_COLOR welcome emits no SGR styles',
+  )
+  assert(
+    mediumWelcome
+      .split('\n')
+      .every((line) => visibleWidth(line) <= 74),
+    'medium welcome stays inside terminal width',
+  )
+
+  const compactWelcome = renderInkLayout({
+    columns: 46,
+    plain: false,
+    cwd: 'E:\\DEV\\a-very-long-workspace-name',
+    model: 'work/a-very-long-model-name',
+    sessionId: 'sess_compact',
+    env: {} as NodeJS.ProcessEnv,
+  })
+  assert(compactWelcome.includes('╭'), 'compact welcome remains a real panel')
+  assert(
+    compactWelcome
+      .split('\n')
+      .every((line) => visibleWidth(line) <= 44),
+    'compact welcome clips every row safely',
+  )
 
   // 首 provider 事件前必须立即可见；elapsed 是活动态的一部分。
   const activityLine = formatTurnActivityLine({
@@ -195,6 +253,16 @@ async function main(): Promise<void> {
   assert(activityLine.includes('Thinking'), 'activity label')
   assert(activityLine.includes('1.2s'), 'activity elapsed time')
   assert(activityLine.includes('Ctrl+C'), 'activity shows interrupt shortcut')
+  const laterActivityLine = formatTurnActivityLine({
+    label: 'Thinking',
+    elapsedMs: 1_540,
+    frame: 8,
+    color: false,
+  })
+  assert(
+    activityLine.startsWith('✦') && laterActivityLine.startsWith('✦'),
+    'activity status glyph is stable across redraws',
+  )
   const narrowActivityLine = formatTurnActivityLine({
     label: 'Running read_a_very_long_tool_name',
     elapsedMs: 1_240,
@@ -214,6 +282,14 @@ async function main(): Promise<void> {
     now: () => 1_000,
   })
   activity.start('Thinking')
+  assert(
+    activityOut.length === 1 &&
+      activityOut[0]!.startsWith('\r✦ Thinking') &&
+      activityOut[0]!.endsWith('\u001b[K'),
+    `activity first frame is one atomic in-place write: ${JSON.stringify(
+      activityOut,
+    )}`,
+  )
   assert(activityOut.join('').includes('Thinking'), 'activity writes immediately')
   assert(activity.isActive(), 'activity becomes active')
   activity.beforeEvent({ type: 'phase', phase: 'running' })

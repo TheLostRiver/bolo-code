@@ -1105,6 +1105,7 @@ export async function runResumeCli(
         : result.session.model
     const layout = renderInkLayout({
       version: '0.0.1',
+      headline: 'Welcome back.',
       cwd: result.session.cwd,
       model: active,
       sessionId: result.session.id,

@@ -146,6 +146,7 @@ export async function runNewSessionCli(
     if (useLayout) {
       const layout = renderInkLayout({
         version: '0.0.1',
+        headline: 'Welcome to Bolo Code',
         cwd: session.cwd,
         model: active,
         sessionId: session.id,
