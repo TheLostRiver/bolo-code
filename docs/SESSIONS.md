@@ -203,7 +203,8 @@ controlId + sessionId + kind + state + timestamp
 - 顶层 retry-safe 不调用 provider或 drain queue；result 添加 non-interactive warning。进程退出后 replacement turn/control 在下次 resume 分别恢复为 admitted/ready provenance 的 interrupted，coordinator 仍为空。
 - JSON command output 是一个 `runtime.result`；load failure 是一个 `{ok:false,code:"load_failed",detail}`。resume banner、provider key warning 与 SessionEnd event 不污染 stdout。
 
-DR0–DR4、AR1A 与 AR1B1–B3 已收口；当前主线为 AR1C1 text/pager。
+DR0–DR4 与 AR1 全段已收口；全局当前主线只以 [ROADMAP.md](./ROADMAP.md) §0
+和 §13.11 为准，不在本专题重复硬编码。
 
 ## 2. 快照格式（version 1，只读兼容）
 

@@ -26,7 +26,7 @@
 | 层 | 粗估 | 说明 |
 |----|------|------|
 | Headless 核心 | ~82–90% | queryLoop · 权限 · tools · STE；partial stream fail-closed |
-| **Agent 能力面（工具集）** | **~78–85%** | 14 个基础工具 + 可选 `Agent` + **Web search**（Anthropic / OpenAI Responses 已实测） |
+| **Agent 能力面（工具集）** | **~82–88%** | 15 个常驻/可选工具 + **Web search**（hosted/MCP 已实测；SearXNG 为本地 fixture） |
 | 会话 / CLI | ~92–97% | JSONL · durable runtime · query/action CLI · TTY pager · pipe/JSON automation |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
 | Subagent | ~89–95% | `config.agents` + `agents/*.md` · durable task/result · overflow FIFO/cancel · safe delivery · worktree 保全 |
@@ -40,9 +40,9 @@
 | Electron GUI | ~65–75% | 壳 + 流式 + 权限 + Settings + 多 provider |
 | 相对 HC 全家桶 UI | 另计 | 不设 100% |
 
-**已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Runtime DR0–DR4 · Autonomous Road AR1 CLI/TUI runtime UX · **AR-T1–T3+ Agent 能力面** · AR2 Compact depth · AR4 evidence gate · AR5 release hardening。
+**已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Runtime DR0–DR4 · Autonomous Road AR1 CLI/TUI runtime UX · **AR-T1–T3+ Agent 能力面** · AR2 Compact depth · AR4 evidence gate · AR5 release hardening · **OI-04 SearXNG 直连**。
 
-**当前主线：** 按 [开放问题清单](docs/OPEN_ISSUES.md) 先解决 **OI-04 SearXNG 契约矛盾**，随后完成 **OI-06 Desktop runtime 生产接线**。
+**当前主线：** 按 [开放问题清单](docs/OPEN_ISSUES.md) 完成 **OI-06 Desktop runtime 生产接线**。
 
 **外部或人工项：** SearXNG live smoke 需要真实实例；AskUserQuestion 真 TTY、Desktop 点击与视觉走查需要真人验证，不以自动测试冒充完成。
 
@@ -78,7 +78,8 @@ bolo "帮我看看这个仓库是干什么的"
 BOLO_PROVIDER=mock bolo -p "hello"
 ```
 
-更细的配置（多后端、权限、Effort、Subagent）→ 编辑 `~/.bolo/config.json` 或项目 `.bolo/config.json`（JSONC，可用 `//` 注释）。
+更细的配置（多后端、权限、Effort、Subagent、SearXNG 直连）→ 编辑
+`~/.bolo/config.json` 或项目 `.bolo/config.json`（JSONC，可用 `//` 注释）。
 
 ### 从源码开发
 

@@ -21,9 +21,9 @@
 
 关闭证据：
 
-- ROADMAP §0/§13.11、handoff、README 与 autonomous prompt 统一把当前队列写为
-  OI-04 → OI-06，并保留外部/人工阻塞标记。
-- AR4 ADR 已按正文改为六个候选；RELEASE 与默认门禁统一为 99 个脚本。
+- ROADMAP §0/§13.11、handoff、README 与 autonomous prompt 使用同一队列，
+  并在 OI-04 关闭后统一把 OI-06 标为当前，同时保留外部/人工阻塞标记。
+- AR4 ADR 已按正文改为六个候选；RELEASE 与默认门禁现统一为 100 个脚本。
 - USAGE 已补 `--allowed-tools`、`--disallowed-tools`、`AskUserQuestion`
   与 Web search 的最短入口。
 - `test-dist-build.ts` 守住默认门禁条目和 package manager；
@@ -69,11 +69,11 @@
 
 ### OI-04 · SearXNG 产品契约互相矛盾
 
-**状态：OPEN**
+**状态：CLOSED（`c058998`）**
 
 证据：
 
-- `packages/config/src/searchPresets.ts` 内置 `searxng` MCP preset，
+- 关闭前 `packages/config/src/searchPresets.ts` 内置 `searxng` MCP preset，
   指向 `http://127.0.0.1:8080/mcp` 占位桥。
 - `LOCAL_SEARCH_AND_FETCH.md` §3.1 明确说 Bolo 不内置任何 SearXNG 桥 preset。
 - 同文 §3.3 声称“断网也应该能搜”，但 SearXNG 没有自有索引，查询仍需上游引擎。
@@ -85,6 +85,18 @@
 - 提供零依赖、显式配置、fail-closed 的 SearXNG JSON 搜索工具。
 - 本地 fixture 覆盖请求参数、响应解析、超时、错误与结果预算。
 - 文档明确“本地服务”与“查询不出机器”不是一回事。
+
+关闭证据：
+
+- `search.searxng` 支持 user/project 深层合并与 `enabled: false`；畸形高优先级覆盖
+  不会继续启用低优先级 endpoint。
+- 内置 `WebSearch` 只接受显式配置的 endpoint；公开 HTTP、URL 凭据/query/fragment
+  均 fail closed，并限制超时、响应体、结果字段和最终输出。
+- `/websearch off` 会从模型请求移除 disabled schema；reload 保持唯一工具实例。
+- `bolo search status` 同时列出 hosted、SearXNG direct 与 MCP 线路；配置 warning
+  在 CLI 与 Desktop 都可见。
+- `test-searxng-search.ts` 使用本地 HTTP fixture 覆盖请求、解析、错误、预算和生产
+  接线，并已进入独立 script 与 100 项默认门禁。真实实例仍单列 OI-X1。
 
 ### OI-05 · CLI 构建会吞掉 bundled skills 复制失败
 
@@ -113,8 +125,8 @@
 - 会话侧栏只渲染列表项，没有 click/keyboard resume；主进程仍是单 session。
 - composer 没有 queue/steer/interrupt，提交时只有 Send。
 - 设置页不能修改 model/effort；effort 只有只读提示。
-- renderer 只处理 17 类 SessionEvent 中的 text/tool start/tool end/error，
-  phase、warning、tool progress 等运行态信息未呈现。
+- renderer 处理 17 类 SessionEvent 中的 text/tool start/tool end/error/warning；
+  phase、tool progress 等运行态信息仍未呈现。
 
 关闭条件：
 
@@ -168,8 +180,8 @@ Ctrl-C/Esc 以及 REPL 是否抢占 stdin。需要人在真实终端按键确认
 
 - ROADMAP、RELEASE、AGENT_HANDOFF、USAGE、ARCHITECTURE、AR4 ADR、
   Desktop 与本地搜索专题文档；
-- 根与 Desktop package metadata、默认测试串及 134 个 `test-*.ts` 的注册差集；
-- SearXNG preset、WebFetch、工具注册、权限分类、runtime client、Desktop IPC/renderer；
+- 根与 Desktop package metadata、100 项默认测试串及 134 个 `test-*.ts` 的注册差集；
+- 历史 SearXNG preset、WebFetch、工具注册、权限分类、runtime client、Desktop IPC/renderer；
 - 代码中的 TODO/FIXME、空 catch 与未实现标记；
 - 当前完整门禁、electron-builder registry 版本与真实 NSIS 构建。
 

@@ -107,7 +107,7 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | 层 | 粗估 | 状态摘要 |
 |----|------|----------|
 | Headless 核心 | ~82–90% | queryLoop · STE · 权限 · tools；partial stream fail-closed |
-| **Agent 能力面（工具集）** | **~78–85%** | 14 个基础工具 + 可选 `Agent` + **Web search**（ROADMAP §14 · [TOOLS.md](./TOOLS.md)） |
+| **Agent 能力面（工具集）** | **~82–88%** | 15 个常驻/可选工具 + 显式 SearXNG `WebSearch`（ROADMAP §14 · [TOOLS.md](./TOOLS.md)） |
 | **分发（CLI）** | **~85–92%** | `npm i -g` / `npx` 单文件产物；零运行时依赖（ROADMAP §15 · [RELEASE.md](./RELEASE.md)） |
 | 会话 / CLI | ~90–96% | JSONL · new/resume 同构 runtime · durable controls/tasks · background FIFO/promotion · versioned runtime protocol |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
@@ -123,11 +123,11 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | Electron GUI | ~65–75% | 薄壳可启动且 NSIS 可构建；生产 runtime、会话切换、composer 与设置仍在 OI-06 |
 | 产品相对 HC 全家桶 | ~74–88% | 日用高；UI 密度另计 |
 
-**已闭环：** Diff · Hooks · Compact（含 AR2 全段）· Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR-T1–T3+ Agent 能力面** · **AR4 evidence gate** · **AR5 release hardening**。
+**已闭环：** Diff · Hooks · Compact（含 AR2 全段）· Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR-T1–T3+ Agent 能力面** · **AR4 evidence gate** · **AR5 release hardening** · **OI-04 SearXNG 直连**。
 
 **当前主线：** 按 [OPEN_ISSUES.md](./OPEN_ISSUES.md) 清理全仓核验发现：
-先解决 **OI-04 SearXNG 产品契约矛盾**，再推进 **OI-06 Desktop runtime
-生产接线**。发行门禁、npm 工具链与 NSIS 已收口。
+现在推进 **OI-06 Desktop runtime 生产接线**。OI-04、发行门禁、npm
+工具链与 NSIS 已收口。
 
 **其它开放轨（非阻塞）：**
 
@@ -170,8 +170,8 @@ DR2A 单 session runner ✅
 → AR3 Codex App 风格 Desktop（OI-06 生产接线开放）
 → AR4 证据驱动深水项 ✅
 → AR5 release hardening ✅
-→ OI-04 SearXNG 契约收口（当前）
-→ OI-06 Desktop 生产接线
+→ OI-04 SearXNG 契约收口 ✅
+→ OI-06 Desktop 生产接线（当前）
 ```
 
 每刀都必须先改 `packages/*` 契约和失败测试，再接 CLI/Desktop；定向测试、typecheck、完整 `npm test`、scoped `diff --check` 全绿后，代码与文档分批 commit/push。遇到需要数据库/daemon/RPC、用户脏文件冲突、数据丢失或副作用自动重放风险时停止扩张。

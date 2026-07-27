@@ -13,7 +13,7 @@
 |----|------|------|
 | **Headless 核心** | **~82–90%** | loop/STE/权限/auto/snip/policy/OS sandbox；partial stream fail-closed |
 | **分发（CLI）** | **~85–92%** | `npm i -g` / `npx` 单文件产物 · 零运行时依赖 · pack→install→run E2E 进门禁；见 §15 与 [RELEASE.md](./RELEASE.md) |
-| **Agent 能力面（工具集）** | **~82–88%** | 15 工具 + **Web search**（五条线路全部活体验证）：Bash（含 `run_in_background`）· BashOutput · KillShell · Read/Write/Edit/apply_patch · Glob/Grep · Skill · WebFetch · Agent · **TodoWrite** · **ExitPlanMode** · **AskUserQuestion**；Bash 超时错误会指出 `run_in_background` 这条出路（只在超时时）；见 §14 |
+| **Agent 能力面（工具集）** | **~82–88%** | 15 个常驻/可选工具 + 显式 SearXNG `WebSearch`；五条外部线路已活体验证，SearXNG 仅本地 fixture：Bash（含 `run_in_background`）· BashOutput · KillShell · Read/Write/Edit/apply_patch · Glob/Grep · Skill · WebFetch · Agent · **TodoWrite** · **ExitPlanMode** · **AskUserQuestion**；见 §14 |
 | 会话与 CLI | **~91–96%** | JSONL · new/resume 同构 runtime · durable controls/tasks · background FIFO/promotion · versioned runtime protocol · **`--allowed-tools` / `--disallowed-tools` 工具级放行**（headless 不必再整档开 bypass） |
 | **扩展面** | **~80–88%** | MCP×3 · Skills · Plugins · WebFetch · OAuth 本地 |
 | **Subagent** | **~89–95%** | Spec v0；durable task/result · overflow FIFO/cancel · safe-boundary delivery · worktree fail-closed |
@@ -34,8 +34,8 @@
 **已闭环主线：** headless 日用 → Diff（D0–D7 / U0–U4）· Hooks（H0–H5）· Compact（C0–C5）· Provider（P0–P4.1）· Effort（E0–E9）· Provider UX（CX0–CX8）· 可靠性（R0–R4）· **Durable Runtime（DR0–DR4）** · **Autonomous Road AR1 CLI/TUI runtime UX**。切片明细 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
 
 **当前主线：** 按 [OPEN_ISSUES.md](./OPEN_ISSUES.md) 清理首轮全仓核验结果。
-发行门禁、npm 工具链和 NSIS 已收口；agent 可推进的下一项是
-**OI-04 直连 SearXNG**，随后是 **OI-06 Desktop 生产接线**。
+发行门禁、npm 工具链、NSIS 与 **OI-04 SearXNG 直连**已收口；
+agent 可推进的下一项是 **OI-06 Desktop 生产接线**。
 
 **外部或人工阻塞项单列，不与 agent 队列混淆：**
 
@@ -50,7 +50,7 @@
 
 **已插队并收口：** **AR-T · Agent 能力面**（§14）。准入证据：基础设施深度（DR0–DR4 + AR1）已远超能力广度——彼时 agent 无法跨步骤记住计划，也无法启动任何活过一次工具调用的进程。AR2 压缩深化顺延，A0a/A0b 成果不受影响。
 
-**非阻塞开放项：** OI-04 SearXNG 直连 · OI-06 Desktop 生产接线；
+**非阻塞开放项：** OI-06 Desktop 生产接线；
 其余状态见 [OPEN_ISSUES.md](./OPEN_ISSUES.md)。
 
 ---
@@ -128,9 +128,9 @@
 
 **一句话：** 主路径、Diff、Hooks、Compact、多 Provider、Effort、Provider UX、可靠性 R0–R4、Durable Runtime DR0–DR4、AR1 runtime UX、**AR-T1/AR-T2 能力面**已收口。
 
-**下一刀（当前主线）：** [OPEN_ISSUES.md](./OPEN_ISSUES.md) OI-04，
-删除误导性的 SearXNG 桥 preset，改为零依赖直连 JSON API。
-随后推进 OI-06 Desktop 生产接线。中段压缩与远端压缩按证据门控**显式关闭**
+**下一刀（当前主线）：** [OPEN_ISSUES.md](./OPEN_ISSUES.md) OI-06，
+完成 Desktop runtime、会话切换、composer 与设置生产接线。OI-04 已以
+零依赖 SearXNG JSON 直连收口。中段压缩与远端压缩按证据门控**显式关闭**
 （后者见 [ADR_COMPACT_REMOTE.md](./ADR_COMPACT_REMOTE.md)）。
 
 ---
@@ -150,7 +150,7 @@
 | [DESKTOP_DESIGN.md](./DESKTOP_DESIGN.md) | **AR3 设计方案**（信息架构 · 交互 · 视觉 · 不做什么） |
 | [ADR_COMPACT_REMOTE.md](./ADR_COMPACT_REMOTE.md) | **AR2C 决定**：compaction 保持 local-only（含重开条件） |
 | [ADR_AR4_EVIDENCE_GATE.md](./ADR_AR4_EVIDENCE_GATE.md) | **AR4 决定**：六个候选逐条书面决定（含证据与重开条件） |
-| [LOCAL_SEARCH_AND_FETCH.md](./LOCAL_SEARCH_AND_FETCH.md) | **本地搜索/抓取**：可照抄的配置 · 每条路径查询去哪 · 为何不做成 preset |
+| [LOCAL_SEARCH_AND_FETCH.md](./LOCAL_SEARCH_AND_FETCH.md) | **本地搜索/抓取**：SearXNG compose + Bolo 直连配置 · 每条路径查询去哪 |
 | [TOOLS.md](./TOOLS.md) | **内置工具契约**（TodoWrite · 后台 shell） |
 | [RELEASE.md](./RELEASE.md) | **发布契约**（构建 · tarball · 门禁 · 发布流程） |
 | [HOOKS.md](./HOOKS.md) | Hook 契约 |
@@ -400,6 +400,7 @@ AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 regis
 | 18 | **AR3A–F** | A ✅ client/store 契约 · B/C ✅ 视图模型与薄壳 · F ✅ NSIS；A 的生产 adapter、B 的会话切换、D/E 待接 | Codex App 风格 Desktop（[设计方案](./DESKTOP_DESIGN.md)） | mock/core IPC + crash/restart + Windows package | ⏳ **OI-06 当前开放**。应用可真启动、NSIS 可构建；runtime client 仍无生产调用者，composer 与设置不完整。⚠️ 窗口视觉仍未肉眼验证 |
 | 19 | **AR4** | 逐项 evidence gate | 有证据实施；无证据书面关闭 | 场景/基准/兼容证据 | ✅ **六条全部书面决定**（含重开条件）→ [ADR_AR4_EVIDENCE_GATE.md](./ADR_AR4_EVIDENCE_GATE.md) |
 | 20 | **AR5A–D**（AR5C 已提前完成） | A ✅ 迁移幂等/失败不覆盖源 · B ✅ 故障注入 · D ✅ 发布门 | clean clone 安装、升级、恢复手册 | full test + cross-platform smoke + security audit | ✅ **看板走完**。发布门含 SBOM · 性能预算 · 安全自查 · **已知限制** · 恢复手册 · 可执行 checklist → [RELEASE.md](./RELEASE.md) §6 |
+| 21 | **OI-04 · SearXNG 直连** | 显式配置 · fail-closed endpoint · 零依赖 JSON 工具 · 动态启用 | `bolo search status` · CLI/Desktop warning · 无第三方桥 | 本地 HTTP fixture + reload/预算/错误 + 完整门禁 | ✅ `c058998`；真实实例 live smoke 仍为 OI-X1 |
 
 固定 checkpoint：
 
@@ -503,7 +504,8 @@ MCP 工具失败只吐 `fetch failed`（补 `describeMcpCallError`：指名 serv
 分不清这两层就等于误导用户；② 我们自己曾有一条**假隐私承诺**（searxng preset 声称
 `Nothing leaves your network`，而 SearXNG 是元搜索代理，自托管只隐藏 IP 不隐藏查询）。
 现已引入机器可读的 `SearchPreset.privacy` 字段并由测试守住散文与字段一致。
-三个参考项目**都没有**提供自托管/开源搜索后端选项，Bolo 的 preset 位是唯一留了口子的。
+三个参考项目**都没有**提供自托管/开源搜索后端选项；Bolo 现在用显式
+`search.searxng` 直连提供这条选择，不借第三方桥。
 
 **活体脚本不进门禁：** `scripts/live-mcp-search.ts` 依赖公网与第三方可用性，
 实测 3 跑挂 1（Exa 免密层按 IP 限速）。放进 `npm test` 会让 CI 因别人家限速变红，
@@ -519,7 +521,7 @@ MCP 工具失败只吐 `fetch failed`（补 `describeMcpCallError`：指名 serv
 | **AskUserQuestion** | ✅ 已实现（**真 TTY 交互未验**） | 契约 + 工具 + 权限归类 + CLI 控件 + 端到端接线 + 系统提示，全部进门禁。详见 [TOOLS.md](./TOOLS.md) §5.1。**遗留**：控件测试注入 `readKey`，真人在真终端按键、以及 raw-mode 与 REPL 抢 stdin 的问题没验过 |
 | **Desktop 侧 AskUserQuestion** | ✅ 已接线 | `apps/desktop/src/main/askUserQuestionBridge.ts`（**不 import electron**，故可离线驱动测试）+ `bolo:ask_user_question` push / `bolo:ask_user_question_response` invoke + renderer 对话框（含自由文本一栏——工具描述对模型承诺了「用户始终可以自己写」，UI 不提供就是假承诺）。**守的那条**：没答绝不能变成「答了」——超时→`cancelled`、没窗口→立刻 `unavailable`（挂着等表现为整轮卡死）、渲染进程发来的垃圾原样上交由 `projectAskUserQuestionAnswers` 拒（转成 `cancelled` 等于替用户说「我放弃了」，同样是编的）。六条护栏逐条拆红验过。**真人点击仍未验**（与 CLI 侧同属只能人工验的一类） |
 | **headless 工具放行粒度** | ✅ 已实现 | `--allowed-tools` / `--disallowed-tools`：精确名 · `mcp__srv__*` 前缀 · `Bash(pattern)`。权限模型本身不缺东西（`SessionPermissionRules` 早就有 always-allow/deny），缺的只是命令行入口，故本刀是**纯解析 + 接线**，不碰匹配器。解析 **fail-closed**（exit 2）——静默丢弃一条 `--disallowed-tools` 会让用户以为拦住了而实际没拦。`--resume` 时与快照规则**叠加**不覆盖。刻意不支持 `Read(src/**)`：本仓 path glob 是全局的，翻过去会连 `Write` 一起放行。详见 [PERMISSIONS.md](./PERMISSIONS.md) §5 |
-| **真·本地搜索路径** | ✅ 文档已交付 | [LOCAL_SEARCH_AND_FETCH.md](./LOCAL_SEARCH_AND_FETCH.md)：已核实的 SearXNG compose（含最易卡住的一步——默认只开 `html`，须显式加 `json`，否则桥连上了也只拿得到 HTML）+ mcp.json 形状 + 断网自测。**仍不做 preset**：npm 上至少十个互相竞争的 SearXNG 桥，**没有一个是权威实现**，全是单人维护包——为「不信任第三方」的需求去背书一个未审计的包，方向是反的。文档里的配置片段有门禁守着漂移（`test-docs-config-snippets.ts`）。另记录了一条已评估未实施的替代：**Bolo 直连 SearXNG 的 JSON 接口**，可省掉整个桥，但它反转 `searchPresets.ts` 里一条已写下的架构决定，属所有者决定 |
+| **真·本地搜索路径** | ✅ OI-04 已实现 | [LOCAL_SEARCH_AND_FETCH.md](./LOCAL_SEARCH_AND_FETCH.md)：SearXNG compose（默认只开 `html`，须显式加 `json`）+ `search.searxng` 配置 + endpoint/预算/隐私边界。Bolo 已删除虚构桥 preset，零依赖直连 JSON API；本地 fixture 覆盖协议和生产接线，真实实例 live smoke 仍为 OI-X1。SearXNG 是本地服务但不是本地索引，查询通常仍到上游引擎 |
 | **本地抓取 preset** | ✅ **书面关闭（不做）** | 重估后前提不成立：**抓取本来就是本地的**——`WebFetch` 是 Bolo 自己的工具，直连目标站点；Exa preset 也已用 `allowTools` 把它的远程抓取工具挡在外面。真实缺口只剩「需要执行 JS 才出内容的页面」，而补它意味着 preset 里写一条 `npx -y <包>`，即**下载并执行远端代码**去解决一个信任问题。且 stdio 早就能用（`McpServerConfig.command`），用户手写进 mcp.json 即可——preset 省的只是打字，换来的是一次背书。代价见 [LOCAL_SEARCH_AND_FETCH.md](./LOCAL_SEARCH_AND_FETCH.md) §4。**重开条件**：出现权威且可审计的本地抓取实现，且有具体到「哪个页面拿不到内容」的需求 |
 | **前台命令自动后台化** | ✅ **书面关闭（不做）** | 门控先量代价：超时时**部分输出本来就保留**，真实损失是「模型不知道下一步」——错误里从没提过 `run_in_background`。故缺口是**错误不可行动**，比自动转后台小得多。已修（只在超时时给出路，两个方向验红：`test-bash-timeout-guidance.ts`）。自动转后台的代价是凭空多一个模型没要求的后台任务、一个要追踪的 id、以及「这轮完没完」的歧义。详见 [ADR_AR4_EVIDENCE_GATE.md](./ADR_AR4_EVIDENCE_GATE.md) §5 |
 | **LSP** | ⏸ **暂缓（有触发条件，非永久待办）** | 缺口属实（今天只有 Glob/Grep，符号级导航没有），但绕路都**成功了**，没记录到「文本搜索给错答案导致改错」的案例——而准入要的正是后者。且 LSP 意味着给每种语言起一个 server 进程，撞「不代跑第三方进程」。触发条件写死了两条（≥3 次可复现的错改案例，或出现不需额外进程的单语言方案）→ [ADR_AR4_EVIDENCE_GATE.md](./ADR_AR4_EVIDENCE_GATE.md) §6 |

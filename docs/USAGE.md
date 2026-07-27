@@ -177,15 +177,31 @@ exit 2，不会静默忽略。完整语法见 [TOOLS.md](./TOOLS.md) §3.3。
 **Web search 最短入口：**
 
 ```text
+/websearch on              # 启用显式配置的本地工具或 provider 线路
 /websearch                 # 看当前线路与 on/off/auto 意图
 /websearch auto            # provider 支持时按模型需要启用
-/websearch off             # 本会话禁用
+/websearch off             # 本会话禁用；SearXNG 工具 schema 不再发给模型
 ```
 
 Anthropic、OpenAI Responses 等 hosted 线路不需要本地工具；其它 provider 可先运行
 `bolo search status` 查看状态，再用 `bolo search enable exa` 配置内置的 MCP
-搜索 preset。SearXNG 的本地直连方式以
-[LOCAL_SEARCH_AND_FETCH.md](./LOCAL_SEARCH_AND_FETCH.md) 为准。
+搜索 preset。SearXNG 不使用 preset 或 MCP 桥，在用户/项目 `config.json` 显式配置：
+
+```jsonc
+{
+  "search": {
+    "searxng": {
+      "baseUrl": "http://127.0.0.1:8888",
+      "maxResults": 8,
+      "safeSearch": 1
+    }
+  }
+}
+```
+
+SearXNG 必须启用 JSON format；部署、HTTPS/LAN 限制、隐私去向与验证边界以
+[LOCAL_SEARCH_AND_FETCH.md](./LOCAL_SEARCH_AND_FETCH.md) 为准。仓库 fixture
+已覆盖协议，但真实实例 live smoke 仍未完成。
 
 `AskUserQuestion` 不是斜杠命令：在 `npx bolo` 的真实 TTY 会话里，模型遇到会
 实质改变结果的歧义时会调用它并显示选择面板。`-p`、pipe 等非交互会话会立即返回

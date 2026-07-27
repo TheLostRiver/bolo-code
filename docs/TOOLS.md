@@ -189,15 +189,17 @@ endSession → killAllBackgroundShells(session.backgroundShells)
 
 ## 3. Web search（AR-T3b）
 
-### 3.0 为什么不自建搜索
+### 3.0 默认走 provider；自托管 SearXNG 是显式例外
 
-三个参考实现全部让**模型 provider** 去搜，没人自己接搜索 API：
+三个参考实现默认都让**模型 provider** 去搜：
 HelsincyCode 用 Anthropic 服务端 `web_search`；codex 发 OpenAI hosted ToolSpec
 （文件名就叫 `hosted_spec.rs`）；opencode 两条都有，且把自调 Exa 的那份在源码注释里
 称为 *"this compromise"* / *"legacy"*。
 
-推论很关键：**provider-hosted 不引入新的第三方接收方**——对话本来就发给该 provider。
-所以没有理由默认关闭。
+推论很关键：**provider-hosted 不引入新的第三方接收方**——对话本来就发给该 provider，
+所以没有理由默认关闭。Bolo 只对用户显式配置的 SearXNG 实例提供一个例外：
+它直接调用稳定的 JSON API，目的是删除不受信任的桥，不是默认替所有 provider
+接第三方搜索 API。
 
 ### 3.1 方言表（真源：`packages/providers/src/webSearchDialect.ts`）
 
@@ -241,7 +243,7 @@ Jina Reader（Apache-2.0）与 Firecrawl（AGPL-3.0）有自托管版，但它�
 
 | 方案 | license | 查询实际去哪 |
 |------|---------|-------------|
-| SearXNG + MCP 桥 | AGPL-3.0 / 桥多为 MIT | ⚠️ **仍到 Google/Bing 等**，只隐藏你的 IP 与 cookie |
+| SearXNG JSON 直连 | AGPL-3.0；Bolo 侧零新增依赖 | ⚠️ **仍到 Google/Bing 等**，只隐藏你的 IP 与 cookie |
 | YaCy（intranet 模式） | GPL-2.0 | ✅ 自建索引，**真的不出本机** · 代价：结果质量与资源开销 |
 | 自建 Marginalia | AGPL-3.0 | ✅ 本地 · 代价：索引数据量巨大 |
 
@@ -266,11 +268,13 @@ Google / Bing / DuckDuckGo / Brave。自托管隐藏的是**你的 IP 与 cookie
 所以现在由 `test-search-preset-privacy.ts` 守住：privacy 不是 `local-only` 的 preset，
 其面向用户文案里**不得出现**「nothing leaves」这类绝对措辞。
 
-同一条 preset 还有第二个坑：**SearXNG 原生不讲 MCP 协议**，直接指向它的端口永远连不上，
-必须在前面架一个桥（如 `ihor-sokoliuk/mcp-searxng`，MIT）。文案已改为明说这一点。
+同一条 preset 还有第二个坑：**SearXNG 原生不讲 MCP 协议**，原占位 URL
+`http://127.0.0.1:8080/mcp` 并不存在。OI-04 已删除该 preset，改为
+`search.searxng` 显式配置与内置 `WebSearch` 直连 `/search?format=json`。
 
-> Bolo **不附带也不代跑**任何第三方桥接进程——那等于替用户引入供应链风险，
-> 与零运行时依赖红线相悖。preset 只负责把配置写对、把去向说清。
+直连 endpoint 只来自配置，不接受模型提供的 URL；公开 HTTP、URL 凭据、query、
+fragment 与畸形继承覆盖都会 fail closed。完整字段与边界见
+[LOCAL_SEARCH_AND_FETCH.md](./LOCAL_SEARCH_AND_FETCH.md)。
 
 ### 3.2 三条不可违反的规则
 
@@ -288,7 +292,7 @@ Responses 侧按 `item.type` 分流即可，**永远不要按 id 前缀判断**�
 **③ hosted 条目必须在 cache 断点之前混入。** 否则落在缓存前缀之外，每轮重新计费。
 同理 `max_uses` 是常量：被缓存的 tool 定义里放按调用变化的字段会击穿缓存。
 
-### 3.3 ✅ 活体验证状态（2026-07）· 五条线路全绿
+### 3.3 ✅ 验证状态（2026-07）· 五条活体 + 一条本地 fixture
 
 **两条 hosted 线路均通过第三方中转实测**——比官方端点更严格，中转还得能正确代理服务端工具。
 
@@ -299,6 +303,7 @@ Responses 侧按 `item.type` 分流即可，**永远不要按 id 前缀判断**�
 | `openai-compatible`（普通端点） | ✅ **活体验证**（DeepSeek 官方 API） | 确认**无** hosted 搜索；不 400；降级措辞正确 |
 | `openrouter-plugin` | ✅ **活体验证**（免费模型，零余额） | `plugins:[{id:'web'}]` 生效；引用正确解析 |
 | `mcp-external` | ✅ **活体验证**（Exa 免密层） | 见 §3.3b —— 连接 → 列工具 → 真调用 → 端到端 |
+| `searxng-direct` | ⚠️ **仅本地 fixture** | 参数、解析、预算、超时、错误、配置/reload/生产接线全绿；**未连接真实实例** |
 
 「零告警」是有意义的证据：未知块兜底一次都没触发，说明**没有任何块被静默丢弃**，
 猜的块类型名全部命中。
@@ -367,6 +372,7 @@ OpenRouter Chat Completions 是**嵌套** `annotations[].url_citation.url`。
 | 状态提示写着 `run 'bolo search enable exa'`，而该命令**当时不存在** | 补 `searchCli.ts`，并加断言：**文案里承诺的命令必须真能跑** |
 | MCP 工具失败时只吐两个词 `fetch failed` | `describeMcpCallError()`：指名 server、分类网络/超时、标注可重试；**原文一律保留**（`test-mcp-tool-error.ts`） |
 | 启用「搜索」搭售了一个**远程抓取**工具，模型拿它顶掉了本地 `WebFetch` | `McpServerConfig.allowTools` / `excludeTools`；exa preset 只注册 `web_search_exa`（`test-mcp-tool-filter.ts`） |
+| 高优先级畸形 `search.searxng` 被对象展开吞掉，低优先级 endpoint 仍启用 | 只有合法对象才深合并；畸形覆盖原样交给解析器并禁用工具（`test-searxng-search.ts`） |
 
 倒数第二条同样是端到端跑出来的：`bolo search enable exa` 会一次带进
 `web_search_exa` **和** `web_fetch_exa`，而实测中模型**选了后者**——于是用户的

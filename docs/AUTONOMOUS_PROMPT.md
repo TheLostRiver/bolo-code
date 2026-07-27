@@ -21,13 +21,13 @@ agent 独立解决的问题。** 不要越过外部/人工阻塞项，也不要�
 | 顺序 | 问题 | 状态 |
 |---|---|---|
 | 1 | OI-01 · 跨文档状态漂移 | ✅ 已收口 |
-| 2 | **OI-04 · SearXNG 产品契约矛盾** | **当前** |
-| 3 | **OI-06 · Desktop runtime 生产接线** | 下一项 |
+| 2 | OI-04 · SearXNG 产品契约矛盾 | ✅ 已收口（`c058998`） |
+| 3 | **OI-06 · Desktop runtime 生产接线** | **当前** |
 | 4 | OI-X1 · 真实 SearXNG live smoke | 外部阻塞 |
 | 5 | OI-H1/H2 · 真 TTY、真人点击与视觉走查 | 人工阻塞 |
 
-**从 OI-04 开始。** 契约先行：先在 `packages/*` 定义零依赖、显式配置、
-fail-closed 的 SearXNG JSON 搜索契约与 fixture 测试，再接 CLI/配置入口。
+**从 OI-06 开始。** OI-04 已完成零依赖、显式配置、fail-closed 的
+SearXNG JSON 搜索契约、fixture、CLI/Desktop warning 与文档收口；不要重复实现。
 
 **一条已知的遗留（不阻塞，顺手可做）：** `AskUserQuestion` 的**真人在真终端按键**没验过——
 控件测试注入 `readKey`，覆盖不到真实 raw-mode 与 REPL 抢 stdin 的问题。
@@ -36,7 +36,7 @@ fail-closed 的 SearXNG JSON 搜索契约与 fixture 测试，再接 CLI/配置�
 
 ### 关于 Electron / GUI（OI-06）
 
-- 排在 OI-04 后；不要把两项混成一个大提交。
+- OI-04 已完成；本轮只推进 OI-06 的最小切片。
 - 现有壳、视图模型、IPC 契约与 NSIS 已有；缺口是 runtime client 的生产
   adapter、会话切换、composer control、model/effort 修改和完整事件投影。
 - 视觉与交互方案已有 [DESKTOP_DESIGN.md](./DESKTOP_DESIGN.md)，先按现有方案和

@@ -5,9 +5,9 @@
 > 本文给出可照抄的配置，并把每条路径「查询/URL 到底去了哪里」说清楚。
 > 没有营销措辞——凡是会离开你机器的，这里都写明白。
 
-ROADMAP §14.5 记着两条相关待办：**真·本地搜索路径**（"缺一份可照抄的
-compose 文档"）与**本地抓取 preset**。本文交付前者，并解释后者为什么
-**不做成 preset**。
+本文给出 SearXNG compose 与 Bolo 直连配置。Bolo 不再为不存在的 `/mcp`
+端点提供占位 preset，也不要求用户安装第三方桥；本地抓取仍由内置
+`WebFetch` 完成。
 
 ---
 
@@ -18,7 +18,7 @@ compose 文档"）与**本地抓取 preset**。本文交付前者，并解释后
 | 能力 | 谁在做 | 出不出机器 |
 |------|--------|-----------|
 | `WebFetch`（读某个 URL） | **Bolo 自己**，直接 HTTP | 只连你给的那个站点 |
-| `WebSearch`（找 URL） | hosted provider 或 MCP server | 出 |
+| `WebSearch`（找 URL） | hosted provider、显式 SearXNG 直连或 MCP server | 通常会出；取决于线路 |
 
 也就是说**抓取本来就是本地的**。`search enable` 装 Exa preset 时刻意
 只注册 `web_search_exa` 一个工具，把它的远程抓取工具挡在外面——否则模型会
@@ -35,7 +35,7 @@ compose 文档"）与**本地抓取 preset**。本文交付前者，并解释后
 | 路径 | 查询去哪 | 需要 |
 |------|---------|------|
 | hosted / Exa 等 preset | 服务商 | 一行配置 |
-| **SearXNG 自托管** | **仍然到达 Google/Bing/DuckDuckGo 等上游引擎** | docker + 一个 MCP 桥 |
+| **SearXNG 自托管** | **仍然到达 Google/Bing/DuckDuckGo 等上游引擎** | docker + Bolo 显式配置 |
 | **YaCy（自有索引）** | 不出你掌控的范围 | 自己爬、自己建索引 |
 
 **SearXNG 不是 local-only，这点必须说清。** 它是**元搜索代理**，自己没有索引：
@@ -100,72 +100,67 @@ curl 'http://127.0.0.1:8888/search?q=test&format=json' | head -c 200
 
 ## 3. 把它接进 Bolo
 
-SearXNG **不讲 MCP**，所以中间需要一个桥把 HTTP 翻成 MCP。
-
-### 3.1 先说清楚你在信任什么
-
-npm 上至少有 **十个**互相竞争的 SearXNG MCP 桥，**没有一个是权威实现**——
-全部是单人维护的包。Bolo **不内置其中任何一个的 preset**，理由是具体的：
-
-- 装 preset 意味着配置里会出现一条 `npx -y <package>` 之类的命令，
-  而 `npx -y` 是**在你机器上下载并执行远端代码**。为一个「不信任第三方」的
-  需求引入一个未经审计的第三方包，方向是反的。
-- Bolo **不代跑第三方进程**（供应链 + 零运行时依赖红线）。
-- 一个 preset 等于一次背书。在没有权威实现的领域，背书是误导。
-
-**能做的是把配置写对、去向说清**，选包由你决定。挑的时候至少看三件事：
-仓库是否开源可读、它有没有除 SearXNG 之外的出站连接、发布者是谁。
-
-### 3.2 配置形状
-
-桥跑起来后（stdio 或 http 都支持），写进 `.bolo/mcp.json`：
+SearXNG 不讲 MCP，但它有稳定的 JSON 搜索接口。Bolo 直接调用该接口，
+不需要桥。把下面配置写进用户 `~/.bolo/config.json` 或项目
+`.bolo/config.json`：
 
 ```jsonc
 {
-  "mcpServers": {
+  "search": {
     "searxng": {
-      // stdio：本地进程
-      "type": "stdio",
-      "command": "node",
-      "args": ["/abs/path/to/your-bridge/index.js"],
-      "env": { "SEARXNG_URL": "http://127.0.0.1:8888" },
-
-      // 只注册你要的那个工具。桥往往还会带进来别的能力
-      // （典型的是一个远程抓取工具，会顶掉本地 WebFetch）
-      "allowTools": ["search"]
+      "enabled": true,
+      "baseUrl": "http://127.0.0.1:8888",
+      "timeoutMs": 15000,
+      "maxResults": 8,
+      "language": "zh-CN",
+      "safeSearch": 1
     }
   }
 }
 ```
 
-HTTP 桥则是：
+`/search` 会自动追加；若 `baseUrl` 已以 `/search` 结尾则不会重复。字段含义：
 
-```jsonc
-{
-  "mcpServers": {
-    "searxng": {
-      "type": "http",
-      "url": "http://127.0.0.1:8080/mcp",
-      "allowTools": ["search"]
-    }
-  }
-}
-```
+| 字段 | 默认 | 约束 |
+|------|------|------|
+| `enabled` | 配置段存在即启用 | `false` 可关闭继承的用户配置 |
+| `baseUrl` | 无 | 必填；公开地址必须 HTTPS |
+| `timeoutMs` | `15000` | 100–60000 毫秒 |
+| `maxResults` | `8` | 1–20 |
+| `language` | 省略 | 字母、数字、`_`、`-`，最长 32 |
+| `safeSearch` | `0` | 0 关闭、1 中等、2 严格 |
 
-字段真源：`packages/mcp/src/types.ts` 的 `McpServerConfig`。
-`type` 可省略——有 `command` 推断 stdio，有 `url` 推断 http。
-`env` 的值支持 `${ENV_VAR}` 展开，**密钥不要写进文件**。
+明文 HTTP 只允许显式 loopback/LAN 主机。URL 不能包含凭据、query 或 fragment；
+无效配置会禁用工具并在 CLI/Desktop 显示 warning，不会猜测或回退到较低优先级
+endpoint。项目配置只覆盖写出的子字段；要关闭用户层配置请写
+`"enabled": false`。
 
-改完 `/mcp` 可以看连接状态与实际注册了哪些工具。
-
-### 3.3 验证它真的在本地
+查看解析后的线路：
 
 ```bash
-# 断网也应该能搜（前提是 SearXNG 容器和桥都在本机）
-# 若断网后搜索仍返回结果 → 说明确实没出机器
+bolo search status
 ```
 
-这一步值得做：**配置对不对，只有实测知道。**
+输出会列出同时存在的 hosted、SearXNG direct 与 MCP 搜索线路，并对直连显示最终
+endpoint。会话内 `/websearch off` 会把直连 `WebSearch` schema 从后续模型请求中
+移除；`on` / `auto` 会恢复它。
+
+### 3.1 验证边界
+
+仓库内可重复的协议验证：
+
+```bash
+npm run test:searxng-search
+```
+
+它使用本地 HTTP fixture 覆盖参数、响应解析、错误分类、超时、响应/输出预算、
+配置继承、reload 去重与生产 session 接线。它**没有**连接真实 SearXNG，也没有
+验证上游引擎。
+
+真实实例先用 §2 的 `curl` 确认 JSON，再在 Bolo 会话里发起搜索。断网后
+SearXNG 通常无法取得新结果，因为它仍依赖上游引擎；不能用“服务跑在本机”
+推导“查询内容不出机器”。真实 live smoke 仍列在
+[OPEN_ISSUES.md](./OPEN_ISSUES.md) OI-X1。
 
 ---
 
@@ -188,31 +183,16 @@ HTTP 桥则是：
 
 ---
 
-## 5. 已评估但未实施：Bolo 直连 SearXNG
+## 5. 直连工具的安全与预算边界
 
-**现状的别扭之处：** SearXNG 暴露的是一个普通的 JSON HTTP 接口
-（`/search?q=…&format=json`），而桥的全部工作就是把这个 GET 翻译成 MCP。
-为此在一个隐私敏感的链路里插进一个未经审计的 npm 包，收益与代价不成比例。
-
-**替代方案：** Bolo 直接打这个端点——用户给 URL，Bolo 发请求、解 JSON。
-不需要桥、不需要第三方进程、不新增依赖（用全局 `fetch`）。
-
-**为什么这里只是记录而不是直接做：**
-
-`searchPresets.ts` 的模块头写着一条明确决定——「这条腿**不写新的 HTTP
-搜索客户端**，搜索作为一个 MCP server 交付」。那条决定是针对**服务商**
-线路做的，理由是复用已有的 MCP client 而不是造第二套客户端；
-但自托管场景的目标恰恰相反——**不经过第三方**才是重点，
-这时「多一个进程」不是省事而是引入风险。
-
-**前提也是成立的：**服务商线路走 MCP 的理由（复用 client、结果进
-`truncateMiddle` 与 per-tool 预算）对自托管同样可以满足——本地直连的结果
-一样是 tool-result，一样过本地预算。
-
-**推荐：实施。** 但它反转一条已写下的架构决定，且新增一个会发网络请求的
-内置工具，属所有者决定。要立项的话，第一步是核实 SearXNG JSON 响应的
-字段形状（`results[].url` / `.title` / `.content`）并按 fail-closed 解析，
-而不是照着记忆写映射。
+- endpoint 只来自显式配置，不接受模型输入；这不是通用 SSRF 工具。
+- 请求固定为 GET `/search?format=json`，重定向按错误处理。
+- 单次响应最多 1,000,000 字节；结果最多 20 条，默认 8 条。
+- title、URL、snippet 与元数据分别限长，最终工具输出最多 12,000 字符，
+  并继续经过 compact 的 `WebSearch` 工具预算。
+- 超时、HTTP 错误、非 JSON、错误响应形状、响应过大和网络失败使用不同
+  `errorCode`，不把坏响应伪装成空结果。
+- 结果 URL 只接受 HTTP/HTTPS；渲染为纯文本，不执行结果页面脚本。
 
 ---
 
@@ -220,6 +200,7 @@ HTTP 桥则是：
 
 - [PROVIDER_UX.md](./PROVIDER_UX.md) — `search enable` / preset 与 `allowTools`
 - [PERMISSIONS.md](./PERMISSIONS.md) §5 — headless 下按工具放行（`--allowed-tools`）
+- [CONFIG.md](./CONFIG.md) — `search.searxng` 配置字段与合并
 - [TOOLS.md](./TOOLS.md) — `WebFetch` / `WebSearch` 契约
-- `packages/mcp/src/types.ts` — `McpServerConfig` 字段真源
-- `packages/config/src/searchPresets.ts` — preset 与 `privacy` 字段
+- `packages/config/src/searxng.ts` — 配置解析与 endpoint 策略真源
+- `packages/tools/src/searxngSearch.ts` — 请求、解析与预算真源

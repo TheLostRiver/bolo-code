@@ -80,6 +80,7 @@ defaults
 - **Skills 同 id**：bundled ← **extra**（可选）← user ← project ← plugin（见 [SKILLS.md](./SKILLS.md)）  
 - **Subagent 类型同名**（S7）：内置 ← 用户 `agents/*.md` ← 项目 `.bolo/agents/*.md`（见 [SUBAGENT.md](./SUBAGENT.md)）  
 - **Subagent 全局策略**（Spec v0）：`config.json` → `agents` 段（`enabled` / `maxConcurrent` / `defaultModel` / `defaultEffort` / `maxSpawnDepth` / `overflow`）；见 [SUBAGENT_SPEC.md](./SUBAGENT_SPEC.md)
+- **SearXNG 直连**：`search.searxng` 子字段深合并；项目层可写 `enabled: false` 关闭用户层配置。畸形高优先级值不会回退启用低优先级 endpoint
 - **Plugins（PL1+PL2）**：扫 user/project `plugins/<id>/bolo.plugin.json`；合并 skills（默认 `skills/`）、hooks、mcp、**commands**（默认 `commands/*.md`）；会话内 `/plugins reload` 热刷新；**无**市场/远程安装
 
 ## 3. `config.json` 示例
@@ -103,6 +104,11 @@ defaults
     "maxSpawnDepth": 0,
     "overflow": "reject"
   },
+  "search": {
+    "searxng": {
+      "enabled": false
+    }
+  },
   "extraSkillRoots": [],
   "foreignPluginRoots": []
 }
@@ -115,6 +121,39 @@ defaults
 `foreignPluginRoots`（**IMPORT-P1**，可选）：外来插件目录列表（只读映射 **skills**）。识别 `.claude-plugin/plugin.json` / `.codex-plugin/plugin.json` 等；**不**加载 hooks/commands；**不**接官方市场。失败与 unsupported contributes 记入 workspace `pluginMerge.errors` 警告。见 [PLUGINS.md](./PLUGINS.md)。
 
 `provider.kind` 还可为：`openai-responses`（原生 Responses `/responses`）、`anthropic`、`mock`。详见 [PROVIDERS.md](./PROVIDERS.md)。
+
+### SearXNG 直连搜索
+
+只有显式配置才注册本地 `WebSearch` 工具：
+
+```jsonc
+{
+  "search": {
+    "searxng": {
+      "baseUrl": "http://127.0.0.1:8888",
+      "timeoutMs": 15000,
+      "maxResults": 8,
+      "language": "zh-CN",
+      "safeSearch": 1
+    }
+  }
+}
+```
+
+| 字段 | 默认 | 说明 |
+|------|------|------|
+| `enabled` | 段存在即启用 | `false` 禁用，包括关闭继承配置 |
+| `baseUrl` | 无 | 必填；自动追加 `/search` |
+| `timeoutMs` | `15000` | 100–60000 毫秒 |
+| `maxResults` | `8` | 1–20 |
+| `language` | 省略 | 字母、数字、`_`、`-`，最长 32 |
+| `safeSearch` | `0` | 0–2 |
+
+公开 endpoint 必须 HTTPS；HTTP 只允许显式 loopback/LAN 主机。URL 不允许凭据、
+query 或 fragment。错误配置会禁用工具并产生 CLI/Desktop warning。
+`bolo search status` 可查看最终 endpoint 与同时配置的 hosted/MCP 线路。
+完整部署、隐私和 fixture/live 边界见
+[LOCAL_SEARCH_AND_FETCH.md](./LOCAL_SEARCH_AND_FETCH.md)。
 
 ### 多 Provider（**P 轨 · P0–P4 日用已闭环**）
 
