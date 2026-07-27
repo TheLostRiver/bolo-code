@@ -15,6 +15,8 @@
 
 ## 1. Agent 可直接解决
 
+当前无未关闭项。以下条目保留关闭证据，防止后续重复实现或状态回退。
+
 ### OI-01 · 状态真源与使用文档漂移
 
 **状态：CLOSED（文档同步批次）**
@@ -23,7 +25,7 @@
 
 - ROADMAP §0/§13.11、handoff、README 与 autonomous prompt 使用同一队列，
   并在 OI-04 关闭后统一把 OI-06 标为当前，同时保留外部/人工阻塞标记。
-- AR4 ADR 已按正文改为六个候选；RELEASE 与默认门禁现统一为 109 个脚本。
+- AR4 ADR 已按正文改为六个候选；RELEASE 与默认门禁现统一为 111 个脚本。
 - USAGE 已补 `--allowed-tools`、`--disallowed-tools`、`AskUserQuestion`
   与 Web search 的最短入口。
 - `test-dist-build.ts` 守住默认门禁条目和 package manager；
@@ -162,7 +164,7 @@
 
 ### OI-07 · SearXNG 诊断与部署体验
 
-**状态：IN PROGRESS（A/B 已关闭；C 可选且 gated）**
+**状态：CLOSED（A `7754525` · B `3e96573` · C `ef03f3d` / `f623ad9`）**
 
 准入证据：
 
@@ -201,21 +203,29 @@
   成功/部分成功 exit 0，网络/JSON/空结果/全故障 exit 1，用法或未配置 exit 2。
 - `test:search-doctor` 的本地 HTTP fixture 覆盖 config/search 两阶段 HTTP、timeout、
   非 JSON、坏 shape、正常非空、合法空结果、全故障、部分成功与真实 CLI 入口；
-  已进入 109 项默认门禁，公网可用性不进入 `npm test`。
+  已进入当前 111 项默认门禁，公网可用性不进入 `npm test`。
 - 源码 CLI 与完整门禁产出的 `dist/bolo.mjs` 均已对真实
   `2026.7.26+b060c780d` 实例运行：8 条有效结果、working engines 与部分故障，
   `partial_success`、exit 0。
 
 #### OI-07C · 可选 Docker setup
 
-**状态：OPEN（GATED；不属于 OI-07A/B）**
+**状态：CLOSED（`ef03f3d` · `f623ad9`）**
 
-- Docker 不是 Bolo 依赖；不静默安装 Docker，不在用户未选择时创建或启动容器。
-- 只有用户明确选择且本机已有 Docker 时，才评估
-  `setup/status/logs/stop`：生成 secret/settings、启用 JSON、执行非空 smoke，
-  再原子合并 Bolo 配置。
-- 不把本轮临时使用的 Bing 强制设为所有用户默认引擎；setup 应诊断当前网络，
-  由用户决定可用引擎。若这些边界不能同时满足，书面关闭而不是交付半自动脚本。
+- 新增 `bolo search searxng setup [--port N]`、`status [--json]`、
+  `logs [--tail N]` 与 `stop`；Docker 必须由用户预先安装，只有显式 `setup` 才会
+  创建 managed files 或启动容器。
+- 使用固定镜像 digest，只绑定 loopback，随机生成 secret；settings 继承 SearXNG
+  默认引擎，只启用 `html/json`，不强制 Bing 或任何单一引擎。
+- fresh setup 在所有写入前预检 loopback 端口与 Docker/Compose，再写文件、启动容器、
+  执行非空 doctor smoke，最后才以保留 JSONC 注释的方式原子合并 Bolo 配置。
+- Docker up、smoke 或 config commit 失败会 compose down 并清理本次新建目录；既有
+  managed setup 不被误删。无 manifest 的 `~/.bolo/searxng` 会 fail closed，避免覆盖
+  用户文件。
+- `status` 不做上游查询；`logs` 有输出预算；`stop` 保留 managed data、manifest 与
+  Bolo config，之后可再次 `setup`。
+- fake runner 专项已进入默认门禁；源码与 `dist/bolo.mjs` 均完成真实
+  setup → status → doctor → logs → stop，且没有触碰 OI-X1 的 8888 实例。
 
 ## 2. 外部资源项（已关闭）
 
@@ -270,7 +280,7 @@ Ctrl-C/Esc 以及 REPL 是否抢占 stdin。需要人在真实终端按键确认
 
 - ROADMAP、RELEASE、AGENT_HANDOFF、USAGE、ARCHITECTURE、AR4 ADR、
   Desktop 与本地搜索专题文档；
-- 根与 Desktop package metadata、105 项默认测试串及 140 个 `test-*.ts` 的注册差集；
+- 根与 Desktop package metadata、111 项默认测试串及 146 个 `test-*.ts` 的注册差集；
 - 历史 SearXNG preset、WebFetch、工具注册、权限分类、runtime client、Desktop IPC/renderer；
 - 代码中的 TODO/FIXME、空 catch 与未实现标记；
 - 当前完整门禁、electron-builder registry 版本与真实 NSIS 构建。

@@ -376,12 +376,14 @@ OpenRouter Chat Completions 是**嵌套** `annotations[].url_citation.url`。
 | 生产调用 | 2.32s 返回 5 条、6 个 URL；首条为 OpenAI 官方 API 文档 |
 | fixture 回归 | `npm run test:searxng-search` EXIT=0 |
 | 只读诊断 | `bolo search doctor --json` 返回版本、能力、8 条有效结果、working/unresponsive engines，`partial_success` / EXIT=0 |
+| 可选部署 | 源码与 dist 均完成 `searxng setup → status → doctor → logs → stop`；固定 digest、loopback、secret、rollback 与成功后才写 config 均命中 |
 
 **活体发现的限制：** 初始成功后，Brave 429、Startpage CAPTCHA、DuckDuckGo /
 Google CSE / Wikipedia timeout 曾让同一查询在原始 JSON 中变成 0 条；这不是
 Bolo 解析丢失。逐引擎探测确认该网络的 Bing 可用，显式启用后默认 JSON 查询
-1.94s 返回 37 条，生产调用恢复。部署 smoke 必须要求**非空结果**并查看
-`unresponsive_engines`；HTTP 200 或容器 running 都不能单独证明搜索可用。
+1.94s 返回 37 条，生产调用恢复。产品 setup **不复制这项本机特例**，而是保留
+SearXNG 默认引擎并以非空 doctor smoke 验收；HTTP 200 或容器 running 都不能单独
+证明搜索可用。
 
 OI-07A 已把这个响应字段接入生产工具契约：
 
@@ -417,10 +419,11 @@ exit 2。公网波动不进默认门禁，`test:search-doctor` 使用本地 fixt
 | MCP 工具失败时只吐两个词 `fetch failed` | `describeMcpCallError()`：指名 server、分类网络/超时、标注可重试；**原文一律保留**（`test-mcp-tool-error.ts`） |
 | 启用「搜索」搭售了一个**远程抓取**工具，模型拿它顶掉了本地 `WebFetch` | `McpServerConfig.allowTools` / `excludeTools`；exa preset 只注册 `web_search_exa`（`test-mcp-tool-filter.ts`） |
 | 高优先级畸形 `search.searxng` 被对象展开吞掉，低优先级 endpoint 仍启用 | 只有合法对象才深合并；畸形覆盖原样交给解析器并禁用工具（`test-searxng-search.ts`） |
-| SearXNG 容器正常、JSON 也是 200，但默认引擎在数次查询后全部 429/CAPTCHA/timeout → 0 结果 | OI-07A 让 Bolo 返回 `upstream_unavailable`/部分成功 warning；setup/live smoke 仍必须断言非空结果，并配置当前网络可用的引擎 |
+| SearXNG 容器正常、JSON 也是 200，但默认引擎在数次查询后全部 429/CAPTCHA/timeout → 0 结果 | OI-07A 让 Bolo 返回 `upstream_unavailable`/部分成功 warning；setup/live smoke 仍必须断言非空结果，必要时由用户按 doctor 诊断调整当前网络可用的引擎 |
 | `search doctor --json` 被通用 argv parser 当成 runtime `--json`；请求成功后 `process.exit` 又在 Windows 强关 libuv handle | `search` 在通用 parser 前分发；用 `process.exitCode` 自然收口网络句柄；真实 `main.ts` 子进程进入 fixture 门禁 |
+| Windows 上 8896 没有监听进程，Docker bind 仍报 EACCES；18080 则被真实进程占用 | 8896 落在系统 excluded range `8890–8989`。fresh setup 在任何文件/Docker 变更前用 Node loopback bind 预检，EACCES/EADDRINUSE 都以 exit 2 清晰拒绝 |
 
-倒数第二条同样是端到端跑出来的：`bolo search enable exa` 会一次带进
+“启用搜索搭售远程抓取”这一条同样是端到端跑出来的：`bolo search enable exa` 会一次带进
 `web_search_exa` **和** `web_fetch_exa`，而实测中模型**选了后者**——于是用户的
 **抓取**也一并出了机器，他并没要求这个。过滤落在 `listTools()` 之后那**一个**咽喉点，
 并存进 `ConnectedMcpServer.toolFilter`：只在 connect 处过滤的话，`list_changed`
@@ -431,7 +434,7 @@ exit 2。公网波动不进默认门禁，`test:search-doctor` 使用本地 fixt
 所以名字对不上时必须告警并列出 server 实际提供了什么；`excludeTools` 打错则相反
 （你以为排掉了其实没有），同样告警。
 
-最后一条是端到端跑出来的，值得展开——它同时坑了人和模型：
+“MCP 工具失败时只吐 `fetch failed`”这一条也是端到端跑出来的，值得展开——它同时坑了人和模型：
 
 - 会话可以挂**多个** MCP server，`fetch failed` 不说是哪个坏了，用户无从修。
 - **模型也在读这条错误**，据此决定重试、换工具还是放弃。实测它拿到无信息的错误后
@@ -489,13 +492,13 @@ npx tsx scripts/test-bash-background-runtime.ts  # 真实进程 spawn/read/kill/
 |------|------|
 | plan 工具流 | `ExitPlanMode`（`packages/tools/src/exitPlanMode.ts`）：提计划 → 用户批准 → 落回 `default` 继续逐项审批。plan 模式下 gate 特批它为 `ask`，否则规划态会把自己的出口也 deny 掉 |
 | `AskUserQuestion` | 见 §5.1 |
-| 网页搜索 | 五条线路，见 §3 |
+| 网页搜索 | 六条线路，含显式 `searxng-direct`，见 §3 |
+| 可选本地搜索部署 | `bolo search searxng setup/status/logs/stop`；Docker 外置，固定镜像、loopback、rollback、非空 smoke 后才写配置 |
 
 **尚未实现：**
 
 | 候选 | 现状 |
 |------|------|
-| `WebSearch`（本地发现） | 无（只有 `WebFetch`，能取已知 URL 不能发现）。搜索目前全部经 provider 或 MCP，见 §3 |
 | 前台命令自动后台化 | 无（参考实现有阻塞预算超时自动转后台；语义复杂，暂不做） |
 | LSP | 无（体量大，归 AR4 证据门控） |
 

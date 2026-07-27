@@ -5,9 +5,9 @@
 > 本文给出可照抄的配置，并把每条路径「查询/URL 到底去了哪里」说清楚。
 > 没有营销措辞——凡是会离开你机器的，这里都写明白。
 
-本文给出 SearXNG compose 与 Bolo 直连配置。Bolo 不再为不存在的 `/mcp`
-端点提供占位 preset，也不要求用户安装第三方桥；本地抓取仍由内置
-`WebFetch` 完成。
+本文优先给出 Bolo 管理的 SearXNG 可选部署，再保留手工 compose 与直连配置。
+Bolo 不再为不存在的 `/mcp` 端点提供占位 preset，也不要求用户安装第三方桥；
+本地抓取仍由内置 `WebFetch` 完成。
 
 ---
 
@@ -54,16 +54,40 @@
 
 ---
 
-## 2. 自托管 SearXNG（可照抄）
+## 2. 自托管 SearXNG（推荐：Bolo 管理）
 
-官方推荐 compose 部署，镜像 `docker.io/searxng/searxng:latest`。
+前提只有一个：**Docker 与 Docker Compose 已经可用**。Bolo 不安装 Docker，也不会在
+安装 Bolo、启动会话或运行 `search status` 时静默创建容器。明确选择后运行：
+
+```bash
+bolo search searxng setup             # 默认 127.0.0.1:8888
+bolo search searxng setup --port 8889 # 默认端口不可用时选择其它端口
+bolo search searxng status --json
+bolo search searxng logs --tail 200
+bolo search searxng stop
+```
+
+managed files 位于用户 Bolo 配置根下的 `searxng/`。setup 使用固定镜像 digest，只绑定
+loopback，随机生成 secret，继承 SearXNG 默认引擎，并启用 `html/json`。fresh setup 的
+顺序是：端口预检 → Docker/Compose 预检 → 写 managed files → compose up → 非空
+doctor smoke → 原子合并用户 `config.json`。任何一步失败都会停止并清理本次新建的
+容器/目录，Bolo 配置保持原样。
+
+`status` 只看 compose 状态，不查询上游；`stop` 会停止 Bolo 管理的 compose project，
+但保留 data、manifest 与 Bolo config，之后再次 `setup` 即可启动。若 `~/.bolo/searxng`
+已经存在但没有 Bolo manifest，命令会拒绝覆盖。
+
+### 2.1 手工 compose（高级 / 替代路径）
+
+若你要自己管理 compose，固定到与当前产品契约相同的可审计镜像，不要使用
+会随时间漂移的 `latest`：
 
 ```yaml
 # docker-compose.yml
+name: bolo-searxng-manual
 services:
   searxng:
-    image: docker.io/searxng/searxng:latest
-    container_name: searxng
+    image: docker.io/searxng/searxng@sha256:d0aaeb14880e6e92bde1518fcc7261e995783367d63d95203383607bef9c6516
     ports:
       - '127.0.0.1:8888:8080'   # 只绑 loopback：没有理由暴露到局域网
     volumes:
@@ -74,10 +98,24 @@ services:
     restart: unless-stopped
 ```
 
-启动一次让它生成默认配置，然后**必须改一处**：
+先生成一个至少 32 字符的随机 secret，例如：
+
+```bash
+node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"
+```
+
+把输出填入配置；保留默认引擎，只启用 API 所需的 JSON format：
 
 ```yaml
 # config/settings.yml
+use_default_settings: true
+
+server:
+  secret_key: '<粘贴上一步输出>'
+  bind_address: '0.0.0.0'
+  port: 8080
+  limiter: false
+
 search:
   formats:
     - html
@@ -88,7 +126,7 @@ search:
 > 官方文档原话是 "remove format to deny access"。不加 `json`，
 > 桥连上了也只会拿到一堆 HTML。
 
-改完 `docker compose restart searxng`，自测：
+写好配置后运行 `docker compose up -d`，再自测：
 
 ```bash
 curl 'http://127.0.0.1:8888/search?q=test&format=json' | head -c 200
@@ -96,27 +134,19 @@ curl 'http://127.0.0.1:8888/search?q=test&format=json' | head -c 200
 
 拿到 JSON 才继续往下。
 
-**200 但 `results: []` 仍然不算成功。** 真实上游会按出口 IP 限流、出
-CAPTCHA 或超时；先看 JSON 的 `unresponsive_engines`。必要时在
-`settings.yml` 显式启用当前网络可达的引擎，例如本仓 2026-07 live smoke
-所在网络中 Bing 可用：
-
-```yaml
-engines:
-  - name: bing
-    disabled: false
-```
-
-这不是推荐所有人固定用 Bing，而是提醒：SearXNG 的“服务已启动”与“至少一个
-上游能返回结果”是两个验收点。修改后 restart，再要求 `results` 非空。
+**200 但 `results: []` 仍然不算成功。** 真实上游会按出口 IP 限流、出 CAPTCHA
+或超时；先看 JSON 的 `unresponsive_engines`，再按你所在网络选择可用引擎。
+产品配置不强制 Bing 或任何单一引擎。SearXNG 的“服务已启动”与“至少一个上游能
+返回结果”是两个验收点；修改引擎配置后 restart，再要求 `results` 非空。
 
 ---
 
 ## 3. 把它接进 Bolo
 
-SearXNG 不讲 MCP，但它有稳定的 JSON 搜索接口。Bolo 直接调用该接口，
-不需要桥。把下面配置写进用户 `~/.bolo/config.json` 或项目
-`.bolo/config.json`：
+SearXNG 不讲 MCP，但它有稳定的 JSON 搜索接口，Bolo 直接调用而不需要桥。
+若使用上面的 managed setup，成功 smoke 后用户 `~/.bolo/config.json` 已被原子合并，
+无需手写。连接已有实例或手工 compose 时，把下面配置写进用户
+`~/.bolo/config.json` 或项目 `.bolo/config.json`：
 
 ```jsonc
 {
@@ -194,15 +224,19 @@ npm run test:searxng-search
 session 接线。它**没有**连接真实 SearXNG，也没有验证上游引擎；这是可重复的
 默认门禁，不应改成依赖公网的测试。
 
-doctor 的可重复门禁另有：
+doctor 与 managed setup 的可重复门禁另有：
 
 ```bash
 npm run test:search-doctor
+npm run test:searxng-setup
+npm run test:searxng-setup-cli
 ```
 
-它覆盖 `/config` 与 `/search` 两阶段 HTTP/timeout/JSON/shape、非空、合法空结果、
-全故障、部分成功、text/JSON/exit code、无配置写入、status 零网络请求与真实 CLI
-入口。公网可用性仍不进入默认门禁。
+`test:search-doctor` 覆盖 `/config` 与 `/search` 两阶段 HTTP/timeout/JSON/shape、非空、
+合法空结果、全故障、部分成功、text/JSON/exit code、无配置写入、status 零网络请求
+与真实 CLI 入口。两个 setup 专项分别覆盖 managed files/JSONC 原子补丁，以及 fake
+Docker runner 下的命令顺序、rollback、端口预检与 status/logs/stop。公网可用性仍不
+进入默认门禁。
 
 OI-X1 已于 2026-07-27 在官方 Docker 镜像 `2026.7.26-b060c780d` 上完成真实
 live smoke：直接 JSON 查询返回真实 URL；生产 status/session/permission-gated
@@ -217,7 +251,9 @@ OI-07A 之前原始 JSON 与 Bolo 都只表现为空结果；现在全故障会�
 
 OI-07B 完成后，源码 CLI 与门禁构建出的 `dist/bolo.mjs` 又对同一真实实例执行
 doctor：报告 `2026.7.26+b060c780d`、279 个已配置引擎、8 条有效结果及可工作/故障
-引擎，`partial_success` / exit 0。
+引擎，`partial_success` / exit 0。OI-07C 随后又让源码与 dist 分别在隔离端口完成
+managed setup/status/doctor/logs/stop；Windows excluded port 与真实占用端口都会在
+任何文件或 Docker 变更前被预检拒绝。
 
 ---
 

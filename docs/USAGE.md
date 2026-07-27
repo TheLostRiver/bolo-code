@@ -183,9 +183,24 @@ exit 2，不会静默忽略。完整语法见 [TOOLS.md](./TOOLS.md) §3.3。
 /websearch off             # 本会话禁用；SearXNG 工具 schema 不再发给模型
 ```
 
+已有 Docker 且希望让 Bolo 管理本机 SearXNG 时，使用显式子命令：
+
+```bash
+bolo search searxng setup             # 默认只绑定 127.0.0.1:8888
+bolo search searxng setup --port 8889 # 自选可用端口
+bolo search searxng status --json     # 只看容器状态，不查询上游
+bolo search searxng logs --tail 200
+bolo search searxng stop              # 停容器；保留数据、manifest 与 Bolo 配置
+```
+
+Docker 必须预先安装；Bolo 不会安装它。只有 `setup` 会创建 managed files 或启动容器。
+fresh setup 会先预检端口与 Docker/Compose，启动后要求 doctor smoke 返回非空结果，
+成功后才原子合并用户 `config.json`；失败会回滚本次新建的容器与目录。
+
 Anthropic、OpenAI Responses 等 hosted 线路不需要本地工具；其它 provider 可先运行
 `bolo search status` 查看状态，再用 `bolo search enable exa` 配置内置的 MCP
-搜索 preset。SearXNG 不使用 preset 或 MCP 桥，在用户/项目 `config.json` 显式配置：
+搜索 preset。SearXNG 不使用 preset 或 MCP 桥；若使用已有或手工部署的实例，在
+用户/项目 `config.json` 显式配置：
 
 ```jsonc
 {
@@ -543,6 +558,8 @@ npx bolo runtime list --resume <id> --json
 | Desktop 起不来 | 先跑 `npm run build:desktop` / `npm run test:desktop-launch`；再查 Electron 二进制与镜像下载 |
 | Agent 工具没有 | `agents.enabled` / `BOLO_AGENTS_ENABLED` |
 | 子又开子失败 | 预期：`maxSpawnDepth: 0`；需要时再抬 |
+| SearXNG setup 报端口不可用 | 换 `--port`；Windows 的 excluded port range 即使没有监听进程也会返回 EACCES |
+| SearXNG 容器在跑但搜不到 | 运行 `bolo search doctor`；查看 working / unresponsive engines，HTTP 200 不代表上游可用 |
 
 ---
 
@@ -565,6 +582,8 @@ npm run test:runtime-cli-pager
 npm run test:runtime-cli-automation
 npm run test:session-settings
 npm run test:desktop-session-settings
+npm run test:searxng-setup
+npm run test:searxng-setup-cli
 npx tsx scripts/test-slash.ts
 npx tsx scripts/test-multi-provider.ts
 npx tsx scripts/test-ultrathink.ts

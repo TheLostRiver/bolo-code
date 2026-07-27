@@ -124,7 +124,20 @@ defaults
 
 ### SearXNG 直连搜索
 
-只有显式配置才注册本地 `WebSearch` 工具：
+已有 Docker 的用户可先运行：
+
+```bash
+bolo search searxng setup [--port N]
+bolo search searxng status [--json]
+bolo search searxng logs [--tail N]
+bolo search searxng stop
+```
+
+Docker 必须预先安装，且只有显式 `setup` 会创建文件或启动容器。setup 使用固定镜像、
+loopback 端口与随机 secret；非空 doctor smoke 通过后才原子合并用户 config。
+`stop` 保留 managed data/manifest/config，之后可再次 setup。
+
+若连接已有或手工部署的实例，只有显式配置才注册本地 `WebSearch` 工具：
 
 ```jsonc
 {

@@ -123,12 +123,12 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | Electron GUI | ~80–88% | runtime IPC/client、会话切换/恢复、composer controls、model/effort 与 control/tool progress 已真接并经 Electron 自动化；真人点击/视觉未验 |
 | 产品相对 HC 全家桶 | ~74–88% | 日用高；UI 密度另计 |
 
-**已闭环：** Diff · Hooks · Compact（含 AR2 全段）· Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR-T1–T3+ Agent 能力面** · **AR3/OI-06 Desktop 产品接线** · **AR4 evidence gate** · **AR5 release hardening** · **OI-04 SearXNG 直连、OI-X1 真实实例 smoke、OI-07A 上游诊断与 OI-07B doctor**。
+**已闭环：** Diff · Hooks · Compact（含 AR2 全段）· Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR-T1–T3+ Agent 能力面** · **AR3/OI-06 Desktop 产品接线** · **AR4 evidence gate** · **AR5 release hardening** · **OI-04 SearXNG 直连、OI-X1 真实实例 smoke、OI-07 上游诊断 / doctor / 可选 Docker setup**。
 
-**当前主线：** [OPEN_ISSUES.md](./OPEN_ISSUES.md) OI-07C 评估。OI-07B 已以
-`3e96573` 落地 `bolo search doctor [--json]`，与配置型 status 分离并经真实
-源码/发行产物验证。OI-07C Docker setup 仍为 gated 可选项，不得静默安装或把
-Docker 变成 Bolo 依赖。
+**当前主线：** 默认 agent 可闭环队列为空。OI-07B 已以 `3e96573` 落地只读
+`bolo search doctor [--json]`；OI-07C 已以 `ef03f3d` / `f623ad9` 落地显式
+`bolo search searxng setup|status|logs|stop`，并完成源码/发行产物真实验证。
+Docker 仍须用户预装，不是 Bolo 依赖，也不会被静默启动。
 
 OI-X1 已在 SearXNG `2026.7.26-b060c780d` 真实 Docker 实例完成：JSON API、
 生产配置/status、permission-gated `WebSearch` 与真实上游 URL 全链通过；默认引擎
@@ -139,8 +139,7 @@ OI-X1 已在 SearXNG `2026.7.26-b060c780d` 真实 Docker 实例完成：JSON API
 
 | 项 | 说明 |
 |----|------|
-| OI-07B | ✅ `3e96573`：只读 doctor，版本/能力/非空 smoke/text+JSON/稳定退出码 |
-| OI-07C | GATED：可选 Docker setup；只在用户明确选择、本机已有 Docker 后评估 |
+| OI-07 | ✅ A `7754525` · B `3e96573` · C `ef03f3d` / `f623ad9`：诊断、doctor 与可选 Docker 管理均关闭 |
 | OI-H1 | `AskUserQuestion` 真 TTY 按键；自动化未覆盖真人终端 |
 | OI-H2 | Desktop 点击、键盘与视觉走查；自动化只证明窗口与 IPC 可用 |
 | LSP / remote compact / 任意中段 rewrite | 已按证据门控关闭；满足专题 ADR 的重开条件前不立项 |
@@ -181,7 +180,7 @@ DR2A 单 session runner ✅
 → OI-06 Desktop 生产接线 ✅
 → OI-07A SearXNG 上游诊断 ✅
 → OI-07B search doctor ✅
-→ OI-07C 可选 Docker setup（GATED · 当前只评估）
+→ OI-07C 可选 Docker setup/status/logs/stop ✅
 ```
 
 每刀都必须先改 `packages/*` 契约和失败测试，再接 CLI/Desktop；定向测试、typecheck、完整 `npm test`、scoped `diff --check` 全绿后，代码与文档分批 commit/push。遇到需要数据库/daemon/RPC、用户脏文件冲突、数据丢失或副作用自动重放风险时停止扩张。
@@ -293,6 +292,8 @@ npm run typecheck
 npm run test:runtime-cli-renderer
 npm run test:runtime-cli-pager
 npm run test:runtime-cli-automation
+npm run test:searxng-setup
+npm run test:searxng-setup-cli
 npx tsx scripts/smoke-turn.ts
 npx tsx scripts/test-model-retry.ts
 npx tsx scripts/test-cli-events.ts
@@ -407,6 +408,7 @@ cd apps/desktop && npm install && set BOLO_DESKTOP_MOCK=1 && npm start
 | **AR-T2 修复** | 落盘 sink 失败（ENOSPC / write-after-end）曾是**未捕获异常 → 整进程崩溃**；接住之后还必须连带收进程树，否则留下 `KillShell` 也杀不掉的孤儿 |
 | **AR-T3a** | `ExitPlanMode`：plan 模式补出口；权限层 deny→**ask**（非 allow），批准落 `default` 而非 acceptEdits |
 | **AR-T3b** | Web search 方言表（意图↔wire 分离）· anthropic/responses hosted 两条腿**已活体验证零告警** · compatible 走既有 MCP · 未知块兜底防「搜了没结果」 |
+| **OI-07** | SearXNG `unresponsive_engines` 诊断 · 只读 `search doctor` · 固定 digest/loopback/secret/rollback 的显式 Docker setup/status/logs/stop · 源码/dist 真实 smoke |
 | **AR5C-early** | esbuild 单文件产物 · 发布元数据 · `getBundledSkillsDir()` 双布局 · pack→install→run E2E 进门禁 · [RELEASE.md](./RELEASE.md) |
 
 最新 commit 以 `git log` 为准。

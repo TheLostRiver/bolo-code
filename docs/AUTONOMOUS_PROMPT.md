@@ -24,28 +24,28 @@ agent 独立解决的问题。** 不要越过外部/人工阻塞项，也不要�
 | 2 | OI-04 · SearXNG 产品契约矛盾 | ✅ 已收口（`c058998`） |
 | 3 | OI-06 · Desktop runtime 生产接线 | ✅ 已收口 |
 | 4 | OI-X1 · 真实 SearXNG live smoke | ✅ 已收口（2026-07-27） |
-| 5 | OI-07A/B · 上游诊断与 `search doctor` | ✅ 已收口（`7754525` · `3e96573`） |
-| 6 | OI-07C · 可选 Docker setup | GATED：用户显式选择且本机已有 Docker 后评估 |
+| 5 | OI-07 · 上游诊断、doctor 与可选 Docker setup | ✅ 已收口（`7754525` · `3e96573` · `ef03f3d` · `f623ad9`） |
+| 6 | 默认 agent 可闭环队列 | 无；不要自行从历史 TODO 发明任务 |
 | 7 | OI-H1/H2 · 真 TTY、真人点击与视觉走查 | 人工阻塞 |
 
 OI-04 已完成零依赖、显式配置、fail-closed 的 SearXNG JSON 搜索契约、fixture、
 CLI/Desktop warning 与文档收口；OI-X1 已补齐真实 Docker 实例和上游搜索证据；
-OI-07A/B 已补上游故障诊断与只读 doctor。不要重复实现或把公网依赖塞进默认门禁。
+OI-07 已完成上游故障诊断、只读 doctor 与显式 Docker setup/status/logs/stop。
+Docker 不是默认依赖，公网 live 不进默认门禁。不要重复实现。
 
 **一条已知的遗留（不阻塞，顺手可做）：** `AskUserQuestion` 的**真人在真终端按键**没验过——
 控件测试注入 `readKey`，覆盖不到真实 raw-mode 与 REPL 抢 stdin 的问题。
 文档与 ROADMAP 已如实标注「真 TTY 交互未验」。**不要在没有真正验证的情况下把这个标注抹掉。**
 其余能力面候选已经落地、书面关闭或写明重开条件，不再作为隐含队列。
 
-### 关于 Electron / GUI（OI-06）
+### 关于 Electron / GUI（OI-06，已关闭）
 
-- OI-04 已完成；本轮只推进 OI-06 的最小切片。
-- 现有壳、视图模型、NSIS、runtime client 生产桥（`74997ab`）、
-  会话切换/恢复（`c76123e`）、composer controls（`c08254a`）与
-  model/effort 设置（`ce918ef`）已完成；下一刀补关键运行态事件投影。
-- 视觉与交互方案已有 [DESKTOP_DESIGN.md](./DESKTOP_DESIGN.md)，先按现有方案和
-  `OPEN_ISSUES.md` 的关闭条件接线，不重新发明一套设计。
-- Desktop 是**薄壳**：契约与逻辑必须先在 `packages/*` 里成立，壳只做渲染与 IPC。
+- 壳、视图模型、NSIS、runtime client 生产桥、会话切换/恢复、composer controls、
+  model/effort 与关键运行态事件投影均已完成；没有新证据时不要重开 OI-06。
+- 视觉与交互方案见 [DESKTOP_DESIGN.md](./DESKTOP_DESIGN.md)；真人点击与窗口视觉仍是
+  OI-H2 人工项，不能用 Electron 自动化冒充完成。
+- Desktop 是**薄壳**：若未来有获准切片，契约与逻辑仍必须先在 `packages/*` 成立，
+  壳只做渲染与 IPC。
 
 ## 2. 硬红线（任何情况下都不得违反）
 
