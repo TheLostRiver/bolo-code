@@ -33,18 +33,21 @@
 
 **已闭环主线：** headless 日用 → Diff（D0–D7 / U0–U4）· Hooks（H0–H5）· Compact（C0–C5）· Provider（P0–P4.1）· Effort（E0–E9）· Provider UX（CX0–CX8）· 可靠性（R0–R4）· **Durable Runtime（DR0–DR4）** · **Autonomous Road AR1 CLI/TUI runtime UX**。切片明细 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
 
-**当前主线：** **看板 20 项已全部走完，[RELEASE.md](./RELEASE.md) §6.4 里能独立做的也已做完。**
-待办来源现为 **§14.5 AR-T3+ 续刀候选**——那些是活体跑出来的具体缺口，不是设想。
-§6.4 剩下的四条**都需要所有者或人工介入**（NSIS 方案决策 · 桌面窗口视觉 · 真 TTY 按键 ·
-searxng 桥端点），不是可以自己往前推的东西。
+**当前主线：** **自治队列为空。** 看板 20 项、[RELEASE.md](./RELEASE.md) §6.4 中可独立推进的部分、
+以及 **§14.5 AR-T3+ 续刀候选全部走完**——七条里四条落地、两条书面关闭、一条暂缓并写死触发条件。
 
-> **等所有者的四条**（不是被遗忘，是无法独立推进）：**NSIS 安装包**（根因已确证，
-> 需决定 PATH 方案或等上游 electron-builder 27）· **桌面窗口视觉** 与
-> **AskUserQuestion 真 TTY 按键**（只能人工验）· **searxng 桥端点**（需用户自建）。
-> 另有一条已书面标注但**刻意未改**：根 `packageManager: pnpm@9.15.0` 与实际的
-> npm workspaces 不符，属仓库级决定。
->
-> AR-T1/AR-T2/AR-T3a/AR-T3b/AR-T3+ · **AR2 全段（A0a/A0b/A1/A2/B1/B2/C）** 与
+**剩下的每一条都需要你**，不是被遗忘：
+
+| 待办 | 卡在哪 |
+|------|--------|
+| NSIS 安装包 | 根因已确证（electron-builder 在现代 Node 下 spawn `npm.CMD` 失败）。需决定：加 PATH shim，还是等上游 27 稳定 |
+| 桌面窗口视觉 · AskUserQuestion 真人按键/点击 | 只能人工验，自动化覆盖不到 |
+| SearXNG 桥端点 | 需你自建实例与桥；做法已写全 → [LOCAL_SEARCH_AND_FETCH.md](./LOCAL_SEARCH_AND_FETCH.md) |
+| Bolo 直连 SearXNG（省掉桥） | **已评估，推荐实施**，但它反转 `searchPresets.ts` 里一条已写下的架构决定 → 同上 §5 |
+| 根 `packageManager: pnpm@9.15.0` | 与实际的 npm workspaces 不符，属仓库级决定，故刻意未改 |
+| LSP | 暂缓，触发条件已写死 → [ADR_AR4_EVIDENCE_GATE.md](./ADR_AR4_EVIDENCE_GATE.md) §6 |
+
+> AR-T1/AR-T2/AR-T3a/AR-T3b/**AR-T3+ 全段** · **AR2 全段（A0a/A0b/A1/A2/B1/B2/C）** 与
 > **AR5C-early 分发**（§15）已收口。
 
 **已插队并收口：** **AR-T · Agent 能力面**（§14）。准入证据：基础设施深度（DR0–DR4 + AR1）已远超能力广度——彼时 agent 无法跨步骤记住计划，也无法启动任何活过一次工具调用的进程。AR2 压缩深化顺延，A0a/A0b 成果不受影响。
