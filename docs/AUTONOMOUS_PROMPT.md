@@ -37,8 +37,9 @@ SearXNG JSON 搜索契约、fixture、CLI/Desktop warning 与文档收口；不�
 ### 关于 Electron / GUI（OI-06）
 
 - OI-04 已完成；本轮只推进 OI-06 的最小切片。
-- 现有壳、视图模型、IPC 契约与 NSIS 已有；缺口是 runtime client 的生产
-  adapter、会话切换、composer control、model/effort 修改和完整事件投影。
+- 现有壳、视图模型、NSIS 与 runtime client 生产桥已完成（`74997ab`）；
+  下一刀从会话切换/恢复开始，随后是 composer control、model/effort 修改和
+  完整事件投影。
 - 视觉与交互方案已有 [DESKTOP_DESIGN.md](./DESKTOP_DESIGN.md)，先按现有方案和
   `OPEN_ISSUES.md` 的关闭条件接线，不重新发明一套设计。
 - Desktop 是**薄壳**：契约与逻辑必须先在 `packages/*` 里成立，壳只做渲染与 IPC。

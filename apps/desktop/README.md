@@ -1,15 +1,17 @@
 # Desktop (Electron)
 
-> 可用壳：流式对话 · 权限弹窗 · 基础设置 · **多 provider（CX7）**。**无遥测。**  
+> 可用壳：流式对话 · 权限弹窗 · 基础设置 · **多 provider（CX7）** ·
+> **runtime v1 生产 IPC/client**。**无遥测。**
 > 产品逻辑在 `packages/*`；本目录只做 IPC 编排。
 
 ## 结构
 
 ```text
 apps/desktop/
-  src/main/index.mjs      # 主进程 · 会话宿主 · provider IPC
+  src/main/index.ts       # 主进程 · 会话宿主 · runtime/provider IPC
   src/preload/index.cjs   # 白名单 bridge
-  src/renderer/           # chat · permission · settings · provider 下拉
+  src/renderer/           # chat · permission · settings · provider · runtime 状态
+  dist/                   # main bundle + browser runtime client + 静态 renderer
   scripts/smoke-ipc.mjs
 ```
 
@@ -25,7 +27,9 @@ set BOLO_DESKTOP_MOCK=1
 npm start            # 等价 electron . ；dev 脚本同 mock
 ```
 
-> main 进程 `repoRoot` 解析自 `src/main` 上四级到仓库根，动态 import `packages/*`。
+`npm start` 先执行 `scripts/build-desktop.ts`：main 的 `packages/*` 静态导入被打进
+自包含 bundle，共享 `RuntimeClient` 单独打成 browser ESM。运行时不依赖仓库
+`repoRoot` 布局，也不需要 `tsx`。
 
 | 变量 | 含义 |
 |------|------|
@@ -41,7 +45,9 @@ Provider / 多后端配置仍读 `~/.bolo` 与项目 `.bolo`（与 headless 同�
 
 | 通道 | 作用 |
 |------|------|
+| **runtimeHello / runtimeQuery / runtimeCommand** | runtime v1 协商、当前 snapshot、expected-state 安全动作 |
 | getStatus / submit / listMessages | 会话（status 含 providerId · effort） |
+| getTimeline / listSessions | 结构化 timeline 与会话列表；切换/resume 尚在 OI-06 |
 | getSettings / setSettings | mode · mock · cwd（可重建会话） |
 | **listProviders** | providers 列表 + presets + effort tip |
 | **useProvider** | 热切命名后端（`switchSessionProvider`） |
@@ -51,8 +57,15 @@ Provider / 多后端配置仍读 `~/.bolo` 与项目 `.bolo`（与 headless 同�
 
 ## 测试
 
+以下专项门禁从仓库根目录执行（若仍在 `apps/desktop`，先运行 `cd ../..`）：
+
 ```bash
-node --import tsx/esm apps/desktop/scripts/smoke-ipc.mjs
+npm run test:runtime-core-transport
+npm run test:desktop-ipc-contract
+npm run test:desktop-bundle
 ```
+
+最后一项会真实启动 Electron，并要求 renderer 的 RuntimeClient 完成 hello/query
+握手到 `ready`。窗口视觉、真人点击、会话切换和 composer controls 仍未因此自动验收。
 
 总进度与后置项见仓库根 [README.md](../../README.md) · [docs/ROADMAP.md](../../docs/ROADMAP.md) · [docs/PROVIDER_UX.md](../../docs/PROVIDER_UX.md)。

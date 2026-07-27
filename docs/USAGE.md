@@ -504,7 +504,7 @@ npx bolo runtime list --resume <id> --json
 | 缺 key / 401 | 查 `apiKeyEnv` 与环境变量；`/doctor` |
 | effort 400 | `/effort list` 看 choosable；或 `BOLO_EFFORT_LOOSE`（慎用） |
 | 热切失败 | `/provider list`；保留旧后端 |
-| Desktop 起不来 | 检查 `repoRoot` 已修；electron dist；镜像下载 |
+| Desktop 起不来 | 先跑 `npm run build:desktop` / `npm run test:desktop-launch`；再查 Electron 二进制与镜像下载 |
 | Agent 工具没有 | `agents.enabled` / `BOLO_AGENTS_ENABLED` |
 | 子又开子失败 | 预期：`maxSpawnDepth: 0`；需要时再抬 |
 

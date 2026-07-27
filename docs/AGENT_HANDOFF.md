@@ -120,14 +120,14 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | Effort 方言 | ~92–95% | **E0–E9** |
 | Provider UX | ~95–98% | **CX0–CX8**（ultrathink 默认 off） |
 | Durable Runtime | DR0–DR4 ✅ | 输入先落盘 · recovery · 单 runner · durable control/task · FIFO/promotion · v1 protocol/resolution · crash/restart closeout |
-| Electron GUI | ~65–75% | 薄壳可启动且 NSIS 可构建；生产 runtime、会话切换、composer 与设置仍在 OI-06 |
+| Electron GUI | ~68–78% | runtime IPC/client 已真接并经 Electron 握手；会话切换、composer 与 model/effort 设置仍在 OI-06 |
 | 产品相对 HC 全家桶 | ~74–88% | 日用高；UI 密度另计 |
 
 **已闭环：** Diff · Hooks · Compact（含 AR2 全段）· Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR-T1–T3+ Agent 能力面** · **AR4 evidence gate** · **AR5 release hardening** · **OI-04 SearXNG 直连**。
 
 **当前主线：** 按 [OPEN_ISSUES.md](./OPEN_ISSUES.md) 清理全仓核验发现：
-现在推进 **OI-06 Desktop runtime 生产接线**。OI-04、发行门禁、npm
-工具链与 NSIS 已收口。
+现在推进 **OI-06 Desktop 产品接线**。runtime 生产协议桥已于 `74997ab`
+收口，下一切片为会话切换/恢复；OI-04、发行门禁、npm 工具链与 NSIS 已收口。
 
 **其它开放轨（非阻塞）：**
 
@@ -231,10 +231,12 @@ DR2A 单 session runner ✅
 | **后台 shell** | `packages/shared/src/backgroundShell.ts`（契约）· `packages/tools/src/backgroundShellRuntime.ts`（spawn/kill/游标）· `backgroundShellTools.ts`（BashOutput/KillShell） |
 | **构建 / 发布产物** | `scripts/build-dist.ts`（esbuild → `dist/bolo.mjs`）· `package.json` 的 `files`/`bin`/`prepack` |
 | CLI 打印 / picker | `packages/cli/src/**` |
-| Desktop IPC | `apps/desktop/src/main/index.mjs` · `renderer/*` |
+| Desktop IPC | `apps/desktop/src/main/index.ts` · `preload/index.cjs` · `renderer/*` |
 | 单测 | `scripts/test-*.ts` · `scripts/smoke-*.ts` |
 
-**Desktop 注意：** `main` 里 `repoRoot` 从 `src/main` **上四级**到仓库根，再动态 import `packages/*`。
+**Desktop 注意：** main 静态导入 `packages/*` 并由 esbuild 打成自包含 bundle；
+renderer 壳原样复制，共享 `RuntimeClient` 单独打成 browser ESM。不要恢复运行时
+`repoRoot` 推算或 TS 动态导入。
 
 ---
 

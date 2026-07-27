@@ -37,12 +37,13 @@
 | **Effort 方言** | **~92–95%** | E0–E9 |
 | **Provider UX** | **~95–98%** | CX0–CX8（ultrathink 默认 off） |
 | Durable Runtime | DR0–DR4 ✅ | admission · recovery · 单 runner · durable control/task · FIFO/promotion · v1 protocol/resolution · crash/restart closeout |
-| Electron GUI | ~65–75% | 壳 + 流式 + 权限 + Settings + 多 provider |
+| Electron GUI | ~68–78% | 壳 + 流式 + 权限 + runtime IPC/client + Settings + 多 provider；会话切换/composer controls 待接 |
 | 相对 HC 全家桶 UI | 另计 | 不设 100% |
 
 **已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Runtime DR0–DR4 · Autonomous Road AR1 CLI/TUI runtime UX · **AR-T1–T3+ Agent 能力面** · AR2 Compact depth · AR4 evidence gate · AR5 release hardening · **OI-04 SearXNG 直连**。
 
-**当前主线：** 按 [开放问题清单](docs/OPEN_ISSUES.md) 完成 **OI-06 Desktop runtime 生产接线**。
+**当前主线：** 按 [开放问题清单](docs/OPEN_ISSUES.md) 完成 **OI-06 Desktop 产品接线**。
+runtime 生产协议桥已于 `74997ab` 收口，下一切片是会话切换/恢复。
 
 **外部或人工项：** SearXNG live smoke 需要真实实例；AskUserQuestion 真 TTY、Desktop 点击与视觉走查需要真人验证，不以自动测试冒充完成。
 

@@ -2,6 +2,9 @@
 
 > 目标风格：**Codex App**。本文是 AR3A–F 动手前的方案，先定信息架构、交互与视觉，
 > 再写代码。ROADMAP §13.10.2 AR3 · 看板第 18 位。
+>
+> 实现状态持续同步：AR3A 生产桥、B/C 视图模型与薄壳、F 打包/NSIS 已落地；
+> 会话切换、composer controls 与 model/effort 设置仍在 OI-06。
 
 ## 0. 证据说明（先说清楚哪些是看到的、哪些是推断的）
 
@@ -18,17 +21,17 @@ Codex App 的一手资料**没拿到**：OpenAI 官方发布页 WebFetch 返回 
 
 | 项 | 事实 |
 |---|---|
-| 规模 | ~1295 行；`main/index.mjs` 417 · `renderer/app.js` 425 · `styles.css` 239 · `index.html` 86 |
-| IPC 面 | **11 个通道**（9 invoke + 2 send），不是我最初以为的 2 个 |
+| 规模 | main/renderer 仍是单文件薄壳；协议、状态、view-model 与安全判断均在 `packages/*` |
+| IPC 面 | **15 request + 3 push**；`test-desktop-ipc-contract.ts` 双向守住 |
 | 分层 | ✅ **已达标**：renderer 无业务状态机，不重算权限、不重算 diff，只消费 core 预算好的 cell/preview |
-| 事件覆盖 | ❌ core 发 **17 种**事件，renderer 只处理 **4 种** |
+| 事件覆盖 | ⏳ core 发 **17 种**事件，renderer 处理 **5 种**；phase/tool progress 等仍待投影 |
 | 流式 | ❌ **曾经是假的**——事件名 `text_delta` 与 core 的 `text` 对不上，分支从未执行（已修 `d32d4cd`，并加契约测试守住） |
-| 历史回看 | ❌ `listMessages` 把消息拍平成 `slice(0,4000)` 字符串，工具调用/diff/reasoning 一律丢失 |
+| 历史回看 | ✅ `getTimeline` 返回 packages 生成的结构化卡片；旧 `listMessages` 只作失败回退 |
 | 会话 | ❌ 主进程 `let session = null` **单例**，无多会话/resume（core 侧 sessionPersist + session-list 已有，未接） |
-| 布局 | ❌ 单窗三行栅格（header / log / 单行 input），**纯暗色硬编码**，无侧栏 |
-| 打包 | ❌ **完全没有**。且生产运行还靠 `tsx` 直读 TS 源码 + 四级相对路径——打包后必然失效 |
+| 布局 | ✅ 三栏骨架、按需右栏、light/dark 主题已落地；视觉仍未真人验收 |
+| 打包 | ✅ main 自包含 bundle + browser RuntimeClient bundle + Electron smoke + Windows NSIS |
 
-**结论：分层是对的，要重写的是「视图与数据模型」和「外壳」，不是架构。**
+**结论：基础架构与生产协议桥已成立，剩余工作是把会话导航和控制工作流接完整。**
 
 ## 2. 从 Codex App 借什么（借语义，不抄实现）
 
@@ -54,8 +57,8 @@ Codex App 的一手资料**没拿到**：OpenAI 官方发布页 WebFetch 返回 
 
 ### 2.3 审批走「状态 + 集中队列 + 内联 diff」，不用阻塞式弹窗
 
-多会话并行时，弹窗会互相阻塞。Bolo 现在的 `currentPermId` 是**单个**
-（`app.js:332`），一次只能挂一个审批——这在单会话下够用，多会话下必须改成队列。
+多会话并行时，弹窗会互相阻塞。Bolo 现在的 `currentPermId` 仍是**单个**，
+一次只能挂一个审批——这在单会话下够用，多会话下必须改成队列。
 
 ### 2.4 composer 的 queue 与 steer 必须是**两个显式动作**
 
@@ -79,8 +82,8 @@ Codex App 的一手资料**没拿到**：OpenAI 官方发布页 WebFetch 返回 
 
 - 单色系为主，彩色**只留给语义**（错误、等待审批）
 - 排版与留白撑结构，不用阴影和渐变
-- **light / dark 双主题从第一天就做扎实**——它的浅色是一等公民、深色定制欠缺，
-  而 Bolo 现在恰好相反（`styles.css` 硬编码 `color-scheme: dark`）。两边都别偏废
+- **light / dark 双主题都要做扎实**——实现已具备双主题，真人主题切换与
+  maximize 视觉仍不得伪称验收
 - 等宽字体用于代码与元数据
 
 > 具体字号阶梯与间距**待验**：调研拿到的 token 来自第三方整理的设计 skill 页面，
@@ -94,42 +97,41 @@ Codex App 的一手资料**没拿到**：OpenAI 官方发布页 WebFetch 返回 
 | | 现状 |
 |---|---|
 | `packages/shared` 的 runtime 协议契约 | ✅ **完整就绪**：版本常量、snapshot/query/command 形状、fail-closed 解析器、版本协商函数，均有测试 |
-| client / transport / store 抽象 | ❌ **不存在**。CLI 是唯一消费者，且是**进程内直连** core |
-| mock adapter | ❌ 无 |
-| 版本协商函数 | ⚠️ 已实现但**生产代码零调用者** |
-| Desktop 当前消费 | 只走 `SessionEvent` 推流，**完全不碰 runtime 协议** |
+| client / transport / store 抽象 | ✅ `packages/shared/src/runtimeClient.ts`；单一 normalized store |
+| mock / core adapter | ✅ mock 与 `createSessionRuntimeTransport` 共用 `RuntimeTransport` |
+| 版本协商函数 | ✅ Desktop renderer 生产调用；真实 Electron smoke 握手为 `ready` |
+| Desktop 当前消费 | ✅ `SessionEvent` 推流 + runtime hello/query/command；会话 selection 尚未接 |
 
 **`SessionEvent`（推）与 runtime query（拉）是两套系统，Desktop 两套都要用：**
 
 - **推**：实时增量——文本、工具进度、phase、审批请求
 - **拉**：可回看的结构化状态——会话列表、turn timeline、diff、usage
 
-现在桌面端只有推，且推的那条还坏过（§1）。**历史回看必须换成拉 `sessionTranscript`
-的结构化数据**，而不是继续用 `listMessages` 的截断字符串。
+现在桌面端两套都已接：实时内容走推，启动/runtime 状态和结构化 timeline 走拉。
+下一缺口不是再造读路径，而是让左侧 selection 真正切换/resume session，并继续保持
+`listMessages` 只作兼容回退。
 
 ## 6. 切片顺序（对齐 ROADMAP AR3A–F）
 
 | 切片 | 交付 | 先决 |
 |---|---|---|
-| **A** | protocol client/store：传输接口 + **mock 与 core 双 adapter 同接口** + normalized store；接上零调用者的版本协商 | 契约已就绪，净新增 client 层 |
-| **B** | 会话列表 + turn timeline + 中断恢复视图（主进程从单例改多会话管理器） | A |
-| **C** | 内容卡片：消息 / 工具 / diff / 审批 / 错误。**view-model 继续来自 packages**，renderer 不重算 | A · B |
-| **D** | composer：queue / steer 显式化 · 运行中可输入 · 打断 | A |
-| **E** | 设置：provider / model / effort / 能力可解释。**secret 不回传 renderer/transcript** | A |
-| **F** | 打包：esbuild + electron-builder + Windows NSIS | 全部 |
+| **A ✅** | protocol client/store：传输接口 + **mock 与 core 双 adapter 同接口** + normalized store；生产 IPC 与真实握手 | 契约已就绪，净新增 client 层 |
+| **B ⏳** | 会话列表 + turn timeline 已有；切换/resume 与中断恢复动作待接 | A |
+| **C ✅** | 内容卡片：消息 / 工具 / diff / 审批 / 错误。**view-model 继续来自 packages**，renderer 不重算 | A · B |
+| **D ⏳** | composer：queue / steer 显式化 · 运行中可输入 · 打断 | A |
+| **E ⏳** | 设置：provider / model / effort / 能力可解释。**secret 不回传 renderer/transcript** | A |
+| **F ✅** | main/browser bundle + electron-builder + Windows NSIS | 全部 |
 
 **每片都先落 packages / IPC fixture，再改 `apps/desktop`。**
 
 ## 7. 已知风险与未决问题
 
-1. **打包是唯一必须从零搭的板块。** 现在靠 `tsx` 直读源码 + 四级相对路径，
-   打包后必然失效。是否复用 CLI 的 `scripts/build-dist.ts` 那条 esbuild 链，
-   还是 desktop 独立一条——**未决**。
-2. **多会话归属未决**：主进程改多会话管理器算 desktop 范围还是 core 范围？
-   core 侧 `sessionPersist` + session-list 已有，倾向 desktop 只做接线。
-3. **electron-builder 会引入构建期依赖**。红线是**产物**零运行时依赖，
-   构建工具进 `devDependencies` 不违规（同 esbuild 的先例），但要确认
-   打出的 asar 里不混入 dev 依赖。
+1. **多会话归属仍待收口**：core 已有 resume/session-list，Desktop 应只做
+   session manager 与 IPC 接线，不复制持久化或恢复规则。
+2. **审批仍是单 pending id**：会话切换前必须决定如何按 session 排队，不能让
+   一个会话的响应错误认领另一个会话的审批。
+3. **composer/settings 仍未接生产动作**：queue/steer/interrupt 必须携带
+   expected state/requestId；model/effort 切换失败必须保留旧值。
 4. Codex App 消息流里「模型文本 / 工具调用 / 错误」的具体视觉区分方式**未找到证据**，
    diff 是否有并排视图也未找到。这两点自己定，不假装是借鉴。
 
@@ -137,6 +139,7 @@ Codex App 的一手资料**没拿到**：OpenAI 官方发布页 WebFetch 返回 
 
 | 面 | 状态 |
 |---|---|
+| runtime 生产桥 | ✅ core adapter + 15 request/3 push IPC + browser client；真实 Electron hello/query 为 `ready` |
 | 视图模型（会话列表 / timeline / 卡片） | ✅ 纯函数，门禁测试覆盖，关键语义均实证过会红 |
 | IPC 两侧对齐 | ✅ `test-desktop-ipc-contract.ts`（请求与推送两个方向） |
 | 事件名对齐 | ✅ `test-desktop-event-contract.ts` |
@@ -149,8 +152,9 @@ Codex App 的一手资料**没拿到**：OpenAI 官方发布页 WebFetch 返回 
 
 `test-desktop-launch.ts` 关掉了「白屏」那一类：它启动真实 Electron，
 在页面里确认三栏容器挂上、`window.bolo` 存在（**即 preload 路径没写错**）、
-样式表真的加载了。实证过它抓得住——把 preload 指向一个不存在的文件，立刻变红，
-而那正是静态断言**抓不到**的场景（路径写法合法、文件不存在）。
+样式表真的加载，并等待 RuntimeClient 完成真实 hello/query 握手。实证过它抓得住——
+把 preload 指向一个不存在的文件或移除 runtime client 产物都会立刻变红，而这些正是
+静态断言**抓不到**的场景。
 
 **仍然没验的是「好不好看、好不好用」**：布局的实际观感、Windows 上主题切换与
 maximize 后的渲染稳定性、焦点环与键盘走查、长会话滚动性能。
