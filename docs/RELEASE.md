@@ -209,7 +209,7 @@ git push --follow-tags
 | **Windows 安装包（NSIS）** | ✅ 构建已验证 | Node 24 / npm 11.17.0 / electron-builder 26.15.3 已生成安装包与 blockmap；没有证书，用户仍会看到 SmartScreen 提示 → [DESKTOP_DESIGN §7c](./DESKTOP_DESIGN.md) |
 | **桌面窗口的视觉呈现** | ❌ 未验证 | 应用**能启动**且 renderer 挂载已由 `test-desktop-launch.ts` 实证；但布局观感、Windows 主题切换与 maximize 渲染、键盘走查、长会话滚动**没有肉眼验证过** |
 | **`AskUserQuestion` 的真 TTY 交互** | ❌ 未验证 | 控件逻辑测试注入 `readKey`，覆盖不到真实 raw-mode 与 REPL 抢 stdin |
-| **CLI TUI 的真实 Windows Terminal 呈现** | ❌ 未验证 | OI-09 已覆盖三档 Bolot 欢迎 renderer、NO_COLOR、input reducer/raw driver、CJK/emoji cell 宽度、固定 `✦` 原子活动行、ANSI、首 token gate 与完整门禁；源码入口也经 Codex PTY smoke，但真实 Windows Terminal 字体/颜色下的光标、重绘、resize、Ctrl+J/历史/删除组合键和长回答滚动仍需真人走查 |
+| **CLI TUI 的真实 Windows Terminal 呈现** | ❌ 未验证 | OI-09–OI-11 已自动覆盖水晶三档/ASCII/NO_COLOR、常驻全宽 composer、slash reducer/raw driver、CJK/emoji、gutter/用户块/status、分段 Thinking、权限详情/三态选择、局部 VT 与 121 项门禁；源码入口也经 Codex PTY smoke，但真实 Windows Terminal 字体/颜色下的光标、resize、Ctrl+J/历史/删除组合键、权限切换和长回答滚动仍需真人走查 |
 | **`mcp-external` 搜索** | ⚠️ 仅验过 Exa | Exa 免密层已真连；其它 MCP 搜索服务仍取决于外部端点 |
 | **SearXNG 直连** | ✅ 实例/诊断/可选 setup 已验证 | `2026.7.26-b060c780d` Docker 实例：JSON API、生产 status/session/`WebSearch`、真实 URL 与源码/dist doctor 全链通过；OI-07A 已区分正常空结果、全故障和部分成功，OI-07B doctor 检查版本/能力并要求非空 smoke，OI-07C 的源码/dist managed setup/status/logs/stop 已实跑。Docker 仍须用户预装且不是默认依赖；默认引擎仍可能 429/CAPTCHA/timeout |
 | **中段 compact** | 🚫 显式不启用 | 契约就绪但产品代码零调用；两个参考实现都没真正跑过它 → §13.10.2 |
@@ -235,7 +235,7 @@ git push --follow-tags
 ### 6.6 发布 checklist（逐项可执行）
 
 ```bash
-npm test                              # typecheck + 114 个门禁脚本，必须 EXIT=0
+npm test                              # typecheck + 121 个串联门禁脚本，必须 EXIT=0
 node -e "console.log(JSON.stringify(require('./package.json').dependencies))"
                                       # 必须输出 {}
 npm pack --dry-run                    # 清单只应有 6 项

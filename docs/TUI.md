@@ -1,9 +1,9 @@
 # CLI TUI
 
 > 无遥测。品牌见 `docs/BRAND.md`。  
-> **现状：** OI-09/OI-10 零运行时依赖 TTY controller：响应式 Bolot 欢迎页 ·
-> 共享 frame 的真实输入框 · slash 菜单/补全 · 原子多帧 turn 活动态 · 结构化时间线 ·
-> 箭头 picker · Diff/权限面板。
+> **现状：** OI-09/OI-10/OI-11 零运行时依赖 TTY controller：Bolo 水晶欢迎页 ·
+> 常驻全宽 composer · slash 菜单/补全 · 分段 Thinking · 结构化时间线/status footer ·
+> 可审计权限选择 · 局部重绘 picker/Diff。
 > **框架选择：** 没有依赖 React Ink；完成标准是交互和输出契约，不是框架名称。
 > Diff 轨见 [ROADMAP.md](./ROADMAP.md) §3 ·
 > [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) 轨 B。
@@ -14,18 +14,19 @@
 
 | 条件 | 行为 |
 |------|------|
-| stdin/stdout 双 TTY + stdin 支持 raw mode | 响应式品牌欢迎页 + 真实输入框 + 动态 Thinking/Running 时间线 |
+| stdin/stdout 双 TTY + stdin 支持 raw mode | 响应式水晶欢迎页 + 常驻全宽 composer + 动态 Thinking/Running 时间线 |
 | TTY 但 raw mode 不可用 | 回落 readline `bolo>`；不发送动态光标控制 |
 | 非 TTY / pipe / `-p` / `--print` | 追加式纯文本；不回显伪输入框、不挂起等按键 |
 | `NO_COLOR` | 关闭 SGR 颜色，保留欢迎页结构与真实输入能力 |
+| `BOLO_ASCII=1` | 欢迎页使用 ASCII 水晶和 ASCII 分隔符；不改变 TUI 能力 |
 | `BOLO_PLAIN=1` / `BOLO_THEME=plain` | 关闭颜色并简化欢迎区；真实输入能力仍可用 |
 | `BOLO_TUI_INPUT=0` | 关闭动态输入/时间线，回落 readline |
 | `BOLO_TUI_LAYOUT=0` / `TERM=dumb` | 关闭 layout 与动态路径，回落 readline |
-| `>=96` 列 | 欢迎页使用 Bolot/环境与行动/会话双栏 |
-| `56–95` 列 | 欢迎页使用完整 Bolot 单栏 |
-| `38–55` 列 | 欢迎页使用一行 Bolot 紧凑框；输入、消息和 activity 继续按 cell 宽度裁切/折行 |
+| `>=96` 列 | 欢迎页使用完整水晶源稿与纵向 workspace/model/session 信息轨 |
+| `56–95` 列 | 欢迎页使用中型水晶与同一纵向信息轨 |
+| `38–55` 列 | 欢迎页使用 6 行紧凑水晶；动态文本按 cell 宽度裁切 |
 | `<38` 列 | 欢迎页回落无边框纯文本，避免最小终端破框 |
-| `BOLO_MASCOT=0` | 隐藏欢迎页 Bolot，保留品牌字标和环境/行动信息 |
+| `BOLO_MASCOT=0` | 隐藏水晶，保留品牌字标和 workspace/model/session 信息 |
 | `--resume` 无 id | **箭头键 picker**（↑↓ Enter；`BOLO_ARROW_PICKER=0` 用编号） |
 | 非 TTY resume | 表格式列表 + 要求 `--resume <id>` |
 | `runtime list\|inspect` + stdin/stdout 双 TTY + 多页 | 进入轻量 runtime pager |
@@ -37,18 +38,21 @@
 
 | 文件 | 角色 |
 |------|------|
-| `tui/inkLayout.ts` | 一次性响应式品牌/workspace 欢迎页；绝不伪装成输入框 |
-| `tui/frame.ts` | 欢迎页、输入框与用户消息共用的终端 frame width 契约 |
-| `tui/inputBox.ts` | 输入/slash reducer、CJK-safe 菜单 renderer、短生命周期 raw-mode driver |
+| `tui/crystalLogo.ts` | 水晶常量、源稿归一化、整块 cell-width 居中与 ASCII 降级 |
+| `tui/inkLayout.ts` | 一次性水晶欢迎页；纵向环境信息，不伪装成输入框 |
+| `tui/frame.ts` | 欢迎/正文封顶宽度与全宽 composer dock 两套明确契约 |
+| `tui/inputBox.ts` | 输入/slash reducer、CJK-safe renderer、idle raw-mode driver、running dock |
+| `tui/terminalSurface.ts` | append-only 历史与底部临时 dock/activity 的行所有权 |
+| `tui/localPanel.ts` | picker/diff/question/permission 共用的局部行 erase/repaint |
 | `tui/terminalText.ts` | ANSI/CJK/emoji grapheme cell 宽度、裁切、补齐与折行 |
-| `tui/turnActivity.ts` | 首 token 前与工具间隙的 Thinking/Running/elapsed 单行状态 |
+| `tui/turnActivity.ts` | reasoning/tool/search/retry 分段生命周期、动画与独立计时 |
 | `tui/terminalMarkdown.ts` | 流式 inline emphasis/code renderer |
 | `tui/arrowPicker.ts` | F-T8：↑↓ 选择 |
 | `tui/theme.ts` | F-T9：主题 |
 | `tui/banner.ts` · `statusLine.ts` | 启动/状态 |
 | `tui/formatSessionEvent.ts` | user/reasoning/tool/assistant 时间线 · tool_end 摘要 |
-| `tui/diffPane.ts` | U1 browse · U2 approve 面板 |
-| `tui/askPermissionTty.ts` | 权限 y/a/N；有 files 时进审批面板 |
+| `tui/diffPane.ts` | U1 browse · U2 approve 面板；局部重绘 |
+| `tui/permissionPanel.ts` · `askPermissionTty.ts` | command/cwd/关键参数摘要与 once/always/deny 选择 |
 | `packages/core/src/runtimeTextView.ts` | AR1C：纯 runtime text page renderer；CLI 与 slash 共用 |
 | `tui/runtimePager.ts` | AR1C：页状态 reducer · raw key reader · TTY pager driver |
 | `slashCandidates.ts` | core 候选与 CLI-local `/exit`/`/quit` 的无副作用合并层 |
@@ -57,19 +61,19 @@
 
 ---
 
-## 3. 会话交互（OI-09/OI-10）
+## 3. 会话交互（OI-09/OI-10/OI-11）
 
 ### 3.1 欢迎首页
 
-默认欢迎页使用 Bolo Code 青色强调、灰色边框和原创河豚 **Bolot**。宽屏左栏负责
-欢迎语、吉祥物、model/workspace，右栏负责 Start here、当前会话和常用命令；
-中宽度改为完整单栏，紧凑宽度改为一行 Bolot。所有动态文本都先移除外来 ANSI，
-再按 grapheme cell 宽度裁切/补齐，所以 CJK、emoji、长模型名和长路径不会破框。
-欢迎页、输入框与用户消息统一通过 `resolveTuiFrameWidth()` 计算外框；超宽终端共同
-封顶 160 列并保留两列 gutter，不再出现上框 160、输入框 120 的右缘错位。
+默认欢迎页使用 `bolo-logo-tui.txt` 的 **Bolo Crystal**。宽屏渲染完整源稿，中屏和
+紧凑屏使用独立简化图形；水晶下方是 workspace/model/session 纵向信息轨，不再使用
+Claude 式左右等分信息卡。图形先去公共缩进，再按整块最大 cell 宽居中；动态值使用
+grapheme cell 宽度裁切，所以 CJK、emoji、长模型名和长路径不会越界。
 
-`NO_COLOR` 只移除颜色，不删除结构；`BOLO_THEME=plain` / `BOLO_PLAIN=1` 才显式
-简化为纯文本。`BOLO_MASCOT=0` 只隐藏 Bolot，不影响环境与会话信息。
+欢迎/正文仍由 `resolveTuiFrameWidth()` 在超宽终端封顶 160 列；composer/status dock
+改用 `resolveTuiDockWidth()` 跟随终端可用宽度，两者不再被错误地当成同一布局。
+`NO_COLOR` 只移除颜色；`BOLO_ASCII=1` 保留结构并切成 ASCII 字符；
+`BOLO_THEME=plain` / `BOLO_PLAIN=1` 才简化为纯文本；`BOLO_MASCOT=0` 只隐藏水晶。
 
 ### 3.2 输入
 
@@ -94,29 +98,45 @@
 短标签；无匹配显示明确空态。Tab/Enter 只写回 `/<name> `，第二次 Enter 才走既有
 submit/dispatch，reducer 不执行命令副作用。其它不可见 C0/C1 控制符不会进入输入框。
 输入框最多显示四行，菜单默认最多显示六项并随选中项滚动；完整文本与候选仍保留在
-state 中。每次 turn 开始前 raw editor 都会释放 stdin，权限/picker/`Ctrl+C` 不与
-空闲输入 listener 竞争。
+state 中。每次 turn 开始前负责编辑的 raw key listener 会释放 stdin，但
+`TerminalSurface` 会把同宽 composer 以 running 状态留在底部；历史输出先临时擦除
+dock、追加内容后再恢复，因此输入区不会凭空消失。权限/picker 接管 stdin 时暂时挂起
+dock，结束后恢复，不与空闲 listener 竞争。
 
 ### 3.3 Turn 时间线
 
 | 时点 / 事件 | 人类可见结果 |
 |-------------|--------------|
-| 提交普通消息 | 立即以 `❯` 回显用户消息；不等 provider 首 token |
-| provider 尚未输出 | `✦/✧/✶/✧ Thinking · elapsed · Ctrl+C interrupt` 原位刷新 |
-| reasoning | `◇ Thinking` 段；`/thinking off` 可关闭 |
+| 提交普通消息 | 立即进入带背景的用户消息块；不等 provider 首 token |
+| provider 尚未输出 | `✦/✧/✶/✧ Thinking · 本段耗时 · Ctrl+C interrupt` 原位刷新 |
+| reasoning | 当前段持续动画；边界到达后留下 `Thought for <duration>` |
 | `tool_start/end` | 进入永久工具时间线；结束后回到 Thinking |
 | `tool_progress` | 只在 activity 原位更新“工具名 · 进度”，不把每个 tick 刷成永久消息 |
-| assistant text | `● Bolo` 角色头；inline `**bold**` / `` `code` `` 不再原样泄露 |
-| turn 完成 | 清掉活动行并显示 `Done · elapsed`；随后重新出现输入框 |
+| assistant text | 正文保留稳定 gutter；inline `**bold**` / `` `code` `` 不再原样泄露 |
+| turn 完成 | 清掉活动行并把常驻 composer 从 running 切回 idle；不冒充输出总思考耗时 |
 | slash command | 回显用户命令但不启动虚假的模型 Thinking |
+| composer footer | 按宽度保留 model/mode/effort、高亮按键与 `↓input ↑output`；估算 usage 加 `~` |
 
-activity 使用确定性 `✦ → ✧ → ✶ → ✧` 状态帧，每 250ms 更新 glyph 与耗时；每帧把
+activity 使用确定性 `✦ → ✧ → ✶ → ✧` 状态帧，每 250ms 更新 glyph 与本段耗时；model、
+tool、search、retry 切换会重置段起点，同一 reasoning chunk 不会误重置。每帧把
 `\r + 完整状态行 + erase-to-end` 合成一次 writer 调用，不再先清空整行再绘制，
 因此不会周期性出现空白帧。每帧仍读取当前终端列宽，完整文案放不下时依次退化为
 紧凑/最小文案，避免自动换行残影。`NO_COLOR` 只移除 SGR，不移除必要的
 cursor-control。
 
-### 3.4 输出边界
+### 3.4 权限与临时面板
+
+- 非文件工具默认进入三态面板：**Allow once**、**Always allow this tool for this
+  session**、**Deny**；默认选中 Deny，可用 `↑/↓`、数字或 `y/a/n`。
+- Bash 显示实际 command、cwd、foreground/background 和生效 timeout；未知 input
+  只做有界、安全的键值摘要，不泄漏 secret。
+- Always 的真实作用域是“本会话后续同名工具”，不是“只记住这一条命令”。
+- 文件变更继续使用可滚 Diff view-model，不复制 diff 算法。
+- arrow/diff/question/permission 都通过 `localPanel` 只擦除自己拥有的行；不会发送
+  `ESC[2J` 或全局 Home。独立 runtime pager 和用户主动 `Ctrl+L` 仍保留整屏语义。
+- 非 TTY、abort 或面板不可用时保持 fail-closed，并保留兼容文本路径。
+
+### 3.5 输出边界
 
 - 动态时间线只在 `shouldUseDynamicTui()` 为真时启用。
 - pipe、JSON、`-p`/`--print` 与 raw-mode 不可用的 fallback 不输出动态 activity、清行、
@@ -194,6 +214,7 @@ apps/desktop/renderer   ← U3：`<details>` cell · 权限 files 列表
 | `BOLO_DIFF_THEME` / `BOLO_THEME` | `default` · `dim` · `plain`（兼听 `NO_COLOR`） |
 | `BOLO_TUI_INPUT=0` | 关闭动态输入、activity 与时间线，使用 readline fallback |
 | `BOLO_TUI_LAYOUT=0` | 关闭 TUI layout/dynamic path |
+| `BOLO_ASCII=1` | 欢迎页图形和分隔符使用 ASCII |
 
 **约束：**
 
@@ -206,7 +227,7 @@ apps/desktop/renderer   ← U3：`<details>` cell · 权限 files 列表
 | 模式 | 键 |
 |------|-----|
 | browse (`/diff`) | `j/k` 选文件 · `Enter` 展开 · `h` 返回 · `q` 退出 |
-| approve (ask) | 同上浏览 · **`y` allow · `a` always · `n`/`q` deny** |
+| approve (ask) | 同上浏览 · **`y` allow once · `a` always · `n`/`q` deny** |
 
 **测试：**
 
@@ -231,6 +252,12 @@ npx tsx scripts/test-file-diff.ts
 ```bash
 npm test
 npm run test:cli-tui
+npm run test:cli-terminal-surface
+npm run test:cli-timeline-hierarchy
+npm run test:cli-thinking-segments
+npm run test:cli-permission-panel
+npm run test:cli-local-panels
+npm run test:cli-crystal-identity
 npm run test:cli-events
 npm run test:cli
 npm run test:cli-first-run
@@ -243,11 +270,11 @@ npx tsx scripts/test-file-diff.ts
 npx tsx scripts/test-diff-view.ts
 ```
 
-`test:cli-tui` 覆盖 grapheme/CJK/emoji cell 宽度、输入/slash reducer、菜单可视窗口、
-raw-mode 清理、共享 frame、宽/中/紧凑欢迎页、Bolot/NO_COLOR、24 列输入菜单、
-首 token gate、多帧活动符号与原子 writer、Thinking/Running、warning 恢复和非 TTY
-追加式输出。`test:slash-completion` 覆盖内置/Plugin/Skill projection、重名、
-hidden alias、exact/prefix 与空匹配。完整门禁当前包含 114 个 `scripts/*.ts`。
+专项分别覆盖持久 dock/历史追加、gutter/用户块/status footer、分段计时、权限详情与
+三态选择、局部 VT 重绘、水晶源稿/三档/ASCII/NO_COLOR 与单文件 dist 嵌入。
+`test:cli-tui` 继续覆盖 grapheme/CJK/emoji、输入/slash reducer、菜单窗口与非 TTY
+回落；`test:slash-completion` 覆盖内置/Plugin/Skill projection、重名、hidden alias、
+exact/prefix 与空匹配。完整门禁当前包含 **121** 个串联 `scripts/*.ts`。
 
 **仍需真人验收：** Windows Terminal 中的字体观感、实际光标位置、窗口 resize、
 Ctrl+J/历史/删除组合键和长回答滚动。自动测试与静态快照不能替代肉眼/真人按键，

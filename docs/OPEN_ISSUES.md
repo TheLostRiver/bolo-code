@@ -15,13 +15,15 @@
 
 ## 1. Agent 可直接解决
 
-当前主线为 OI-11。以下已关闭条目继续保留关闭证据，防止后续重复实现或状态回退。
+当前没有 agent 可独立闭环的开放项。以下已关闭条目继续保留准入与关闭证据，防止
+后续重复实现或状态回退。
 
 ### OI-11 · CLI TUI 持久终端表面与可审计权限交互
 
-**状态：IN PROGRESS（2026-07-28 登记）**
+**状态：CLOSED（代码 `e9a32cf`、`59acdf6`、`b0feb0c`、`4fc3791`、`da0533c`、
+`b0fbb86`、`8088fbb`；2026-07-28 文档同步）**
 
-准入证据：
+准入证据（登记时）：
 
 - 真实 Windows Terminal 截图显示 Agent header 与正文从第 0 列开始；用户历史消息
   只有 `❯` 前缀，没有与 Agent 输出区分开的背景块。Claude Code、Grok CLI 与 Pi
@@ -50,16 +52,27 @@
 
 | 切片 | packages-first 交付 | 人类可见结果 | 自动关闭条件 | 状态 |
 |------|---------------------|--------------|--------------|------|
-| **OI-11A · terminal surface / persistent composer** | 终端临时区域所有权契约；历史 append 与底部 dock 分离；composer width 使用可用终端宽度 | Thinking/Running 时输入区不消失；输入框横向铺满；权限面板可临时接管 stdin | idle/running/permission 状态机；24/38/80/160/超宽；局部 clear 序列；非 TTY 回归 | OPEN |
-| **OI-11B · timeline hierarchy / status** | 统一 timeline gutter；用户消息背景块；结构化 footer token（model/mode/keys/usage） | Agent 正文不贴边；已提交问题有灰色块；模型、快捷键和 `↓token` 清晰高亮 | ANSI/NO_COLOR、CJK/emoji、usage real/estimated、窄屏优先级与裁剪 golden | OPEN |
-| **OI-11C · segment activity** | model/tool/reasoning segment 生命周期与独立计时；活动帧继续原子写入 | 当前 `Thinking` 有动画；每段结束显示 `Thought for 4.2s`，不再把整轮时间冒充本段耗时 | 假时钟覆盖多段 model→tool→model、retry、warning、abort；每 tick 单 write | OPEN |
-| **OI-11D · permission chooser/details** | `toolInput` 安全摘要器；通用 once/always/deny picker；文件 diff 继续复用现有 view-model | Bash 展示具体 command/cwd/关键参数；方向键/快捷键选择，不必盲输 `yes/no` | Bash/Write/WebFetch/MCP/未知 input；always 作用域文案；abort/非 TTY fail-closed | OPEN |
-| **OI-11E · viewport stability** | 可复用局部 region erase/repaint；移除嵌入式 picker/diff 的整屏 clear | 权限、diff、输入和活动更新不再把历史擦掉或把屏幕滚成只剩几行 | VT 输出序列 + 小 viewport/长历史/面板增长缩短/resize；无 `ESC[2J` 回归 | OPEN |
-| **OI-11F · Responses abort diagnosis** | timeout 与 parent/user abort 分源；retry 分类和 provider error context | 120 秒超时明确显示 endpoint/timeout/下一步；用户 Ctrl+C 仍是取消且不重试 | fake fetch/fake clock 覆盖 timeout、parent abort、成功清理、secret redaction | OPEN |
-| **OI-11G · crystal identity** | 水晶标识常量/资产与 cell-width renderer；宽/中/紧凑独立布局 | 欢迎页使用 Bolo 水晶标识，不再是 Claude 左右等分卡；窄屏有稳定降级 | 三档 golden、Unicode/ASCII、NO_COLOR、长 cwd/model 裁剪、dist 资产契约 | OPEN |
-| **OI-11H · 验收与文档** | 新专项进入默认门禁；README/TUI/ROADMAP/handoff/USAGE 同步 | 源码与 dist 行为一致，用户文档不再承诺旧界面 | 专项、typecheck、完整 `npm test`、dist smoke 全绿；真人项移交 OI-H3 | OPEN |
+| **OI-11A · terminal surface / persistent composer** | 终端临时区域所有权契约；历史 append 与底部 dock 分离；composer width 使用可用终端宽度 | Thinking/Running 时输入区不消失；输入框横向铺满；权限面板可临时接管 stdin | idle/running/permission 状态机；24/38/80/160/超宽；局部 clear 序列；非 TTY 回归 | CLOSED `59acdf6` |
+| **OI-11B · timeline hierarchy / status** | 统一 timeline gutter；用户消息背景块；结构化 footer token（model/mode/keys/usage） | Agent 正文不贴边；已提交问题有灰色块；模型、快捷键和 `↓token` 清晰高亮 | ANSI/NO_COLOR、CJK/emoji、usage real/estimated、窄屏优先级与裁剪 golden | CLOSED `b0feb0c` |
+| **OI-11C · segment activity** | model/tool/reasoning segment 生命周期与独立计时；活动帧继续原子写入 | 当前 `Thinking` 有动画；每段结束显示 `Thought for 4.2s`，不再把整轮时间冒充本段耗时 | 假时钟覆盖多段 model→tool→model、retry、warning、abort；每 tick 单 write | CLOSED `4fc3791` |
+| **OI-11D · permission chooser/details** | `toolInput` 安全摘要器；通用 once/always/deny picker；文件 diff 继续复用现有 view-model | Bash 展示具体 command/cwd/关键参数；方向键/快捷键选择，不必盲输 `yes/no` | Bash/Write/WebFetch/MCP/未知 input；always 作用域文案；abort/非 TTY fail-closed | CLOSED `da0533c` |
+| **OI-11E · viewport stability** | 可复用局部 region erase/repaint；移除嵌入式 picker/diff 的整屏 clear | 权限、diff、输入和活动更新不再把历史擦掉或把屏幕滚成只剩几行 | VT 输出序列 + 小 viewport/长历史/面板增长缩短/resize；无 `ESC[2J` 回归 | CLOSED `b0fbb86` |
+| **OI-11F · Responses abort diagnosis** | timeout 与 parent/user abort 分源；retry 分类和 provider error context | 120 秒超时明确显示 endpoint/timeout/下一步；用户 Ctrl+C 仍是取消且不重试 | fake fetch/fake clock 覆盖 timeout、parent abort、成功清理、secret redaction | CLOSED `e9a32cf` |
+| **OI-11G · crystal identity** | 水晶标识常量/资产与 cell-width renderer；宽/中/紧凑独立布局 | 欢迎页使用 Bolo 水晶标识，不再是 Claude 左右等分卡；窄屏有稳定降级 | 三档 golden、Unicode/ASCII、NO_COLOR、长 cwd/model 裁剪、dist 资产契约 | CLOSED `8088fbb` |
+| **OI-11H · 验收与文档** | 新专项进入默认门禁；README/TUI/ROADMAP/handoff/USAGE 同步 | 源码与 dist 行为一致，用户文档不再承诺旧界面 | 专项、typecheck、完整 `npm test`、dist smoke 全绿；真人项移交 OI-H3 | CLOSED（本文档批） |
 
-实现顺序：
+关闭证据：
+
+- `test:provider-abort-diagnosis`、`test:cli-terminal-surface`、
+  `test:cli-timeline-hierarchy`、`test:cli-thinking-segments`、
+  `test:cli-permission-panel`、`test:cli-local-panels`、
+  `test:cli-crystal-identity` 均进入默认门禁。
+- 2026-07-28 完整 `npm.cmd test` 通过 121 个串联脚本；真实 npm pack/install、
+  dist build、Desktop bundle/launch 全绿；根 `dependencies` 保持 `{}`。
+- 自动化只关闭可由代码证明的缺陷；真实字体、颜色、resize 和真人按键仍保留在
+  OI-H3，不以 PTY 或注入按键冒充。
+
+实施顺序（已完成）：
 
 1. OI-11F 先修可复现的数据面错误，避免后续长 TUI 验收被假 abort 打断。
 2. OI-11A 建立共享终端表面，再依次落 OI-11B、OI-11C、OI-11D、OI-11E；
@@ -67,7 +80,7 @@
 3. OI-11G 在交互骨架稳定后重做欢迎页，避免视觉改动掩盖 cursor/scroll 回归。
 4. OI-11H 最后同步文档。每个代码切片独立测试、中文提交并推送；文档批另提。
 
-总关闭条件：
+总关闭条件（已满足）：
 
 - OI-11A–OI-11H 的代码/测试与文档批均已推送，根 `dependencies` 仍为 `{}`。
 - 自动测试证明 reducer、renderer、VT 序列、非 TTY 和 dist 行为；不把 snapshot、
@@ -410,18 +423,17 @@ Ctrl-C/Esc 以及 REPL 是否抢占 stdin。需要人在真实终端按键确认
 
 **状态：BLOCKED: HUMAN**
 
-OI-09/OI-10 已自动覆盖宽/中/紧凑欢迎 renderer、Bolot/NO_COLOR、共享 frame、
-slash reducer/menu、raw-mode listener/恢复、CJK/emoji cell 宽度、确定性多帧 glyph
-与原子 activity writer、首 token 前 Thinking、Running/warning 恢复、非 TTY 回落与
-完整 `npm test`。Codex PTY 默认因 `TERM=dumb` 降级；仅对子进程覆盖
-`TERM=xterm-256color` 后，已实测 `/`/`/d`、Plugin 来源、方向键、Tab、Esc 与
-`/exit` 两阶段提交，但该 PTY 仍不能代表真人 Windows Terminal。
+OI-09–OI-11 已自动覆盖水晶宽/中/紧凑/ASCII/NO_COLOR 欢迎 renderer、常驻全宽
+composer、slash reducer/menu、raw-mode listener/恢复、CJK/emoji cell 宽度、
+时间线 gutter/用户块/status footer、分段 Thinking/`Thought for`、可审计权限详情与
+三态选择、局部面板 VT 序列、Responses timeout 分源、非 TTY 回落和 121 项完整门禁。
+Codex PTY 默认因 `TERM=dumb` 降级；仅对子进程覆盖 `TERM=xterm-256color` 后，已实测
+`/`/`/d`、Plugin 来源、方向键、Tab、Esc 与 `/exit` 两阶段提交，但该 PTY 仍不能
+代表真人 Windows Terminal。
 
-2026-07-28 的真人截图已把持久 composer、全宽布局、时间线 gutter、分段 Thinking、
-权限详情/选择、整屏 clear、usage footer、Responses timeout 误归因和欢迎页身份问题
-移入可自动修复的 OI-11；这些不能继续以 `BLOCKED: HUMAN` 为由延后。
-自动化不能替代真人确认 Windows Terminal 字体/颜色下的实际光标位置、重绘残影、
-窗口 resize、Ctrl+J/历史/删除组合键、权限面板切换和长回答滚动。
+2026-07-28 截图暴露的可自动修复项已全部在 OI-11 关闭。这里现在**只**保留自动化
+不能替代的判断：真实 Windows Terminal 字体/颜色下的水晶与文本观感、实际光标位置、
+窗口 resize 后的重排、Ctrl+J/历史/删除组合键、权限面板真人切换和长回答滚动。
 
 ## 4. 已核实但不列为开放问题
 

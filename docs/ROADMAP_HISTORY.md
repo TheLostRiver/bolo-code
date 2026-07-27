@@ -449,3 +449,42 @@ C4: compact 成功且非 override system 时可选刷新短 skill catalog 段（
   113 脚本完整门禁、dist install、Desktop bundle 与 Electron launch 全部通过。
 - OI-H3 仍保留真实 Windows Terminal 字体/颜色、raw 输入、光标、resize 和长滚动验收；
   Codex PTY smoke 只证明源码入口已接入欢迎页，不替代真人终端检查。
+
+---
+
+## H10. OI-10 · CLI 命令发现与 TUI 一致性
+
+- `packages/core/src/slash.ts` 统一投影内置命令、Plugin command 与
+  user-invocable Skill；CLI 只在该目录上追加 `/exit`、`/quit` 等本地候选，不复制
+  扩展发现逻辑。
+- raw input reducer 在输入 `/` 时展示全量目录，继续输入后执行精确/前缀过滤；
+  `↑/↓` 导航、Tab/Enter 补全、Esc 关闭，空匹配与 hidden alias 都有显式契约。
+- 欢迎区、输入框和已提交用户消息在 OI-10 阶段共用 frame width；activity 使用
+  确定性多帧 glyph 和单次原位写入，既保留动画，也不制造先擦后绘的空白帧。
+- 代码批 `67421bb` 通过 `test:slash-completion`、扩展后的 `test:cli-tui`、typecheck、
+  114 个串联脚本与 dist smoke。后续 OI-11 将 composer 从共享 content frame
+  分离为全宽 dock，并替换欢迎页身份；本节保留 OI-10 收口时的事实。
+- 真人 Windows Terminal 的字体、光标、resize 与按键观感继续由 OI-H3 承接。
+
+---
+
+## H11. OI-11 · CLI TUI 持久终端表面与可审计权限交互
+
+| 切片 | 代码批 | 已关闭行为 |
+|------|--------|------------|
+| OI-11F · Responses abort diagnosis | `e9a32cf` | provider deadline 与 parent/user abort 分源；timeout 带安全 endpoint、时长和可行动说明，非流式请求使用同一 deadline |
+| OI-11A · terminal surface | `59acdf6` | append-only 历史与临时 dock 分离；Thinking/Running 期间 composer 常驻并使用终端可用宽度 |
+| OI-11B · timeline/status | `b0feb0c` | Agent gutter、灰色用户消息块、model/mode/快捷键 footer 与 real/estimated token usage |
+| OI-11C · segment activity | `4fc3791` | reasoning/tool/search/retry 分段计时；活动段持续动画，结束后留下 `Thought for <duration>` |
+| OI-11D · permission chooser | `da0533c` | Bash 展示 command、cwd、前后台和 timeout；once/always/deny 三态选择并明示会话级作用域 |
+| OI-11E · viewport stability | `b0fbb86` | arrow/diff/question/permission 面板只擦除自己拥有的行，不再发送嵌入式整屏 `ESC[2J` |
+| OI-11G · crystal identity | `8088fbb` | 使用 `bolo-logo-tui.txt` 的宽/中/紧凑水晶；支持 ASCII、NO_COLOR、mascot-off，单文件 dist 内嵌资产 |
+
+- OI-11H 将 README、TUI、USAGE、BRAND、RELEASE、ROADMAP、OPEN_ISSUES 与 handoff
+  统一到上述行为；默认 agent 可闭环队列在本轨收口后为空。
+- 七个专项均进入默认门禁；2026-07-28 完整 `npm.cmd test` 通过 121 个串联脚本，
+  npm pack/install、单文件 dist、Desktop bundle/launch 全绿，根 `dependencies`
+  保持 `{}`。
+- 自动化证明 reducer、renderer、provider 分类、VT 序列和分发产物，不替代真人
+  Windows Terminal 的字体/颜色、实际光标、resize、组合键、权限切换与长回答滚动；
+  唯一剩余边界继续记录为 OI-H3。

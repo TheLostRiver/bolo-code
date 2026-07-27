@@ -22,7 +22,7 @@
 | **文件 Diff · 日用契约** | **~95%+** | **D0–D7 已收口**；见 [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) |
 | **文件 Diff · 交互 UI** | **~90–95%** | **U0–U4 已落地**；U5 真·Ink/IDE 可选（AR4 证据门控） |
 | **斜杠** | **~88–94%** | OI-10 已收口：内置、CLI-local、Plugin command 与 user-invocable Skill 共用候选投影；`/` 全量发现、精确/前缀过滤、hidden alias 与键盘补全均有契约 |
-| **CLI TUI** | **~68–78%** | OI-09/OI-10 的输入与 slash 基础已在；OI-11 进行中：持久全宽 composer、timeline gutter/用户块、分段 Thinking、usage footer、可审计权限选择、viewport 稳定性、abort 诊断与水晶身份仍待收口 |
+| **CLI TUI** | **~90–95%** | OI-09–OI-11 已收口：水晶欢迎页 · 常驻全宽 composer · slash 发现/补全 · gutter/用户块 · 分段 Thinking/`Thought for` · model/token/keys footer · 三态权限详情 · 局部面板重绘 · Responses abort 诊断；真人 Windows Terminal 观感仍单列 |
 | **Electron GUI** | **~80–88%** | 壳 + 流式 + 权限 + 多 provider（CX7）+ runtime v1 + **会话切换/恢复 + composer controls + model/effort 设置 + control/tool progress 投影** + AskUserQuestion；真人点击/视觉仍未验 |
 | **Hooks · 日用契约** | **~96–98%** | **H0–H5 已落地**（SessionEnd · exit 语义 · updatedInput · `/hooks recent`） |
 | **Compact · 日用管道** | **~96–98%** | **C0–C5 + AR2 全段已落地**（hybrid 计数 · 中段截断 · 防重摘要 · range/watermark 契约 · 切分不拆对穷举验证 · 写失败完整回退 · durable 条目不丢 · **估算按字符类别分档**（CJK 1.3 / 散文 4.5 / 其余 3.5；实测推翻了「密文 = token 密」的旧前提，最差高估 109% → 19.5%）· 管道基准）；中段压缩与远端压缩均**显式关闭**（§13.10.2 · [ADR](./ADR_COMPACT_REMOTE.md)） |
@@ -31,19 +31,17 @@
 | **Provider UX · 便利层** | **~95–98%** | **CX0–CX8 已落地**（ultrathink 默认 off）· [PROVIDER_UX.md](./PROVIDER_UX.md) |
 | **产品整体（相对 HC）** | **~74–88%** | 日用高；UI 全家桶另计 |
 
-**已闭环主线：** headless 日用 → Diff（D0–D7 / U0–U4）· Hooks（H0–H5）· Compact（C0–C5）· Provider（P0–P4.1）· Effort（E0–E9）· Provider UX（CX0–CX8）· 可靠性（R0–R4）· **Durable Runtime（DR0–DR4）** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR3 Desktop 产品接线** · **OI-07 SearXNG 上游诊断、`search doctor` 与可选 Docker setup** · **OI-08B CLI 零步骤首次启动** · **OI-09 CLI TUI 交互重构** · **OI-10 CLI 命令发现与 TUI 一致性**。切片明细 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
+**已闭环主线：** headless 日用 → Diff（D0–D7 / U0–U4）· Hooks（H0–H5）· Compact（C0–C5）· Provider（P0–P4.1）· Effort（E0–E9）· Provider UX（CX0–CX8）· 可靠性（R0–R4）· **Durable Runtime（DR0–DR4）** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR3 Desktop 产品接线** · **OI-07 SearXNG 上游诊断、`search doctor` 与可选 Docker setup** · **OI-08B CLI 零步骤首次启动** · **OI-09 CLI TUI 交互重构** · **OI-10 CLI 命令发现与 TUI 一致性** · **OI-11 CLI TUI 持久终端表面与可审计权限交互**。切片明细 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
 
-**当前主线：OI-11 · CLI TUI 持久终端表面与可审计权限交互。** 2026-07-28
-真人截图与源码审计确认：idle-only editor 会在 turn 中消失，共享 160 列 frame
-无法形成全宽 dock，Thinking 误用整轮计时，Bash 权限丢失 `toolInput`，
-picker/diff 整屏 clear 会擦除 viewport，Responses 的 120 秒 timeout 被误报成
-无来源 abort。任务证据、八个切片与关闭条件见 [OPEN_ISSUES.md](./OPEN_ISSUES.md)。
+**当前默认 agent 队列：为空。** OI-11 于 2026-07-28 完成 A–H：Responses timeout
+分源、常驻 composer、时间线/status、分段活动、权限详情选择、局部 viewport 重绘、
+水晶身份和文档均已进入 121 项完整门禁。真实终端仍只保留不可由自动化替代的 OI-H3。
 
 **外部或人工阻塞项单列，不与 agent 队列混淆：**
 
 | 待办 | 卡在哪 |
 |------|--------|
-| CLI TUI 真实 Windows Terminal 观感/光标/按键 | OI-11 先修所有已知可自动闭环缺陷；完成后只能由真人确认实际字体下的光标、动画、resize 与按键观感 |
+| CLI TUI 真实 Windows Terminal 观感/光标/按键 | OI-11 已修完所有已知可自动闭环缺陷；只剩真人确认实际字体下的光标、颜色、动画、resize 与按键观感 |
 | 桌面窗口视觉 · AskUserQuestion 真人按键/点击 | 只能人工验，自动化覆盖不到 |
 | LSP | 暂缓，触发条件已写死 → [ADR_AR4_EVIDENCE_GATE.md](./ADR_AR4_EVIDENCE_GATE.md) §6 |
 
@@ -52,9 +50,9 @@ picker/diff 整屏 clear 会擦除 viewport，Responses 的 120 秒 timeout 被�
 
 **已插队并收口：** **AR-T · Agent 能力面**（§14）。准入证据：基础设施深度（DR0–DR4 + AR1）已远超能力广度——彼时 agent 无法跨步骤记住计划，也无法启动任何活过一次工具调用的进程。AR2 压缩深化顺延，A0a/A0b 成果不受影响。
 
-**agent 可闭环开放项：** OI-11A–OI-11H；证据、顺序和关闭条件见
-[OPEN_ISSUES.md](./OPEN_ISSUES.md)。CLI init 不再是默认安装步骤，SearXNG Docker
-管理也只是显式可选能力；真人验收状态仍单列。
+**agent 可闭环开放项：** 当前为空；关闭证据见 [OPEN_ISSUES.md](./OPEN_ISSUES.md)。
+CLI init 不再是默认安装步骤，SearXNG Docker 管理也只是显式可选能力；真人验收
+状态仍单列，不从 `BLOCKED: HUMAN` 反推新功能。
 
 ---
 
@@ -117,9 +115,9 @@ picker/diff 整屏 clear 会擦除 viewport，Responses 的 120 秒 timeout 被�
 | **AR-T1 TodoWrite · AR-T2 Bash background**（§14） | ✅ |
 | **AR-T3a ExitPlanMode · AR-T3b Web search**（§14） | ✅ |
 | **AR5C-early · CLI 可分发**（§15） | ✅ |
-| **OI-09 · CLI TUI 交互重构** | ✅ 响应式 Bolot 欢迎页、真实输入框、稳定即时活动态、结构化时间线、窄终端/非 TTY 契约；真人 Windows Terminal 验收单列 |
+| **OI-09 · CLI TUI 交互重构** | ✅ 建立响应式欢迎页、真实输入框、稳定即时活动态、结构化时间线、窄终端/非 TTY 契约；当时的 Bolot 欢迎页已由 OI-11G 替换 |
 | **OI-10 · CLI 命令发现与 TUI 一致性** | ✅ 共享 frame、原子多帧动画、slash catalog/menu、CLI-local/Plugin/Skill 动态候选与键盘补全；真人 Windows Terminal 验收单列 |
-| **OI-11 · CLI TUI 持久终端表面与可审计权限交互** | 🚧 持久全宽 composer、时间线层级/usage、分段 Thinking、权限详情选择、viewport 稳定、Responses abort 诊断与水晶欢迎页；见 OPEN_ISSUES |
+| **OI-11 · CLI TUI 持久终端表面与可审计权限交互** | ✅ 常驻全宽 composer、时间线层级/usage、分段 Thinking、权限详情选择、viewport 稳定、Responses abort 诊断与水晶欢迎页均已进入默认门禁；真人项见 OI-H3 |
 | **AR-T3+ 能力面续刀**（WebSearch · plan 工具流 · AskUserQuestion） | ✅ 三项均已落地（AskUserQuestion 的真 TTY 交互未验，见 §14.5） |
 | **AR2 Compact depth（A0a/A0b/A1/A2/B1/B2/C 全段）** | ✅ |
 | AR3 Desktop shell | ✅ runtime 生产桥/会话切换恢复/视图模型/composer/model-effort/control-tool progress/NSIS 已收口；真人点击/视觉仍未验 |
@@ -132,12 +130,12 @@ picker/diff 整屏 clear 会擦除 viewport，Responses 的 120 秒 timeout 被�
 
 状态真源见 **§0**；里程碑逐项明细已并入 §0 与 [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
 
-**一句话：** 核心主路径与 OI-10 slash 发现已收口；OI-11 正在补齐 CLI TUI
-日用交互：持久 composer、可审计权限、稳定 viewport、分段活动状态和 Bolo 身份。
+**一句话：** 核心主路径与 OI-11 CLI TUI 已收口；默认 agent 队列为空，外部资源和
+真人验收继续单列。
 
-**当前主线：** OI-11A–OI-11H。先修 Responses timeout 误归因，再建立共享终端
-表面并落时间线/活动/权限/viewport，最后重做水晶欢迎页与文档。真人 Windows
-Terminal 验收仍单列，不以自动快照或注入按键冒充完成。
+**最近闭环：** OI-11A–OI-11H。代码批为 `e9a32cf`、`59acdf6`、`b0feb0c`、
+`4fc3791`、`da0533c`、`b0fbb86`、`8088fbb`；121 项完整门禁与 dist smoke 全绿。
+真人 Windows Terminal 验收仍单列，不以自动快照或注入按键冒充完成。
 中段压缩与远端压缩按证据门控**显式关闭**
 （后者见 [ADR_COMPACT_REMOTE.md](./ADR_COMPACT_REMOTE.md)）。
 
@@ -411,9 +409,9 @@ AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 regis
 | 21 | **OI-04 · SearXNG 直连** | 显式配置 · fail-closed endpoint · 零依赖 JSON 工具 · 动态启用 | `bolo search status` · CLI/Desktop warning · 无第三方桥 | 本地 fixture + 真实 Docker/upstream smoke | ✅ `c058998`；OI-X1 于 2026-07-27 闭环 |
 | 22 | **OI-07 · SearXNG 诊断/部署体验** | A ✅ `unresponsive_engines` 契约 · B ✅ `search doctor` · C ✅ 可选 Docker setup | 区分正常空结果/全故障/部分成功；一键只读诊断；显式 setup 不安装 Docker | fixture + 非空 smoke + rollback/端口预检/零依赖护栏 + 源码/dist live | ✅ A `7754525` · B `3e96573` · C `ef03f3d` / `f623ad9` |
 | 23 | **OI-08B · CLI 零步骤首次启动** | 用户状态 materialize / 项目只读发现 · workspace session store · legacy discovery · 显式 init | 安装后直接 `bolo`；普通启动不创建项目 `.bolo`；旧会话可恢复 | first-run 真实 CLI + spill/subagent 路径 + 112 项完整门禁 | ✅ 代码 `22c0d0c`；文档已同步 |
-| 24 | **OI-09 · CLI TUI 交互重构** | terminal width/input reducer/activity/timeline 纯契约 · raw/plain 双路径 · 原子 activity writer | 宽/中/紧凑 Bolot 欢迎页 · 真实输入框 · 提交即时回显 · 稳定 `✦ Thinking`/Running/elapsed · Markdown 与原位工具进度 | `test:cli-tui` + CLI 兼容轨 + typecheck + 113 脚本完整门禁 | ✅ 代码 `843f593` + `1413da3` + follow-up `10879ec`；文档已同步。⚠️ 真实 Windows Terminal 观感/按键仍需真人验 |
+| 24 | **OI-09 · CLI TUI 交互重构** | terminal width/input reducer/activity/timeline 纯契约 · raw/plain 双路径 · 原子 activity writer | 宽/中/紧凑欢迎页 · 真实输入框 · 提交即时回显 · 稳定 `✦ Thinking`/Running/elapsed · Markdown 与原位工具进度 | `test:cli-tui` + CLI 兼容轨 + typecheck + 113 脚本完整门禁 | ✅ 代码 `843f593` + `1413da3` + follow-up `10879ec`；旧 Bolot 身份已由 OI-11G 替换。⚠️ 真实 Windows Terminal 观感/按键仍需真人验 |
 | 25 | **OI-10 · CLI 命令发现与 TUI 一致性** | A frame width helper · B activity frame · C slash candidate projection · D menu reducer/renderer · E CLI-local/Plugin/Skill 动态贡献 · F 门禁/文档 | `/` 全量、`/d` 过滤 `/doctor` · ↑↓/Tab/Enter/Esc · 上下框同宽 · Thinking 有动画且无空白帧 | `test:cli-tui` + `test:slash-completion` + typecheck + 114 脚本完整门禁 + dist smoke | ✅ 代码 `67421bb`；文档已同步。⚠️ 真实 Windows Terminal 观感/按键仍需真人验 |
-| 26 | **OI-11 · CLI TUI 持久终端表面与可审计权限交互** | A terminal surface/composer · B timeline/status · C segment activity · D permission chooser/details · E viewport VT · F abort diagnosis · G crystal identity · H docs | turn 中输入区常驻全宽 · gutter/用户块/token/model/keys · 每段 Thought · command 可见三态权限 · 历史不被 clear · timeout 可行动 · Bolo 水晶欢迎页 | 新专项 + `test:cli-tui` + provider error/permission 回归 + typecheck + 完整门禁 + dist smoke | 🚧 IN PROGRESS；逐切片提交推送，真人观感移交 OI-H3 |
+| 26 | **OI-11 · CLI TUI 持久终端表面与可审计权限交互** | A terminal surface/composer · B timeline/status · C segment activity · D permission chooser/details · E viewport VT · F abort diagnosis · G crystal identity · H docs | turn 中输入区常驻全宽 · gutter/用户块/token/model/keys · 每段 Thought · command 可见三态权限 · 历史不被 clear · timeout 可行动 · Bolo 水晶欢迎页 | OI-11 专项 + 既有 TUI/provider/permission 回归 + typecheck + 121 项完整门禁 + dist smoke | ✅ A–H 已闭环；代码 `e9a32cf` / `59acdf6` / `b0feb0c` / `4fc3791` / `da0533c` / `b0fbb86` / `8088fbb`，真人观感移交 OI-H3 |
 
 固定 checkpoint：
 

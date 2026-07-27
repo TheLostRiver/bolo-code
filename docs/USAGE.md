@@ -173,8 +173,9 @@ npx bolo runtime discard turn <turnId> --resume <id> --json
 npx bolo runtime retry-safe control <controlId> --continue --json
 ```
 
-真实 TTY 中，REPL 会先显示 Bolo Code/Bolot 品牌欢迎页：96 列以上使用双栏，
-56–95 列使用完整单栏，38–55 列使用紧凑框；随后显示稳定输入框而不是裸 `bolo>`：
+真实 TTY 中，REPL 会先显示 Bolo Code 水晶欢迎页：96 列以上使用完整源稿，
+56–95 列使用中型水晶，38–55 列使用紧凑水晶；workspace/model/session 在图形下方
+纵向排列，不使用左右等分卡。随后显示全宽输入框而不是裸 `bolo>`：
 
 ```text
 ╭─ Message ─────────────────────────────────────────╮
@@ -191,13 +192,20 @@ npx bolo runtime retry-safe control <controlId> --continue --json
 exact/prefix 过滤。菜单打开时 `↑/↓` 选择，Tab/Enter 只补成 `/<name> `，Esc 关闭并
 保留文本；再次 Enter 才提交。菜单关闭后 `Enter` 发送、`Ctrl+J` 换行、`↑/↓` 浏览
 本进程历史；支持 `←/→`、`Home/End`、`Backspace/Delete` 和常见 Emacs 编辑键。
-提交后用户消息立即进入时间线；provider 首 token 到达前显示
-`✦ → ✧ → ✶ → ✧` Thinking、耗时和中断提示，工具运行时显示 `Running <tool>`，
-最终正文带 `Bolo` 角色层级。完整键位见 [TUI.md](./TUI.md) §3。
+提交后用户消息立即进入灰色时间线块；composer 在 provider 思考和工具执行期间仍
+保留在底部。provider 首 token 到达前显示 `✦ → ✧ → ✶ → ✧` Thinking、本段耗时和
+中断提示，工具运行时显示 `Running <tool>`；每段 reasoning 结束后留下
+`Thought for <duration>`，不会把整轮时间冒充单段思考。正文保留稳定 gutter，
+底栏按宽度显示 model/mode、快捷键和 `↓input ↑output` token。完整键位见
+[TUI.md](./TUI.md) §3。
 
 活动行每次把完整内容与擦尾控制合成一次原位写入，不会先清空再绘制；glyph 与耗时
-以 250ms 节奏刷新。`BOLO_MASCOT=0` 可隐藏 Bolot；`NO_COLOR` 只去颜色并保留欢迎页结构，
-显式 `BOLO_THEME=plain` / `BOLO_PLAIN=1` 才简化欢迎页。
+以 250ms 节奏刷新。需要授权时，Bash 面板会显示实际 command、cwd、前后台与 timeout，
+再让用户用 `↑/↓` 或 `y/a/n` 选择 allow once、always 或 deny；Always 作用于本会话
+后续同名工具。picker、Diff 和权限面板只重绘自己拥有的行，不会清除整屏历史。
+
+`BOLO_MASCOT=0` 可隐藏水晶；`BOLO_ASCII=1` 使用 ASCII 水晶；`NO_COLOR` 只去颜色并
+保留欢迎页结构，显式 `BOLO_THEME=plain` / `BOLO_PLAIN=1` 才简化欢迎页。
 
 REPL 中，模型或工具正在运行时按 `Ctrl-C` 会针对 coordinator 当前 active turn 请求 interrupt 并返回提示符；空闲提示符下按 `Ctrl-C` 才退出。若取消发生在权限问答或 diff 审批面板，core 默认按拒绝处理。
 
@@ -365,8 +373,9 @@ PowerShell/Bash 外壳补全。
 | `BOLO_TUI_INPUT=0` | 关闭真实输入框、activity 与结构化时间线，回落 readline |
 | `BOLO_TUI_LAYOUT=0` | 关闭 TUI layout/dynamic path |
 | `NO_COLOR` | 保留输入能力，只关闭颜色 |
+| `BOLO_ASCII=1` | 欢迎页使用 ASCII 水晶和 ASCII 分隔符 |
 | `BOLO_THEME=plain` / `BOLO_PLAIN=1` | 保留输入能力，关闭颜色并简化欢迎区 |
-| `BOLO_MASCOT=0` | 隐藏欢迎页 Bolot，保留品牌字标和环境/行动信息 |
+| `BOLO_MASCOT=0` | 隐藏欢迎页水晶，保留品牌字标和 workspace/model/session 信息 |
 
 ---
 
