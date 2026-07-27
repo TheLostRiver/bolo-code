@@ -65,6 +65,17 @@ async function readStdinIfPiped(idleMs = 80): Promise<string | undefined> {
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2)
+
+  // `search` owns its subcommand argv, including doctor `--json`. Dispatch it
+  // before the generic runtime parser so flags cannot be stolen by another
+  // command family. A network probe must also exit gracefully: `process.exit`
+  // can tear down Windows fetch/libuv handles while they are still closing.
+  if (argv[0] === 'search') {
+    const { runSearchCli } = await import('./searchCli.ts')
+    process.exitCode = await runSearchCli(argv.slice(1))
+    return
+  }
+
   const wantsJson = argv.includes('--json')
   let args
   try {
@@ -103,13 +114,6 @@ async function main(): Promise<void> {
 `)
       process.exit(2)
     }
-  }
-
-  // ── bolo search：给无 hosted 搜索的端点配 MCP 搜索后端 ──
-  // 放在 parseArgs 之后、其它路径之前：它不开会话、不需要 provider。
-  if (argv[0] === 'search') {
-    const { runSearchCli } = await import('./searchCli.ts')
-    process.exit(await runSearchCli(argv.slice(1)))
   }
 
   const cwd = args.cwd ?? process.cwd()

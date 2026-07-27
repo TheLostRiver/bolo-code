@@ -25,6 +25,12 @@ import {
   detectWebSearchDialectId,
 } from '../../providers/src/index.ts'
 import { describeWebSearchStatus } from '../../config/src/searchPresets.ts'
+import {
+  probeSearxng,
+  type SearxngDoctorReport,
+  type SearxngDoctorStage,
+  type SearxngUpstreamFailure,
+} from '../../tools/src/index.ts'
 
 export type SearchCliOptions = {
   /** 覆盖写入路径（测试用）；缺省写用户级 mcp.json */
@@ -33,6 +39,8 @@ export type SearchCliOptions = {
   cwd?: string
   writeOut?: (s: string) => void
   writeErr?: (s: string) => void
+  /** Probe transport override for deterministic callers/tests. */
+  fetchImpl?: typeof fetch
 }
 
 function usage(): string {
@@ -41,6 +49,7 @@ function usage(): string {
     'Usage: bolo search <command>',
     '',
     '  status               show the active hosted/direct/MCP lane',
+    '  doctor [--json]      probe configured SearXNG and run a non-empty smoke',
     '  list                 show available search backends',
     `  enable <preset>      add one to mcp.json (${ids})`,
     '',
@@ -48,6 +57,97 @@ function usage(): string {
     'no setup. This command is for endpoints without hosted search.',
     '',
   ].join('\n')
+}
+
+type SearchDoctorCliReport = {
+  ok: boolean
+  code: string
+  stage: SearxngDoctorStage
+  endpointUrl?: string
+  query?: string
+  version?: string
+  instanceName?: string
+  capabilities: {
+    configJson: boolean
+    searchJson: boolean
+  }
+  configuredEngineCount?: number
+  resultCount: number
+  workingEngines: string[]
+  unresponsiveEngines: SearxngUpstreamFailure[]
+  detail?: string
+}
+
+function doctorCliFailure(
+  code: 'not_configured' | 'invalid_config' | 'usage_error',
+  detail: string,
+): SearchDoctorCliReport {
+  return {
+    ok: false,
+    code,
+    stage: 'config',
+    capabilities: { configJson: false, searchJson: false },
+    resultCount: 0,
+    workingEngines: [],
+    unresponsiveEngines: [],
+    detail:
+      detail.length <= 2_000 ? detail : `${detail.slice(0, 1_999)}…`,
+  }
+}
+
+function formatDoctorReport(report: SearchDoctorCliReport): string {
+  const capabilities = [
+    report.capabilities.configJson ? 'config-json' : '',
+    report.capabilities.searchJson ? 'search-json' : '',
+  ].filter(Boolean)
+  const lines = [
+    `SearXNG doctor: ${report.ok ? 'PASS' : 'FAIL'} (${report.code})`,
+    `stage: ${report.stage}`,
+    ...(report.endpointUrl ? [`endpoint: ${report.endpointUrl}`] : []),
+    ...(report.version ? [`version: ${report.version}`] : []),
+    ...(report.instanceName ? [`instance: ${report.instanceName}`] : []),
+    `capabilities: ${capabilities.length ? capabilities.join(', ') : 'none'}`,
+    ...(report.configuredEngineCount === undefined
+      ? []
+      : [`configured engines: ${report.configuredEngineCount}`]),
+    ...(report.query ? [`smoke query: ${report.query}`] : []),
+    `valid results: ${report.resultCount}`,
+    `working engines: ${
+      report.workingEngines.length ? report.workingEngines.join(', ') : 'none reported'
+    }`,
+    `unresponsive engines: ${
+      report.unresponsiveEngines.length
+        ? report.unresponsiveEngines
+            .map(({ engine, reason }) => `${engine} (${reason})`)
+            .join(', ')
+        : 'none reported'
+    }`,
+    ...(report.detail ? [`detail: ${report.detail}`] : []),
+    '',
+  ]
+  return lines.join('\n')
+}
+
+function writeDoctorReport(
+  report: SearchDoctorCliReport,
+  json: boolean,
+  writeOut: (text: string) => void,
+  writeErr: (text: string) => void,
+): number {
+  if (json) {
+    writeOut(`${JSON.stringify(report)}\n`)
+  } else {
+    const write = report.ok ? writeOut : writeErr
+    write(formatDoctorReport(report))
+  }
+  if (report.ok) return 0
+  return (
+    report.code === 'not_configured' ||
+    report.code === 'invalid_config' ||
+    report.code === 'usage_error'
+  )
+    ? 2
+    : 1
 }
 
 export async function runSearchCli(
@@ -96,6 +196,48 @@ export async function runSearchCli(
       )
     }
     return 0
+  }
+
+  if (sub === 'doctor') {
+    const doctorArgs = argv.slice(1)
+    const json = doctorArgs.includes('--json')
+    if (
+      doctorArgs.length > 1 ||
+      (doctorArgs.length === 1 && doctorArgs[0] !== '--json')
+    ) {
+      return writeDoctorReport(
+        doctorCliFailure(
+          'usage_error',
+          'Usage: bolo search doctor [--json]',
+        ),
+        json,
+        writeOut,
+        writeErr,
+      )
+    }
+
+    const workspace = await loadWorkspace({
+      cwd: options.cwd ?? process.cwd(),
+      ensureDefaults: false,
+    })
+    if (!workspace.searxngSearch) {
+      const warnings = workspace.configWarnings ?? []
+      const report = warnings.length
+        ? doctorCliFailure('invalid_config', warnings.join('; '))
+        : doctorCliFailure(
+            'not_configured',
+            'No valid search.searxng configuration is active. Configure it first, then retry.',
+          )
+      return writeDoctorReport(report, json, writeOut, writeErr)
+    }
+
+    const report: SearxngDoctorReport = await probeSearxng(
+      workspace.searxngSearch,
+      {
+        ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+      },
+    )
+    return writeDoctorReport(report, json, writeOut, writeErr)
   }
 
   if (sub === 'list') {

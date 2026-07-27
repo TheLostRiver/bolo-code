@@ -52,10 +52,16 @@ export {
 
 export {
   createSearxngSearchTool,
+  probeSearxng,
   SEARXNG_SEARCH_TOOL_NAME,
   SEARXNG_SEARCH_MAX_RESPONSE_BYTES,
   SEARXNG_SEARCH_OUTPUT_MAX_CHARS,
   type CreateSearxngSearchToolOptions,
+  type ProbeSearxngOptions,
+  type SearxngDoctorCode,
+  type SearxngDoctorReport,
+  type SearxngDoctorStage,
+  type SearxngUpstreamFailure,
 } from './searxngSearch.ts'
 
 export {
