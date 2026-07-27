@@ -8,7 +8,10 @@ const statusEl = document.getElementById('status')
 const runtimeStatusEl = document.getElementById('runtime-status')
 const logEl = document.getElementById('log')
 const promptEl = document.getElementById('prompt')
-const sendBtn = document.getElementById('send')
+const sendBtn = document.getElementById('composer-send')
+const queueBtn = document.getElementById('composer-queue')
+const steerBtn = document.getElementById('composer-steer')
+const interruptBtn = document.getElementById('composer-interrupt')
 const permEl = document.getElementById('perm')
 const permText = document.getElementById('perm-text')
 const askEl = document.getElementById('ask')
@@ -36,6 +39,16 @@ let lastProviders = []
 let lastPresets = []
 let fillingProviderSelect = false
 let selectingSession = false
+let composerRequestPending = false
+let composerRefreshRevision = 0
+let lastComposerActions = []
+
+const composerButtons = {
+  submit: sendBtn,
+  queue: queueBtn,
+  steer: steerBtn,
+  interrupt: interruptBtn,
+}
 
 const runtimeClient = createRuntimeClient({
   transport: {
@@ -65,6 +78,34 @@ function renderRuntimeState(state) {
   }
   runtimeStatusEl.textContent =
     state.status === 'connecting' ? 'Runtime connecting…' : 'Runtime disconnected'
+}
+
+function renderComposerActions(actions) {
+  lastComposerActions = Array.isArray(actions) ? actions : []
+  for (const [action, button] of Object.entries(composerButtons)) {
+    if (!button) continue
+    const option = lastComposerActions.find((item) => item.action === action)
+    button.disabled = composerRequestPending || option?.available !== true
+    const reason =
+      option?.available === false && option.unavailableReason
+        ? ` — ${option.unavailableReason}`
+        : ''
+    button.title = `${option?.hint ?? action}${reason}`
+  }
+}
+
+async function refreshComposerActions() {
+  const revision = ++composerRefreshRevision
+  try {
+    const result = await window.bolo.getComposerActions({
+      text: promptEl.value,
+    })
+    if (revision !== composerRefreshRevision) return
+    renderComposerActions(result?.ok ? result.actions : [])
+  } catch {
+    if (revision !== composerRefreshRevision) return
+    renderComposerActions([])
+  }
 }
 
 runtimeClient.subscribe(renderRuntimeState)
@@ -98,6 +139,7 @@ async function activateSessionEntry(sessionId) {
     await refreshProviders()
     await refreshSessions()
     if (!(await reloadTimeline())) await reloadMessages()
+    await refreshComposerActions()
     promptEl.focus()
   } catch (error) {
     appendMsg('system', `Session switch error: ${error?.message ?? error}`)
@@ -490,33 +532,77 @@ async function addPreset() {
   }
 }
 
-async function send() {
+async function performComposerAction(action) {
   const text = promptEl.value.trim()
-  if (!text) return
-  sendBtn.disabled = true
-  promptEl.value = ''
-  appendMsg('user', text)
-  endStreamBubble()
-  try {
-    const r = await window.bolo.submit(text)
-    if (r.type === 'slash' && r.message) {
-      appendMsg('system', r.message)
-    } else if (r.type === 'prompt' || r.type === 'turn') {
-      // 优先走结构化 timeline；取不到才退回旧的扁平重拉，
-      // 免得一处出问题就整段历史消失
-      if (!(await reloadTimeline())) await reloadMessages()
-      await refreshSessions()
-    } else if (r.message) {
-      appendMsg('system', String(r.message))
+  if (action === 'submit') {
+    if (!text || sendBtn.disabled) return
+    sendBtn.disabled = true
+    promptEl.value = ''
+    appendMsg('user', text)
+    endStreamBubble()
+    try {
+      const pending = window.bolo.submit(text)
+      await refreshComposerActions()
+      const r = await pending
+      if (r.type === 'slash' && r.message) {
+        appendMsg('system', r.message)
+      } else if (r.type === 'prompt' || r.type === 'turn') {
+        // 优先走结构化 timeline；取不到才退回旧的扁平重拉，
+        // 免得一处出问题就整段历史消失
+        if (!(await reloadTimeline())) await reloadMessages()
+        await refreshSessions()
+      } else if (r.message) {
+        appendMsg('system', String(r.message))
+      }
+      if (r.status) statusEl.textContent = formatStatusLine(r.status)
+      else await refreshStatus()
+      await runtimeClient.refresh()
+      await refreshProviders()
+    } catch (e) {
+      appendMsg('system', `error: ${e?.message ?? e}`)
+    } finally {
+      await refreshComposerActions()
+      promptEl.focus()
     }
-    if (r.status) statusEl.textContent = formatStatusLine(r.status)
-    else await refreshStatus()
+    return
+  }
+
+  if (composerRequestPending) return
+  if (action !== 'interrupt' && !text) return
+  composerRequestPending = true
+  renderComposerActions(lastComposerActions)
+  try {
+    const result = await window.bolo.composerControl({ action, text })
+    if (!result?.ok) {
+      appendMsg(
+        'system',
+        `${action} rejected: ${result?.error ?? result?.code ?? 'unknown'}`,
+      )
+      return
+    }
+    if (action === 'queue' || action === 'steer') {
+      promptEl.value = ''
+    }
+    if (!result.duplicate) {
+      const message =
+        action === 'queue'
+          ? 'Queued for the next turn.'
+          : action === 'steer'
+            ? 'Steering the active turn.'
+            : 'Interrupt requested.'
+      appendMsg('system', message)
+    }
+    if (result.warning) {
+      appendMsg('warning', `Warning: ${stripAnsi(result.warning)}`)
+    }
     await runtimeClient.refresh()
-    await refreshProviders()
-  } catch (e) {
-    appendMsg('system', `error: ${e?.message ?? e}`)
+    await refreshSessions()
+    await refreshStatus()
+  } catch (error) {
+    appendMsg('system', `${action} error: ${error?.message ?? error}`)
   } finally {
-    sendBtn.disabled = false
+    composerRequestPending = false
+    await refreshComposerActions()
     promptEl.focus()
   }
 }
@@ -562,6 +648,9 @@ window.bolo.onEvent((e) => {
   }
   if (e.type === 'warning' && e.message) {
     appendMsg('warning', `Warning: ${stripAnsi(e.message)}`)
+  }
+  if (e.type === 'phase') {
+    void refreshComposerActions()
   }
 })
 
@@ -793,11 +882,17 @@ setProvider?.addEventListener('change', () => {
   void switchProvider(setProvider.value)
 })
 
-sendBtn.addEventListener('click', () => void send())
+sendBtn.addEventListener('click', () => void performComposerAction('submit'))
+queueBtn.addEventListener('click', () => void performComposerAction('queue'))
+steerBtn.addEventListener('click', () => void performComposerAction('steer'))
+interruptBtn.addEventListener('click', () =>
+  void performComposerAction('interrupt'),
+)
+promptEl.addEventListener('input', () => void refreshComposerActions())
 promptEl.addEventListener('keydown', (ev) => {
   if (ev.key === 'Enter' && !ev.shiftKey) {
     ev.preventDefault()
-    void send()
+    void performComposerAction('submit')
   }
 })
 
@@ -806,6 +901,7 @@ void (async () => {
   await refreshStatus()
   await refreshProviders()
   await refreshSessions()
+  await refreshComposerActions()
   // 结构化 timeline 取不到才退回扁平重拉：一处出问题不该让整段历史消失
   if (!(await reloadTimeline())) await reloadMessages()
   appendMsg(

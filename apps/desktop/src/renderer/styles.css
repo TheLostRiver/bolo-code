@@ -250,20 +250,41 @@ html, body {
 /* ── composer ─────────────────────────────── */
 
 .input-bar {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
   gap: 8px;
   padding: 12px 16px;
   border-top: 1px solid var(--border);
 }
 
 .input-bar input {
-  flex: 1;
+  width: 100%;
+  min-width: 0;
   padding: 9px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg);
   color: var(--fg);
   font: inherit;
+}
+
+.composer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  min-height: 38px;
+}
+
+.composer-actions button {
+  min-width: 72px;
+  white-space: nowrap;
+}
+
+button.ghost.danger {
+  color: var(--danger);
+  border-color: var(--danger);
 }
 
 button {
@@ -282,6 +303,16 @@ button.ghost {
 }
 button.icon { padding: 2px 8px; line-height: 1.4; }
 button:disabled { opacity: 0.5; cursor: default; }
+
+@media (max-width: 760px) {
+  .input-bar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .composer-actions {
+    justify-content: flex-start;
+  }
+}
 
 select, input[type='text'] {
   font: inherit;

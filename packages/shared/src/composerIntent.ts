@@ -23,7 +23,21 @@
  * 打断会打到下一个 turn 头上——那是最糟的一种「成功」。
  */
 
-export type ComposerAction = 'submit' | 'queue' | 'steer' | 'interrupt'
+export const COMPOSER_ACTIONS = [
+  'submit',
+  'queue',
+  'steer',
+  'interrupt',
+] as const
+
+export type ComposerAction = (typeof COMPOSER_ACTIONS)[number]
+
+export function isComposerAction(value: unknown): value is ComposerAction {
+  return (
+    typeof value === 'string' &&
+    (COMPOSER_ACTIONS as readonly string[]).includes(value)
+  )
+}
 
 export type ComposerRunnerState = {
   sessionId: string
@@ -41,27 +55,43 @@ export type ComposerActionOption = {
   unavailableReason?: string
 }
 
-export type ComposerControlRequest = {
+type ComposerControlRequestBase = {
   controlId: string
-  kind: 'queue' | 'steer' | 'interrupt'
   sessionId: string
   expectedTurnId: string
-  turnId?: string
-  prompt?: string
 }
+
+export type ComposerControlRequest =
+  | (ComposerControlRequestBase & {
+      kind: 'queue'
+      turnId: string
+      prompt: string
+    })
+  | (ComposerControlRequestBase & {
+      kind: 'steer'
+      prompt: string
+    })
+  | (ComposerControlRequestBase & {
+      kind: 'interrupt'
+    })
 
 export type ComposerIntentResult =
   | { ok: true; control: ComposerControlRequest }
   | {
       ok: false
-      code: 'no_active_turn' | 'empty_prompt' | 'not_a_control'
+      code:
+        | 'no_active_turn'
+        | 'empty_prompt'
+        | 'not_a_control'
+        | 'invalid_action'
+        | 'invalid_text'
       detail: string
     }
 
 export type ComposerIntentInput = {
   runner: ComposerRunnerState
-  text: string
-  action: ComposerAction
+  text: unknown
+  action: unknown
 }
 
 /**
@@ -70,7 +100,7 @@ export type ComposerIntentInput = {
  * 刻意**不带时间戳或随机数**——那样每次点击都会变成一条新控制，
  * core 的 duplicate 检测就永远不会命中，双击直接变两条。
  */
-function stableControlId(
+function stableIntentHash(
   sessionId: string,
   turnId: string,
   action: string,
@@ -83,7 +113,29 @@ function stableControlId(
     h ^= material.charCodeAt(i)
     h = Math.imul(h, 0x01000193) >>> 0
   }
-  return `ctl_${action}_${h.toString(36)}`
+  return h.toString(36)
+}
+
+function stableControlId(
+  sessionId: string,
+  turnId: string,
+  action: string,
+  text: string,
+): string {
+  return `ctl_${action}_${stableIntentHash(sessionId, turnId, action, text)}`
+}
+
+function stableQueueTurnId(
+  sessionId: string,
+  activeTurnId: string,
+  text: string,
+): string {
+  return `turn_queue_${stableIntentHash(
+    sessionId,
+    activeTurnId,
+    'queue',
+    text,
+  )}`
 }
 
 export function buildComposerActions(opts: {
@@ -142,7 +194,22 @@ export function buildComposerActions(opts: {
 export function composerIntentToControl(
   input: ComposerIntentInput,
 ): ComposerIntentResult {
-  const { runner, action } = input
+  const { runner } = input
+  if (!isComposerAction(input.action)) {
+    return {
+      ok: false,
+      code: 'invalid_action',
+      detail: 'unknown composer action',
+    }
+  }
+  if (typeof input.text !== 'string') {
+    return {
+      ok: false,
+      code: 'invalid_text',
+      detail: 'composer text must be a string',
+    }
+  }
+  const action = input.action
   const text = input.text.trim()
 
   if (action === 'submit') {
@@ -170,16 +237,26 @@ export function composerIntentToControl(
     }
   }
 
-  return {
-    ok: true,
-    control: {
-      controlId: stableControlId(runner.sessionId, turnId, action, text),
-      kind: action,
-      sessionId: runner.sessionId,
-      // 永远带上：界面看到的 turn 可能已经结束，不带它就会打到下一个 turn 头上
-      expectedTurnId: turnId,
-      ...(action === 'queue' ? { turnId } : {}),
-      ...(action === 'interrupt' ? {} : { prompt: text }),
-    },
+  const base = {
+    controlId: stableControlId(runner.sessionId, turnId, action, text),
+    sessionId: runner.sessionId,
+    // 永远带上：界面看到的 turn 可能已经结束，不带它就会打到下一个 turn 头上
+    expectedTurnId: turnId,
   }
+
+  if (action === 'queue') {
+    return {
+      ok: true,
+      control: {
+        ...base,
+        kind: action,
+        turnId: stableQueueTurnId(runner.sessionId, turnId, text),
+        prompt: text,
+      },
+    }
+  }
+  if (action === 'steer') {
+    return { ok: true, control: { ...base, kind: action, prompt: text } }
+  }
+  return { ok: true, control: { ...base, kind: action } }
 }

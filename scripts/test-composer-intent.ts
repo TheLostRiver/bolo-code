@@ -125,7 +125,36 @@ function main() {
     }
   }
 
-  // ── 6) 同一意图 → 同一 controlId（防重复提交）──
+  // ── 6) queue 分配稳定的新 turnId，不能复用正在运行的 turn ──
+  {
+    const first = composerIntentToControl({
+      runner: BUSY,
+      text: 'run later',
+      action: 'queue',
+    })
+    const repeated = composerIntentToControl({
+      runner: BUSY,
+      text: 'run later',
+      action: 'queue',
+    })
+    assert(first.ok && repeated.ok, 'queue intent translates')
+    assert(
+      first.ok &&
+        first.control.kind === 'queue' &&
+        first.control.turnId !== first.control.expectedTurnId,
+      'queue turnId identifies the new queued turn, not the active turn it follows',
+    )
+    assert(
+      first.ok &&
+        first.control.kind === 'queue' &&
+        repeated.ok &&
+        repeated.control.kind === 'queue' &&
+        first.control.turnId === repeated.control.turnId,
+      'retrying the same queue intent keeps the same queued turnId',
+    )
+  }
+
+  // ── 7) 同一意图 → 同一 controlId（防重复提交）──
   {
     const a = composerIntentToControl({ runner: BUSY, text: 'go', action: 'steer' })
     const b = composerIntentToControl({ runner: BUSY, text: 'go', action: 'steer' })
@@ -156,7 +185,7 @@ function main() {
     )
   }
 
-  // ── 7) 不可用的动作翻译时必须被拒，且给结构化原因 ──
+  // ── 8) 不可用的动作翻译时必须被拒，且给结构化原因 ──
   {
     const r = composerIntentToControl({ runner: IDLE, text: 'x', action: 'steer' })
     assert(!r.ok, 'translating an unavailable action fails instead of producing a doomed request')
@@ -166,7 +195,7 @@ function main() {
     )
   }
 
-  // ── 8) queue 需要 turnId；缺了要拒而不是编一个 ──
+  // ── 9) queue 需要 active turn；缺了要拒而不是编一个 ──
   {
     const r = composerIntentToControl({
       runner: { sessionId: 's1', activeTurnId: undefined },
@@ -176,7 +205,30 @@ function main() {
     assert(!r.ok, 'queueing with no turn to queue behind is refused')
   }
 
-  // ── 9) 纯函数 ──
+  // ── 10) IPC 等不可信调用方不能靠 TypeScript 类型兜底 ──
+  {
+    const badAction = composerIntentToControl({
+      runner: BUSY,
+      text: 'x',
+      action: 'destroy' as never,
+    })
+    assert(
+      !badAction.ok && badAction.code === 'invalid_action',
+      'unknown action is rejected instead of falling through as interrupt',
+    )
+
+    const badText = composerIntentToControl({
+      runner: BUSY,
+      text: 42 as never,
+      action: 'queue',
+    })
+    assert(
+      !badText.ok && badText.code === 'invalid_text',
+      'non-string text is rejected instead of throwing at trim()',
+    )
+  }
+
+  // ── 11) 纯函数 ──
   {
     const runner = { sessionId: 's1', activeTurnId: 't1' }
     const before = JSON.stringify(runner)

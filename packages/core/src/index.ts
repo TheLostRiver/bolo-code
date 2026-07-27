@@ -554,6 +554,12 @@ export {
   type SessionControlTakeResult,
   type SessionRunnerReleaseResult,
 } from './sessionControlRuntime.ts'
+export {
+  getSessionComposerActions,
+  requestSessionComposerControl,
+  type SessionComposerRuntime,
+  type SessionComposerControlResult,
+} from './composerRuntime.ts'
 // AR3B：视图装配（transcript → 会话列表 / turn timeline）
 export {
   loadSessionTimeline,

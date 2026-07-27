@@ -69,18 +69,20 @@
         <main id="log" class="log" aria-live="polite" aria-label="Conversation"></main>
 
         <footer class="input-bar">
-          <!--
-            composer 在运行中**不锁**（docs/DESKTOP_DESIGN.md §2.4）。
-            queue 与 steer 要成为两个显式动作 —— 那是 AR3D 的事，
-            这里先把「运行中仍可输入」立住。
-          -->
           <input
             id="prompt"
             type="text"
             placeholder="Message or /help …"
             autocomplete="off"
           />
-          <button id="send" type="button">Send</button>
+          <div class="composer-actions" role="toolbar" aria-label="Message actions">
+            <button id="composer-send" type="button">Send</button>
+            <button id="composer-queue" type="button" class="ghost">Queue</button>
+            <button id="composer-steer" type="button" class="ghost">Steer</button>
+            <button id="composer-interrupt" type="button" class="ghost danger">
+              Interrupt
+            </button>
+          </div>
         </footer>
       </section>
 

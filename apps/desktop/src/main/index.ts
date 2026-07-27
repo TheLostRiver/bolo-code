@@ -37,6 +37,9 @@ import {
   createSessionRuntimeTransport,
   createActiveSessionManager,
   scopeSessionRequestId,
+  getSessionComposerActions,
+  requestSessionComposerControl,
+  takeNextSessionQueued,
 } from '../../../../packages/core/src/index.ts'
 import {
   buildTimelineCards,
@@ -335,6 +338,34 @@ async function ensureSession(forceNew = false): Promise<DesktopSession> {
 const desktopRuntimeTransport = createSessionRuntimeTransport(() =>
   ensureSession(),
 )
+
+async function submitDesktopInput(s: DesktopSession, text: string) {
+  let result = await submitUserInput(s, text, {
+    querySource: 'desktop_composer',
+  })
+  while (true) {
+    const next = await takeNextSessionQueued(s)
+    if (next.persistenceWarning) {
+      send('bolo:event', {
+        type: 'warning',
+        message: next.persistenceWarning,
+      })
+    }
+    if (!next.control) break
+    if (!next.control.prompt || !next.control.turnId) {
+      send('bolo:event', {
+        type: 'warning',
+        message: `queued control "${next.control.controlId}" is missing its prompt or turn id`,
+      })
+      continue
+    }
+    result = await submitUserInput(s, next.control.prompt, {
+      turnId: next.control.turnId,
+      querySource: next.control.querySource ?? 'desktop_composer_queue',
+    })
+  }
+  return result
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -647,10 +678,43 @@ function registerIpc() {
     }
   })
 
+  ipcMain.handle('bolo:getComposerActions', async (_evt, payload) => {
+    const s = await ensureSession()
+    const text = typeof payload?.text === 'string' ? payload.text : ''
+    return {
+      ok: true,
+      actions: getSessionComposerActions(s, text),
+    }
+  })
+
+  ipcMain.handle('bolo:composerControl', async (_evt, payload) => {
+    const s = await ensureSession()
+    const result = await requestSessionComposerControl(s, {
+      action: payload?.action,
+      text: payload?.text,
+    })
+    return result.ok
+      ? {
+          ok: true,
+          control: result.control,
+          duplicate: result.duplicate === true,
+          ...(result.persistenceWarning
+            ? { warning: result.persistenceWarning }
+            : {}),
+          actions: getSessionComposerActions(s, ''),
+        }
+      : {
+          ok: false,
+          code: result.code,
+          error: result.detail,
+          actions: getSessionComposerActions(s, ''),
+        }
+  })
+
   ipcMain.handle('bolo:submit', async (_evt, text) => {
     const s = await ensureSession()
     const raw = typeof text === 'string' ? text : ''
-    const result = await submitUserInput(s, raw)
+    const result = await submitDesktopInput(s, raw)
     return {
       type: result.type,
       message: 'message' in result ? result.message : undefined,

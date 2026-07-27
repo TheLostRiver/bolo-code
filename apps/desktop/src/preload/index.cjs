@@ -8,6 +8,10 @@ contextBridge.exposeInMainWorld('bolo', {
   getStatus: () => ipcRenderer.invoke('bolo:getStatus'),
   getSettings: () => ipcRenderer.invoke('bolo:getSettings'),
   setSettings: (patch) => ipcRenderer.invoke('bolo:setSettings', patch),
+  getComposerActions: (payload) =>
+    ipcRenderer.invoke('bolo:getComposerActions', payload),
+  composerControl: (payload) =>
+    ipcRenderer.invoke('bolo:composerControl', payload),
   submit: (text) => ipcRenderer.invoke('bolo:submit', text),
   listMessages: () => ipcRenderer.invoke('bolo:listMessages'),
   /** AR3B：结构化 turn timeline（工具调用与 diff 不丢） */
