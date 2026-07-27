@@ -46,8 +46,13 @@ export {
   createSearxngSetupPlan,
   getSearxngSetupPaths,
   patchSearxngConfigJsonc,
+  readSearxngSetup,
+  removeSearxngSetupFiles,
+  writeSearxngSetupFiles,
   type CommitSearxngSearchConfigResult,
   type CreateSearxngSetupPlanInput,
+  type ReadSearxngSetupResult,
+  type SearxngManagedSetup,
   type SearxngSetupPaths,
   type SearxngSetupPlan,
 } from './searxngSetup.ts'

@@ -50,6 +50,21 @@ export type CommitSearxngSearchConfigResult =
   | { ok: true; configPath: string; created: boolean }
   | { ok: false; reason: string }
 
+export type SearxngManagedSetup = {
+  version: number
+  port: number
+  baseUrl: string
+  image: string
+  projectName: string
+  paths: SearxngSetupPaths
+}
+
+export type ReadSearxngSetupResult =
+  | { status: 'missing'; paths: SearxngSetupPaths }
+  | { status: 'unmanaged'; paths: SearxngSetupPaths; reason: string }
+  | { status: 'invalid'; paths: SearxngSetupPaths; reason: string }
+  | { status: 'ready'; setup: SearxngManagedSetup }
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
@@ -399,6 +414,135 @@ async function atomicWriteText(filePath: string, body: string): Promise<void> {
   } finally {
     await fs.rm(tempPath, { force: true }).catch(() => {})
   }
+}
+
+export async function writeSearxngSetupFiles(
+  plan: SearxngSetupPlan,
+): Promise<void> {
+  try {
+    await fs.access(plan.paths.root)
+    throw new Error(
+      'refusing to overwrite existing SearXNG setup directory: ' +
+        plan.paths.root,
+    )
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') throw error
+  }
+
+  await fs.mkdir(plan.paths.configDir, { recursive: true })
+  await fs.mkdir(plan.paths.dataDir, { recursive: true })
+  await atomicWriteText(plan.paths.composeFile, plan.composeYaml)
+  await atomicWriteText(plan.paths.settingsFile, plan.settingsYaml)
+  // Manifest last: its presence means all required managed files were written.
+  await atomicWriteText(plan.paths.manifestFile, plan.manifestJson)
+}
+
+async function pathExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath)
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function readSearxngSetup(
+  layoutRoot: string,
+): Promise<ReadSearxngSetupResult> {
+  const paths = getSearxngSetupPaths(layoutRoot)
+  let raw: string
+  try {
+    raw = await fs.readFile(paths.manifestFile, 'utf8')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+      return {
+        status: 'invalid',
+        paths,
+        reason:
+          'could not read managed manifest: ' +
+          (error instanceof Error ? error.message : String(error)),
+      }
+    }
+    if (await pathExists(paths.root)) {
+      return {
+        status: 'unmanaged',
+        paths,
+        reason:
+          'setup directory exists without bolo-managed.json; refusing to overwrite user files',
+      }
+    }
+    return { status: 'missing', paths }
+  }
+
+  let value: unknown
+  try {
+    value = JSON.parse(raw)
+  } catch (error) {
+    return {
+      status: 'invalid',
+      paths,
+      reason:
+        'managed manifest is not valid JSON: ' +
+        (error instanceof Error ? error.message : String(error)),
+    }
+  }
+  if (!isRecord(value)) {
+    return { status: 'invalid', paths, reason: 'managed manifest must be an object' }
+  }
+
+  const port = value.port
+  const expectedBaseUrl =
+    Number.isInteger(port) && Number(port) >= 1 && Number(port) <= 65_535
+      ? 'http://127.0.0.1:' + Number(port)
+      : ''
+  if (
+    value.version !== SEARXNG_SETUP_VERSION ||
+    value.projectName !== SEARXNG_COMPOSE_PROJECT ||
+    value.image !== SEARXNG_DOCKER_IMAGE ||
+    value.baseUrl !== expectedBaseUrl
+  ) {
+    return {
+      status: 'invalid',
+      paths,
+      reason:
+        'managed manifest does not match the supported SearXNG setup contract',
+    }
+  }
+  if (
+    !(await pathExists(paths.composeFile)) ||
+    !(await pathExists(paths.settingsFile))
+  ) {
+    return {
+      status: 'invalid',
+      paths,
+      reason: 'managed manifest exists but compose.yaml or settings.yml is missing',
+    }
+  }
+
+  return {
+    status: 'ready',
+    setup: {
+      version: SEARXNG_SETUP_VERSION,
+      port: Number(port),
+      baseUrl: expectedBaseUrl,
+      image: SEARXNG_DOCKER_IMAGE,
+      projectName: SEARXNG_COMPOSE_PROJECT,
+      paths,
+    },
+  }
+}
+
+export async function removeSearxngSetupFiles(
+  paths: SearxngSetupPaths,
+): Promise<void> {
+  const resolved = path.resolve(paths.root)
+  if (
+    path.basename(resolved).toLowerCase() !== 'searxng' ||
+    path.dirname(resolved) === resolved
+  ) {
+    throw new Error('refusing to remove an unsafe SearXNG setup path')
+  }
+  await fs.rm(resolved, { recursive: true, force: true })
 }
 
 export async function commitSearxngSearchConfig(input: {

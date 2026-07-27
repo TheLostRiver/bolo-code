@@ -31,6 +31,10 @@ import {
   type SearxngDoctorStage,
   type SearxngUpstreamFailure,
 } from '../../tools/src/index.ts'
+import {
+  runSearxngSetupCli,
+  type SearxngSetupCliOptions,
+} from './searxngSetupCli.ts'
 
 export type SearchCliOptions = {
   /** 覆盖写入路径（测试用）；缺省写用户级 mcp.json */
@@ -41,6 +45,8 @@ export type SearchCliOptions = {
   writeErr?: (s: string) => void
   /** Probe transport override for deterministic callers/tests. */
   fetchImpl?: typeof fetch
+  /** Explicit SearXNG Docker management overrides for deterministic tests. */
+  searxngSetup?: Omit<SearxngSetupCliOptions, 'writeOut' | 'writeErr'>
 }
 
 function usage(): string {
@@ -50,6 +56,7 @@ function usage(): string {
     '',
     '  status               show the active hosted/direct/MCP lane',
     '  doctor [--json]      probe configured SearXNG and run a non-empty smoke',
+    '  searxng <command>    explicitly manage the optional local Docker setup',
     '  list                 show available search backends',
     `  enable <preset>      add one to mcp.json (${ids})`,
     '',
@@ -238,6 +245,14 @@ export async function runSearchCli(
       },
     )
     return writeDoctorReport(report, json, writeOut, writeErr)
+  }
+
+  if (sub === 'searxng') {
+    return await runSearxngSetupCli(argv.slice(1), {
+      ...(options.searxngSetup ?? {}),
+      writeOut,
+      writeErr,
+    })
   }
 
   if (sub === 'list') {
