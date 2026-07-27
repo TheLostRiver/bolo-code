@@ -15,7 +15,65 @@
 
 ## 1. Agent 可直接解决
 
-当前 agent 可闭环开放主线为空。以下已关闭条目继续保留关闭证据，防止后续重复实现或状态回退。
+当前主线为 OI-11。以下已关闭条目继续保留关闭证据，防止后续重复实现或状态回退。
+
+### OI-11 · CLI TUI 持久终端表面与可审计权限交互
+
+**状态：IN PROGRESS（2026-07-28 登记）**
+
+准入证据：
+
+- 真实 Windows Terminal 截图显示 Agent header 与正文从第 0 列开始；用户历史消息
+  只有 `❯` 前缀，没有与 Agent 输出区分开的背景块。Claude Code、Grok CLI 与 Pi
+  虽然框架不同，但都给时间线正文稳定 gutter，并把已提交用户消息做成独立视觉块。
+- `inputBox.ts` 明确把 raw editor 定义为“只在 agent idle 时存在”；提交后
+  `clearRendered()` 并释放 stdin，所以 Thinking、工具执行和权限等待期间 composer
+  完全消失。`renderTuiInputBox()` 又与欢迎页共用 160 列 frame 上限，超宽终端右侧
+  留出大块空白。
+- `turnActivity.ts` 只有一个 `turnStartedAt`，工具和模型阶段只更换 label，不重置
+  起点；截图中的 `Thinking · 135s/370s` 因而是整轮累计，不是当前思考段耗时。
+- `AskPermissionRequest` 已带 `toolInput`，但非文件权限路径只读取
+  `preview.summaryText`；Bash 因此退化成 `Allow Bash? [y/a/N]`，没有 command/cwd/
+  timeout/background 等判断依据，也没有可导航的 once/always/deny 选项。
+- `arrowPicker.ts` 与 `diffPane.ts` 使用 `ESC[2J ESC[H` 清整屏；审批结束也会再次
+  清屏。截图复现了历史被擦出当前 viewport、整屏只剩顶部几行活动内容的问题。
+- `openaiResponses.ts` 默认 120 秒定时器与父 signal 都调用裸
+  `controller.abort()`，catch 后只保留 `This operation was aborted`；core 又把
+  不含 timeout 字样的 `AbortError` 当作用户取消，导致真实 request timeout
+  不重试、无可行动说明。错误末尾的 `dialect: max-tokens` 与 abort 没有因果关系。
+- 用户提供的 `bolo-logo-tui.txt` 是竖向 Unicode 水晶标识；当前欢迎页仍是
+  Claude 式左右等分信息卡和 Bolot 像素头像，需要形成 Bolo 自己的视觉结构。
+- Pi 将 user/assistant/status/footer/editor 分组件并由同一交互模式编排；OpenCode
+  为 thinking、prompt-submit race 和 permission stage 建独立测试；Codex 有
+  `vt100_history`/`resize_reflow` 测试。参考范围仅限状态机、失败模式和测试方法，
+  不复制品牌布局、代码或重量级依赖。
+
+| 切片 | packages-first 交付 | 人类可见结果 | 自动关闭条件 | 状态 |
+|------|---------------------|--------------|--------------|------|
+| **OI-11A · terminal surface / persistent composer** | 终端临时区域所有权契约；历史 append 与底部 dock 分离；composer width 使用可用终端宽度 | Thinking/Running 时输入区不消失；输入框横向铺满；权限面板可临时接管 stdin | idle/running/permission 状态机；24/38/80/160/超宽；局部 clear 序列；非 TTY 回归 | OPEN |
+| **OI-11B · timeline hierarchy / status** | 统一 timeline gutter；用户消息背景块；结构化 footer token（model/mode/keys/usage） | Agent 正文不贴边；已提交问题有灰色块；模型、快捷键和 `↓token` 清晰高亮 | ANSI/NO_COLOR、CJK/emoji、usage real/estimated、窄屏优先级与裁剪 golden | OPEN |
+| **OI-11C · segment activity** | model/tool/reasoning segment 生命周期与独立计时；活动帧继续原子写入 | 当前 `Thinking` 有动画；每段结束显示 `Thought for 4.2s`，不再把整轮时间冒充本段耗时 | 假时钟覆盖多段 model→tool→model、retry、warning、abort；每 tick 单 write | OPEN |
+| **OI-11D · permission chooser/details** | `toolInput` 安全摘要器；通用 once/always/deny picker；文件 diff 继续复用现有 view-model | Bash 展示具体 command/cwd/关键参数；方向键/快捷键选择，不必盲输 `yes/no` | Bash/Write/WebFetch/MCP/未知 input；always 作用域文案；abort/非 TTY fail-closed | OPEN |
+| **OI-11E · viewport stability** | 可复用局部 region erase/repaint；移除嵌入式 picker/diff 的整屏 clear | 权限、diff、输入和活动更新不再把历史擦掉或把屏幕滚成只剩几行 | VT 输出序列 + 小 viewport/长历史/面板增长缩短/resize；无 `ESC[2J` 回归 | OPEN |
+| **OI-11F · Responses abort diagnosis** | timeout 与 parent/user abort 分源；retry 分类和 provider error context | 120 秒超时明确显示 endpoint/timeout/下一步；用户 Ctrl+C 仍是取消且不重试 | fake fetch/fake clock 覆盖 timeout、parent abort、成功清理、secret redaction | OPEN |
+| **OI-11G · crystal identity** | 水晶标识常量/资产与 cell-width renderer；宽/中/紧凑独立布局 | 欢迎页使用 Bolo 水晶标识，不再是 Claude 左右等分卡；窄屏有稳定降级 | 三档 golden、Unicode/ASCII、NO_COLOR、长 cwd/model 裁剪、dist 资产契约 | OPEN |
+| **OI-11H · 验收与文档** | 新专项进入默认门禁；README/TUI/ROADMAP/handoff/USAGE 同步 | 源码与 dist 行为一致，用户文档不再承诺旧界面 | 专项、typecheck、完整 `npm test`、dist smoke 全绿；真人项移交 OI-H3 | OPEN |
+
+实现顺序：
+
+1. OI-11F 先修可复现的数据面错误，避免后续长 TUI 验收被假 abort 打断。
+2. OI-11A 建立共享终端表面，再依次落 OI-11B、OI-11C、OI-11D、OI-11E；
+   禁止让新的 picker/activity 各自重新拥有 stdout。
+3. OI-11G 在交互骨架稳定后重做欢迎页，避免视觉改动掩盖 cursor/scroll 回归。
+4. OI-11H 最后同步文档。每个代码切片独立测试、中文提交并推送；文档批另提。
+
+总关闭条件：
+
+- OI-11A–OI-11H 的代码/测试与文档批均已推送，根 `dependencies` 仍为 `{}`。
+- 自动测试证明 reducer、renderer、VT 序列、非 TTY 和 dist 行为；不把 snapshot、
+  注入按键或 Codex PTY 冒充真人 Windows Terminal。
+- OI-H3 只保留真实字体下的光标/动画/resize/按键观感，不再承载可由代码和
+  自动测试直接证明的已知功能缺陷。
 
 ### OI-10 · CLI 命令发现与 TUI 一致性
 
@@ -358,6 +416,10 @@ slash reducer/menu、raw-mode listener/恢复、CJK/emoji cell 宽度、确定�
 完整 `npm test`。Codex PTY 默认因 `TERM=dumb` 降级；仅对子进程覆盖
 `TERM=xterm-256color` 后，已实测 `/`/`/d`、Plugin 来源、方向键、Tab、Esc 与
 `/exit` 两阶段提交，但该 PTY 仍不能代表真人 Windows Terminal。
+
+2026-07-28 的真人截图已把持久 composer、全宽布局、时间线 gutter、分段 Thinking、
+权限详情/选择、整屏 clear、usage footer、Responses timeout 误归因和欢迎页身份问题
+移入可自动修复的 OI-11；这些不能继续以 `BLOCKED: HUMAN` 为由延后。
 自动化不能替代真人确认 Windows Terminal 字体/颜色下的实际光标位置、重绘残影、
 窗口 resize、Ctrl+J/历史/删除组合键、权限面板切换和长回答滚动。
 
