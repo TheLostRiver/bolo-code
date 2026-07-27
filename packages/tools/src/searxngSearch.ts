@@ -30,6 +30,11 @@ type ParsedResult = {
   publishedDate?: string
 }
 
+type UnresponsiveEngine = {
+  engine: string
+  reason: string
+}
+
 function errorResult(output: string, errorCode: string): ToolResult {
   return { ok: false, isError: true, output, errorCode }
 }
@@ -229,6 +234,51 @@ function parseResults(raw: unknown, limit: number): ParsedResult[] | null {
   return out
 }
 
+function parseUnresponsiveEngines(raw: unknown): UnresponsiveEngine[] {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return []
+  const candidates = (raw as Record<string, unknown>).unresponsive_engines
+  if (!Array.isArray(candidates)) return []
+
+  const out: UnresponsiveEngine[] = []
+  const seen = new Set<string>()
+  for (const candidate of candidates) {
+    if (!Array.isArray(candidate) || candidate.length < 2) continue
+    const engine = cleanText(candidate[0], 80)
+    const reason = cleanText(candidate[1], 160)
+    if (!engine || !reason) continue
+    const key = `${engine.toLowerCase()}\u0000${reason.toLowerCase()}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push({ engine, reason })
+    if (out.length >= 8) break
+  }
+  return out
+}
+
+function formatUnresponsiveEngines(engines: UnresponsiveEngine[]): string {
+  return engines
+    .map(({ engine, reason }) => `${engine} (${reason})`)
+    .join(', ')
+}
+
+function appendUpstreamWarning(
+  output: string,
+  engines: UnresponsiveEngine[],
+): string {
+  if (engines.length === 0) return output
+  const suffix = `\n\nWarning: SearXNG reported unavailable upstream engines: ${formatUnresponsiveEngines(
+    engines,
+  )}.`
+  if (suffix.length >= SEARXNG_SEARCH_OUTPUT_MAX_CHARS) {
+    return suffix.slice(0, SEARXNG_SEARCH_OUTPUT_MAX_CHARS)
+  }
+  const outputBudget = SEARXNG_SEARCH_OUTPUT_MAX_CHARS - suffix.length
+  if (output.length <= outputBudget) return `${output}${suffix}`
+  const marker = '\n… result text omitted to preserve upstream diagnostics'
+  const bodyBudget = Math.max(0, outputBudget - marker.length)
+  return `${output.slice(0, bodyBudget)}${marker}${suffix}`
+}
+
 function formatResults(query: string, results: ParsedResult[]): string {
   if (results.length === 0) {
     return `SearXNG returned no valid results for "${query}".`
@@ -393,9 +443,21 @@ export function createSearxngSearchTool(
             'invalid_response',
           )
         }
+        const unresponsiveEngines = parseUnresponsiveEngines(decoded)
+        if (results.length === 0 && unresponsiveEngines.length > 0) {
+          return errorResult(
+            `SearXNG returned no results because upstream engines were unavailable: ${formatUnresponsiveEngines(
+              unresponsiveEngines,
+            )}.`,
+            'upstream_unavailable',
+          )
+        }
         return {
           ok: true,
-          output: formatResults(parsed.value.query, results),
+          output: appendUpstreamWarning(
+            formatResults(parsed.value.query, results),
+            unresponsiveEngines,
+          ),
         }
       } catch (error) {
         if (ctx.signal?.aborted) {

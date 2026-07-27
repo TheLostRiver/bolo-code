@@ -1,5 +1,5 @@
 /**
- * OI-04: SearXNG JSON direct search contract.
+ * OI-04/OI-07A: SearXNG JSON direct search and upstream diagnostics contract.
  *
  * This test uses a local HTTP fixture. It does not claim that a real SearXNG
  * instance or any upstream engine has been exercised.
@@ -90,6 +90,76 @@ async function main() {
               content: 'x'.repeat(SEARXNG_SEARCH_MAX_RESPONSE_BYTES + 1024),
             },
           ],
+        }),
+      )
+      return
+    }
+    if (query === 'empty') {
+      res.setHeader('content-type', 'application/json')
+      res.end('{"results":[],"unresponsive_engines":[]}')
+      return
+    }
+    if (query === 'upstream-down') {
+      res.setHeader('content-type', 'application/json')
+      res.end(
+        JSON.stringify({
+          results: [],
+          unresponsive_engines: [
+            ['brave', 'too many requests'],
+            ['google cse', 'timeout'],
+            ['brave', 'too many requests'],
+          ],
+        }),
+      )
+      return
+    }
+    if (query === 'partial') {
+      res.setHeader('content-type', 'application/json')
+      res.end(
+        JSON.stringify({
+          results: [
+            {
+              title: 'Partial result',
+              url: 'https://example.test/partial',
+              content: 'One engine still answered.',
+              engine: 'bing',
+            },
+          ],
+          unresponsive_engines: [
+            ['brave', 'too many requests'],
+            ['google cse', 'timeout'],
+          ],
+        }),
+      )
+      return
+    }
+    if (query === 'malformed-diagnostics') {
+      res.setHeader('content-type', 'application/json')
+      res.end(
+        JSON.stringify({
+          results: [],
+          unresponsive_engines: [
+            null,
+            [''],
+            ['brave'],
+            ['bing', 429],
+            { engine: 'google', reason: 'timeout' },
+          ],
+        }),
+      )
+      return
+    }
+    if (query === 'partial-budget') {
+      res.setHeader('content-type', 'application/json')
+      res.end(
+        JSON.stringify({
+          results: Array.from({ length: 20 }, (_, index) => ({
+            title: `Budget result ${index + 1}`,
+            url: `https://example.test/budget/${index + 1}`,
+            content: `Long snippet ${index + 1} ${'x'.repeat(2_000)}`,
+            engine: 'bing',
+          })),
+          unresponsive_engines: [['brave', 'too many requests']],
         }),
       )
       return
@@ -221,7 +291,83 @@ async function main() {
       `formatted result stays within ${SEARXNG_SEARCH_OUTPUT_MAX_CHARS} chars`,
     )
 
-    // 4) Timeout and malformed upstream responses are distinct hard failures.
+    // 4) Empty results remain valid unless SearXNG reports upstream failures.
+    const empty = await tool.call({ query: 'empty' }, { cwd: process.cwd() })
+    assert(empty.ok, `a legitimate empty result remains successful: ${empty.output}`)
+    assert(
+      /no valid results/i.test(empty.output) && !/warning|unavailable/i.test(empty.output),
+      `a legitimate empty result is not mislabeled as an outage: ${empty.output}`,
+    )
+
+    const upstreamDown = await tool.call(
+      { query: 'upstream-down' },
+      { cwd: process.cwd() },
+    )
+    assert(
+      !upstreamDown.ok && upstreamDown.isError,
+      `empty results with upstream failures fail visibly: ${upstreamDown.output}`,
+    )
+    assert(
+      upstreamDown.errorCode === 'upstream_unavailable',
+      `upstream outage has an actionable code: ${JSON.stringify(upstreamDown)}`,
+    )
+    assert(
+      /brave.*too many requests/i.test(upstreamDown.output) &&
+        /google cse.*timeout/i.test(upstreamDown.output),
+      `upstream outage names the affected engines without dropping reasons: ${upstreamDown.output}`,
+    )
+    assert(
+      upstreamDown.output.match(/brave/gi)?.length === 1,
+      `duplicate engine diagnostics are collapsed: ${upstreamDown.output}`,
+    )
+
+    const partial = await tool.call({ query: 'partial' }, { cwd: process.cwd() })
+    assert(partial.ok, `partial upstream success keeps valid results: ${partial.output}`)
+    assert(
+      partial.output.includes('Partial result') &&
+        /warning.*brave.*too many requests/i.test(partial.output) &&
+        /google cse.*timeout/i.test(partial.output),
+      `partial success appends a concise upstream warning: ${partial.output}`,
+    )
+    assert(
+      partial.output.length <= SEARXNG_SEARCH_OUTPUT_MAX_CHARS,
+      `partial warning stays within ${SEARXNG_SEARCH_OUTPUT_MAX_CHARS} chars`,
+    )
+
+    const malformedDiagnostics = await tool.call(
+      { query: 'malformed-diagnostics' },
+      { cwd: process.cwd() },
+    )
+    assert(
+      malformedDiagnostics.ok &&
+        /no valid results/i.test(malformedDiagnostics.output) &&
+        !/warning|unavailable/i.test(malformedDiagnostics.output),
+      `malformed diagnostics cannot invent an outage: ${malformedDiagnostics.output}`,
+    )
+
+    const wideConfig = resolveSearxngSearchConfig({
+      baseUrl,
+      timeoutMs: 1_000,
+      maxResults: 20,
+    })
+    assert(wideConfig.status === 'enabled', 'wide budget fixture config is valid')
+    const budgetedPartial = await createSearxngSearchTool(wideConfig.config).call(
+      { query: 'partial-budget', limit: 20 },
+      { cwd: process.cwd() },
+    )
+    assert(
+      budgetedPartial.ok &&
+        budgetedPartial.output.length <= SEARXNG_SEARCH_OUTPUT_MAX_CHARS,
+      `long partial output stays inside the global budget: ${budgetedPartial.output.length}`,
+    )
+    assert(
+      /result text omitted to preserve upstream diagnostics/i.test(
+        budgetedPartial.output,
+      ) && /warning.*brave.*too many requests/i.test(budgetedPartial.output),
+      `long result output preserves the upstream warning: ${budgetedPartial.output.slice(-500)}`,
+    )
+
+    // 5) Timeout and malformed upstream responses are distinct hard failures.
     const timeoutConfig = resolveSearxngSearchConfig({
       baseUrl,
       timeoutMs: 100,
@@ -245,7 +391,7 @@ async function main() {
       )
     }
 
-    // 5) Workspace wiring: valid config adds one tool; invalid config warns and adds none.
+    // 6) Workspace wiring: valid config adds one tool; invalid config warns and adds none.
     process.env.BOLO_CONFIG_DIR = path.join(tmpRoot, 'user')
     process.env.BOLO_PROVIDER = 'mock'
     const project = path.join(tmpRoot, 'valid-project')
