@@ -33,7 +33,9 @@ import {
   type SessionEventPrinter,
 } from './tui/formatSessionEvent.ts'
 import {
+  createTuiInputState,
   readTuiInput,
+  renderTuiInputBox,
   shouldUseDynamicTui,
 } from './tui/inputBox.ts'
 import {
@@ -46,6 +48,10 @@ import {
   type ArrowPickItem,
 } from './tui/arrowPicker.ts'
 import { getCliSlashCommandCandidates } from './slashCandidates.ts'
+import {
+  createTerminalSurface,
+  type TerminalSurface,
+} from './tui/terminalSurface.ts'
 
 export type ResumeCliOptions = {
   /** session id / 路径；省略或 true 时进入项目列表选择 */
@@ -403,6 +409,7 @@ export function lastAssistantText(
 
 /** 挂 session 上的 T4 打印机（CLI 内部） */
 const EVENT_PRINTER = Symbol.for('bolo.cli.eventPrinter')
+const TERMINAL_SURFACE = Symbol.for('bolo.cli.terminalSurface')
 
 export function getSessionEventPrinter(
   session: BoloSession,
@@ -419,6 +426,23 @@ export function attachSessionEventPrinter(
   ;(session as BoloSession & { [EVENT_PRINTER]?: SessionEventPrinter })[
     EVENT_PRINTER
   ] = printer
+}
+
+export function getSessionTerminalSurface(
+  session: BoloSession,
+): TerminalSurface | undefined {
+  return (
+    session as BoloSession & { [TERMINAL_SURFACE]?: TerminalSurface }
+  )[TERMINAL_SURFACE]
+}
+
+export function attachSessionTerminalSurface(
+  session: BoloSession,
+  surface: TerminalSurface,
+): void {
+  ;(
+    session as BoloSession & { [TERMINAL_SURFACE]?: TerminalSurface }
+  )[TERMINAL_SURFACE] = surface
 }
 
 /**
@@ -443,19 +467,35 @@ export function createCliOnEvent(opts: {
 }): {
   printer: SessionEventPrinter
   onEvent: (e: SessionEvent) => void
+  surface?: TerminalSurface
 } {
+  const surface =
+    opts.timeline === true
+      ? createTerminalSurface({
+          writeOut: opts.writeOut,
+          writeErr: opts.writeErr,
+        })
+      : undefined
+  const printerOut = surface?.writeOutput ?? opts.writeOut
+  const printerErr = surface?.writeError ?? opts.writeErr
   const activity =
     opts.timeline === true
       ? (opts.activity ??
         createTurnActivityIndicator({
-          writeOut: opts.writeOut,
+          writeOut: printerOut,
           color: opts.color,
           columns: () => process.stdout.columns ?? opts.columns,
+          ...(surface
+            ? {
+                renderFrame: (line: string) => surface.setActivity(line),
+                clearFrame: () => surface.clearActivity(),
+              }
+            : {}),
         }))
       : undefined
   const printer = createSessionEventPrinter({
-    writeOut: opts.writeOut,
-    writeErr: opts.writeErr,
+    writeOut: printerOut,
+    writeErr: printerErr,
     showThinking: opts.showThinking,
     timeline: opts.timeline,
     color: opts.color,
@@ -465,6 +505,7 @@ export function createCliOnEvent(opts: {
   })
   return {
     printer,
+    ...(surface ? { surface } : {}),
     onEvent: (e) => {
       printer.onEvent(e)
       opts.onSessionEvent?.(e)
@@ -490,7 +531,7 @@ export async function resumeFromIdOrPath(
 
   // 打印机创建早于 session；绑定后读 session.showThinking（/thinking）
   const thinkingGate: { session: BoloSession | null } = { session: null }
-  const { printer, onEvent } = createCliOnEvent({
+  const { printer, onEvent, surface } = createCliOnEvent({
     writeOut,
     writeErr,
     onSessionEvent: opts.onSessionEvent,
@@ -535,6 +576,7 @@ export async function resumeFromIdOrPath(
   thinkingGate.session = session
   if (opts.toolSpecs) applyToolSpecsToSession(session, opts.toolSpecs)
   attachSessionEventPrinter(session, printer)
+  if (surface) attachSessionTerminalSurface(session, surface)
 
   // 快照读不了但从 append-only transcript 救回来了。
   // 静默恢复等于隐瞒损坏——说清楚发生了什么、坏文件在哪、我们没动它。
@@ -843,6 +885,11 @@ export async function runRepl(
   const writeErr = options?.writeErr ?? ((s) => process.stderr.write(s))
   const isTty = options?.isTty ?? process.stdin.isTTY === true
   const dynamicTui = shouldUseDynamicTui({ isTty })
+  const surface = dynamicTui
+    ? getSessionTerminalSurface(session)
+    : undefined
+  const runtimeOut = surface?.writeOutput ?? writeOut
+  const runtimeErr = surface?.writeError ?? writeErr
   const color =
     process.env.NO_COLOR === undefined &&
     process.env.BOLO_THEME?.trim().toLowerCase() !== 'plain'
@@ -917,6 +964,12 @@ export async function runRepl(
       /* ignore */
     }
   }
+  const pauseInteractiveSurface = dynamicTui
+    ? () => surface?.suspend()
+    : pauseRl
+  const resumeInteractiveSurface = dynamicTui
+    ? () => surface?.resume()
+    : resumeRl
   let activeTurn: AbortController | null = null
   const interrupt = async () => {
     if (activeTurn && !activeTurn.signal.aborted) {
@@ -929,16 +982,16 @@ export async function runRepl(
           expectedTurnId: snapshot.active.turnId,
         })
         if (result.ok) {
-          writeErr(`^C turn interrupt requested (${snapshot.active.turnId})\n`)
+          runtimeErr(`^C turn interrupt requested (${snapshot.active.turnId})\n`)
           if (result.persistenceWarning) {
-            writeErr(`warning: ${result.persistenceWarning}\n`)
+            runtimeErr(`warning: ${result.persistenceWarning}\n`)
           }
           return
         }
       }
       // ownership 前的极短窗口或本地 slash 面板：回退本地 signal。
       activeTurn.abort('interrupt')
-      writeErr('^C turn cancelled\n')
+      runtimeErr('^C turn cancelled\n')
       return
     }
     replClosed = true
@@ -1005,6 +1058,27 @@ export async function runRepl(
       activeTurn = turnController
       const onParentAbort = () => turnController.abort('parent')
       options?.signal?.addEventListener('abort', onParentAbort, { once: true })
+      if (surface) {
+        const runningComposer = renderTuiInputBox({
+          state: createTuiInputState(),
+          columns: process.stdout.columns,
+          color,
+          mode: 'running',
+          status: {
+            permissionMode: session.permissionMode,
+            providerId: session.providerId,
+            providerKind: session.provider?.id,
+            model: session.model,
+            effortLevel: session.effortLevel,
+          },
+        })
+        surface.setDock({
+          lines: runningComposer.lines,
+          cursorRow: runningComposer.cursorRow,
+          cursorColumn: runningComposer.cursorColumn,
+          showCursor: false,
+        })
+      }
       session.askPermission = createTtyAskPermission({
         isTty,
         ...(dynamicTui
@@ -1014,19 +1088,20 @@ export async function runRepl(
                 (await question(prompt, turnController.signal)) ?? '',
             }),
         nonTtyDecision: 'deny',
-        writeOut,
-        pauseInput: pauseRl,
-        resumeInput: resumeRl,
+        writeOut: runtimeOut,
+        pauseInput: pauseInteractiveSurface,
+        resumeInput: resumeInteractiveSurface,
+        suspendTextPrompt: dynamicTui,
         signal: turnController.signal,
         onInterrupt: () => turnController.abort('interrupt'),
       })
       try {
         await runOnePrompt(session, text, {
-          writeOut,
-          writeErr,
+          writeOut: runtimeOut,
+          writeErr: runtimeErr,
           isTty,
-          pauseInput: pauseRl,
-          resumeInput: resumeRl,
+          pauseInput: pauseInteractiveSurface,
+          resumeInput: resumeInteractiveSurface,
           signal: turnController.signal,
           ...(queued
             ? {
@@ -1037,8 +1112,9 @@ export async function runRepl(
         })
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
-        writeErr(`error: ${msg}\n`)
+        runtimeErr(`error: ${msg}\n`)
       } finally {
+        surface?.clearDock()
         options?.signal?.removeEventListener('abort', onParentAbort)
         if (activeTurn === turnController) activeTurn = null
       }
@@ -1051,6 +1127,7 @@ export async function runRepl(
     if (dynamicTui) process.removeListener('SIGINT', onSigint)
     else rl?.removeListener('SIGINT', onSigint)
     options?.signal?.removeEventListener('abort', onExternalAbort)
+    surface?.dispose()
     rl?.close()
     // H0：REPL 正常退出 → SessionEnd
     try {

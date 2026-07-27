@@ -21,6 +21,7 @@ import { renderInkLayout } from './tui/inkLayout.ts'
 import { shouldUseDynamicTui } from './tui/inputBox.ts'
 import {
   attachSessionEventPrinter,
+  attachSessionTerminalSurface,
   createCliOnEvent,
   runOnePrompt,
   runRepl,
@@ -67,7 +68,7 @@ export async function runNewSessionCli(
     process.env.BOLO_THEME?.trim().toLowerCase() !== 'plain'
 
   const thinkingGate: { session: BoloSession | null } = { session: null }
-  const { printer, onEvent } = createCliOnEvent({
+  const { printer, onEvent, surface } = createCliOnEvent({
     writeOut,
     writeErr,
     onSessionEvent: opts.onSessionEvent,
@@ -105,6 +106,7 @@ export async function runNewSessionCli(
   if (opts.toolSpecs) applyToolSpecsToSession(session, opts.toolSpecs)
   session.askUserQuestion = askUserQuestion
   attachSessionEventPrinter(session, printer)
+  if (surface) attachSessionTerminalSurface(session, surface)
 
   // 配置解析失败必须先说——否则用户会把「配置没生效」误当成别的问题排查
   for (const w of workspace.configWarnings ?? []) {

@@ -56,9 +56,15 @@ export {
   type InkLayoutOptions,
 } from './tui/inkLayout.ts'
 export {
+  resolveTuiDockWidth,
   resolveTuiFrameWidth,
   TUI_FRAME_MAX_COLUMNS,
 } from './tui/frame.ts'
+export {
+  createTerminalSurface,
+  type TerminalDock,
+  type TerminalSurface,
+} from './tui/terminalSurface.ts'
 export {
   resolveTuiTheme,
   type TuiTheme,

@@ -14,6 +14,7 @@ import {
   getCliSlashCommandCandidates,
   measureTerminalText,
   readTuiInput,
+  resolveTuiDockWidth,
   resolveTuiFrameWidth,
   renderInkLayout,
   renderTuiInputBox,
@@ -432,8 +433,9 @@ async function main(): Promise<void> {
     visibleWidth(ultraWideWelcome.split('\n')[0] ?? '') ===
       resolveTuiFrameWidth(220) &&
       visibleWidth(ultraWideInput.lines[0] ?? '') ===
-        resolveTuiFrameWidth(220),
-    'welcome and input share the same ultra-wide frame contract',
+        resolveTuiDockWidth(220) &&
+      resolveTuiDockWidth(220) > resolveTuiFrameWidth(220),
+    'ultra-wide input fills the terminal independently of the content frame',
   )
 
   const mediumWelcome = renderInkLayout({

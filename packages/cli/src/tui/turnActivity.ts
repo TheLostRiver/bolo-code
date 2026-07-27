@@ -72,6 +72,8 @@ export function createTurnActivityIndicator(options: {
   now?: () => number
   intervalMs?: number
   showCompletion?: boolean
+  renderFrame?: (line: string) => boolean
+  clearFrame?: () => boolean
 }): TurnActivityIndicator {
   const now = options.now ?? Date.now
   const intervalMs = Math.max(100, options.intervalMs ?? 250)
@@ -82,7 +84,10 @@ export function createTurnActivityIndicator(options: {
   let turnStartedAt: number | undefined
   let activeToolName: string | undefined
 
-  const erase = () => options.writeOut('\r\u001b[2K')
+  const erase = () => {
+    if (options.clearFrame?.() === true) return
+    options.writeOut('\r\u001b[2K')
+  }
   const draw = () => {
     if (!active || turnStartedAt == null) return
     const line = formatTurnActivityLine({
@@ -95,8 +100,10 @@ export function createTurnActivityIndicator(options: {
           ? options.columns()
           : options.columns,
     })
-    // One write avoids the visible blank frame produced by erase-then-draw.
-    options.writeOut(`\r${line}\u001b[K`)
+    if (options.renderFrame?.(line) !== true) {
+      // One write avoids the visible blank frame produced by erase-then-draw.
+      options.writeOut(`\r${line}\u001b[K`)
+    }
     frame++
   }
   const stopTimer = () => {

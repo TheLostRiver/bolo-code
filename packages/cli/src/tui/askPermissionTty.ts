@@ -100,6 +100,8 @@ export type CreateTtyAskPermissionOptions = {
   /** 面板前后（REPL 暂停 readline） */
   pauseInput?: () => void
   resumeInput?: () => void
+  /** 文本权限询问也临时接管动态 composer 区域。 */
+  suspendTextPrompt?: boolean
   /** 当前 turn 的取消信号；abort 时权限请求按 deny 收口 */
   signal?: AbortSignal
   /** raw diff panel 收到 Ctrl-C 时通知 turn owner */
@@ -211,10 +213,15 @@ export function createTtyAskPermission(
       }
     }
 
-    const prompt = formatPermissionPrompt(req.toolName, req.preview)
-    const raw = opts.readAnswer
-      ? await resolveOnAbort(opts.readAnswer(prompt), signal, '')
-      : await defaultRead(prompt, signal)
-    return parsePermissionAnswer(raw)
+    if (opts.suspendTextPrompt) opts.pauseInput?.()
+    try {
+      const prompt = formatPermissionPrompt(req.toolName, req.preview)
+      const raw = opts.readAnswer
+        ? await resolveOnAbort(opts.readAnswer(prompt), signal, '')
+        : await defaultRead(prompt, signal)
+      return parsePermissionAnswer(raw)
+    } finally {
+      if (opts.suspendTextPrompt) opts.resumeInput?.()
+    }
   }
 }

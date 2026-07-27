@@ -11,3 +11,14 @@ export function resolveTuiFrameWidth(columns = 80): number {
     : 80
   return Math.min(TUI_FRAME_MAX_COLUMNS, Math.max(24, normalized - 2))
 }
+
+/**
+ * Bottom composer/dock width. Unlike content and welcome frames, the dock
+ * follows the terminal instead of stopping at 160 columns.
+ */
+export function resolveTuiDockWidth(columns = 80): number {
+  const normalized = Number.isFinite(columns)
+    ? Math.max(1, Math.floor(columns))
+    : 80
+  return Math.max(24, normalized - 2)
+}

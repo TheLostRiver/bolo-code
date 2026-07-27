@@ -15,7 +15,7 @@ import {
   terminalGraphemeWidth,
   wrapTerminalText,
 } from './terminalText.ts'
-import { resolveTuiFrameWidth } from './frame.ts'
+import { resolveTuiDockWidth, resolveTuiFrameWidth } from './frame.ts'
 
 export type TuiInputState = {
   value: string
@@ -484,9 +484,10 @@ export function renderTuiInputBox(options: {
   maxBodyRows?: number
   maxMenuRows?: number
   title?: string
+  mode?: 'idle' | 'running'
 }): RenderedTuiInputBox {
   const columns = Math.max(24, Math.floor(options.columns ?? 80))
-  const frameWidth = resolveTuiFrameWidth(columns)
+  const frameWidth = resolveTuiDockWidth(columns)
   const contentWidth = Math.max(8, frameWidth - 6)
   const maxBodyRows = Math.max(1, options.maxBodyRows ?? 4)
   const wrapped = wrapInputAtCursor(options.state, contentWidth)
@@ -538,7 +539,9 @@ export function renderTuiInputBox(options: {
     `${dim}${clipTerminalText(
       options.state.slashMenu
         ? '  ↑↓ select · Tab/Enter complete · Esc close'
-        : '  Enter send · Ctrl+J newline · ↑↓ history · Ctrl+C exit',
+        : options.mode === 'running'
+          ? '  Working · Ctrl+C interrupt'
+          : '  Enter send · Ctrl+J newline · ↑↓ history · Ctrl+C exit',
       frameWidth,
     )}${reset}`,
   )
