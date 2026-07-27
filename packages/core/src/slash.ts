@@ -54,6 +54,7 @@ import {
   formatSkillBodyForInjection,
   formatSkillCatalogWithStats,
   formatSkillCatalogStatsLine,
+  isSkillUserInvocable,
   skillUserInvokeBlockReason,
   type LoadedSkill,
 } from '../../skills/src/index.ts'
@@ -3673,7 +3674,13 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     group: 'session',
     run: cmdCost,
   },
-    {
+  {
+    name: 'doctor',
+    summary: 'Local diagnostics (node, cwd, mode, tools, usage, ~/.bolo)',
+    group: 'diagnostics',
+    run: cmdDoctor,
+  },
+  {
     name: 'diff',
     summary:
       'File changes; TTY opens panel (U1). /diff last · git [path] · <path>',
@@ -3687,12 +3694,6 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     group: 'session',
     hidden: true,
     run: cmdCost,
-  },
-  {
-    name: 'doctor',
-    summary: 'Local diagnostics (node, cwd, mode, tools, usage, ~/.bolo)',
-    group: 'diagnostics',
-    run: cmdDoctor,
   },
   {
     name: 'memory',
@@ -3855,6 +3856,101 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     run: cmdSkill,
   },
 ]
+
+export type SlashCommandCandidateSource = 'builtin' | 'plugin' | 'skill'
+
+export type SlashCommandCandidate = {
+  name: string
+  description: string
+  usage?: string
+  source: SlashCommandCandidateSource
+  sourceLabel?: string
+  hidden?: boolean
+}
+
+export type SlashCommandCandidateSession = Pick<
+  SlashSession,
+  'pluginCommands' | 'skills'
+>
+
+function normalizeSlashCandidateName(value: string): string {
+  const name = value.trim().replace(/^\/+/, '').toLowerCase()
+  return name && !/\s/u.test(name) ? name : ''
+}
+
+/**
+ * Project the executable slash registry into display-only candidates.
+ * Ordering follows dispatch precedence: built-in, plugin, then skill.
+ */
+export function getSlashCommandCandidates(
+  session: SlashCommandCandidateSession,
+): SlashCommandCandidate[] {
+  const candidates: SlashCommandCandidate[] = []
+  const seen = new Set<string>()
+  const add = (candidate: SlashCommandCandidate) => {
+    const name = normalizeSlashCandidateName(candidate.name)
+    if (!name || seen.has(name)) return
+    seen.add(name)
+    candidates.push({ ...candidate, name })
+  }
+
+  for (const command of SLASH_COMMANDS) {
+    add({
+      name: command.name,
+      description: command.summary,
+      ...(command.usage ? { usage: command.usage } : {}),
+      source: 'builtin',
+      ...(command.hidden ? { hidden: true } : {}),
+    })
+  }
+  for (const command of session.pluginCommands ?? []) {
+    add({
+      name: command.name,
+      description:
+        command.description?.trim() ||
+        `Command contributed by plugin ${command.pluginId}`,
+      source: 'plugin',
+      sourceLabel: command.pluginId,
+    })
+  }
+  for (const skill of session.skills ?? []) {
+    if (!isSkillUserInvocable(skill)) continue
+    add({
+      name: skill.meta.id,
+      description:
+        skill.meta.description?.trim() ||
+        skill.meta.whenToUse?.trim() ||
+        `Load skill ${skill.meta.name}`,
+      source: 'skill',
+      sourceLabel: skill.source,
+    })
+  }
+  return candidates
+}
+
+/**
+ * Filter a complete command token. The first release deliberately supports
+ * exact/prefix discovery only; arguments and `//` prompts close the menu.
+ */
+export function filterSlashCommandCandidates(
+  candidates: readonly SlashCommandCandidate[],
+  query: string,
+): SlashCommandCandidate[] {
+  if (!query.startsWith('/') || query.startsWith('//')) return []
+  const needle = query.slice(1).toLowerCase()
+  if (/\s/u.test(needle)) return []
+
+  const matches = candidates.filter((candidate) => {
+    if (!needle && candidate.hidden) return false
+    return candidate.name.toLowerCase().startsWith(needle)
+  })
+  if (!needle) return matches
+  return matches.sort((left, right) => {
+    const leftExact = left.name.toLowerCase() === needle ? 0 : 1
+    const rightExact = right.name.toLowerCase() === needle ? 0 : 1
+    return leftExact - rightExact
+  })
+}
 
 const COMMAND_MAP = new Map(SLASH_COMMANDS.map((c) => [c.name, c]))
 

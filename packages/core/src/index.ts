@@ -3169,6 +3169,8 @@ export {
   getSlashCommand,
   invokeSkillBySlash,
   SLASH_COMMANDS,
+  getSlashCommandCandidates,
+  filterSlashCommandCandidates,
   EFFORT_LEVELS,
   isEffortLevel,
   approxTokensFromChars,
@@ -3181,6 +3183,9 @@ export {
   type SlashDispatchResult,
   type SubmitUserInputResult,
   type SlashCommandDef,
+  type SlashCommandCandidate,
+  type SlashCommandCandidateSession,
+  type SlashCommandCandidateSource,
   type SlashCommandGroup,
   type EffortLevel,
 } from './slash.ts'

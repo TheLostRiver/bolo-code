@@ -23,7 +23,7 @@ export type TurnActivityIndicator = {
   isActive: () => boolean
 }
 
-const ACTIVITY_GLYPH = '✦'
+const ACTIVITY_GLYPHS = ['✦', '✧', '✶', '✧'] as const
 
 export function formatTurnActivityLine(options: {
   label: string
@@ -32,7 +32,10 @@ export function formatTurnActivityLine(options: {
   color?: boolean
   columns?: number
 }): string {
-  const glyph = ACTIVITY_GLYPH
+  const glyph =
+    ACTIVITY_GLYPHS[
+      Math.abs(Math.trunc(options.frame)) % ACTIVITY_GLYPHS.length
+    ]!
   const seconds = Math.max(0, options.elapsedMs) / 1_000
   const elapsed = seconds < 10 ? seconds.toFixed(1) : Math.round(seconds).toString()
   const variants = [

@@ -4,6 +4,10 @@
 
 import * as readline from 'node:readline'
 import {
+  filterSlashCommandCandidates,
+  type SlashCommandCandidate,
+} from '../../../core/src/index.ts'
+import {
   clipTerminalText,
   measureTerminalText,
   padTerminalText,
@@ -11,6 +15,7 @@ import {
   terminalGraphemeWidth,
   wrapTerminalText,
 } from './terminalText.ts'
+import { resolveTuiFrameWidth } from './frame.ts'
 
 export type TuiInputState = {
   value: string
@@ -19,6 +24,14 @@ export type TuiInputState = {
   history: string[]
   historyIndex: number | null
   historyDraft: string
+  slashCandidates: SlashCommandCandidate[]
+  slashMenu: TuiSlashMenuState | null
+}
+
+export type TuiSlashMenuState = {
+  items: SlashCommandCandidate[]
+  selectedIndex: number
+  query: string
 }
 
 export type TuiInputKey = {
@@ -55,14 +68,56 @@ export type RenderedTuiInputBox = {
 export function createTuiInputState(options?: {
   value?: string
   history?: string[]
+  slashCandidates?: readonly SlashCommandCandidate[]
 }): TuiInputState {
   const value = options?.value ?? ''
-  return {
+  const state: TuiInputState = {
     value,
     cursor: splitTerminalGraphemes(value).length,
     history: [...(options?.history ?? [])],
     historyIndex: null,
     historyDraft: value,
+    slashCandidates: [...(options?.slashCandidates ?? [])],
+    slashMenu: null,
+  }
+  return refreshSlashMenu(state)
+}
+
+function isSlashCompletionContext(state: TuiInputState): boolean {
+  const chars = splitTerminalGraphemes(state.value)
+  return (
+    state.cursor === chars.length &&
+    state.value.startsWith('/') &&
+    !state.value.startsWith('//') &&
+    !/\s/u.test(state.value.slice(1))
+  )
+}
+
+function refreshSlashMenu(
+  state: TuiInputState,
+  previous = state.slashMenu,
+): TuiInputState {
+  if (!isSlashCompletionContext(state)) {
+    return state.slashMenu === null ? state : { ...state, slashMenu: null }
+  }
+  const items = filterSlashCommandCandidates(
+    state.slashCandidates,
+    state.value,
+  )
+  const selectedName =
+    previous?.query === state.value
+      ? previous.items[previous.selectedIndex]?.name
+      : undefined
+  const preservedIndex = selectedName
+    ? items.findIndex((candidate) => candidate.name === selectedName)
+    : -1
+  return {
+    ...state,
+    slashMenu: {
+      items,
+      selectedIndex: preservedIndex >= 0 ? preservedIndex : 0,
+      query: state.value,
+    },
   }
 }
 
@@ -71,11 +126,47 @@ function withValue(
   graphemes: string[],
   cursor: number,
 ): TuiInputState {
-  return {
+  return refreshSlashMenu({
     ...state,
     value: graphemes.join(''),
     cursor: Math.max(0, Math.min(cursor, graphemes.length)),
     historyIndex: null,
+  })
+}
+
+function withCursor(state: TuiInputState, cursor: number): TuiInputState {
+  const chars = splitTerminalGraphemes(state.value)
+  return refreshSlashMenu({
+    ...state,
+    cursor: Math.max(0, Math.min(cursor, chars.length)),
+  })
+}
+
+function selectSlashMenuItem(
+  state: TuiInputState,
+  direction: -1 | 1,
+): TuiInputState {
+  const menu = state.slashMenu
+  if (!menu || menu.items.length === 0) return state
+  const selectedIndex =
+    (menu.selectedIndex + direction + menu.items.length) % menu.items.length
+  return {
+    ...state,
+    slashMenu: { ...menu, selectedIndex },
+  }
+}
+
+function completeSlashMenuItem(state: TuiInputState): TuiInputState | null {
+  const menu = state.slashMenu
+  const candidate = menu?.items[menu.selectedIndex]
+  if (!candidate) return null
+  const value = `/${candidate.name} `
+  return {
+    ...state,
+    value,
+    cursor: splitTerminalGraphemes(value).length,
+    historyIndex: null,
+    slashMenu: null,
   }
 }
 
@@ -105,31 +196,31 @@ function recallHistory(
     const draft =
       state.historyIndex == null ? state.value : state.historyDraft
     const value = state.history[next] ?? ''
-    return {
+    return refreshSlashMenu({
       ...state,
       value,
       cursor: splitTerminalGraphemes(value).length,
       historyIndex: next,
       historyDraft: draft,
-    }
+    })
   }
   if (state.historyIndex == null) return state
   const next = state.historyIndex + 1
   if (next >= state.history.length) {
-    return {
+    return refreshSlashMenu({
       ...state,
       value: state.historyDraft,
       cursor: splitTerminalGraphemes(state.historyDraft).length,
       historyIndex: null,
-    }
+    })
   }
   const value = state.history[next] ?? ''
-  return {
+  return refreshSlashMenu({
     ...state,
     value,
     cursor: splitTerminalGraphemes(value).length,
     historyIndex: next,
-  }
+  })
 }
 
 export function applyTuiInputKey(
@@ -152,10 +243,10 @@ export function applyTuiInputKey(
     return { state, action: 'clear_screen' }
   }
   if (key.ctrl && name === 'a') {
-    return { state: { ...state, cursor: 0 } }
+    return { state: withCursor(state, 0) }
   }
   if (key.ctrl && name === 'e') {
-    return { state: { ...state, cursor: chars.length } }
+    return { state: withCursor(state, chars.length) }
   }
   if (key.ctrl && name === 'u') {
     return { state: withValue(state, chars.slice(state.cursor), 0) }
@@ -178,8 +269,17 @@ export function applyTuiInputKey(
     return { state: withValue(state, chars, state.cursor) }
   }
 
+  if (name === 'escape' && state.slashMenu) {
+    return { state: { ...state, slashMenu: null } }
+  }
   if (name === 'return' || name === 'enter') {
+    const completed = completeSlashMenuItem(state)
+    if (completed) return { state: completed }
     return { state, action: 'submit', value: state.value }
+  }
+  if (name === 'tab' && state.slashMenu) {
+    const completed = completeSlashMenuItem(state)
+    return { state: completed ?? state }
   }
   if (name === 'backspace') {
     if (state.cursor > 0) {
@@ -193,16 +293,20 @@ export function applyTuiInputKey(
     return { state: withValue(state, chars, state.cursor) }
   }
   if (name === 'left') {
-    return { state: { ...state, cursor: Math.max(0, state.cursor - 1) } }
+    return { state: withCursor(state, state.cursor - 1) }
   }
   if (name === 'right') {
-    return {
-      state: { ...state, cursor: Math.min(chars.length, state.cursor + 1) },
-    }
+    return { state: withCursor(state, state.cursor + 1) }
   }
-  if (name === 'home') return { state: { ...state, cursor: 0 } }
+  if (name === 'home') return { state: withCursor(state, 0) }
   if (name === 'end') {
-    return { state: { ...state, cursor: chars.length } }
+    return { state: withCursor(state, chars.length) }
+  }
+  if (name === 'up' && state.slashMenu) {
+    return { state: selectSlashMenuItem(state, -1) }
+  }
+  if (name === 'down' && state.slashMenu) {
+    return { state: selectSlashMenuItem(state, 1) }
   }
   if (name === 'up') return { state: recallHistory(state, -1) }
   if (name === 'down') return { state: recallHistory(state, 1) }
@@ -290,16 +394,99 @@ function formatInputStatus(status?: TuiInputStatus): string {
   return `${mode} · ${target} · effort ${effort}`
 }
 
+function formatSlashCandidateLabel(candidate: SlashCommandCandidate): string {
+  const usage = candidate.usage ? ` ${candidate.usage}` : ''
+  const source =
+    candidate.source === 'builtin'
+      ? ''
+      : ` [${candidate.sourceLabel ?? candidate.source}]`
+  return `/${candidate.name}${usage}${source}`
+}
+
+function renderSlashMenuRows(options: {
+  menu: TuiSlashMenuState
+  frameWidth: number
+  maxRows: number
+  color: boolean
+  border: string
+  prompt: string
+  dim: string
+  reset: string
+}): string[] {
+  const {
+    menu,
+    frameWidth,
+    maxRows,
+    color,
+    border,
+    prompt,
+    dim,
+    reset,
+  } = options
+  const rows: string[] = []
+  rows.push(
+    `${border}${borderLine('├', '┤', frameWidth, `Commands · ${menu.items.length}`)}${reset}`,
+  )
+  const bodyWidth = Math.max(4, frameWidth - 4)
+  if (!menu.items.length) {
+    const empty = padTerminalText('  No matching commands', bodyWidth)
+    rows.push(
+      `${border}│${reset} ${dim}${empty}${reset} ${border}│${reset}`,
+    )
+    return rows
+  }
+
+  const start = Math.max(
+    0,
+    Math.min(
+      menu.selectedIndex - maxRows + 1,
+      Math.max(0, menu.items.length - maxRows),
+    ),
+  )
+  const visible = menu.items.slice(start, start + maxRows)
+  for (let offset = 0; offset < visible.length; offset++) {
+    const index = start + offset
+    const candidate = visible[offset]!
+    const selected = index === menu.selectedIndex
+    const marker = selected ? '❯ ' : '  '
+    const available = Math.max(2, bodyWidth - measureTerminalText(marker))
+    const label = formatSlashCandidateLabel(candidate)
+    let content: string
+    if (available < 24) {
+      content = clipTerminalText(label, available)
+    } else {
+      const labelWidth = Math.min(
+        Math.max(10, Math.floor(available * 0.42)),
+        Math.max(10, available - 10),
+      )
+      const descriptionWidth = Math.max(0, available - labelWidth - 1)
+      content = `${padTerminalText(
+        clipTerminalText(label, labelWidth),
+        labelWidth,
+      )} ${clipTerminalText(candidate.description, descriptionWidth)}`
+    }
+    const body = padTerminalText(`${marker}${content}`, bodyWidth)
+    const selectedStart = color && selected ? '\u001b[7m' : ''
+    const selectedEnd = color && selected ? reset : ''
+    const tone = selected ? prompt : ''
+    rows.push(
+      `${border}│${reset} ${selectedStart}${tone}${body}${selectedEnd} ${border}│${reset}`,
+    )
+  }
+  return rows
+}
+
 export function renderTuiInputBox(options: {
   state: TuiInputState
   columns?: number
   status?: TuiInputStatus
   color?: boolean
   maxBodyRows?: number
+  maxMenuRows?: number
   title?: string
 }): RenderedTuiInputBox {
   const columns = Math.max(24, Math.floor(options.columns ?? 80))
-  const frameWidth = Math.min(120, Math.max(24, columns - 1))
+  const frameWidth = resolveTuiFrameWidth(columns)
   const contentWidth = Math.max(8, frameWidth - 6)
   const maxBodyRows = Math.max(1, options.maxBodyRows ?? 4)
   const wrapped = wrapInputAtCursor(options.state, contentWidth)
@@ -329,12 +516,31 @@ export function renderTuiInputBox(options: {
       `${border}│${reset} ${prompt}${marker}${reset}${body} ${border}│${reset}`,
     )
   }
+  if (options.state.slashMenu) {
+    lines.push(
+      ...renderSlashMenuRows({
+        menu: options.state.slashMenu,
+        frameWidth,
+        maxRows: Math.max(1, options.maxMenuRows ?? 6),
+        color,
+        border,
+        prompt,
+        dim,
+        reset,
+      }),
+    )
+  }
   lines.push(`${border}${borderLine('╰', '╯', frameWidth)}${reset}`)
 
   const status = clipTerminalText(`  ${formatInputStatus(options.status)}`, frameWidth)
   if (status.trim()) lines.push(`${dim}${status}${reset}`)
   lines.push(
-    `${dim}${clipTerminalText('  Enter send · Ctrl+J newline · ↑↓ history · Ctrl+C exit', frameWidth)}${reset}`,
+    `${dim}${clipTerminalText(
+      options.state.slashMenu
+        ? '  ↑↓ select · Tab/Enter complete · Esc close'
+        : '  Enter send · Ctrl+J newline · ↑↓ history · Ctrl+C exit',
+      frameWidth,
+    )}${reset}`,
   )
 
   const cursorRow = 1 + wrapped.cursorLine - start
@@ -351,7 +557,7 @@ export function renderUserMessage(
   prompt: string,
   options?: { columns?: number; color?: boolean },
 ): string {
-  const columns = Math.min(120, Math.max(24, (options?.columns ?? 80) - 1))
+  const columns = resolveTuiFrameWidth(options?.columns ?? 80)
   const contentWidth = Math.max(8, columns - 3)
   const lines = wrapTerminalText(prompt.trim(), contentWidth)
   const color = options?.color !== false
@@ -412,6 +618,7 @@ export async function readTuiInput(options: {
   columns?: number
   status?: TuiInputStatus
   history?: string[]
+  slashCandidates?: readonly SlashCommandCandidate[]
   signal?: AbortSignal
   color?: boolean
 }): Promise<ReadTuiInputResult> {
@@ -421,7 +628,10 @@ export async function readTuiInput(options: {
   }
   const writeOut = options.writeOut ?? ((text) => process.stdout.write(text))
   const wasRaw = input.isRaw === true
-  let state = createTuiInputState({ history: options.history })
+  let state = createTuiInputState({
+    history: options.history,
+    slashCandidates: options.slashCandidates,
+  })
   let rendered: RenderedTuiInputBox | null = null
   let settled = false
 

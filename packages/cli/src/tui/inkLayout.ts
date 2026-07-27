@@ -16,6 +16,7 @@ import {
   measureTerminalText,
   padTerminalText,
 } from './terminalText.ts'
+import { resolveTuiFrameWidth } from './frame.ts'
 
 export type InkLayoutOptions = BannerOptions &
   ResolveTuiThemeOptions & {
@@ -42,7 +43,6 @@ type Palette = Record<Exclude<Tone, 'normal'> | 'reset', string>
 const MIN_FRAMED_COLUMNS = 38
 const MEDIUM_LAYOUT_COLUMNS = 56
 const WIDE_LAYOUT_COLUMNS = 96
-const MAX_PANEL_COLUMNS = 160
 
 function createPalette(options: {
   ansi: boolean
@@ -461,7 +461,7 @@ export function renderInkLayout(opts: InkLayoutOptions = {}): string {
     ansi: theme.ansi,
     dimTheme: theme.id === 'dim',
   })
-  const width = Math.min(MAX_PANEL_COLUMNS, Math.max(36, columns - 2))
+  const width = resolveTuiFrameWidth(columns)
 
   if (columns >= WIDE_LAYOUT_COLUMNS) {
     return renderWideLayout(opts, width, palette, theme.mascot)

@@ -45,6 +45,7 @@ import {
   runArrowPicker,
   type ArrowPickItem,
 } from './tui/arrowPicker.ts'
+import { getCliSlashCommandCandidates } from './slashCandidates.ts'
 
 export type ResumeCliOptions = {
   /** session id / 路径；省略或 true 时进入项目列表选择 */
@@ -969,6 +970,7 @@ export async function runRepl(
           columns: process.stdout.columns,
           color,
           history,
+          slashCandidates: getCliSlashCommandCandidates(session),
           signal: options?.signal,
           status: {
             permissionMode: session.permissionMode,

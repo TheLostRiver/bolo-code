@@ -11,8 +11,10 @@ import {
   createTuiInputState,
   createTurnActivityIndicator,
   formatTurnActivityLine,
+  getCliSlashCommandCandidates,
   measureTerminalText,
   readTuiInput,
+  resolveTuiFrameWidth,
   renderInkLayout,
   renderTuiInputBox,
   renderUserMessage,
@@ -71,6 +73,193 @@ async function main(): Promise<void> {
     { name: 'up' },
   )
   assert(history.state.value === 'older prompt', 'up recalls history')
+
+  const slashCandidates = [
+    {
+      name: 'doctor',
+      description: 'Show local diagnostics',
+      source: 'builtin' as const,
+    },
+    {
+      name: 'diff',
+      description: 'Inspect file changes',
+      source: 'builtin' as const,
+    },
+    {
+      name: 'demo:review',
+      description: 'Review changes from the demo plugin',
+      source: 'plugin' as const,
+      sourceLabel: 'demo',
+    },
+  ]
+  const completeCliCatalog = getCliSlashCommandCandidates({})
+  assert(
+    completeCliCatalog.some((candidate) => candidate.name === 'exit'),
+    'interactive catalog includes the CLI-local /exit command',
+  )
+  assert(
+    createTuiInputState({
+      slashCandidates: completeCliCatalog,
+      value: '/',
+    }).slashMenu?.items.some((candidate) => candidate.name === 'exit') === true,
+    'bare slash discovers /exit',
+  )
+  assert(
+    createTuiInputState({
+      slashCandidates: completeCliCatalog,
+      value: '/q',
+    }).slashMenu?.items[0]?.name === 'quit',
+    'explicit /q discovers the hidden /quit alias',
+  )
+  let slashInput = createTuiInputState({ slashCandidates })
+  slashInput = applyTuiInputKey(slashInput, { sequence: '/' }).state
+  assert(
+    slashInput.slashMenu?.items.length === slashCandidates.length,
+    'bare slash opens the full command menu',
+  )
+  slashInput = applyTuiInputKey(slashInput, { sequence: 'd' }).state
+  assert(
+    slashInput.slashMenu?.items[0]?.name === 'doctor',
+    '/d filters to /doctor first',
+  )
+  const slashRendered = renderTuiInputBox({
+    state: slashInput,
+    columns: 64,
+    color: false,
+  })
+  assert(slashRendered.text.includes('Commands'), 'slash menu has a title')
+  assert(slashRendered.text.includes('/doctor'), 'slash menu renders matches')
+  assert(
+    slashRendered.text.includes('Show local diagnostics'),
+    'slash menu renders command descriptions',
+  )
+  assert(
+    slashRendered.lines.every(
+      (line) => visibleWidth(line) <= resolveTuiFrameWidth(64),
+    ),
+    'slash menu stays within the shared frame width',
+  )
+  const narrowSlashRendered = renderTuiInputBox({
+    state: createTuiInputState({ slashCandidates, value: '/' }),
+    columns: 24,
+    color: false,
+    maxMenuRows: 3,
+  })
+  assert(
+    narrowSlashRendered.lines.every(
+      (line) => visibleWidth(line) <= resolveTuiFrameWidth(24),
+    ),
+    `slash menu fits a 24-column terminal: ${narrowSlashRendered.lines
+      .map(visibleWidth)
+      .join(',')}`,
+  )
+
+  let menuNavigation = createTuiInputState({ slashCandidates, value: '/' })
+  assert(menuNavigation.slashMenu?.selectedIndex === 0, 'menu selects first row')
+  const wrappedMenu = applyTuiInputKey(menuNavigation, { name: 'up' }).state
+  assert(
+    wrappedMenu.slashMenu?.selectedIndex === slashCandidates.length - 1,
+    'up wraps from the first to the last candidate',
+  )
+  menuNavigation = applyTuiInputKey(menuNavigation, { name: 'down' }).state
+  assert(menuNavigation.slashMenu?.selectedIndex === 1, 'down selects next row')
+  menuNavigation = applyTuiInputKey(menuNavigation, { name: 'up' }).state
+  assert(menuNavigation.slashMenu?.selectedIndex === 0, 'up selects previous row')
+  let resetSelection = createTuiInputState({ slashCandidates, value: '/' })
+  resetSelection = applyTuiInputKey(resetSelection, { name: 'down' }).state
+  resetSelection = applyTuiInputKey(resetSelection, { sequence: 'd' }).state
+  assert(
+    resetSelection.slashMenu?.selectedIndex === 0 &&
+      resetSelection.slashMenu.items[0]?.name === 'doctor',
+    'editing the slash query resets selection to the first match',
+  )
+  const menuBeforeHistory = applyTuiInputKey(
+    createTuiInputState({
+      history: ['older prompt'],
+      slashCandidates,
+      value: '/',
+    }),
+    { name: 'up' },
+  ).state
+  assert(
+    menuBeforeHistory.value === '/' &&
+      menuBeforeHistory.slashMenu?.selectedIndex === slashCandidates.length - 1,
+    'menu navigation takes priority over prompt history',
+  )
+  const tabCompletion = applyTuiInputKey(menuNavigation, {
+    name: 'tab',
+    sequence: '\t',
+  })
+  assert(
+    tabCompletion.state.value === '/doctor ' &&
+      tabCompletion.state.slashMenu === null,
+    'Tab completes the selected command and closes the menu',
+  )
+  const enterCompletion = applyTuiInputKey(
+    createTuiInputState({ slashCandidates, value: '/d' }),
+    { name: 'return', sequence: '\r' },
+  )
+  assert(
+    enterCompletion.action === undefined &&
+      enterCompletion.state.value === '/doctor ',
+    'Enter completes a menu item without executing it',
+  )
+  const escapedMenu = applyTuiInputKey(
+    createTuiInputState({ slashCandidates, value: '/d' }),
+    { name: 'escape', sequence: '\u001b' },
+  )
+  assert(
+    escapedMenu.state.value === '/d' && escapedMenu.state.slashMenu === null,
+    'Esc closes the menu without deleting user input',
+  )
+  const reopenedMenu = applyTuiInputKey(escapedMenu.state, { sequence: 'o' })
+  assert(reopenedMenu.state.slashMenu !== null, 'editing reopens slash matches')
+  let cursorContext = createTuiInputState({
+    slashCandidates,
+    value: '/doctor',
+  })
+  cursorContext = applyTuiInputKey(cursorContext, { name: 'left' }).state
+  assert(
+    cursorContext.slashMenu === null,
+    'moving away from the command-token end closes the menu',
+  )
+  cursorContext = applyTuiInputKey(cursorContext, { name: 'end' }).state
+  assert(cursorContext.slashMenu !== null, 'moving back to the end reopens it')
+  assert(
+    createTuiInputState({ slashCandidates, value: '//' }).slashMenu === null,
+    'double slash remains a normal prompt',
+  )
+  const noMatches = createTuiInputState({
+    slashCandidates,
+    value: '/does-not-exist',
+  })
+  assert(
+    noMatches.slashMenu?.items.length === 0 &&
+      renderTuiInputBox({
+        state: noMatches,
+        columns: 64,
+        color: false,
+      }).text.includes('No matching commands'),
+    'unknown command prefix has an explicit empty state',
+  )
+  const unknownSubmit = applyTuiInputKey(noMatches, {
+    name: 'return',
+    sequence: '\r',
+  })
+  assert(
+    unknownSubmit.action === 'submit' &&
+      unknownSubmit.value === '/does-not-exist',
+    'Enter still submits an unknown slash command from the empty state',
+  )
+  const restoredMatch = applyTuiInputKey(
+    createTuiInputState({ slashCandidates, value: '/doz' }),
+    { name: 'backspace' },
+  ).state
+  assert(
+    restoredMatch.value === '/do' &&
+      restoredMatch.slashMenu?.items[0]?.name === 'doctor',
+    'deleting an unmatched suffix restores live candidates',
+  )
 
   const multiline = applyTuiInputKey(
     createTuiInputState({ value: 'line one' }),
@@ -171,6 +360,28 @@ async function main(): Promise<void> {
   assert(fakeInput.listenerCount('keypress') === 0, 'keypress listener removed')
   assert(fakeInput.paused, 'stdin paused after idle editor exits')
 
+  const slashDriverInput = new FakeRawInput()
+  const slashDriver = readTuiInput({
+    input: slashDriverInput as never,
+    writeOut: () => {},
+    columns: 64,
+    color: false,
+    slashCandidates,
+  })
+  slashDriverInput.emit('keypress', '/', { name: 'slash', sequence: '/' })
+  slashDriverInput.emit('keypress', 'd', { name: 'd', sequence: 'd' })
+  slashDriverInput.emit('keypress', '\t', { name: 'tab', sequence: '\t' })
+  slashDriverInput.emit('keypress', '\r', {
+    name: 'return',
+    sequence: '\r',
+  })
+  const slashDriverResult = await slashDriver
+  assert(
+    slashDriverResult.type === 'submit' &&
+      slashDriverResult.value === '/doctor ',
+    'raw driver exposes slash discovery and completion',
+  )
+
   // 欢迎首页：宽屏必须有品牌焦点、Bolot 和职责明确的双栏；不能只是状态框。
   const welcome = renderInkLayout({
     columns: 120,
@@ -204,6 +415,25 @@ async function main(): Promise<void> {
   assert(
     welcomeLines.some((line) => line.split('│').length >= 4),
     'wide welcome has an internal column separator',
+  )
+
+  const ultraWideWelcome = renderInkLayout({
+    columns: 220,
+    cwd: 'E:\\DEV\\HelsincyAgent',
+    model: 'work/gpt-test',
+    env: { NO_COLOR: '1' } as NodeJS.ProcessEnv,
+  })
+  const ultraWideInput = renderTuiInputBox({
+    state: createTuiInputState(),
+    columns: 220,
+    color: false,
+  })
+  assert(
+    visibleWidth(ultraWideWelcome.split('\n')[0] ?? '') ===
+      resolveTuiFrameWidth(220) &&
+      visibleWidth(ultraWideInput.lines[0] ?? '') ===
+        resolveTuiFrameWidth(220),
+    'welcome and input share the same ultra-wide frame contract',
   )
 
   const mediumWelcome = renderInkLayout({
@@ -260,8 +490,26 @@ async function main(): Promise<void> {
     color: false,
   })
   assert(
-    activityLine.startsWith('✦') && laterActivityLine.startsWith('✦'),
-    'activity status glyph is stable across redraws',
+    activityLine[0] !== laterActivityLine[0] &&
+      visibleWidth(activityLine[0] ?? '') === 1 &&
+      visibleWidth(laterActivityLine[0] ?? '') === 1,
+    'activity glyph visibly animates without blank or wide frames',
+  )
+  const animationGlyphs = [0, 1, 2, 3].map(
+    (frame) =>
+      formatTurnActivityLine({
+        label: 'Thinking',
+        elapsedMs: 1_240,
+        frame,
+        color: false,
+      })[0] ?? '',
+  )
+  assert(
+    new Set(animationGlyphs).size >= 3 &&
+      animationGlyphs.every((glyph) => visibleWidth(glyph) === 1),
+    `activity has a visible, single-cell frame sequence: ${animationGlyphs.join(
+      ',',
+    )}`,
   )
   const narrowActivityLine = formatTurnActivityLine({
     label: 'Running read_a_very_long_tool_name',

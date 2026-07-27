@@ -30,6 +30,10 @@ export {
 } from './resumeCli.ts'
 export { runNewSessionCli, type NewSessionCliOptions } from './newSessionCli.ts'
 export {
+  CLI_LOCAL_SLASH_COMMANDS,
+  getCliSlashCommandCandidates,
+} from './slashCandidates.ts'
+export {
   runInitCli,
   type InitCliOptions,
   type InitCliResult,
@@ -51,6 +55,10 @@ export {
   renderInkLayout,
   type InkLayoutOptions,
 } from './tui/inkLayout.ts'
+export {
+  resolveTuiFrameWidth,
+  TUI_FRAME_MAX_COLUMNS,
+} from './tui/frame.ts'
 export {
   resolveTuiTheme,
   type TuiTheme,
@@ -100,6 +108,7 @@ export {
   type TuiInputKey,
   type TuiInputState,
   type TuiInputStatus,
+  type TuiSlashMenuState,
 } from './tui/inputBox.ts'
 export {
   createTurnActivityIndicator,
