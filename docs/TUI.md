@@ -1,8 +1,8 @@
 # CLI TUI
 
 > 无遥测。品牌见 `docs/BRAND.md`。  
-> **现状：** OI-09 零运行时依赖 TTY controller：真实输入框 · turn 活动态 ·
-> 结构化时间线 · 箭头 picker · Diff/权限面板。
+> **现状：** OI-09 零运行时依赖 TTY controller：响应式 Bolot 欢迎页 · 真实输入框 ·
+> 稳定 turn 活动态 · 结构化时间线 · 箭头 picker · Diff/权限面板。
 > **框架选择：** 没有依赖 React Ink；完成标准是交互和输出契约，不是框架名称。
 > Diff 轨见 [ROADMAP.md](./ROADMAP.md) §3 ·
 > [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) 轨 B。
@@ -13,15 +13,18 @@
 
 | 条件 | 行为 |
 |------|------|
-| stdin/stdout 双 TTY + stdin 支持 raw mode | 紧凑欢迎区 + 真实输入框 + 动态 Thinking/Running 时间线 |
+| stdin/stdout 双 TTY + stdin 支持 raw mode | 响应式品牌欢迎页 + 真实输入框 + 动态 Thinking/Running 时间线 |
 | TTY 但 raw mode 不可用 | 回落 readline `bolo>`；不发送动态光标控制 |
 | 非 TTY / pipe / `-p` / `--print` | 追加式纯文本；不回显伪输入框、不挂起等按键 |
-| `NO_COLOR` | 关闭 SGR 颜色；真实输入能力仍可用 |
+| `NO_COLOR` | 关闭 SGR 颜色，保留欢迎页结构与真实输入能力 |
 | `BOLO_PLAIN=1` / `BOLO_THEME=plain` | 关闭颜色并简化欢迎区；真实输入能力仍可用 |
 | `BOLO_TUI_INPUT=0` | 关闭动态输入/时间线，回落 readline |
 | `BOLO_TUI_LAYOUT=0` / `TERM=dumb` | 关闭 layout 与动态路径，回落 readline |
-| 窄终端 | 欢迎区降级为三行文本；输入、用户消息与 activity 按 cell 宽度裁切/折行 |
-| `BOLO_MASCOT=0` | 仅影响显式启用的旧 banner；OI-09 默认欢迎区本来就没有 mascot |
+| `>=96` 列 | 欢迎页使用 Bolot/环境与行动/会话双栏 |
+| `56–95` 列 | 欢迎页使用完整 Bolot 单栏 |
+| `38–55` 列 | 欢迎页使用一行 Bolot 紧凑框；输入、消息和 activity 继续按 cell 宽度裁切/折行 |
+| `<38` 列 | 欢迎页回落无边框纯文本，避免最小终端破框 |
+| `BOLO_MASCOT=0` | 隐藏欢迎页 Bolot，保留品牌字标和环境/行动信息 |
 | `--resume` 无 id | **箭头键 picker**（↑↓ Enter；`BOLO_ARROW_PICKER=0` 用编号） |
 | 非 TTY resume | 表格式列表 + 要求 `--resume <id>` |
 | `runtime list\|inspect` + stdin/stdout 双 TTY + 多页 | 进入轻量 runtime pager |
@@ -33,7 +36,7 @@
 
 | 文件 | 角色 |
 |------|------|
-| `tui/inkLayout.ts` | 一次性紧凑身份/workspace 欢迎区；绝不伪装成输入框 |
+| `tui/inkLayout.ts` | 一次性响应式品牌/workspace 欢迎页；绝不伪装成输入框 |
 | `tui/inputBox.ts` | 输入 reducer、CJK-safe renderer、短生命周期 raw-mode driver |
 | `tui/terminalText.ts` | ANSI/CJK/emoji grapheme cell 宽度、裁切、补齐与折行 |
 | `tui/turnActivity.ts` | 首 token 前与工具间隙的 Thinking/Running/elapsed 单行状态 |
@@ -53,7 +56,17 @@
 
 ## 3. 会话交互（OI-09）
 
-### 3.1 输入
+### 3.1 欢迎首页
+
+默认欢迎页使用 Bolo Code 青色强调、灰色边框和原创河豚 **Bolot**。宽屏左栏负责
+欢迎语、吉祥物、model/workspace，右栏负责 Start here、当前会话和常用命令；
+中宽度改为完整单栏，紧凑宽度改为一行 Bolot。所有动态文本都先移除外来 ANSI，
+再按 grapheme cell 宽度裁切/补齐，所以 CJK、emoji、长模型名和长路径不会破框。
+
+`NO_COLOR` 只移除颜色，不删除结构；`BOLO_THEME=plain` / `BOLO_PLAIN=1` 才显式
+简化为纯文本。`BOLO_MASCOT=0` 只隐藏 Bolot，不影响环境与会话信息。
+
+### 3.2 输入
 
 | 键 | 动作 |
 |----|------|
@@ -72,12 +85,12 @@ Tab 规范为两个空格；其它不可见 C0/C1 控制符不会进入输入框
 围绕光标滚动，长文本仍完整保留在 state 中。每次 turn 开始前 raw editor 都会释放
 stdin，权限/picker/`Ctrl+C` 不与空闲输入 listener 竞争。
 
-### 3.2 Turn 时间线
+### 3.3 Turn 时间线
 
 | 时点 / 事件 | 人类可见结果 |
 |-------------|--------------|
 | 提交普通消息 | 立即以 `❯` 回显用户消息；不等 provider 首 token |
-| provider 尚未输出 | `Thinking · elapsed · Ctrl+C interrupt` 原位刷新 |
+| provider 尚未输出 | `✦ Thinking · elapsed · Ctrl+C interrupt` 原位刷新 |
 | reasoning | `◇ Thinking` 段；`/thinking off` 可关闭 |
 | `tool_start/end` | 进入永久工具时间线；结束后回到 Thinking |
 | `tool_progress` | 只在 activity 原位更新“工具名 · 进度”，不把每个 tick 刷成永久消息 |
@@ -85,13 +98,16 @@ stdin，权限/picker/`Ctrl+C` 不与空闲输入 listener 竞争。
 | turn 完成 | 清掉活动行并显示 `Done · elapsed`；随后重新出现输入框 |
 | slash command | 回显用户命令但不启动虚假的模型 Thinking |
 
-activity 每帧读取当前终端列宽，完整文案放不下时依次退化为紧凑/最小文案，保证动态
-单行不会因自动换行留下残影。`NO_COLOR` 只移除 SGR，不移除必要的 cursor-control。
+activity 使用固定 `✦` 状态符号，每 250ms 更新耗时；每帧把
+`\r + 完整状态行 + erase-to-end` 合成一次 writer 调用，不再先清空整行再绘制，
+因此不会周期性出现空白帧。每帧仍读取当前终端列宽，完整文案放不下时依次退化为
+紧凑/最小文案，避免自动换行残影。`NO_COLOR` 只移除 SGR，不移除必要的
+cursor-control。
 
-### 3.3 输出边界
+### 3.4 输出边界
 
 - 动态时间线只在 `shouldUseDynamicTui()` 为真时启用。
-- pipe、JSON、`-p`/`--print` 与 raw-mode 不可用的 fallback 不输出 spinner、清行、
+- pipe、JSON、`-p`/`--print` 与 raw-mode 不可用的 fallback 不输出动态 activity、清行、
   cursor move 或用户回显，旧自动化无需清洗 TUI。
 - `formatSessionEventChunks()` 等旧追加式 formatter 继续保留；新时间线复用事件语义，
   不在 CLI 重建 core 状态机。
@@ -215,9 +231,10 @@ npx tsx scripts/test-file-diff.ts
 npx tsx scripts/test-diff-view.ts
 ```
 
-`test:cli-tui` 覆盖 grapheme/CJK/emoji cell 宽度、输入 reducer、raw-mode 清理、宽窄
-输入框、首 token gate、Thinking/Running、NO_COLOR、warning 恢复和非 TTY
-追加式输出。完整门禁当前包含 113 个 `scripts/*.ts`。
+`test:cli-tui` 覆盖 grapheme/CJK/emoji cell 宽度、输入 reducer、raw-mode 清理、
+宽/中/紧凑欢迎页、Bolot/NO_COLOR、宽窄输入框、首 token gate、固定活动符号与
+原子 writer、Thinking/Running、warning 恢复和非 TTY 追加式输出。完整门禁当前包含
+113 个 `scripts/*.ts`。
 
 **仍需真人验收：** Windows Terminal 中的字体观感、实际光标位置、窗口 resize、
 Ctrl+J/历史/删除组合键和长回答滚动。自动测试与静态快照不能替代肉眼/真人按键，

@@ -435,3 +435,17 @@ C4: compact 成功且非 override system 时可选刷新短 skill catalog 段（
   进一步让 `tool_progress` 只原位更新 activity，避免每个 tick 污染永久时间线。
 - 真实 Windows Terminal 观感、光标/resize/组合键和长滚动仍为 OI-H3 人工项；未用
   静态快照或被禁止的终端 UI 自动化冒充真人验收。
+
+### H9.1 品牌欢迎页与活动行稳定性
+
+- `10879ec` 把三行身份面板升级为原创 Bolot 品牌欢迎页：`>=96` 列使用
+  mascot/environment 与 action/session 双栏，`56–95` 列使用完整单栏，`38–55`
+  列使用一行 Bolot 紧凑框，极窄或显式 plain 回落纯文本。
+- 欢迎页沿用 input 的青色强调/灰色边框，`NO_COLOR` 只移除 SGR，`BOLO_MASCOT=0`
+  只隐藏形象；new/resume 分别显示 `Welcome to Bolo Code` / `Welcome back.`。
+- activity 删除 90ms Braille spinner 和 erase-then-draw 两次 write，改为固定 `✦`、
+  250ms elapsed 刷新与 `\r + line + erase-to-end` 单次原位写入，消除周期性空白帧。
+- `test:cli-tui` 新增 Bolot、双栏、三档宽度、NO_COLOR、固定符号和原子 writer 断言；
+  113 脚本完整门禁、dist install、Desktop bundle 与 Electron launch 全部通过。
+- OI-H3 仍保留真实 Windows Terminal 字体/颜色、raw 输入、光标、resize 和长滚动验收；
+  Codex PTY smoke 只证明源码入口已接入欢迎页，不替代真人终端检查。

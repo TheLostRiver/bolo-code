@@ -173,7 +173,8 @@ npx bolo runtime discard turn <turnId> --resume <id> --json
 npx bolo runtime retry-safe control <controlId> --continue --json
 ```
 
-真实 TTY 中，REPL 会显示稳定输入框而不是裸 `bolo>`：
+真实 TTY 中，REPL 会先显示 Bolo Code/Bolot 品牌欢迎页：96 列以上使用双栏，
+56–95 列使用完整单栏，38–55 列使用紧凑框；随后显示稳定输入框而不是裸 `bolo>`：
 
 ```text
 ╭─ Message ─────────────────────────────────────────╮
@@ -185,13 +186,17 @@ npx bolo runtime retry-safe control <controlId> --continue --json
 
 `Enter` 发送，`Ctrl+J` 换行，`↑/↓` 浏览本进程历史；支持 `←/→`、`Home/End`、
 `Backspace/Delete` 和常见 Emacs 编辑键。提交后用户消息立即进入时间线；provider
-首 token 到达前显示 `Thinking`、耗时和中断提示，工具运行时显示
+首 token 到达前显示固定 `✦ Thinking`、耗时和中断提示，工具运行时显示
 `Running <tool>`，最终正文带 `Bolo` 角色层级。完整键位见 [TUI.md](./TUI.md) §3。
+
+活动行每次把完整内容与擦尾控制合成一次原位写入，不会先清空再绘制；耗时以
+250ms 节奏刷新。`BOLO_MASCOT=0` 可隐藏 Bolot；`NO_COLOR` 只去颜色并保留欢迎页结构，
+显式 `BOLO_THEME=plain` / `BOLO_PLAIN=1` 才简化欢迎页。
 
 REPL 中，模型或工具正在运行时按 `Ctrl-C` 会针对 coordinator 当前 active turn 请求 interrupt 并返回提示符；空闲提示符下按 `Ctrl-C` 才退出。若取消发生在权限问答或 diff 审批面板，core 默认按拒绝处理。
 
 动态 TUI 只在 stdin/stdout 双 TTY 且 stdin 支持 raw mode 时启用。pipe、`-p`、
-`--print`、JSON 或不支持 raw mode 的宿主会自动回落追加式输出，不发送 spinner/
+`--print`、JSON 或不支持 raw mode 的宿主会自动回落追加式输出，不发送动态 activity/
 清行/光标移动。`NO_COLOR` 关闭颜色但不关闭输入；需要彻底回落时设
 `BOLO_TUI_INPUT=0` 或 `BOLO_TUI_LAYOUT=0`。
 
@@ -350,6 +355,7 @@ Steer 的提示只在请求已到达安全边界并真正注入后显示为 appl
 | `BOLO_TUI_LAYOUT=0` | 关闭 TUI layout/dynamic path |
 | `NO_COLOR` | 保留输入能力，只关闭颜色 |
 | `BOLO_THEME=plain` / `BOLO_PLAIN=1` | 保留输入能力，关闭颜色并简化欢迎区 |
+| `BOLO_MASCOT=0` | 隐藏欢迎页 Bolot，保留品牌字标和环境/行动信息 |
 
 ---
 

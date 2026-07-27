@@ -22,7 +22,7 @@
 | **文件 Diff · 日用契约** | **~95%+** | **D0–D7 已收口**；见 [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) |
 | **文件 Diff · 交互 UI** | **~90–95%** | **U0–U4 已落地**；U5 真·Ink/IDE 可选（AR4 证据门控） |
 | **斜杠** | **~80–88%** | 日用 + polish |
-| **CLI TUI** | **~85–90%** | **OI-09 已落地**：紧凑欢迎区 · 真实 raw-mode 输入框/历史/多行编辑 · 用户即时回显 · Thinking/Running/耗时 · 结构化时间线 · CJK/emoji 宽度 · 非 TTY 回落；不依赖 React Ink，真实 Windows Terminal 观感/按键仍未验 |
+| **CLI TUI** | **~85–90%** | **OI-09 已落地**：响应式品牌欢迎页/Bolot · 真实 raw-mode 输入框/历史/多行编辑 · 用户即时回显 · 稳定 `✦ Thinking`/Running/耗时 · 结构化时间线 · CJK/emoji 宽度 · 非 TTY 回落；不依赖 React Ink，真实 Windows Terminal 观感/按键仍未验 |
 | **Electron GUI** | **~80–88%** | 壳 + 流式 + 权限 + 多 provider（CX7）+ runtime v1 + **会话切换/恢复 + composer controls + model/effort 设置 + control/tool progress 投影** + AskUserQuestion；真人点击/视觉仍未验 |
 | **Hooks · 日用契约** | **~96–98%** | **H0–H5 已落地**（SessionEnd · exit 语义 · updatedInput · `/hooks recent`） |
 | **Compact · 日用管道** | **~96–98%** | **C0–C5 + AR2 全段已落地**（hybrid 计数 · 中段截断 · 防重摘要 · range/watermark 契约 · 切分不拆对穷举验证 · 写失败完整回退 · durable 条目不丢 · **估算按字符类别分档**（CJK 1.3 / 散文 4.5 / 其余 3.5；实测推翻了「密文 = token 密」的旧前提，最差高估 109% → 19.5%）· 管道基准）；中段压缩与远端压缩均**显式关闭**（§13.10.2 · [ADR](./ADR_COMPACT_REMOTE.md)） |
@@ -37,14 +37,14 @@
 `bolo` 自动准备用户状态但不创建项目 `.bolo/`，新会话写用户级 workspace 分桶，
 显式 `bolo init [--project]` / `--user` 才创建模板，旧项目/用户会话继续兼容。
 OI-07 搜索诊断与可选 Docker 管理也已关闭；Docker 仍由用户自行安装。
-OI-09 已用零运行时依赖的 TTY controller 完成真实输入框、首 token 前活动态与
-用户/reasoning/tool/assistant 时间线；框架名称不作为完成标准。
+OI-09 已用零运行时依赖的 TTY controller 完成响应式 Bolot 欢迎页、真实输入框、
+首 token 前稳定活动态与 user/reasoning/tool/assistant 时间线；框架名称不作为完成标准。
 
 **外部或人工阻塞项单列，不与 agent 队列混淆：**
 
 | 待办 | 卡在哪 |
 |------|--------|
-| CLI TUI 真实 Windows Terminal 观感/光标/按键 | 自动契约覆盖 raw driver、宽度、ANSI 与首 token gate；只能由真人确认实际终端呈现 |
+| CLI TUI 真实 Windows Terminal 观感/光标/按键 | 自动契约覆盖三档欢迎 renderer、Bolot/NO_COLOR、raw driver、原子活动行、ANSI 与首 token gate；只能由真人确认实际终端呈现 |
 | 桌面窗口视觉 · AskUserQuestion 真人按键/点击 | 只能人工验，自动化覆盖不到 |
 | LSP | 暂缓，触发条件已写死 → [ADR_AR4_EVIDENCE_GATE.md](./ADR_AR4_EVIDENCE_GATE.md) §6 |
 
@@ -117,7 +117,7 @@ OI-09 已用零运行时依赖的 TTY controller 完成真实输入框、首 tok
 | **AR-T1 TodoWrite · AR-T2 Bash background**（§14） | ✅ |
 | **AR-T3a ExitPlanMode · AR-T3b Web search**（§14） | ✅ |
 | **AR5C-early · CLI 可分发**（§15） | ✅ |
-| **OI-09 · CLI TUI 交互重构** | ✅ 真实输入框、即时活动态、结构化时间线、窄终端/非 TTY 契约；真人 Windows Terminal 验收单列 |
+| **OI-09 · CLI TUI 交互重构** | ✅ 响应式 Bolot 欢迎页、真实输入框、稳定即时活动态、结构化时间线、窄终端/非 TTY 契约；真人 Windows Terminal 验收单列 |
 | **AR-T3+ 能力面续刀**（WebSearch · plan 工具流 · AskUserQuestion） | ✅ 三项均已落地（AskUserQuestion 的真 TTY 交互未验，见 §14.5） |
 | **AR2 Compact depth（A0a/A0b/A1/A2/B1/B2/C 全段）** | ✅ |
 | AR3 Desktop shell | ✅ runtime 生产桥/会话切换恢复/视图模型/composer/model-effort/control-tool progress/NSIS 已收口；真人点击/视觉仍未验 |
@@ -408,7 +408,7 @@ AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 regis
 | 21 | **OI-04 · SearXNG 直连** | 显式配置 · fail-closed endpoint · 零依赖 JSON 工具 · 动态启用 | `bolo search status` · CLI/Desktop warning · 无第三方桥 | 本地 fixture + 真实 Docker/upstream smoke | ✅ `c058998`；OI-X1 于 2026-07-27 闭环 |
 | 22 | **OI-07 · SearXNG 诊断/部署体验** | A ✅ `unresponsive_engines` 契约 · B ✅ `search doctor` · C ✅ 可选 Docker setup | 区分正常空结果/全故障/部分成功；一键只读诊断；显式 setup 不安装 Docker | fixture + 非空 smoke + rollback/端口预检/零依赖护栏 + 源码/dist live | ✅ A `7754525` · B `3e96573` · C `ef03f3d` / `f623ad9` |
 | 23 | **OI-08B · CLI 零步骤首次启动** | 用户状态 materialize / 项目只读发现 · workspace session store · legacy discovery · 显式 init | 安装后直接 `bolo`；普通启动不创建项目 `.bolo`；旧会话可恢复 | first-run 真实 CLI + spill/subagent 路径 + 112 项完整门禁 | ✅ 代码 `22c0d0c`；文档已同步 |
-| 24 | **OI-09 · CLI TUI 交互重构** | terminal width/input reducer/activity/timeline 纯契约 · raw/plain 双路径 | 紧凑欢迎区 · 真实输入框 · 提交即时回显 · Thinking/Running/elapsed · Markdown 与原位工具进度 | `test:cli-tui` + CLI 兼容轨 + typecheck + 113 脚本完整门禁 | ✅ 代码 `843f593` + `1413da3`；文档已同步。⚠️ 真实 Windows Terminal 观感/按键仍需真人验 |
+| 24 | **OI-09 · CLI TUI 交互重构** | terminal width/input reducer/activity/timeline 纯契约 · raw/plain 双路径 · 原子 activity writer | 宽/中/紧凑 Bolot 欢迎页 · 真实输入框 · 提交即时回显 · 稳定 `✦ Thinking`/Running/elapsed · Markdown 与原位工具进度 | `test:cli-tui` + CLI 兼容轨 + typecheck + 113 脚本完整门禁 | ✅ 代码 `843f593` + `1413da3` + follow-up `10879ec`；文档已同步。⚠️ 真实 Windows Terminal 观感/按键仍需真人验 |
 
 固定 checkpoint：
 

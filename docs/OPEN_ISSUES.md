@@ -297,10 +297,12 @@ Ctrl-C/Esc 以及 REPL 是否抢占 stdin。需要人在真实终端按键确认
 
 **状态：BLOCKED: HUMAN**
 
-OI-09 已自动覆盖输入 reducer、raw-mode listener/恢复、CJK/emoji cell 宽度、宽窄
-renderer、首 token 前 Thinking、Running/warning 恢复、NO_COLOR、非 TTY 回落与
-完整 `npm test`。自动化不能替代真人确认 Windows Terminal 字体下的实际光标位置、
-重绘残影、窗口 resize、Ctrl+J/历史/删除组合键、权限面板切换和长回答滚动。
+OI-09 已自动覆盖宽/中/紧凑欢迎 renderer、Bolot/NO_COLOR、输入 reducer、
+raw-mode listener/恢复、CJK/emoji cell 宽度、固定 `✦` 与原子 activity writer、
+首 token 前 Thinking、Running/warning 恢复、非 TTY 回落与完整 `npm test`。
+Codex PTY 也已确认源码入口实际接入欢迎页，但不具备项目要求的 raw-mode 能力。
+自动化不能替代真人确认 Windows Terminal 字体/颜色下的实际光标位置、重绘残影、
+窗口 resize、Ctrl+J/历史/删除组合键、权限面板切换和长回答滚动。
 
 ## 4. 已核实但不列为开放问题
 

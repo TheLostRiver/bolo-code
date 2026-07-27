@@ -28,7 +28,7 @@
 | Headless 核心 | ~82–90% | queryLoop · 权限 · tools · STE；partial stream fail-closed |
 | **Agent 能力面（工具集）** | **~82–88%** | 15 个常驻/可选工具 + **Web search**（hosted、MCP、SearXNG 均已活体验证） |
 | 会话 / CLI | ~92–97% | **零步骤首次启动** · 用户级 workspace JSONL · 旧项目会话兼容 · durable runtime · query/action CLI · TTY pager · pipe/JSON automation |
-| **CLI TUI** | **~85–90%** | 紧凑欢迎区 · 真实输入框/历史/多行编辑 · 用户即时回显 · Thinking/Running/耗时 · 结构化时间线 · CJK/emoji 宽度 · 非 TTY 回落；真实 Windows Terminal 观感/按键未验 |
+| **CLI TUI** | **~85–90%** | 响应式品牌欢迎页/Bolot · 真实输入框/历史/多行编辑 · 用户即时回显 · 稳定 `✦ Thinking`/Running/耗时 · 结构化时间线 · CJK/emoji 宽度 · 非 TTY 回落；真实 Windows Terminal 观感/按键未验 |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
 | Subagent | ~89–95% | `config.agents` + `agents/*.md` · durable task/result · overflow FIFO/cancel · safe delivery · worktree 保全 |
 | 文件 Diff 日用 | ~95%+ | D0–D7 · U0–U4 |
@@ -47,7 +47,8 @@
 自动准备用户级 `~/.bolo`，新会话写入用户目录下的 workspace 分桶，不会仅因进入仓库
 就在 cwd 创建 `.bolo/`。项目模板只由显式 `bolo init [--project]` 创建；旧项目会话
 继续可 list/resume。SearXNG 的只读 doctor 与显式 Docker 管理也已落地，Docker 仍不是
-默认依赖。OI-09 已把一次性伪输入提示替换为真实 TTY 输入框和连续 turn 反馈。
+默认依赖。OI-09 已把一次性伪输入提示替换为响应式 Bolot 欢迎页、真实 TTY 输入框
+和连续 turn 反馈；活动行使用固定状态符号与单次原位写入，不再先清空后绘制造闪烁。
 
 **人工项：** CLI TUI 与 AskUserQuestion 的真实 Windows Terminal 按键/观感、Desktop
 点击与视觉走查需要真人验证，不以自动测试冒充完成。SearXNG 已在真实 Docker 实例和
@@ -158,10 +159,11 @@ bolo runtime discard turn <turnId> --resume <id> --json
 bolo runtime retry-safe control <controlId> --continue --json
 ```
 
-交互 REPL 在真实 TTY 中使用稳定输入框：`Enter` 发送，`Ctrl+J` 换行，`↑/↓`
-浏览本进程历史；提交后立即回显用户消息并显示 `Thinking`、耗时与 `Ctrl+C`
-中断提示，工具运行时切换为 `Running <tool>`。pipe、`-p`/`--print` 和 JSON
-路径保持追加式输出，不发送动态光标控制。完整键位和回落开关见
+交互 REPL 先按终端宽度显示 Bolo Code/Bolot 品牌欢迎页，再进入稳定输入框：
+`Enter` 发送，`Ctrl+J` 换行，`↑/↓` 浏览本进程历史；提交后立即回显用户消息并显示
+固定 `✦ Thinking`、耗时与 `Ctrl+C` 中断提示，工具运行时切换为
+`Running <tool>`。pipe、`-p`/`--print` 和 JSON 路径保持追加式输出，不发送动态
+光标控制。完整键位、欢迎页宽度档位和回落开关见
 [docs/TUI.md](docs/TUI.md)。
 
 `runtime list|inspect` 的文本输出在 **stdin/stdout 都是 TTY** 且内容超过一页时自动分页：`n/j/↓/→` 下一页，`p/k/↑/←` 上一页，`q/Esc` 退出，`Ctrl-C` 返回 130。0/1 页不读键盘；pipe 与 `--json` 永不进入 pager、不会输出 ANSI/banner，也不会因为大列表挂起。
