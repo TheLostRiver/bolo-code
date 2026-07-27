@@ -19,6 +19,7 @@ export type TurnActivityIndicator = {
   start: (label?: string) => void
   beforeEvent: (event: TurnActivityEvent) => void
   afterEvent: (event: TurnActivityEvent) => void
+  finishThinkingSegment: () => number | undefined
   finish: (terminalReason?: string) => void
   isActive: () => boolean
 }
@@ -71,7 +72,6 @@ export function createTurnActivityIndicator(options: {
   columns?: number | (() => number | undefined)
   now?: () => number
   intervalMs?: number
-  showCompletion?: boolean
   renderFrame?: (line: string) => boolean
   clearFrame?: () => boolean
 }): TurnActivityIndicator {
@@ -81,7 +81,14 @@ export function createTurnActivityIndicator(options: {
   let active = false
   let label = 'Thinking'
   let frame = 0
-  let turnStartedAt: number | undefined
+  let segmentStartedAt: number | undefined
+  let segmentKind:
+    | 'thinking'
+    | 'tool'
+    | 'search'
+    | 'retry'
+    | 'other'
+    | undefined
   let activeToolName: string | undefined
 
   const erase = () => {
@@ -89,10 +96,10 @@ export function createTurnActivityIndicator(options: {
     options.writeOut('\r\u001b[2K')
   }
   const draw = () => {
-    if (!active || turnStartedAt == null) return
+    if (!active || segmentStartedAt == null) return
     const line = formatTurnActivityLine({
       label,
-      elapsedMs: now() - turnStartedAt,
+      elapsedMs: now() - segmentStartedAt,
       frame,
       color: options.color,
       columns:
@@ -115,14 +122,45 @@ export function createTurnActivityIndicator(options: {
     if (active) erase()
     active = false
   }
-  const start = (nextLabel = 'Thinking') => {
+  const startSegment = (
+    nextLabel: string,
+    nextKind: NonNullable<typeof segmentKind>,
+  ) => {
     stopTimer()
     label = nextLabel
-    if (turnStartedAt == null) turnStartedAt = now()
+    if (segmentStartedAt == null || segmentKind !== nextKind) {
+      segmentStartedAt = now()
+      segmentKind = nextKind
+      frame = 0
+    }
     active = true
     draw()
     timer = setInterval(draw, intervalMs)
     timer.unref?.()
+  }
+  const start = (nextLabel = 'Thinking') => {
+    const nextKind =
+      nextLabel === 'Thinking'
+        ? 'thinking'
+        : nextLabel.startsWith('Running')
+          ? 'tool'
+          : nextLabel.startsWith('Searching')
+            ? 'search'
+            : nextLabel.startsWith('Retrying')
+              ? 'retry'
+              : 'other'
+    startSegment(nextLabel, nextKind)
+  }
+  const finishThinkingSegment = (): number | undefined => {
+    if (segmentKind !== 'thinking' || segmentStartedAt == null) {
+      return undefined
+    }
+    const elapsedMs = Math.max(0, now() - segmentStartedAt)
+    clear()
+    segmentStartedAt = undefined
+    segmentKind = undefined
+    frame = 0
+    return elapsedMs
   }
 
   return {
@@ -132,51 +170,51 @@ export function createTurnActivityIndicator(options: {
     },
     afterEvent(event) {
       const name = typeof event.name === 'string' ? event.name : ''
-      if (event.type === 'tool_start') {
+      if (event.type === 'reasoning') {
+        startSegment('Thinking', 'thinking')
+      } else if (event.type === 'tool_start') {
         activeToolName = name || undefined
-        start(name ? `Running ${name}` : 'Running tool')
+        startSegment(name ? `Running ${name}` : 'Running tool', 'tool')
       } else if (event.type === 'tool_progress') {
         if (name) activeToolName = name
         const message =
           typeof event.message === 'string' ? event.message.trim() : ''
         const toolName = name || activeToolName
-        start(
+        startSegment(
           message
             ? `${toolName ? `${toolName} · ` : ''}${message}`
             : toolName
               ? `Running ${toolName}`
               : 'Running tool',
+          'tool',
         )
       } else if (event.type === 'tool_end') {
         activeToolName = undefined
-        start('Thinking')
+        startSegment('Thinking', 'thinking')
       } else if (event.type === 'phase' && event.phase === 'running') {
-        start(activeToolName ? `Running ${activeToolName}` : 'Thinking')
+        startSegment(
+          activeToolName ? `Running ${activeToolName}` : 'Thinking',
+          activeToolName ? 'tool' : 'thinking',
+        )
       } else if (event.type === 'web_search') {
-        start(event.phase === 'query' ? 'Searching the web' : 'Thinking')
+        startSegment(
+          event.phase === 'query' ? 'Searching the web' : 'Thinking',
+          event.phase === 'query' ? 'search' : 'thinking',
+        )
       } else if (event.type === 'model_retry') {
-        start('Retrying model request')
+        startSegment('Retrying model request', 'retry')
       } else if (event.type === 'warning') {
-        start(activeToolName ? `Running ${activeToolName}` : 'Thinking')
+        startSegment(
+          activeToolName ? `Running ${activeToolName}` : 'Thinking',
+          activeToolName ? 'tool' : 'thinking',
+        )
       }
     },
-    finish(terminalReason = 'completed') {
+    finishThinkingSegment,
+    finish() {
       clear()
-      if (
-        turnStartedAt != null &&
-        options.showCompletion !== false &&
-        terminalReason === 'completed'
-      ) {
-        const elapsedMs = now() - turnStartedAt
-        const seconds =
-          elapsedMs < 10_000
-            ? `${(elapsedMs / 1_000).toFixed(1)}s`
-            : `${Math.round(elapsedMs / 1_000)}s`
-        const dim = options.color === false ? '' : '\u001b[2m'
-        const reset = options.color === false ? '' : '\u001b[0m'
-        options.writeOut(`${dim}Done · ${seconds}${reset}\n`)
-      }
-      turnStartedAt = undefined
+      segmentStartedAt = undefined
+      segmentKind = undefined
       frame = 0
       activeToolName = undefined
     },

@@ -714,6 +714,8 @@ export type SessionEvent =
   | { type: 'text'; text: string }
   /** 思考链增量（流式展示；不持久化进 transcript） */
   | { type: 'reasoning'; text: string }
+  /** provider 的显式思考分段结束边界。 */
+  | { type: 'reasoning_end' }
   | { type: 'tool_start'; id: string; name: string; input: unknown }
   | {
       type: 'tool_progress'

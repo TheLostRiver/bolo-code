@@ -12,6 +12,7 @@ import type { TurnActivityIndicator } from './turnActivity.ts'
 export type CliSessionEvent =
   | { type: 'text'; text: string }
   | { type: 'reasoning'; text: string }
+  | { type: 'reasoning_end' }
   | { type: 'tool_start'; id: string; name: string; input?: unknown }
   | {
       type: 'tool_progress'
@@ -238,6 +239,23 @@ export function createSessionEventPrinter(opts: {
   }
   const emitOut = (text: string) => writeOut(withTimelineGutter(text))
   const emitErr = (text: string) => writeErr(withTimelineGutter(text))
+  const formatThoughtDuration = (elapsedMs: number): string =>
+    elapsedMs < 10_000
+      ? `${(Math.max(0, elapsedMs) / 1_000).toFixed(1)}s`
+      : `${Math.round(Math.max(0, elapsedMs) / 1_000)}s`
+
+  const finishReasoningSegment = () => {
+    const elapsedMs = opts.activity?.finishThinkingSegment()
+    if (!reasoningPrefixDone) return
+    if (openReasoningLine) emitOut('\n')
+    openReasoningLine = false
+    if (timeline && elapsedMs != null) {
+      emitOut(
+        `${dim}Thought for ${formatThoughtDuration(elapsedMs)}${reset}\n`,
+      )
+    }
+    reasoningPrefixDone = false
+  }
 
   const ensureLineBreak = () => {
     if (openTextLine || openReasoningLine) {
@@ -281,6 +299,7 @@ export function createSessionEventPrinter(opts: {
       }
     },
     endTurn(options) {
+      finishReasoningSegment()
       if (openTextLine && timeline) {
         const tail = markdown.finish()
         if (tail) emitOut(tail)
@@ -326,15 +345,16 @@ export function createSessionEventPrinter(opts: {
           openReasoningLine = !e.text.endsWith('\n')
           return
         }
+        if (e.type === 'reasoning_end') {
+          finishReasoningSegment()
+          return
+        }
         if (
           e.type === 'text' &&
           typeof e.text === 'string' &&
           e.text.length > 0
         ) {
-          if (openReasoningLine) {
-            emitOut('\n')
-            openReasoningLine = false
-          }
+          finishReasoningSegment()
           if (timeline && !assistantHeaderDone) {
             emitOut(`${accent}●${reset} Bolo\n`)
             assistantHeaderDone = true
@@ -346,11 +366,13 @@ export function createSessionEventPrinter(opts: {
           return
         }
         if (timeline && e.type === 'tool_progress') {
+          finishReasoningSegment()
           ensureLineBreak()
           return
         }
         const toolLine = formatToolEventLine(e)
         if (toolLine) {
+          finishReasoningSegment()
           ensureLineBreak()
           const renderedToolLine = color
             ? toolLine
@@ -359,6 +381,7 @@ export function createSessionEventPrinter(opts: {
           return
         }
         if (e.type === 'error' && typeof e.message === 'string') {
+          finishReasoningSegment()
           ensureLineBreak()
           const explained = opts.explainError
             ? opts.explainError(e.message)
@@ -367,6 +390,7 @@ export function createSessionEventPrinter(opts: {
           return
         }
         if (e.type === 'warning' && typeof e.message === 'string') {
+          finishReasoningSegment()
           ensureLineBreak()
           emitErr(`warn: ${e.message}\n`)
           return
@@ -374,6 +398,7 @@ export function createSessionEventPrinter(opts: {
         // provider 侧搜索：写 stdout（是内容不是诊断），但用不同前缀标明
         // 它不是本地工具调用。不显示就等于让用户为看不见的搜索买单。
         if (e.type === 'web_search') {
+          finishReasoningSegment()
           ensureLineBreak()
           if (e.phase === 'query') {
             const q =
@@ -396,6 +421,7 @@ export function createSessionEventPrinter(opts: {
           return
         }
         if (e.type === 'model_retry') {
+          finishReasoningSegment()
           ensureLineBreak()
           const attempt = typeof e.attempt === 'number' ? e.attempt : '?'
           const max = typeof e.maxRetries === 'number' ? e.maxRetries : '?'

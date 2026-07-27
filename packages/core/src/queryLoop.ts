@@ -71,6 +71,8 @@ export type QueryLoopEvent =
   | { type: 'text'; text: string }
   /** 思考链增量（不写入 ChatMessage；仅展示） */
   | { type: 'reasoning'; text: string }
+  /** provider 的显式思考分段结束边界。 */
+  | { type: 'reasoning_end' }
   | { type: 'hook'; event: string; exitCode: number; blocked?: boolean }
   | { type: 'error'; message: string }
   /**
@@ -575,7 +577,7 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
               emit(params, { type: 'reasoning', text: ev.text })
             }
           } else if (ev.type === 'reasoning_end') {
-            // 分段标记：CLI 用空 reasoning 或仅靠后续 text 换行；此处不发噪声
+            emit(params, { type: 'reasoning_end' })
           } else if (ev.type === 'tool_call') {
             let input: unknown = {}
             try {
