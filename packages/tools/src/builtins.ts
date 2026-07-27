@@ -312,12 +312,25 @@ export function createBashTool(): BoloTool {
           err.killed === true ||
           err.code === 'ETIMEDOUT' ||
           /timed?\s*out/i.test(err.message ?? '')
+        // 超时时把**出路**写进错误。
+        //
+        // 部分输出本来就保留着（stdout/stderr 都在下面），所以超时的真实代价
+        // 不是「结果没了」，而是「跑到一半白跑，且模型不知道下一步」——
+        // execFile 的 ETIMEDOUT 里没有任何一处提到 `run_in_background`，
+        // 于是模型要么原样重试再超一次，要么放弃一件后台本可以跑完的活。
+        //
+        // 这也是「前台命令自动后台化」那条候选的门控结论：真缺口是错误不可行动，
+        // 比自动转后台小得多，且不引入模型没要求的后台任务与「这轮完没完」的歧义。
+        const hint = timedOut
+          ? `\nThis command was killed after ${timeoutMs}ms. Partial output above is all that ran. ` +
+            'Re-run it with run_in_background: true and read it with BashOutput if it legitimately takes longer, ' +
+            'or raise timeout (max 600000ms) if you expect it to finish soon.'
+          : ''
         return {
           ok: false,
           isError: true,
-          output: [err.stdout, err.stderr, err.message]
-            .filter(Boolean)
-            .join('\n'),
+          output:
+            [err.stdout, err.stderr, err.message].filter(Boolean).join('\n') + hint,
           errorCode: timedOut ? 'timeout' : 'exec_failed',
         }
       } finally {

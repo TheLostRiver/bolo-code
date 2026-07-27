@@ -517,8 +517,8 @@ MCP 工具失败只吐 `fetch failed`（补 `describeMcpCallError`：指名 serv
 | **headless 工具放行粒度** | ✅ 已实现 | `--allowed-tools` / `--disallowed-tools`：精确名 · `mcp__srv__*` 前缀 · `Bash(pattern)`。权限模型本身不缺东西（`SessionPermissionRules` 早就有 always-allow/deny），缺的只是命令行入口，故本刀是**纯解析 + 接线**，不碰匹配器。解析 **fail-closed**（exit 2）——静默丢弃一条 `--disallowed-tools` 会让用户以为拦住了而实际没拦。`--resume` 时与快照规则**叠加**不覆盖。刻意不支持 `Read(src/**)`：本仓 path glob 是全局的，翻过去会连 `Write` 一起放行。详见 [PERMISSIONS.md](./PERMISSIONS.md) §5 |
 | **真·本地搜索路径** | ✅ 文档已交付 | [LOCAL_SEARCH_AND_FETCH.md](./LOCAL_SEARCH_AND_FETCH.md)：已核实的 SearXNG compose（含最易卡住的一步——默认只开 `html`，须显式加 `json`，否则桥连上了也只拿得到 HTML）+ mcp.json 形状 + 断网自测。**仍不做 preset**：npm 上至少十个互相竞争的 SearXNG 桥，**没有一个是权威实现**，全是单人维护包——为「不信任第三方」的需求去背书一个未审计的包，方向是反的。文档里的配置片段有门禁守着漂移（`test-docs-config-snippets.ts`）。另记录了一条已评估未实施的替代：**Bolo 直连 SearXNG 的 JSON 接口**，可省掉整个桥，但它反转 `searchPresets.ts` 里一条已写下的架构决定，属所有者决定 |
 | **本地抓取 preset** | ✅ **书面关闭（不做）** | 重估后前提不成立：**抓取本来就是本地的**——`WebFetch` 是 Bolo 自己的工具，直连目标站点；Exa preset 也已用 `allowTools` 把它的远程抓取工具挡在外面。真实缺口只剩「需要执行 JS 才出内容的页面」，而补它意味着 preset 里写一条 `npx -y <包>`，即**下载并执行远端代码**去解决一个信任问题。且 stdio 早就能用（`McpServerConfig.command`），用户手写进 mcp.json 即可——preset 省的只是打字，换来的是一次背书。代价见 [LOCAL_SEARCH_AND_FETCH.md](./LOCAL_SEARCH_AND_FETCH.md) §4。**重开条件**：出现权威且可审计的本地抓取实现，且有具体到「哪个页面拿不到内容」的需求 |
-| **前台命令自动后台化** | 无 | 参考实现有阻塞预算超时自动转后台；语义复杂，暂不做 |
-| **LSP** | 无 | 体量大，归 AR4 证据门控 |
+| **前台命令自动后台化** | ✅ **书面关闭（不做）** | 门控先量代价：超时时**部分输出本来就保留**，真实损失是「模型不知道下一步」——错误里从没提过 `run_in_background`。故缺口是**错误不可行动**，比自动转后台小得多。已修（只在超时时给出路，两个方向验红：`test-bash-timeout-guidance.ts`）。自动转后台的代价是凭空多一个模型没要求的后台任务、一个要追踪的 id、以及「这轮完没完」的歧义。详见 [ADR_AR4_EVIDENCE_GATE.md](./ADR_AR4_EVIDENCE_GATE.md) §5 |
+| **LSP** | ⏸ **暂缓（有触发条件，非永久待办）** | 缺口属实（今天只有 Glob/Grep，符号级导航没有），但绕路都**成功了**，没记录到「文本搜索给错答案导致改错」的案例——而准入要的正是后者。且 LSP 意味着给每种语言起一个 server 进程，撞「不代跑第三方进程」。触发条件写死了两条（≥3 次可复现的错改案例，或出现不需额外进程的单语言方案）→ [ADR_AR4_EVIDENCE_GATE.md](./ADR_AR4_EVIDENCE_GATE.md) §6 |
 
 ---
 
