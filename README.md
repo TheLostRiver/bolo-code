@@ -40,11 +40,12 @@
 | Electron GUI | ~80–88% | 壳 + 流式 + 权限 + runtime IPC/client + 会话切换/恢复 + composer controls + model/effort + control/tool progress 投影 + 多 provider；真人点击/视觉未验 |
 | 相对 HC 全家桶 UI | 另计 | 不设 100% |
 
-**已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Runtime DR0–DR4 · Autonomous Road AR1 CLI/TUI runtime UX · **AR-T1–T3+ Agent 能力面** · AR2 Compact depth · AR3 Desktop 产品接线 · AR4 evidence gate · AR5 release hardening · **OI-04 SearXNG 直连与 OI-X1 真实实例 smoke**。
+**已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Runtime DR0–DR4 · Autonomous Road AR1 CLI/TUI runtime UX · **AR-T1–T3+ Agent 能力面** · AR2 Compact depth · AR3 Desktop 产品接线 · AR4 evidence gate · AR5 release hardening · **OI-04 SearXNG 直连、OI-X1 真实实例 smoke 与 OI-07A 上游诊断**。
 
-**当前主线：** [开放问题清单](docs/OPEN_ISSUES.md) 的 OI-01–OI-06 已全部关闭。
-Desktop 最后一刀以 packages-first 投影接通 `control` / `tool_progress`
-（`9f0f687`）；当前没有可由 agent 独立闭环的开放代码项。
+**当前主线：** [开放问题清单](docs/OPEN_ISSUES.md) 的 OI-07。OI-07A 已让
+SearXNG `WebSearch` 区分正常空结果、全上游故障与部分成功；下一刀是只读的
+`bolo search doctor`（OI-07B）。Docker setup（OI-07C）仍是显式选择后的可选项，
+不会成为安装依赖或被静默启动。
 
 **人工项：** AskUserQuestion 真 TTY、Desktop 点击与视觉走查需要真人验证，不以自动测试冒充完成。SearXNG 已在真实 Docker 实例和上游引擎上完成 live smoke。
 

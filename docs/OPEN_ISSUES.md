@@ -160,6 +160,56 @@
 - `test:desktop-runtime-events`、typecheck、IPC/event 契约、dist install、Desktop
   bundle/launch 与完整 `npm test` 全绿。真人点击与视觉验收仍单列 OI-H2。
 
+### OI-07 · SearXNG 诊断与部署体验
+
+**状态：IN PROGRESS（A 已关闭；B 当前；C 可选）**
+
+准入证据：
+
+- OI-X1 真实实例曾在 HTTP 200 下因 429/CAPTCHA/timeout 返回 0 条；旧
+  `WebSearch` 只输出普通 “no valid results”，无法区分合法空结果与上游全故障。
+- 同一实例也会出现“部分引擎返回结果、其余引擎失败”；诊断不能以丢弃有效结果为代价。
+- `bolo search status` 只读解析后的配置，不访问 endpoint，也不验证 JSON、版本或
+  非空结果；它不能承担健康检查。
+
+#### OI-07A · 上游诊断契约
+
+**状态：CLOSED（`7754525`）**
+
+- packages-first 解析 SearXNG `unresponsive_engines` tuple；畸形条目忽略，
+  有效条目去重并限制数量/字符预算。
+- `results: []` 且没有有效故障诊断仍是成功的正常空结果。
+- 没有有效结果但存在上游故障时返回
+  `errorCode: "upstream_unavailable"`，并列出引擎与原因。
+- 部分成功保持 `ok: true`、保留有效结果，在输出尾部追加简短 warning；即使结果
+  很长，warning 也不会被 12,000 字符预算截掉。
+- fixture 覆盖正常空结果、全故障、部分成功、去重、畸形诊断与长输出预算；
+  专项、typecheck、108 项默认门禁与真实实例全故障分支均已验证。
+
+#### OI-07B · `bolo search doctor`
+
+**状态：OPEN（下一刀）**
+
+关闭条件：
+
+- 与只读配置展示 `search status` 分离；doctor 实际检查 endpoint 可达性、JSON format
+  与 SearXNG 版本/能力，不修改配置或启动服务。
+- 运行真实 smoke query 并要求结果非空；分别显示可工作与
+  `unresponsive_engines`，失败返回稳定机器码与非零退出码。
+- text/JSON 输出、超时、非 JSON、合法空结果、全故障与部分成功进入本地 fixture
+  和默认门禁；公网实例不进入默认 `npm test`。
+
+#### OI-07C · 可选 Docker setup
+
+**状态：OPEN（GATED；不属于 OI-07A/B）**
+
+- Docker 不是 Bolo 依赖；不静默安装 Docker，不在用户未选择时创建或启动容器。
+- 只有用户明确选择且本机已有 Docker 时，才评估
+  `setup/status/logs/stop`：生成 secret/settings、启用 JSON、执行非空 smoke，
+  再原子合并 Bolo 配置。
+- 不把本轮临时使用的 Bing 强制设为所有用户默认引擎；setup 应诊断当前网络，
+  由用户决定可用引擎。若这些边界不能同时满足，书面关闭而不是交付半自动脚本。
+
 ## 2. 外部资源项（已关闭）
 
 ### OI-X1 · SearXNG 真实实例 live smoke

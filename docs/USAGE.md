@@ -201,9 +201,14 @@ Anthropic、OpenAI Responses 等 hosted 线路不需要本地工具；其它 pro
 
 SearXNG 必须启用 JSON format；部署、HTTPS/LAN 限制、隐私去向与验证边界以
 [LOCAL_SEARCH_AND_FETCH.md](./LOCAL_SEARCH_AND_FETCH.md) 为准。仓库 fixture
-持续覆盖协议；真实 Docker 实例与上游引擎 live smoke 也已完成。若 JSON 合法但
-`results` 为空，应先检查 `unresponsive_engines`，再启用当前网络真正可达的引擎；
-仅 HTTP 200 不算搜索配置成功。
+持续覆盖协议；真实 Docker 实例与上游引擎 live smoke 也已完成。`WebSearch`
+会区分三种情况：正常空结果仍成功；空结果且有 `unresponsive_engines` 时返回
+`upstream_unavailable`；有结果但部分引擎失败时保留结果并追加 `Warning:`。
+按 warning 调整当前网络可达的引擎；仅 HTTP 200 不算搜索配置成功。
+
+`bolo search status` 只展示解析后的配置与 endpoint，**不会发起探活查询**；
+因此 status 为 on 不等于上游可用。完整健康检查属于当前 OI-07B，命令落地前不要把
+status 当作 doctor。
 
 `AskUserQuestion` 不是斜杠命令：在 `npx bolo` 的真实 TTY 会话里，模型遇到会
 实质改变结果的歧义时会调用它并显示选择面板。`-p`、pipe 等非交互会话会立即返回

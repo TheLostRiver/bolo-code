@@ -382,6 +382,18 @@ Bolo 解析丢失。逐引擎探测确认该网络的 Bing 可用，显式启用
 1.94s 返回 37 条，生产调用恢复。部署 smoke 必须要求**非空结果**并查看
 `unresponsive_engines`；HTTP 200 或容器 running 都不能单独证明搜索可用。
 
+OI-07A 已把这个响应字段接入生产工具契约：
+
+| SearXNG 响应 | Bolo `WebSearch` 结果 |
+|-------------|-----------------------|
+| 无有效结果、无有效故障 tuple | 成功；普通 “no valid results” |
+| 无有效结果、有故障 tuple | 失败；`errorCode=upstream_unavailable`，列出引擎/原因 |
+| 有有效结果、有故障 tuple | 成功；结果照常返回，尾部追加 `Warning:` |
+
+诊断最多保留 8 个经清洗、去重的 tuple；部分成功 warning 会优先保留在
+12,000 字符输出预算内。真实实例随后一次全故障已直接命中新错误码，而不是继续
+伪装成合法空结果。
+
 ### 3.4 只有真跑才发现的问题
 
 每条线路的活体测试都抓到了假流测不出来的缺陷：
@@ -394,7 +406,7 @@ Bolo 解析丢失。逐引擎探测确认该网络的 Bing 可用，显式启用
 | MCP 工具失败时只吐两个词 `fetch failed` | `describeMcpCallError()`：指名 server、分类网络/超时、标注可重试；**原文一律保留**（`test-mcp-tool-error.ts`） |
 | 启用「搜索」搭售了一个**远程抓取**工具，模型拿它顶掉了本地 `WebFetch` | `McpServerConfig.allowTools` / `excludeTools`；exa preset 只注册 `web_search_exa`（`test-mcp-tool-filter.ts`） |
 | 高优先级畸形 `search.searxng` 被对象展开吞掉，低优先级 endpoint 仍启用 | 只有合法对象才深合并；畸形覆盖原样交给解析器并禁用工具（`test-searxng-search.ts`） |
-| SearXNG 容器正常、JSON 也是 200，但默认引擎在数次查询后全部 429/CAPTCHA/timeout → 0 结果 | setup/live smoke 必须断言 `results` 非空、展示 `unresponsive_engines`，并配置当前网络可用的引擎 |
+| SearXNG 容器正常、JSON 也是 200，但默认引擎在数次查询后全部 429/CAPTCHA/timeout → 0 结果 | OI-07A 让 Bolo 返回 `upstream_unavailable`/部分成功 warning；setup/live smoke 仍必须断言非空结果，并配置当前网络可用的引擎 |
 
 倒数第二条同样是端到端跑出来的：`bolo search enable exa` 会一次带进
 `web_search_exa` **和** `web_fetch_exa`，而实测中模型**选了后者**——于是用户的

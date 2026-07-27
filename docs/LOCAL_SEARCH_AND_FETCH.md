@@ -157,7 +157,17 @@ bolo search status
 
 输出会列出同时存在的 hosted、SearXNG direct 与 MCP 搜索线路，并对直连显示最终
 endpoint。会话内 `/websearch off` 会把直连 `WebSearch` schema 从后续模型请求中
-移除；`on` / `auto` 会恢复它。
+移除；`on` / `auto` 会恢复它。`search status` **只读配置、不访问 endpoint**，
+所以它显示 on 不能证明上游引擎可用。
+
+OI-07A 起，直连工具会读取 `unresponsive_engines`：
+
+- `results: []` 且没有有效故障诊断：正常空结果，`ok: true`；
+- 没有有效结果且有上游故障：`upstream_unavailable`，列出引擎与原因；
+- 有有效结果且部分引擎故障：保留结果并在尾部追加 `Warning:`。
+
+诊断 tuple 会清洗、去重并限制预算；畸形字段不能把正常空结果伪装成故障，长结果也
+不能把 warning 截掉。
 
 ### 3.1 验证边界
 
@@ -167,18 +177,21 @@ endpoint。会话内 `/websearch off` 会把直连 `WebSearch` schema 从后续�
 npm run test:searxng-search
 ```
 
-它使用本地 HTTP fixture 覆盖参数、响应解析、错误分类、超时、响应/输出预算、
-配置继承、reload 去重与生产 session 接线。它**没有**连接真实 SearXNG，也没有
-验证上游引擎；这是可重复的默认门禁，不应改成依赖公网的测试。
+它使用本地 HTTP fixture 覆盖参数、响应解析、错误分类、正常空结果、全上游故障、
+部分成功 warning、畸形诊断、超时、响应/输出预算、配置继承、reload 去重与生产
+session 接线。它**没有**连接真实 SearXNG，也没有验证上游引擎；这是可重复的
+默认门禁，不应改成依赖公网的测试。
 
 OI-X1 已于 2026-07-27 在官方 Docker 镜像 `2026.7.26-b060c780d` 上完成真实
 live smoke：直接 JSON 查询返回真实 URL；生产 status/session/permission-gated
 `WebSearch` 全链通过，工具调用 2.32s 返回 5 条、6 个 URL。
 
-活体也证明默认引擎会快速出现 Brave 429、Startpage CAPTCHA 和多引擎 timeout；
-原始 JSON 与 Bolo 都如实返回空结果，启用当前网络可达的 Bing 后恢复。断网后
-SearXNG 通常无法取得新结果，因为它仍依赖上游引擎；不能用“服务跑在本机”
-推导“查询内容不出机器”。完整证据见 [OPEN_ISSUES.md](./OPEN_ISSUES.md) OI-X1。
+活体也证明默认引擎会快速出现 Brave 429、Startpage CAPTCHA 和多引擎 timeout。
+OI-07A 之前原始 JSON 与 Bolo 都只表现为空结果；现在全故障会明确返回
+`upstream_unavailable`，部分成功会保留结果和 warning。启用当前网络可达的 Bing
+曾恢复结果，但它不是所有网络的默认答案。断网后 SearXNG 通常无法取得新结果，
+因为它仍依赖上游引擎；不能用“服务跑在本机”推导“查询内容不出机器”。完整证据见
+[OPEN_ISSUES.md](./OPEN_ISSUES.md) OI-X1/OI-07。
 
 ---
 
