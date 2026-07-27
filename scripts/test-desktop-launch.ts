@@ -27,10 +27,11 @@ import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 
+import { ensureTranscriptFile } from '../packages/core/src/index.ts'
+
 function assert(cond: unknown, msg: string): asserts cond {
   if (!cond) {
-    console.error('FAIL:', msg)
-    process.exit(1)
+    throw new Error(`FAIL: ${msg}`)
   }
 }
 
@@ -79,48 +80,76 @@ async function main() {
   )
   assert(built.status === 0, `bundling failed:\n${built.stderr || built.stdout}`)
 
-  const run = spawnSync(bin, ['.'], {
-    cwd: APP_DIR,
-    encoding: 'utf8',
-    env: {
-      ...process.env,
-      BOLO_DESKTOP_SMOKE: '1',
-      // mock provider：启动检查不该依赖任何真实后端或密钥
-      BOLO_DESKTOP_MOCK: '1',
-    },
-    timeout: 120_000,
-  })
+  const fixtureRoot = path.resolve(
+    '.bolo-tmp',
+    `desktop-launch-${process.pid}-${Date.now()}`,
+  )
+  const sessionsDir = path.join(fixtureRoot, '.bolo', 'sessions')
+  const selectionTarget = 'desktop_switch_target'
+  try {
+    await fs.mkdir(sessionsDir, { recursive: true })
+    for (const sessionId of [selectionTarget, 'desktop_switch_other']) {
+      await ensureTranscriptFile(path.join(sessionsDir, `${sessionId}.jsonl`), {
+        sessionId,
+        cwd: fixtureRoot,
+        permissionMode: 'default',
+        model: 'mock',
+      })
+    }
 
-  const out = `${run.stdout ?? ''}\n${run.stderr ?? ''}`
-  assert(
-    run.status === 0,
-    `the app did not start cleanly (exit ${run.status}):\n${out.slice(-1500)}`,
-  )
+    const run = spawnSync(bin, ['.'], {
+      cwd: APP_DIR,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        BOLO_DESKTOP_SMOKE: '1',
+        BOLO_DESKTOP_SMOKE_SELECT_ID: selectionTarget,
+        BOLO_DESKTOP_CWD: fixtureRoot,
+        // mock provider：启动检查不该依赖任何真实后端或密钥
+        BOLO_DESKTOP_MOCK: '1',
+      },
+      timeout: 120_000,
+    })
 
-  const line = /desktop smoke ok: (\{.*\})/.exec(out)
-  assert(
-    line,
-    `the smoke marker never appeared — the window may not have finished loading:\n${out.slice(-1500)}`,
-  )
+    const out = `${run.stdout ?? ''}\n${run.stderr ?? ''}`
+    assert(
+      run.status === 0,
+      `the app did not start cleanly (exit ${run.status}):\n${out.slice(-1500)}`,
+    )
 
-  const report = JSON.parse(line![1]!) as Record<string, unknown>
-  assert(report.log === true, 'the conversation container mounted')
-  assert(report.sidebar === true, 'the session sidebar mounted (three-column shell)')
-  assert(
-    report.bridge === true,
-    'window.bolo exists — this is what proves the preload path is correct',
-  )
-  assert(
-    typeof report.sheets === 'number' && report.sheets > 0,
-    `stylesheets actually loaded, got ${String(report.sheets)} — zero means a 404 and an unstyled window`,
-  )
-  assert(
-    report.runtime === 'ready',
-    `the renderer RuntimeClient completes a real hello/query handshake, got ${String(report.runtime)}`,
-  )
+    const line = /desktop smoke ok: (\{.*\})/.exec(out)
+    assert(
+      line,
+      `the smoke marker never appeared — the window may not have finished loading:\n${out.slice(-1500)}`,
+    )
 
-  console.log(`  launched, renderer mounted: ${JSON.stringify(report)}`)
-  console.log('PASS: desktop launch')
+    const report = JSON.parse(line![1]!) as Record<string, unknown>
+    assert(report.log === true, 'the conversation container mounted')
+    assert(report.sidebar === true, 'the session sidebar mounted (three-column shell)')
+    assert(
+      report.bridge === true,
+      'window.bolo exists — this is what proves the preload path is correct',
+    )
+    assert(
+      typeof report.sheets === 'number' && report.sheets > 0,
+      `stylesheets actually loaded, got ${String(report.sheets)} — zero means a 404 and an unstyled window`,
+    )
+    assert(
+      report.runtime === 'ready',
+      `the renderer RuntimeClient completes a real hello/query handshake, got ${String(report.runtime)}`,
+    )
+    assert(
+      report.selected === true &&
+        report.afterSessionId === selectionTarget &&
+        report.beforeSessionId !== selectionTarget,
+      `a real session-row click resumes the target: ${JSON.stringify(report)}`,
+    )
+
+    console.log(`  launched, renderer mounted: ${JSON.stringify(report)}`)
+    console.log('PASS: desktop launch')
+  } finally {
+    await fs.rm(fixtureRoot, { recursive: true, force: true })
+  }
 }
 
 main().catch((e) => {

@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url'
 // 不再维护两个会漂移的入口。
 import {
   createSessionFromWorkspace,
+  resumeSessionFromWorkspace,
   submitUserInput,
   closeSessionMcp,
   endSession,
@@ -34,6 +35,8 @@ import {
   getSessionPersistMeta,
   buildRuntimeSnapshot,
   createSessionRuntimeTransport,
+  createActiveSessionManager,
+  scopeSessionRequestId,
 } from '../../../../packages/core/src/index.ts'
 import {
   buildTimelineCards,
@@ -56,13 +59,16 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-// 主进程改成 .ts 之后第一次进入 typecheck（此前是 .mjs，完全没检查）。
-// 这几处显式类型不是形式主义：session 是全局可空单例，
-// 少了它每个用点都得靠人记得判空。
+type DesktopSession = Awaited<
+  ReturnType<typeof createSessionFromWorkspace>
+>['session']
+type DesktopPermissionDecision = 'allow' | 'deny' | 'allow_always'
+
 let mainWindow: BrowserWindow | null = null
-let session: Awaited<ReturnType<typeof createSessionFromWorkspace>>['session'] | null =
-  null
-const pendingPermissions = new Map()
+const pendingPermissions = new Map<
+  string,
+  (decision: DesktopPermissionDecision) => void
+>()
 
 /** 桌面设置（会话级，重启窗口保留进程内） */
 const PERMISSION_MODES = [
@@ -113,16 +119,21 @@ const askUserQuestionBridge: DesktopAskUserQuestionBridge =
     },
   })
 
-type DesktopPermissionDecision = 'allow' | 'deny' | 'allow_always'
-
-function createDesktopAskPermission() {
+function createDesktopAskPermission(
+  scope: string,
+  ownsSession: () => boolean,
+) {
   return async (req: {
     toolName: string
     toolInput?: unknown
     toolUseId?: string
     preview?: unknown
   }): Promise<DesktopPermissionDecision> => {
-    const id = req.toolUseId || `p_${Date.now()}`
+    if (!ownsSession()) return 'deny'
+    const id = scopeSessionRequestId(
+      scope,
+      req.toolUseId || `permission_${Date.now()}`,
+    )
     return await new Promise((resolve) => {
       pendingPermissions.set(id, resolve)
       send('bolo:permission_request', {
@@ -142,25 +153,31 @@ function createDesktopAskPermission() {
   }
 }
 
-async function destroySession(reason = 'other') {
-  if (session) {
+function cancelPendingSessionInteractions() {
+  for (const [, resolve] of pendingPermissions) resolve('deny')
+  pendingPermissions.clear()
+  askUserQuestionBridge.cancelAll()
+}
+
+async function disposeDesktopSession(
+  target: DesktopSession,
+  _reason: 'replace' | 'shutdown' | 'candidate_rejected',
+) {
+  try {
+    await endSession(target, { reason: 'other', closeMcp: true })
+  } catch {
     try {
-      await endSession(session, { reason, closeMcp: true })
+      await closeSessionMcp(target)
     } catch {
-      try {
-        await closeSessionMcp(session)
-      } catch {
-        /* ignore */
-      }
+      /* ignore */
     }
-    session = null
   }
 }
 
 /**
  * 从磁盘刷新 registry 并挂到 session（add provider 后用）。
  */
-async function refreshSessionRegistry(s: NonNullable<typeof session>) {
+async function refreshSessionRegistry(s: DesktopSession) {
   try {
     const user = await loadConfigJson(getUserLayout())
     const project = await loadConfigJson(getProjectLayout(s.cwd))
@@ -173,7 +190,7 @@ async function refreshSessionRegistry(s: NonNullable<typeof session>) {
   }
 }
 
-function effortSnapshot(s: NonNullable<typeof session>) {
+function effortSnapshot(s: DesktopSession) {
   try {
     const dialect =
       s.effortDialect ??
@@ -209,7 +226,7 @@ function effortSnapshot(s: NonNullable<typeof session>) {
   }
 }
 
-function sessionStatusPayload(s: NonNullable<typeof session>) {
+function sessionStatusPayload(s: DesktopSession) {
   const effort = effortSnapshot(s)
   return {
     id: s.id,
@@ -228,10 +245,39 @@ function sessionStatusPayload(s: NonNullable<typeof session>) {
   }
 }
 
-async function ensureSession(forceNew = false) {
-  if (session && !forceNew) return session
-  if (forceNew) await destroySession()
+function configureDesktopSession(
+  target: DesktopSession,
+  askPermission: ReturnType<typeof createDesktopAskPermission>,
+  resumed: boolean,
+): DesktopSession {
+  if (desktopSettings.useMock) {
+    target.provider = createMockProvider()
+    target.deps = productionDeps(target.provider)
+  }
+  target.askPermission = askPermission
+  target.askUserQuestion = askUserQuestionBridge.asker
 
+  if (!resumed && target.permissionMode !== desktopSettings.permissionMode) {
+    try {
+      setPermissionMode(target, desktopSettings.permissionMode)
+    } catch {
+      target.permissionMode = desktopSettings.permissionMode
+    }
+  }
+  return target
+}
+
+function syncDesktopSettingsFromSession(target: DesktopSession) {
+  desktopSettings.cwd = target.cwd
+  desktopSettings.permissionMode =
+    toPermissionMode(target.permissionMode) ?? desktopSettings.permissionMode
+}
+
+async function createDesktopSession(scope: string): Promise<DesktopSession> {
+  let ownedSession: DesktopSession | null = null
+  const ownsSession = () =>
+    ownedSession !== null && sessionManager.isCurrent(ownedSession, scope)
+  const askPermission = createDesktopAskPermission(scope, ownsSession)
   const created = await createSessionFromWorkspace({
     cwd: desktopSettings.cwd,
     ensureDefaults: true,
@@ -240,29 +286,50 @@ async function ensureSession(forceNew = false) {
     // 注意：createSessionFromWorkspace **不接受** permissionMode——
     // 此处曾传过一个会被静默忽略的同名选项。真正生效的是下面那次
     // setPermissionMode，所以别再把它加回来。
-    askPermission: createDesktopAskPermission(),
-    onEvent: (e) => send('bolo:event', e),
+    askPermission,
+    onEvent: (event) => {
+      if (ownsSession()) send('bolo:event', event)
+    },
   })
-  session = created?.session ?? created
+  ownedSession = created.session
+  return configureDesktopSession(ownedSession, askPermission, false)
+}
 
-  if (desktopSettings.useMock) {
-    // mock 覆盖协议实现，但保留 registry 以便 UI 列 providers
-    session.provider = createMockProvider()
-    session.deps = productionDeps(session.provider)
-  }
-  session.askPermission = createDesktopAskPermission()
-  session.askUserQuestion = askUserQuestionBridge.asker
-  if (
-    desktopSettings.permissionMode &&
-    session.permissionMode !== desktopSettings.permissionMode
-  ) {
-    try {
-      setPermissionMode(session, desktopSettings.permissionMode)
-    } catch {
-      session.permissionMode = desktopSettings.permissionMode
-    }
-  }
-  return session
+async function resumeDesktopSession(
+  sessionId: string,
+  scope: string,
+): Promise<DesktopSession> {
+  let ownedSession: DesktopSession | null = null
+  const ownsSession = () =>
+    ownedSession !== null && sessionManager.isCurrent(ownedSession, scope)
+  const askPermission = createDesktopAskPermission(scope, ownsSession)
+  const resumed = await resumeSessionFromWorkspace({
+    idOrPath: sessionId,
+    cwd: desktopSettings.cwd,
+    ensureDefaults: true,
+    connectMcp: false,
+    systemPrompt: true,
+    askPermission,
+    onEvent: (event) => {
+      if (ownsSession()) send('bolo:event', event)
+    },
+  })
+  ownedSession = resumed.session
+  return configureDesktopSession(ownedSession, askPermission, true)
+}
+
+const sessionManager = createActiveSessionManager<DesktopSession>({
+  create: createDesktopSession,
+  resume: resumeDesktopSession,
+  beforeReplace: () => cancelPendingSessionInteractions(),
+  dispose: disposeDesktopSession,
+})
+
+async function ensureSession(forceNew = false): Promise<DesktopSession> {
+  if (!forceNew) return sessionManager.ensure()
+  const recreated = await sessionManager.recreate()
+  if (!recreated.ok) throw new Error(recreated.detail)
+  return recreated.session
 }
 
 const desktopRuntimeTransport = createSessionRuntimeTransport(() =>
@@ -294,6 +361,8 @@ function createWindow() {
   // 这条能抓住静态断言抓不到的一类问题：preload/renderer 路径写错时**构建不报错**，
   // 只在窗口打开那一刻白屏。让它在门禁里真跑一次，比断言字符串可靠得多。
   if (process.env.BOLO_DESKTOP_SMOKE === '1') {
+    const smokeSelectId =
+      process.env.BOLO_DESKTOP_SMOKE_SELECT_ID?.trim() ?? ''
     const fail = (why: string) => {
       process.stderr.write(`desktop smoke failed: ${why}
 `)
@@ -307,36 +376,81 @@ function createWindow() {
         .executeJavaScript(
           // 三样都查：DOM 挂上了、preload 桥接可用、样式表真的加载了。
           // 只查 DOM 会漏掉「preload 路径错」和「CSS 404」这两种白屏成因。
-          `new Promise((resolve) => {
+          `(async () => {
+             const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
              const started = Date.now()
-             const report = () => {
-               const runtime = document.documentElement.dataset.runtimeState || 'missing'
-               if (runtime === 'connecting' && Date.now() - started < 10000) {
-                 return setTimeout(report, 25)
-               }
-               resolve(JSON.stringify({
-                 log: !!document.getElementById('log'),
-                 sidebar: !!document.getElementById('session-list'),
-                 bridge: typeof window.bolo === 'object' && window.bolo !== null,
-                 styled: getComputedStyle(document.body).display !== '',
-                 sheets: document.styleSheets.length,
-                 runtime,
-               }))
+             let runtime = document.documentElement.dataset.runtimeState || 'missing'
+             while (runtime === 'connecting' && Date.now() - started < 10000) {
+               await wait(25)
+               runtime = document.documentElement.dataset.runtimeState || 'missing'
              }
-             report()
-           })`,
+
+             const selectionTarget = ${JSON.stringify(smokeSelectId)}
+             let beforeSessionId = null
+             let afterSessionId = null
+             let selected = selectionTarget === ''
+             let selectionError = null
+             if (selectionTarget) {
+               const before = await window.bolo.getStatus()
+               beforeSessionId = before && before.id
+               const selectionStarted = Date.now()
+               let row = null
+               while (!row && Date.now() - selectionStarted < 10000) {
+                 row = [...document.querySelectorAll('.session-item')]
+                   .find((item) => item.dataset.sessionId === selectionTarget)
+                 if (!row) await wait(25)
+               }
+               if (!row) {
+                 selectionError = 'target session row was not rendered'
+               } else {
+                 row.click()
+                 while (Date.now() - selectionStarted < 10000) {
+                   const after = await window.bolo.getStatus()
+                   afterSessionId = after && after.id
+                   if (afterSessionId === selectionTarget) {
+                     selected = true
+                     break
+                   }
+                   await wait(25)
+                 }
+                 if (!selected) {
+                   selectionError = 'target session did not become active'
+                 }
+               }
+             }
+             return JSON.stringify({
+               log: !!document.getElementById('log'),
+               sidebar: !!document.getElementById('session-list'),
+               bridge: typeof window.bolo === 'object' && window.bolo !== null,
+               styled: getComputedStyle(document.body).display !== '',
+               sheets: document.styleSheets.length,
+               runtime,
+               selectionTarget,
+               beforeSessionId,
+               afterSessionId,
+               selected,
+               selectionError,
+             })
+           })()`,
         )
         .then((raw: string) => {
           const r = JSON.parse(raw) as Record<string, unknown>
-          const missing = Object.entries(r)
-            .filter(([k, v]) =>
-              k === 'sheets'
-                ? v === 0
-                : k === 'runtime'
-                  ? v !== 'ready'
-                  : v !== true,
+          const missing: string[] = []
+          for (const key of ['log', 'sidebar', 'bridge', 'styled']) {
+            if (r[key] !== true) missing.push(key)
+          }
+          if (r.sheets === 0) missing.push('sheets')
+          if (r.runtime !== 'ready') missing.push('runtime')
+          if (
+            smokeSelectId &&
+            (r.selected !== true ||
+              r.afterSessionId !== smokeSelectId ||
+              r.beforeSessionId === smokeSelectId)
+          ) {
+            missing.push(
+              `selection(${String(r.selectionError ?? 'wrong session id')})`,
             )
-            .map(([k]) => k)
+          }
           if (missing.length) return fail(`renderer incomplete: ${missing.join(', ')}`)
           process.stdout.write(`desktop smoke ok: ${raw}
 `)
@@ -378,6 +492,7 @@ function registerIpc() {
     if (!patch || typeof patch !== 'object') {
       return { ok: false, error: 'bad patch' }
     }
+    const previousSettings = { ...desktopSettings }
     let needRecreate = false
     if (typeof patch.cwd === 'string' && patch.cwd.trim()) {
       const next = path.resolve(patch.cwd.trim())
@@ -393,20 +508,44 @@ function registerIpc() {
       }
     }
     const nextMode = toPermissionMode(patch.permissionMode)
-    if (nextMode) {
-      desktopSettings.permissionMode = nextMode
-      if (session && !needRecreate) {
-        try {
-          setPermissionMode(session, nextMode)
-        } catch {
-          session.permissionMode = patch.permissionMode
+    if (nextMode) desktopSettings.permissionMode = nextMode
+
+    const shouldRecreate = needRecreate || patch.recreate === true
+    const current = sessionManager.current()
+    if (nextMode && current && !shouldRecreate) {
+      try {
+        setPermissionMode(current, nextMode)
+      } catch {
+        current.permissionMode = nextMode
+      }
+    }
+    if (shouldRecreate) {
+      const recreated = await sessionManager.recreate()
+      if (!recreated.ok) {
+        Object.assign(desktopSettings, previousSettings)
+        return {
+          ok: false,
+          code: recreated.code,
+          error: recreated.detail,
         }
       }
     }
-    if (needRecreate || patch.recreate === true) {
-      await ensureSession(true)
-    }
     return { ok: true, settings: { ...desktopSettings } }
+  })
+
+  ipcMain.handle('bolo:selectSession', async (_evt, request) => {
+    const selected = await sessionManager.select(request)
+    if (!selected.ok) return selected
+    syncDesktopSettingsFromSession(selected.session)
+    return {
+      ok: true,
+      status: selected.status,
+      sessionId: selected.sessionId,
+      ...(selected.previousSessionId
+        ? { previousSessionId: selected.previousSessionId }
+        : {}),
+      session: sessionStatusPayload(selected.session),
+    }
   })
 
   // ── CX7：providers ──
@@ -612,10 +751,6 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', async () => {
-  for (const [, resolve] of pendingPermissions) resolve('deny')
-  pendingPermissions.clear()
-  // 没有窗口就没有人可答；挂着的问题收成 cancelled 而不是编一个答案
-  askUserQuestionBridge.cancelAll()
-  await destroySession()
+  await sessionManager.close()
   if (process.platform !== 'darwin') app.quit()
 })

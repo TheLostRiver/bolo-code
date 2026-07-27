@@ -146,6 +146,7 @@ async function main() {
     'bolo:runtimeHello',
     'bolo:runtimeQuery',
     'bolo:runtimeCommand',
+    'bolo:selectSession',
   ]) {
     assert(
       handlers.has(channel) && invoked.has(channel),

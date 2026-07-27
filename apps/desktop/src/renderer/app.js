@@ -35,6 +35,7 @@ let lastProviders = []
 /** @type {{ id: string, label?: string }[]} */
 let lastPresets = []
 let fillingProviderSelect = false
+let selectingSession = false
 
 const runtimeClient = createRuntimeClient({
   transport: {
@@ -69,6 +70,43 @@ function renderRuntimeState(state) {
 runtimeClient.subscribe(renderRuntimeState)
 renderRuntimeState(runtimeClient.getState())
 
+async function activateSessionEntry(sessionId) {
+  if (!sessionId || selectingSession || !window.bolo?.selectSession) return
+  selectingSession = true
+  sessionListEl?.setAttribute('aria-busy', 'true')
+  try {
+    const selected = await window.bolo.selectSession({ sessionId })
+    if (!selected?.ok) {
+      appendMsg(
+        'system',
+        `Session switch failed: ${selected?.detail ?? selected?.error ?? 'unknown'}`,
+      )
+      return
+    }
+
+    // These prompts belonged to the previous live session instance. The main
+    // process has cancelled their pending owners; the renderer must drop its
+    // stale ids too so a late click cannot send a misleading response.
+    currentPermId = null
+    permEl.hidden = true
+    currentAskId = null
+    closeAsk()
+    endStreamBubble()
+
+    await runtimeClient.refresh()
+    await refreshStatus()
+    await refreshProviders()
+    await refreshSessions()
+    if (!(await reloadTimeline())) await reloadMessages()
+    promptEl.focus()
+  } catch (error) {
+    appendMsg('system', `Session switch error: ${error?.message ?? error}`)
+  } finally {
+    selectingSession = false
+    sessionListEl?.removeAttribute('aria-busy')
+  }
+}
+
 /**
  * 会话侧栏。
  *
@@ -90,7 +128,17 @@ async function refreshSessions() {
     li.className = 'session-item'
     li.tabIndex = 0
     li.setAttribute('role', 'option')
+    li.dataset.sessionId = e.sessionId
+    li.setAttribute('aria-selected', String(e.active === true))
     if (e.active) li.setAttribute('aria-current', 'true')
+    li.addEventListener('click', () => {
+      void activateSessionEntry(e.sessionId)
+    })
+    li.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return
+      event.preventDefault()
+      void activateSessionEntry(e.sessionId)
+    })
 
     const title = document.createElement('span')
     title.className = 'session-title'

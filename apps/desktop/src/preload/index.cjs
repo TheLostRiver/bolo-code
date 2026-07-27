@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('bolo', {
   getTimeline: () => ipcRenderer.invoke('bolo:getTimeline'),
   /** AR3B：会话列表（含运行时状态徽标） */
   listSessions: () => ipcRenderer.invoke('bolo:listSessions'),
+  /** OI-06E：选择并恢复盘上的会话 */
+  selectSession: (request) => ipcRenderer.invoke('bolo:selectSession', request),
   /** CX7：多 provider */
   listProviders: () => ipcRenderer.invoke('bolo:listProviders'),
   useProvider: (idOrPayload) =>

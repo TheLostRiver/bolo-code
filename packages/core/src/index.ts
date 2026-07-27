@@ -3190,6 +3190,20 @@ export {
 } from './runtimeTransport.ts'
 
 export {
+  canReplaceActiveSession,
+  createActiveSessionManager,
+  scopeSessionRequestId,
+  type ActiveSessionHandle,
+  type ActiveSessionManager,
+  type ActiveSessionManagerDeps,
+  type SessionDisposeReason,
+  type SessionSelectionFailure,
+  type SessionSelectionFailureCode,
+  type SessionSelectionResult,
+  type SessionSelectionSuccess,
+} from './sessionSelection.ts'
+
+export {
   renderRuntimeText,
   type RuntimeTextRenderOptions,
   type RuntimeTextPage,
