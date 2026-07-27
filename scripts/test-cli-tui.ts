@@ -383,7 +383,7 @@ async function main(): Promise<void> {
     'raw driver exposes slash discovery and completion',
   )
 
-  // 欢迎首页：宽屏必须有品牌焦点、Bolot 和职责明确的双栏；不能只是状态框。
+  // 欢迎首页：宽屏必须有 Bolo 水晶身份和清晰元数据，不能沿用左右等分卡。
   const welcome = renderInkLayout({
     columns: 120,
     plain: false,
@@ -400,9 +400,10 @@ async function main(): Promise<void> {
     env: {} as NodeJS.ProcessEnv,
   })
   assert(welcome.includes('BOLO'), 'welcome identifies product')
-  assert(welcome.includes('Bolot'), 'welcome gives the mascot a visible identity')
-  assert(welcome.includes('Start here'), 'welcome has a clear action area')
-  assert(welcome.includes('Useful commands'), 'welcome exposes next actions')
+  assert(welcome.includes('──◆──'), 'welcome gives Bolo a crystal identity')
+  assert(welcome.includes('WORKSPACE'), 'welcome exposes workspace metadata')
+  assert(welcome.includes('MODEL'), 'welcome exposes model metadata')
+  assert(welcome.includes('SESSION'), 'welcome exposes session metadata')
   assert(!welcome.includes('ink-equiv'), 'internal renderer name is hidden')
   assert(!welcome.includes('bolo>'), 'welcome has no fake input')
   assert(!welcome.includes('____'), 'giant ASCII logo is removed')
@@ -414,8 +415,8 @@ async function main(): Promise<void> {
       .join(',')}`,
   )
   assert(
-    welcomeLines.some((line) => line.split('│').length >= 4),
-    'wide welcome has an internal column separator',
+    !welcomeLines.some((line) => line.split('│').length >= 4),
+    'wide welcome avoids the legacy two-column card',
   )
 
   const ultraWideWelcome = renderInkLayout({
@@ -446,8 +447,11 @@ async function main(): Promise<void> {
     sessionId: 'sess_medium',
     env: { NO_COLOR: '1' } as NodeJS.ProcessEnv,
   })
-  assert(mediumWelcome.includes('Bolot'), 'medium welcome keeps the mascot')
-  assert(mediumWelcome.includes('╭'), 'NO_COLOR keeps the structured layout')
+  assert(mediumWelcome.includes('──◆──'), 'medium welcome keeps the crystal')
+  assert(
+    mediumWelcome.includes('WORKSPACE'),
+    'NO_COLOR keeps the structured metadata',
+  )
   assert(
     !/\u001b\[[0-9;]*m/.test(mediumWelcome),
     'NO_COLOR welcome emits no SGR styles',
@@ -467,7 +471,10 @@ async function main(): Promise<void> {
     sessionId: 'sess_compact',
     env: {} as NodeJS.ProcessEnv,
   })
-  assert(compactWelcome.includes('╭'), 'compact welcome remains a real panel')
+  assert(
+    compactWelcome.includes('╔██╗'),
+    'compact welcome keeps a recognizable crystal',
+  )
   assert(
     compactWelcome
       .split('\n')

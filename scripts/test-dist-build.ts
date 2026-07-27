@@ -155,6 +155,10 @@ async function main() {
     !/from ["'][^"']*\.ts["']/.test(bundle),
     'bundle must not import .ts sources at runtime',
   )
+  assert(
+    bundle.includes('──◆──') && !bundle.includes('context puffer'),
+    'single-file bundle embeds the Bolo crystal identity without the legacy mascot',
+  )
 
   // ── 7) 产物可执行 ──
   const { stdout } = await execFileAsync(process.execPath, [distEntry, '--help'], {

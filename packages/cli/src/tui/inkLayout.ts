@@ -1,22 +1,30 @@
-/** One-time branded welcome panel. The live input is rendered elsewhere. */
+/** One-time Bolo welcome surface. The live composer is rendered elsewhere. */
 
 import {
-  BOLOT_MASCOT_LINES,
   getTerminalColumns,
   type BannerOptions,
 } from './banner.ts'
+import {
+  BOLO_CRYSTAL_ASCII_COMPACT_LINES,
+  BOLO_CRYSTAL_ASCII_LINES,
+  BOLO_CRYSTAL_COMPACT_LINES,
+  BOLO_CRYSTAL_MEDIUM_LINES,
+  BOLO_CRYSTAL_UNICODE_LINES,
+  centerTuiArt,
+  shouldUseAsciiCrystal,
+} from './crystalLogo.ts'
+import { resolveTuiFrameWidth } from './frame.ts'
 import type { StatusLineSession } from './statusLine.ts'
 import {
   resolveTuiTheme,
-  type TuiThemeId,
   type ResolveTuiThemeOptions,
+  type TuiThemeId,
 } from './theme.ts'
 import {
   clipTerminalText,
   measureTerminalText,
   padTerminalText,
 } from './terminalText.ts'
-import { resolveTuiFrameWidth } from './frame.ts'
 
 export type InkLayoutOptions = BannerOptions &
   ResolveTuiThemeOptions & {
@@ -32,13 +40,8 @@ export type InkLayoutOptions = BannerOptions &
 
 type Tone = 'normal' | 'title' | 'accent' | 'dim' | 'border'
 type Align = 'left' | 'center'
-type PanelLine = {
-  text: string
-  tone?: Tone
-  align?: Align
-}
-
 type Palette = Record<Exclude<Tone, 'normal'> | 'reset', string>
+type LayoutSize = 'wide' | 'medium' | 'compact'
 
 const MIN_FRAMED_COLUMNS = 38
 const MEDIUM_LAYOUT_COLUMNS = 56
@@ -66,72 +69,49 @@ function paint(text: string, tone: Tone, palette: Palette): string {
   return `${palette[tone]}${text}${palette.reset}`
 }
 
-function alignText(text: string, width: number, align: Align): string {
+function surfaceRow(
+  text: string,
+  width: number,
+  palette: Palette,
+  options: { tone?: Tone; align?: Align } = {},
+): string {
   const clipped = clipTerminalText(text, width)
-  if (align === 'left') return padTerminalText(clipped, width)
+  if (options.align !== 'center') {
+    return paint(
+      padTerminalText(clipped, width),
+      options.tone ?? 'normal',
+      palette,
+    )
+  }
   const remaining = Math.max(0, width - measureTerminalText(clipped))
   const left = Math.floor(remaining / 2)
-  return `${' '.repeat(left)}${clipped}${' '.repeat(remaining - left)}`
+  const body = `${' '.repeat(left)}${clipped}${' '.repeat(
+    remaining - left,
+  )}`
+  return paint(body, options.tone ?? 'normal', palette)
 }
 
-function frameBorder(
-  left: string,
-  right: string,
-  width: number,
-  palette: Palette,
-  label = '',
-): string {
-  const inner = width - 2
-  const safeLabel = label
-    ? clipTerminalText(label, Math.max(0, inner - 4))
-    : ''
-  const prefix = safeLabel ? `─ ${safeLabel} ` : ''
-  const fill = '─'.repeat(
-    Math.max(0, inner - measureTerminalText(prefix)),
-  )
-  return (
-    paint(left, 'border', palette) +
-    (prefix ? paint(prefix, 'title', palette) : '') +
-    paint(`${fill}${right}`, 'border', palette)
-  )
+function divider(width: number, palette: Palette, ascii: boolean): string {
+  const line = ascii
+    ? '-'.repeat(width)
+    : `╶${'─'.repeat(Math.max(0, width - 2))}╴`
+  return paint(line, 'border', palette)
 }
 
-function contentRow(
-  line: PanelLine,
+function metadataRow(
+  label: string,
+  value: string,
   width: number,
   palette: Palette,
 ): string {
-  const body = alignText(line.text, width - 2, line.align ?? 'left')
+  const prefix = `  ${label.toUpperCase().padEnd(11)}`
+  const prefixWidth = measureTerminalText(prefix)
+  const available = Math.max(0, width - prefixWidth)
+  const clipped = clipTerminalText(value, available)
   return (
-    paint('│', 'border', palette) +
-    paint(body, line.tone ?? 'normal', palette) +
-    paint('│', 'border', palette)
-  )
-}
-
-function twoColumnRow(
-  left: PanelLine,
-  right: PanelLine,
-  leftWidth: number,
-  rightWidth: number,
-  palette: Palette,
-): string {
-  const leftBody = alignText(
-    left.text,
-    leftWidth,
-    left.align ?? 'left',
-  )
-  const rightBody = alignText(
-    right.text,
-    rightWidth,
-    right.align ?? 'left',
-  )
-  return (
-    paint('│', 'border', palette) +
-    paint(leftBody, left.tone ?? 'normal', palette) +
-    paint('│', 'border', palette) +
-    paint(rightBody, right.tone ?? 'normal', palette) +
-    paint('│', 'border', palette)
+    paint(prefix, 'accent', palette) +
+    clipped +
+    ' '.repeat(Math.max(0, available - measureTerminalText(clipped)))
   )
 }
 
@@ -140,7 +120,7 @@ function cleanPreview(preview: string[] | undefined): string {
     preview
       ?.filter(Boolean)
       .slice(-1)[0]
-      ?.replace(/\s+/g, ' ')
+      ?.replace(/\s+/gu, ' ')
       .trim() ?? ''
   )
 }
@@ -155,6 +135,137 @@ function sessionSummary(session: StatusLineSession | undefined): string {
   }`
 }
 
+function selectCrystalLines(
+  size: LayoutSize,
+  ascii: boolean,
+): readonly string[] {
+  if (ascii) {
+    return size === 'wide'
+      ? BOLO_CRYSTAL_ASCII_LINES
+      : BOLO_CRYSTAL_ASCII_COMPACT_LINES
+  }
+  if (size === 'wide') return BOLO_CRYSTAL_UNICODE_LINES
+  if (size === 'medium') return BOLO_CRYSTAL_MEDIUM_LINES
+  return BOLO_CRYSTAL_COMPACT_LINES
+}
+
+function renderIdentity(
+  opts: InkLayoutOptions,
+  width: number,
+  palette: Palette,
+  options: {
+    size: LayoutSize
+    mascot: boolean
+    ascii: boolean
+    showHeadline: boolean
+  },
+): string[] {
+  const lines: string[] = []
+  if (options.mascot) {
+    lines.push(
+      ...centerTuiArt(
+        selectCrystalLines(options.size, options.ascii),
+        width,
+      ).map((line) => paint(line, 'accent', palette)),
+    )
+  }
+  lines.push(
+    surfaceRow(
+      `BOLO CODE${options.ascii ? ' | ' : ' · '}v${
+        opts.version ?? '0.0.1'
+      }`,
+      width,
+      palette,
+      { tone: 'title', align: 'center' },
+    ),
+  )
+  if (options.showHeadline) {
+    lines.push(
+      surfaceRow(
+        opts.headline?.trim() || 'Ready',
+        width,
+        palette,
+        { tone: 'dim', align: 'center' },
+      ),
+    )
+  }
+  return lines
+}
+
+function renderSessionRows(
+  opts: InkLayoutOptions,
+  width: number,
+  palette: Palette,
+  options: { compact: boolean; ascii: boolean },
+): string[] {
+  const separator = options.ascii ? ' | ' : ' · '
+  const id = opts.sessionId?.trim() || 'new'
+  const rows = [
+    metadataRow('workspace', opts.cwd ?? 'unavailable', width, palette),
+    metadataRow(
+      'model',
+      opts.model ?? 'not configured',
+      width,
+      palette,
+    ),
+    metadataRow(
+      'session',
+      options.compact
+        ? id
+        : `${id}${separator}${sessionSummary(opts.session)}`,
+      width,
+      palette,
+    ),
+  ]
+
+  if (options.compact && opts.session) {
+    rows.push(metadataRow('state', sessionSummary(opts.session), width, palette))
+  }
+  const preview = cleanPreview(opts.messagePreview)
+  if (preview) rows.push(metadataRow('recent', preview, width, palette))
+  return rows
+}
+
+function renderStructuredLayout(
+  opts: InkLayoutOptions,
+  width: number,
+  palette: Palette,
+  options: {
+    size: LayoutSize
+    mascot: boolean
+    ascii: boolean
+  },
+): string {
+  const compact = options.size === 'compact'
+  const hint =
+    opts.hint ??
+    (compact
+      ? '/help · /provider'
+      : '/help commands · /provider model · /permissions access')
+  const projectedHint = options.ascii
+    ? hint.replace(/·/gu, '|')
+    : hint
+  const output = renderIdentity(opts, width, palette, {
+    ...options,
+    showHeadline: !compact,
+  })
+  output.push(
+    divider(width, palette, options.ascii),
+    ...renderSessionRows(opts, width, palette, {
+      compact,
+      ascii: options.ascii,
+    }),
+    divider(width, palette, options.ascii),
+    surfaceRow(
+      `  ${projectedHint}`,
+      width,
+      palette,
+      { tone: 'dim' },
+    ),
+  )
+  return output.join('\n')
+}
+
 function renderPlainLayout(
   opts: InkLayoutOptions,
   columns: number,
@@ -166,272 +277,6 @@ function renderPlainLayout(
   return lines
     .map((line) => clipTerminalText(line, Math.max(1, columns)))
     .join('\n')
-}
-
-function renderWideLayout(
-  opts: InkLayoutOptions,
-  width: number,
-  palette: Palette,
-  mascot: boolean,
-): string {
-  const inner = width - 2
-  const leftWidth = Math.max(
-    32,
-    Math.min(42, Math.floor(inner * 0.32)),
-  )
-  const rightWidth = inner - leftWidth - 1
-  const headline = opts.headline?.trim() || 'Welcome to Bolo Code'
-  const art: PanelLine[] = mascot
-    ? BOLOT_MASCOT_LINES.map((text) => ({
-        text,
-        tone: 'accent',
-        align: 'center',
-      }))
-    : [{ text: 'B O L O   C O D E', tone: 'title', align: 'center' }]
-  const left: PanelLine[] = [
-    { text: headline, tone: 'title', align: 'center' },
-    { text: '' },
-    ...art,
-    {
-      text: mascot ? 'Bolot · context puffer' : 'Bolo Code',
-      tone: 'dim',
-      align: 'center',
-    },
-    { text: '' },
-    {
-      text: opts.model ? `model · ${opts.model}` : 'model · not configured',
-      tone: 'dim',
-      align: 'center',
-    },
-    {
-      text: opts.cwd ? `workspace · ${opts.cwd}` : 'workspace · unavailable',
-      tone: 'dim',
-      align: 'center',
-    },
-  ]
-  const preview = cleanPreview(opts.messagePreview)
-  const rightDivider = `  ${'─'.repeat(Math.max(0, rightWidth - 4))}`
-  const right: PanelLine[] = [
-    { text: '  Start here', tone: 'title' },
-    {
-      text: '  Describe the task. Paste an error. Ask Bolo to investigate.',
-    },
-    { text: '' },
-    { text: rightDivider, tone: 'border' },
-    { text: '  Current session', tone: 'accent' },
-    { text: `  ${sessionSummary(opts.session)}`, tone: 'dim' },
-    {
-      text: opts.sessionId
-        ? `  session · ${opts.sessionId}`
-        : '  session · new',
-      tone: 'dim',
-    },
-    { text: preview ? `  ${preview}` : '', tone: 'dim' },
-    { text: rightDivider, tone: 'border' },
-    { text: '  Useful commands', tone: 'accent' },
-    { text: '  /help commands · /provider model' },
-    { text: '  /permissions tool access' },
-  ]
-  const rows = Math.max(left.length, right.length)
-  while (left.length < rows) left.push({ text: '' })
-  while (right.length < rows) right.push({ text: '' })
-
-  const output = [
-    frameBorder(
-      '╭',
-      '╮',
-      width,
-      palette,
-      `BOLO CODE v${opts.version ?? '0.0.1'}`,
-    ),
-  ]
-  for (let index = 0; index < rows; index++) {
-    output.push(
-      twoColumnRow(
-        left[index]!,
-        right[index]!,
-        leftWidth,
-        rightWidth,
-        palette,
-      ),
-    )
-  }
-  output.push(frameBorder('╰', '╯', width, palette))
-  return output.join('\n')
-}
-
-function renderMediumLayout(
-  opts: InkLayoutOptions,
-  width: number,
-  palette: Palette,
-  mascot: boolean,
-): string {
-  const headline = opts.headline?.trim() || 'Welcome to Bolo Code'
-  const lines: string[] = [
-    frameBorder(
-      '╭',
-      '╮',
-      width,
-      palette,
-      `BOLO CODE v${opts.version ?? '0.0.1'}`,
-    ),
-    contentRow(
-      { text: headline, tone: 'title', align: 'center' },
-      width,
-      palette,
-    ),
-  ]
-  if (mascot) {
-    for (const text of BOLOT_MASCOT_LINES) {
-      lines.push(
-        contentRow(
-          { text, tone: 'accent', align: 'center' },
-          width,
-          palette,
-        ),
-      )
-    }
-    lines.push(
-      contentRow(
-        {
-          text: 'Bolot · context puffer',
-          tone: 'dim',
-          align: 'center',
-        },
-        width,
-        palette,
-      ),
-    )
-  } else {
-    lines.push(
-      contentRow(
-        { text: 'B O L O   C O D E', tone: 'title', align: 'center' },
-        width,
-        palette,
-      ),
-    )
-  }
-  lines.push(
-    frameBorder('├', '┤', width, palette, 'Workspace'),
-    contentRow(
-      { text: `  ${opts.cwd ?? 'unavailable'}` },
-      width,
-      palette,
-    ),
-    contentRow(
-      {
-        text: `  model · ${opts.model ?? 'not configured'}`,
-        tone: 'dim',
-      },
-      width,
-      palette,
-    ),
-    contentRow(
-      { text: `  ${sessionSummary(opts.session)}`, tone: 'dim' },
-      width,
-      palette,
-    ),
-  )
-  if (opts.sessionId) {
-    lines.push(
-      contentRow(
-        { text: `  session · ${opts.sessionId}`, tone: 'dim' },
-        width,
-        palette,
-      ),
-    )
-  }
-  const preview = cleanPreview(opts.messagePreview)
-  if (preview) {
-    lines.push(
-      contentRow({ text: `  ${preview}`, tone: 'dim' }, width, palette),
-    )
-  }
-  lines.push(
-    frameBorder('├', '┤', width, palette, 'Start here'),
-    contentRow(
-      {
-        text: '  Describe the task, paste an error, or ask a question.',
-      },
-      width,
-      palette,
-    ),
-    contentRow(
-      {
-        text: `  ${opts.hint ?? '/help commands · /provider model'}`,
-        tone: 'dim',
-      },
-      width,
-      palette,
-    ),
-    frameBorder('╰', '╯', width, palette),
-  )
-  return lines.join('\n')
-}
-
-function renderCompactLayout(
-  opts: InkLayoutOptions,
-  width: number,
-  palette: Palette,
-  mascot: boolean,
-): string {
-  const headline = opts.headline?.trim() || 'Welcome to Bolo Code'
-  const lines = [
-    frameBorder(
-      '╭',
-      '╮',
-      width,
-      palette,
-      `BOLO CODE v${opts.version ?? '0.0.1'}`,
-    ),
-    contentRow(
-      { text: headline, tone: 'title', align: 'center' },
-      width,
-      palette,
-    ),
-  ]
-  if (mascot) {
-    lines.push(
-      contentRow(
-        {
-          text: '<(● ᴗ ●)>  Bolot',
-          tone: 'accent',
-          align: 'center',
-        },
-        width,
-        palette,
-      ),
-    )
-  }
-  lines.push(
-    frameBorder('├', '┤', width, palette, 'Workspace'),
-    contentRow(
-      { text: `  ${opts.cwd ?? 'unavailable'}` },
-      width,
-      palette,
-    ),
-    contentRow(
-      {
-        text: `  model · ${opts.model ?? 'not configured'}`,
-        tone: 'dim',
-      },
-      width,
-      palette,
-    ),
-    contentRow(
-      { text: `  ${sessionSummary(opts.session)}`, tone: 'dim' },
-      width,
-      palette,
-    ),
-    frameBorder(
-      '╰',
-      '╯',
-      width,
-      palette,
-      opts.hint ?? '/help · /provider',
-    ),
-  )
-  return lines.join('\n')
 }
 
 function usesExplicitPlainLayout(
@@ -462,14 +307,18 @@ export function renderInkLayout(opts: InkLayoutOptions = {}): string {
     dimTheme: theme.id === 'dim',
   })
   const width = resolveTuiFrameWidth(columns)
+  const size: LayoutSize =
+    columns >= WIDE_LAYOUT_COLUMNS
+      ? 'wide'
+      : columns >= MEDIUM_LAYOUT_COLUMNS
+        ? 'medium'
+        : 'compact'
 
-  if (columns >= WIDE_LAYOUT_COLUMNS) {
-    return renderWideLayout(opts, width, palette, theme.mascot)
-  }
-  if (columns >= MEDIUM_LAYOUT_COLUMNS) {
-    return renderMediumLayout(opts, width, palette, theme.mascot)
-  }
-  return renderCompactLayout(opts, width, palette, theme.mascot)
+  return renderStructuredLayout(opts, width, palette, {
+    size,
+    mascot: theme.mascot,
+    ascii: shouldUseAsciiCrystal({ ascii: opts.ascii, env }),
+  })
 }
 
 export type { TuiThemeId }

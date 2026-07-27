@@ -56,6 +56,16 @@ export {
   type InkLayoutOptions,
 } from './tui/inkLayout.ts'
 export {
+  BOLO_CRYSTAL_ASCII_COMPACT_LINES,
+  BOLO_CRYSTAL_ASCII_LINES,
+  BOLO_CRYSTAL_COMPACT_LINES,
+  BOLO_CRYSTAL_MEDIUM_LINES,
+  BOLO_CRYSTAL_UNICODE_LINES,
+  centerTuiArt,
+  normalizeTuiArt,
+  shouldUseAsciiCrystal,
+} from './tui/crystalLogo.ts'
+export {
   resolveTuiDockWidth,
   resolveTuiFrameWidth,
   TUI_FRAME_MAX_COLUMNS,

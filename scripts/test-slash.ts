@@ -531,7 +531,7 @@ async function main() {
   )
   const plain = renderWelcomeBanner({ plain: true, version: '0.0.1' })
   assert(plain.includes('BOLO'), 'plain contains BOLO')
-  assert(!plain.includes('Bolot') || plain === 'BOLO · v0.0.1' || plain.startsWith('BOLO'), 'plain short')
+  assert(!plain.includes('──◆──'), 'plain banner omits terminal art')
 
   const full = renderWelcomeBanner({
     plain: false,
@@ -539,8 +539,8 @@ async function main() {
     cwd: '/tmp/proj',
     model: 'm1',
   })
-  assert(full.includes('BOLO') || full.includes('| __ )'), 'full art has BOLO shape')
-  assert(full.includes('Bolot'), 'full has Bolot')
+  assert(full.includes('BOLO'), 'full art identifies Bolo')
+  assert(full.includes('──◆──'), 'full banner has the crystal mark')
   assert(full.includes('0.0.1'), 'version')
   assert(full.includes('/tmp/proj'), 'cwd')
 

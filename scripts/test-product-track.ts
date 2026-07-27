@@ -78,14 +78,14 @@ const plainBan = renderWelcomeBanner({
   columns: 40,
   version: '0.0.1',
 })
-assert(!plainBan.includes('Bolot'), 'no art on narrow')
+assert(!plainBan.includes('──◆──'), 'no art on narrow')
 assert(plainBan.includes('BOLO'), 'has BOLO')
 const fullBan = renderWelcomeBanner({
   columns: 120,
   plain: false,
   version: '0.0.1',
 })
-assert(fullBan.includes('Bolot') || fullBan.includes('BOLO'), 'full banner')
+assert(fullBan.includes('──◆──'), 'full banner uses the crystal mark')
 
 const short = formatSessionStatusLine(
   { permissionMode: 'default', model: 'gpt-test', messages: { length: 3 } },

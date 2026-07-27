@@ -81,7 +81,7 @@ const noMascot = renderWelcomeBanner({
   mascot: false,
   env: {} as NodeJS.ProcessEnv,
 })
-assert(!noMascot.includes('Bolot'), 'mascot off')
+assert(!noMascot.includes('──◆──'), 'mascot off')
 
 // F2 compact/cache
 const msgs = [

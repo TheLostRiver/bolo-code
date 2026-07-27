@@ -1,9 +1,14 @@
 /**
- * BOLO welcome identity and the original Bolot terminal mascot.
+ * BOLO welcome identity.
  * P-T9 + F-T9-THEME: plain mode and mascot switches remain supported.
  */
 
 import { resolveTuiTheme } from './theme.ts'
+import {
+  BOLO_CRYSTAL_ASCII_LINES,
+  BOLO_CRYSTAL_UNICODE_LINES,
+  shouldUseAsciiCrystal,
+} from './crystalLogo.ts'
 
 export type BannerOptions = {
   version?: string
@@ -16,25 +21,12 @@ export type BannerOptions = {
   env?: NodeJS.ProcessEnv
   /** 强制显示/隐藏吉祥物行 */
   mascot?: boolean
+  /** Force the portable ASCII crystal instead of Unicode terminal art. */
+  ascii?: boolean
 }
 
 const VERSION_DEFAULT = '0.0.1'
 export const NARROW_TERMINAL_COLUMNS = 80
-
-export const BOLOT_MASCOT_LINES = [
-  '      ▄██████▄',
-  '   ▄██  ●  ●  ██▄',
-  ' <██      ▄      ██>',
-  '   ██   ╰───╯   ██',
-  '    ▀██▄▄▄▄▄▄██▀',
-  '       ▀████▀',
-] as const
-
-const BANNER_ART = [
-  'BOLO CODE',
-  ...BOLOT_MASCOT_LINES,
-  'Bolot · context puffer',
-].join('\n')
 
 const BANNER_ART_NO_MASCOT = 'BOLO CODE'
 
@@ -89,6 +81,8 @@ export function renderWelcomeBanner(options: BannerOptions = {}): string {
   const version = options.version ?? VERSION_DEFAULT
   const env = options.env ?? process.env
   const theme = resolveTuiTheme({ env, mascot: options.mascot })
+  const ascii = shouldUseAsciiCrystal({ ascii: options.ascii, env })
+  const separator = ascii ? ' | ' : ' · '
   const plain = shouldUsePlainBanner({
     plain: options.plain,
     env,
@@ -100,7 +94,7 @@ export function renderWelcomeBanner(options: BannerOptions = {}): string {
     if (options.sessionId) parts.push(`session ${options.sessionId}`)
     else parts.push(`v${version}`)
     if (options.model) parts.push(options.model)
-    return parts.join(' · ')
+    return parts.join(separator)
   }
 
   const info: string[] = [`v${version}`]
@@ -108,6 +102,13 @@ export function renderWelcomeBanner(options: BannerOptions = {}): string {
   if (options.model) info.push(`model ${options.model}`)
   if (options.sessionId) info.push(`session ${options.sessionId}`)
 
-  const art = theme.mascot ? BANNER_ART : BANNER_ART_NO_MASCOT
-  return `${art}\n${info.join('  ·  ')}`
+  const art = theme.mascot
+    ? [
+        'BOLO CODE',
+        ...(ascii
+          ? BOLO_CRYSTAL_ASCII_LINES
+          : BOLO_CRYSTAL_UNICODE_LINES),
+      ].join('\n')
+    : BANNER_ART_NO_MASCOT
+  return `${art}\n${info.join(separator)}`
 }
