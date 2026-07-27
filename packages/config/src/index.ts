@@ -38,6 +38,21 @@ export {
 } from './searxng.ts'
 
 export {
+  DEFAULT_SEARXNG_SETUP_PORT,
+  SEARXNG_COMPOSE_PROJECT,
+  SEARXNG_DOCKER_IMAGE,
+  SEARXNG_SETUP_VERSION,
+  commitSearxngSearchConfig,
+  createSearxngSetupPlan,
+  getSearxngSetupPaths,
+  patchSearxngConfigJsonc,
+  type CommitSearxngSearchConfigResult,
+  type CreateSearxngSetupPlanInput,
+  type SearxngSetupPaths,
+  type SearxngSetupPlan,
+} from './searxngSetup.ts'
+
+export {
   normalizeProviderRegistry,
   mergeProviderConfigJson,
   mergeProvidersMaps,
