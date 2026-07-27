@@ -178,7 +178,31 @@ export async function loadHooksJson(
   return (await readJsonFile<HooksFileJson>(layout.hooksJson)) ?? {}
 }
 
-/** 浅合并 config：后写覆盖前写；provider / providers / agents 深度合并；list 字段拼接去重 */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function mergeSearchConfig(
+  base: unknown,
+  over: unknown,
+): BoloConfigJson['search'] {
+  if (over === undefined) return base as BoloConfigJson['search']
+  if (!isRecord(over)) return over as BoloConfigJson['search']
+  if (!isRecord(base)) return over as BoloConfigJson['search']
+
+  const merged: Record<string, unknown> = { ...base, ...over }
+  if (Object.prototype.hasOwnProperty.call(over, 'searxng')) {
+    const baseSearxng = base.searxng
+    const overSearxng = over.searxng
+    merged.searxng =
+      isRecord(baseSearxng) && isRecord(overSearxng)
+        ? { ...baseSearxng, ...overSearxng }
+        : overSearxng
+  }
+  return merged as BoloConfigJson['search']
+}
+
+/** 浅合并 config：后写覆盖前写；provider / providers / agents / search 深度合并；list 字段拼接去重 */
 export function mergeConfigJson(
   base: BoloConfigJson,
   over: BoloConfigJson,
@@ -195,6 +219,7 @@ export function mergeConfigJson(
     base.agents || over.agents
       ? { ...(base.agents ?? {}), ...(over.agents ?? {}) }
       : undefined
+  const search = mergeSearchConfig(base.search, over.search)
   const providers = mergeProvidersMaps(base.providers, over.providers)
   const defaultProvider =
     over.defaultProvider?.trim() ||
@@ -212,6 +237,7 @@ export function mergeConfigJson(
       : { providers: undefined }),
     ...(defaultProvider ? { defaultProvider } : { defaultProvider: undefined }),
     ...(agents ? { agents } : {}),
+    ...(search !== undefined ? { search } : { search: undefined }),
     ...(extraSkillRoots.length
       ? { extraSkillRoots }
       : { extraSkillRoots: undefined }),

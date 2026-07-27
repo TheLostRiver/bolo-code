@@ -170,6 +170,15 @@ html, body {
   gap: 10px;
 }
 
+.msg.warning {
+  padding: 8px 10px;
+  border-left: 3px solid var(--attention);
+  background: var(--panel);
+  color: var(--fg);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* ── 卡片 ─────────────────────────────────── */
 /* 折叠/展开由 packages 的 buildTimelineCards 决定，这里只呈现 */
 

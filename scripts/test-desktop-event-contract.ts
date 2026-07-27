@@ -112,6 +112,10 @@ async function main() {
       'the branch is dead code and the feature silently does nothing. ' +
       `core emits: ${[...coreTypes].sort().join(', ')}`,
   )
+  assert(
+    rendererTypes.has('warning'),
+    'renderer must display core warning events so invalid config is visible in Desktop',
+  )
 
   // 反向只作提示，不失败：renderer 不必处理每一种事件
   const unhandled = [...coreTypes].filter((t) => !rendererTypes.has(t))

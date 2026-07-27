@@ -4,6 +4,7 @@
 
 import type { HooksConfig } from '../../shared/src/index.ts'
 import type { PermissionMode } from '../../permissions/src/index.ts'
+import type { SearchConfigJson } from './searxng.ts'
 
 export type ProviderConfigJson = {
   /** mock | openai-compatible | openai-responses | anthropic */
@@ -100,6 +101,8 @@ export type BoloConfigJson = {
    * 缺省：enabled、maxConcurrent=3、defaultModel=inherit、maxSpawnDepth=0。
    */
   agents?: AgentsConfigJson
+  /** Explicit local/direct search backends. Absent means no local network tool. */
+  search?: SearchConfigJson
 }
 
 /** config.json → agents 段（可序列化） */

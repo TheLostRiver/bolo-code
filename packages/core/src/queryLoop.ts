@@ -414,7 +414,9 @@ function buildMessagesForQuery(
 export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
   const maxTurns = params.maxTurns ?? 8
   const querySource = params.querySource ?? 'repl_main_thread'
-  const tools = params.tools ?? createBuiltinTools()
+  const tools = (params.tools ?? createBuiltinTools()).filter((tool) =>
+    tool.isEnabled(),
+  )
   const maxPtlRetries =
     params.maxPtlRetries === undefined
       ? DEFAULT_MAX_PTL_RETRIES

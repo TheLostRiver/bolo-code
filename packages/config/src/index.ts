@@ -29,6 +29,15 @@ export {
 } from './types.ts'
 
 export {
+  resolveSearxngSearchConfig,
+  resolveSearxngSearchConfigFromSearch,
+  type SearchConfigJson,
+  type SearxngSearchConfigJson,
+  type ResolvedSearxngSearchConfig,
+  type ResolveSearxngSearchConfigResult,
+} from './searxng.ts'
+
+export {
   normalizeProviderRegistry,
   mergeProviderConfigJson,
   mergeProvidersMaps,

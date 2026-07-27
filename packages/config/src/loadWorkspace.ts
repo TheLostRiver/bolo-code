@@ -48,6 +48,10 @@ import {
   type ProviderProfile,
   type ProviderRegistry,
 } from './providerRegistry.ts'
+import {
+  resolveSearxngSearchConfigFromSearch,
+  type ResolvedSearxngSearchConfig,
+} from './searxng.ts'
 
 export type ResolvedWorkspace = {
   cwd: string
@@ -61,6 +65,8 @@ export type ResolvedWorkspace = {
   mcpConfigWarnings?: string[]
   /** config.json 解析失败等；不阻断会话，但 CLI 必须打印 */
   configWarnings?: string[]
+  /** Validated direct SearXNG config; absent means the tool must not be registered. */
+  searxngSearch?: ResolvedSearxngSearchConfig
   skills: LoadedSkill[]
   plugins: LoadedPlugin[]
   pluginMerge?: MergeResult
@@ -161,6 +167,12 @@ export async function loadWorkspace(
   // 配置写坏了不阻断启动（进不去 CLI 更难修），但必须让用户看见
   const configWarnings = [...userLoaded.warnings, ...projectLoaded.warnings]
   const config = mergeConfigs(userConfig, projectConfig)
+  const searxngResolution = resolveSearxngSearchConfigFromSearch(config.search)
+  if (searxngResolution.status === 'invalid') {
+    configWarnings.push(
+      `${searxngResolution.reason}; WebSearch is disabled until this is fixed`,
+    )
+  }
 
   let hooks = mergeHooks(
     await loadHooksJson(user),
@@ -287,6 +299,9 @@ export async function loadWorkspace(
     mcpServers,
     ...(mcpConfigWarnings.length ? { mcpConfigWarnings } : {}),
     ...(configWarnings.length ? { configWarnings } : {}),
+    ...(searxngResolution.status === 'enabled'
+      ? { searxngSearch: searxngResolution.config }
+      : {}),
     skills,
     plugins,
     pluginMerge,

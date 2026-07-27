@@ -51,6 +51,14 @@ export {
 } from './askUserQuestion.ts'
 
 export {
+  createSearxngSearchTool,
+  SEARXNG_SEARCH_TOOL_NAME,
+  SEARXNG_SEARCH_MAX_RESPONSE_BYTES,
+  SEARXNG_SEARCH_OUTPUT_MAX_CHARS,
+  type CreateSearxngSearchToolOptions,
+} from './searxngSearch.ts'
+
+export {
   createTodoWriteTool,
   TODO_WRITE_TOOL_NAME,
   type TodoStoreRef,

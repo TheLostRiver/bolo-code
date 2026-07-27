@@ -309,6 +309,7 @@ export const TOOL_OUTPUT_BUDGET_BYTES: Readonly<Record<string, number>> = {
   Read: 40_000,
   Grep: 12_000,
   WebFetch: 8_000,
+  WebSearch: 12_000,
 }
 
 /** 预算解析：显式覆盖 > per-tool 表 > 默认 */

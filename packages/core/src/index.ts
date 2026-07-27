@@ -48,10 +48,12 @@ import type {
   LoadedPlugin,
   PluginCommand,
 } from '../../plugins/src/index.ts'
-import type { BoloTool } from '../../tools/src/index.ts'
 import {
   cleanupShellOutputDir,
+  createSearxngSearchTool,
   killAllBackgroundShells,
+  SEARXNG_SEARCH_TOOL_NAME,
+  type BoloTool,
 } from '../../tools/src/index.ts'
 import { createBackgroundShellStore } from '../../shared/src/index.ts'
 import {
@@ -1602,6 +1604,11 @@ async function attachWorkspaceRuntime(
     )
   }
 
+  for (const warning of workspace.configWarnings ?? []) {
+    emit(session, { type: 'warning', message: warning })
+  }
+  attachWorkspaceSearchTool(session, workspace)
+
   let mcp: ConnectMcpResult | undefined
   if (workspace.mcpConfigWarnings?.length) {
     for (const warning of workspace.mcpConfigWarnings) {
@@ -1662,6 +1669,26 @@ async function attachWorkspaceRuntime(
     }
   }
   return mcp
+}
+
+function attachWorkspaceSearchTool(
+  session: BoloSession,
+  workspace: ResolvedWorkspace,
+): void {
+  const baseTools = (
+    session.tools ??
+    createDefaultTools(session.agentDefinitions, {
+      agentPolicy: session.agentPolicy,
+    })
+  ).filter((tool) => tool.name !== SEARXNG_SEARCH_TOOL_NAME)
+  session.tools = workspace.searxngSearch
+    ? [
+        ...baseTools,
+        createSearxngSearchTool(workspace.searxngSearch, {
+          isEnabled: () => session.webSearch !== 'off',
+        }),
+      ]
+    : baseTools
 }
 
 /**
@@ -1728,6 +1755,11 @@ export async function reloadSessionPlugins(
     cwd: session.cwd,
     ensureDefaults: false,
   })
+  for (const warning of workspace.configWarnings ?? []) {
+    warnings.push(warning)
+    emit(session, { type: 'warning', message: warning })
+  }
+  attachWorkspaceSearchTool(session, workspace)
 
   session.plugins = workspace.plugins
   session.skills = workspace.skills

@@ -17,7 +17,12 @@ import {
   createSession,
   dispatchSlashCommand,
 } from '../packages/core/src/index.ts'
-import { createCallModelFromProvider } from '../packages/core/src/deps.ts'
+import { queryLoop } from '../packages/core/src/queryLoop.ts'
+import {
+  createCallModelFromProvider,
+  identityPrepareMessages,
+} from '../packages/core/src/deps.ts'
+import { buildTool } from '../packages/tools/src/index.ts'
 import type {
   CompleteStreamOptions,
   LlmProvider,
@@ -157,6 +162,55 @@ async function main() {
     assert(
       /on|off|auto/i.test(bad.message ?? ''),
       `error lists the valid values: ${bad.message}`,
+    )
+  }
+
+  // ── 7) disabled 工具不得把 schema 发给模型 ──
+  {
+    let seenTools: string[] = []
+    const enabled = buildTool({
+      name: 'EnabledSearchFixture',
+      description: 'enabled fixture',
+      inputJSONSchema: { type: 'object' },
+      isEnabled: () => true,
+      async call() {
+        return { ok: true, output: 'ok' }
+      },
+    })
+    const disabled = buildTool({
+      name: 'DisabledSearchFixture',
+      description: 'disabled fixture',
+      inputJSONSchema: { type: 'object' },
+      isEnabled: () => false,
+      async call() {
+        return { ok: true, output: 'must not run' }
+      },
+    })
+    const terminal = await queryLoop({
+      sessionId: 'sess_ws_enabled_filter',
+      cwd: process.cwd(),
+      hooks: {},
+      messages: [{ role: 'user', content: 'hello' }],
+      systemPromptSections: [],
+      tools: [enabled, disabled],
+      deps: {
+        prepareMessages: identityPrepareMessages,
+        uuid: () => 'id_enabled_filter',
+        callModel: async function* ({ tools }) {
+          seenTools = (tools ?? []).map((tool) => tool.name)
+          yield { type: 'text_delta', text: 'ok' }
+          yield { type: 'done' }
+        },
+      },
+      permissionMode: 'default',
+      askPermission: async () => 'deny',
+      maxTurns: 1,
+    })
+    assert(terminal.reason === 'completed', 'fixture query completes')
+    assert(seenTools.includes('EnabledSearchFixture'), 'enabled schema reaches model')
+    assert(
+      !seenTools.includes('DisabledSearchFixture'),
+      `disabled schema is absent from model request: ${seenTools.join(', ')}`,
     )
   }
 

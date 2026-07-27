@@ -3,8 +3,9 @@
  *
  * Chat Completions 协议上没有 hosted 搜索的位置，但用户把这条线路视为一等公民。
  * Bolo 已经有完整的 MCP client（stdio / http / sse + `${ENV}` 展开），
- * 所以这条腿**不写新的 HTTP 搜索客户端**——搜索作为一个 MCP server 交付，
- * preset 只负责把一行配置写进 mcp.json。
+ * 所以第三方通用搜索服务继续作为 MCP server 交付，preset 只负责把一行配置
+ * 写进 mcp.json。SearXNG 是例外：它有稳定 JSON API，Bolo 直接连接用户显式
+ * 配置的实例，不再为一个不存在的 `/mcp` 桥写占位 preset。
  *
  * 顺带的好处：MCP 搜索结果是 tool-result，会经过 `truncateMiddle` 与
  * per-tool 预算。两条 hosted 线路的结果在 provider 侧就进了上下文，
@@ -88,18 +89,6 @@ export const BUILTIN_SEARCH_PRESETS: readonly SearchPreset[] = [
     label: 'Exa (with API key; higher limits)',
     notes:
       'Queries go to Exa; same policy as the keyless tier. Set EXA_API_KEY in your environment — the key is never written to disk.',
-  },
-  {
-    id: 'searxng',
-    serverName: 'searxng-search',
-    // 占位地址。指向的必须是**桥**，不是 SearXNG 本身——见 notes。
-    url: 'http://127.0.0.1:8080/mcp',
-    auth: 'none',
-    // 不是 local-only：SearXNG 没有自己的索引，它把查询转给上游引擎。
-    privacy: 'upstream-engines',
-    label: 'SearXNG (self-hosted; point the url at your MCP bridge)',
-    notes:
-      'SearXNG does not speak MCP — run a SearXNG-to-MCP bridge and point url at it. Self-hosting hides your IP and cookies from upstream engines; it does not hide the query itself, which SearXNG still forwards to Google, Bing, DuckDuckGo and friends.',
   },
 ]
 
@@ -186,6 +175,8 @@ export type WebSearchStatusInput = {
   dialectId: string
   /** 用户是否已配置提供搜索的 MCP server */
   hasSearchMcpServer: boolean
+  /** 用户是否显式配置了 SearXNG JSON 直连工具 */
+  hasSearxngSearchTool?: boolean
 }
 
 export type WebSearchStatus = {
@@ -203,22 +194,23 @@ export type WebSearchStatus = {
 export function describeWebSearchStatus(
   input: WebSearchStatusInput,
 ): WebSearchStatus {
+  const activeLanes: string[] = []
   if (input.dialectId === 'anthropic-hosted') {
-    return {
-      configured: true,
-      summary: 'web search: on (runs server-side at your provider)',
-    }
+    activeLanes.push('runs server-side at your provider')
   }
   if (input.dialectId === 'openai-responses-hosted') {
-    return {
-      configured: true,
-      summary: 'web search: on (hosted by your provider)',
-    }
+    activeLanes.push('hosted by your provider')
+  }
+  if (input.hasSearxngSearchTool) {
+    activeLanes.push('direct JSON via configured SearXNG')
   }
   if (input.hasSearchMcpServer) {
+    activeLanes.push('via a configured MCP server')
+  }
+  if (activeLanes.length > 0) {
     return {
       configured: true,
-      summary: 'web search: on (via a configured MCP server)',
+      summary: `web search: on (${activeLanes.join('; ')})`,
     }
   }
   if (input.dialectId === 'openrouter-plugin') {

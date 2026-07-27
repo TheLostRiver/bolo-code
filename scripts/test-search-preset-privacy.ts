@@ -67,27 +67,12 @@ async function main() {
     }
   }
 
-  // ── 3) searxng：具体到这条曾经错掉的 preset ──
+  // ── 3) searxng：不再用一个不存在的 MCP 桥占位 ──
   {
     const sx = BUILTIN_SEARCH_PRESETS.find((p) => p.id === 'searxng')
-    assert(sx, 'searxng preset exists')
     assert(
-      sx!.privacy === 'upstream-engines',
-      `SearXNG is a metasearch proxy with no index of its own — queries still reach Google/Bing/etc, got privacy=${sx!.privacy}`,
-    )
-    const prose = `${sx!.label} ${sx!.notes ?? ''}`
-    assert(
-      /upstream|google|bing|engine/i.test(prose),
-      `says queries still reach upstream engines: ${prose}`,
-    )
-    assert(
-      /ip|cookie/i.test(prose),
-      `says what self-hosting actually hides (your IP / cookies): ${prose}`,
-    )
-    // 第二个坑：SearXNG 原生不讲 MCP，直接指向它的端口永远连不上
-    assert(
-      /bridge|adapter|does not speak mcp|mcp server in front/i.test(prose),
-      `warns that SearXNG itself does not speak MCP and needs a bridge: ${prose}`,
+      sx === undefined,
+      'SearXNG uses the native JSON API, not a curated third-party bridge preset',
     )
   }
 
@@ -148,10 +133,9 @@ async function main() {
       /queries|goes to|leaves|upstream/i.test(text),
       `list tells the user where queries go before they enable anything: ${text}`,
     )
-    // 三档都要能在列表里区分出来
     assert(
-      /exa/i.test(text) && /searxng/i.test(text),
-      `lists all presets: ${text}`,
+      /exa/i.test(text) && !/searxng/i.test(text),
+      `lists MCP presets without advertising a SearXNG bridge: ${text}`,
     )
   }
 

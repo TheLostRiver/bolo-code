@@ -475,6 +475,9 @@ window.bolo.onEvent((e) => {
   if (e.type === 'error' && e.message) {
     appendMsg('system', e.message)
   }
+  if (e.type === 'warning' && e.message) {
+    appendMsg('warning', `Warning: ${stripAnsi(e.message)}`)
+  }
 })
 
 let currentPermId = null

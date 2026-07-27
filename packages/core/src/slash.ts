@@ -2945,6 +2945,8 @@ function cmdWebSearch(
     baseUrl: session.providerProfile?.baseUrl,
     model: session.model,
   })
+  const hasDirectSearch =
+    session.tools?.some((tool) => tool.name === 'WebSearch') === true
 
   if (!raw) {
     const plan = resolveWebSearchPlan(dialectId, current, {
@@ -2953,8 +2955,10 @@ function cmdWebSearch(
     // 未配置不是故障；说清现状 + 一步怎么开
     const status = plan.enabled
       ? `on via ${plan.dialect.label}`
-      : dialectId === 'off'
-        ? `not set up on this endpoint — add a search MCP server to enable it`
+      : hasDirectSearch && current !== 'off'
+        ? 'on via configured SearXNG direct JSON'
+        : dialectId === 'off'
+          ? `not set up on this endpoint — configure search.searxng or add a search MCP server`
         : `off (${plan.dialect.label})`
     return {
       ok: true,
@@ -2972,6 +2976,15 @@ Usage: /websearch [on|off|auto]`,
 
   session.webSearch = raw
   const plan = resolveWebSearchPlan(dialectId, raw, { model: session.model })
+  if (hasDirectSearch) {
+    return {
+      ok: true,
+      message:
+        raw === 'off'
+          ? 'websearch set to off (configured SearXNG tool hidden)'
+          : `websearch set to ${raw} (configured SearXNG direct JSON)`,
+    }
+  }
   if (raw === 'on' && !plan.enabled) {
     // 用户明确要开、这条线路给不了：说明原因，而不是假装设置成功了
     return {

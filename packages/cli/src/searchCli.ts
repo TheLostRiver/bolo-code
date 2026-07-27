@@ -17,13 +17,20 @@ import {
   describeSearchPresetPrivacy,
   enableSearchPresetInMcpFile,
   getSearchPreset,
+  loadWorkspace,
   listSearchPresets,
 } from '../../config/src/index.ts'
 import { getUserLayout } from '../../config/src/paths.ts'
+import {
+  detectWebSearchDialectId,
+} from '../../providers/src/index.ts'
+import { describeWebSearchStatus } from '../../config/src/searchPresets.ts'
 
 export type SearchCliOptions = {
   /** 覆盖写入路径（测试用）；缺省写用户级 mcp.json */
   mcpJsonPath?: string
+  /** Workspace used by `status`; defaults to process.cwd(). */
+  cwd?: string
   writeOut?: (s: string) => void
   writeErr?: (s: string) => void
 }
@@ -33,6 +40,7 @@ function usage(): string {
   return [
     'Usage: bolo search <command>',
     '',
+    '  status               show the active hosted/direct/MCP lane',
     '  list                 show available search backends',
     `  enable <preset>      add one to mcp.json (${ids})`,
     '',
@@ -53,6 +61,41 @@ export async function runSearchCli(
   if (!sub) {
     writeErr(usage())
     return 2
+  }
+
+  if (sub === 'status') {
+    const workspace = await loadWorkspace({
+      cwd: options.cwd ?? process.cwd(),
+      ensureDefaults: false,
+    })
+    for (const warning of workspace.configWarnings ?? []) {
+      writeErr(`warn: ${warning}\n`)
+    }
+    const hasSearchMcpServer = workspace.mcpServers.some(
+      (server) =>
+        /search|exa/i.test(server.name) ||
+        server.allowTools?.some((tool) => /search/i.test(tool)) === true ||
+        server.tools?.some((tool) => /search/i.test(tool.name)) === true,
+    )
+    const dialectId = detectWebSearchDialectId({
+      kind: workspace.providerProfile?.kind ?? workspace.providerKind,
+      baseUrl:
+        workspace.providerProfile?.baseUrl ?? workspace.providerBaseUrl,
+      model: workspace.providerModel,
+    })
+    const status = describeWebSearchStatus({
+      dialectId,
+      hasSearchMcpServer,
+      hasSearxngSearchTool: !!workspace.searxngSearch,
+    })
+    writeOut(`${status.summary}\n`)
+    if (workspace.searxngSearch) {
+      writeOut(`endpoint: ${workspace.searxngSearch.endpointUrl}\n`)
+      writeOut(
+        'privacy: SearXNG may forward the query to configured upstream engines\n',
+      )
+    }
+    return 0
   }
 
   if (sub === 'list') {
