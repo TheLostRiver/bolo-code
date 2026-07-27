@@ -33,11 +33,19 @@
 
 **已闭环主线：** headless 日用 → Diff（D0–D7 / U0–U4）· Hooks（H0–H5）· Compact（C0–C5）· Provider（P0–P4.1）· Effort（E0–E9）· Provider UX（CX0–CX8）· 可靠性（R0–R4）· **Durable Runtime（DR0–DR4）** · **Autonomous Road AR1 CLI/TUI runtime UX**。切片明细 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
 
-**当前主线：** **看板 20 项已全部走完。** 后续工作应从 [RELEASE.md](./RELEASE.md) §6.4
-的「已知限制」表里挑——那是目前**唯一有据可依**的待办来源，每条都写明了受阻原因或未验内容。
+**当前主线：** **看板 20 项已全部走完，[RELEASE.md](./RELEASE.md) §6.4 里能独立做的也已做完。**
+待办来源现为 **§14.5 AR-T3+ 续刀候选**——那些是活体跑出来的具体缺口，不是设想。
+§6.4 剩下的四条**都需要所有者或人工介入**（NSIS 方案决策 · 桌面窗口视觉 · 真 TTY 按键 ·
+searxng 桥端点），不是可以自己往前推的东西。
 
-> 三条最值得先动的：**NSIS 安装包**（根因已确证，需所有者决定 PATH 方案或等上游）·
-> **桌面窗口视觉**与 **AskUserQuestion 真 TTY**（两者都只能人工验，自动化覆盖不到）。AR-T1/AR-T2/AR-T3a/AR-T3b/AR-T3+ · **AR2 全段（A0a/A0b/A1/A2/B1/B2/C）** 与 **AR5C-early 分发**（§15）已收口。
+> **等所有者的四条**（不是被遗忘，是无法独立推进）：**NSIS 安装包**（根因已确证，
+> 需决定 PATH 方案或等上游 electron-builder 27）· **桌面窗口视觉** 与
+> **AskUserQuestion 真 TTY 按键**（只能人工验）· **searxng 桥端点**（需用户自建）。
+> 另有一条已书面标注但**刻意未改**：根 `packageManager: pnpm@9.15.0` 与实际的
+> npm workspaces 不符，属仓库级决定。
+>
+> AR-T1/AR-T2/AR-T3a/AR-T3b/AR-T3+ · **AR2 全段（A0a/A0b/A1/A2/B1/B2/C）** 与
+> **AR5C-early 分发**（§15）已收口。
 
 **已插队并收口：** **AR-T · Agent 能力面**（§14）。准入证据：基础设施深度（DR0–DR4 + AR1）已远超能力广度——彼时 agent 无法跨步骤记住计划，也无法启动任何活过一次工具调用的进程。AR2 压缩深化顺延，A0a/A0b 成果不受影响。
 
@@ -117,7 +125,9 @@
 
 **一句话：** 主路径、Diff、Hooks、Compact、多 Provider、Effort、Provider UX、可靠性 R0–R4、Durable Runtime DR0–DR4、AR1 runtime UX、**AR-T1/AR-T2 能力面**已收口。
 
-**下一刀（当前主线）：** **AR3A protocol client/store**（§13.10.2 · 看板第 18 位）。AR2 全段已收口；中段压缩与远端压缩均按证据门控**显式关闭**（后者见 [ADR_COMPACT_REMOTE.md](./ADR_COMPACT_REMOTE.md)）。
+**下一刀（当前主线）：** **§14.5 AR-T3+ 续刀候选**，一次一个最小切片。
+看板 20 项与 AR2 全段均已收口；中段压缩与远端压缩按证据门控**显式关闭**
+（后者见 [ADR_COMPACT_REMOTE.md](./ADR_COMPACT_REMOTE.md)）。
 
 ---
 
@@ -136,6 +146,7 @@
 | [DESKTOP_DESIGN.md](./DESKTOP_DESIGN.md) | **AR3 设计方案**（信息架构 · 交互 · 视觉 · 不做什么） |
 | [ADR_COMPACT_REMOTE.md](./ADR_COMPACT_REMOTE.md) | **AR2C 决定**：compaction 保持 local-only（含重开条件） |
 | [ADR_AR4_EVIDENCE_GATE.md](./ADR_AR4_EVIDENCE_GATE.md) | **AR4 决定**：四个候选逐条书面关闭（含证据与重开条件） |
+| [LOCAL_SEARCH_AND_FETCH.md](./LOCAL_SEARCH_AND_FETCH.md) | **本地搜索/抓取**：可照抄的配置 · 每条路径查询去哪 · 为何不做成 preset |
 | [TOOLS.md](./TOOLS.md) | **内置工具契约**（TodoWrite · 后台 shell） |
 | [RELEASE.md](./RELEASE.md) | **发布契约**（构建 · tarball · 门禁 · 发布流程） |
 | [HOOKS.md](./HOOKS.md) | Hook 契约 |
@@ -504,8 +515,8 @@ MCP 工具失败只吐 `fetch failed`（补 `describeMcpCallError`：指名 serv
 | **AskUserQuestion** | ✅ 已实现（**真 TTY 交互未验**） | 契约 + 工具 + 权限归类 + CLI 控件 + 端到端接线 + 系统提示，全部进门禁。详见 [TOOLS.md](./TOOLS.md) §5.1。**遗留**：控件测试注入 `readKey`，真人在真终端按键、以及 raw-mode 与 REPL 抢 stdin 的问题没验过 |
 | **Desktop 侧 AskUserQuestion** | 无 | core 只持句柄，CLI 已注入一个；Desktop 需注入自己的对话框实现（`session.askUserQuestion`）。归 AR3 |
 | **headless 工具放行粒度** | ✅ 已实现 | `--allowed-tools` / `--disallowed-tools`：精确名 · `mcp__srv__*` 前缀 · `Bash(pattern)`。权限模型本身不缺东西（`SessionPermissionRules` 早就有 always-allow/deny），缺的只是命令行入口，故本刀是**纯解析 + 接线**，不碰匹配器。解析 **fail-closed**（exit 2）——静默丢弃一条 `--disallowed-tools` 会让用户以为拦住了而实际没拦。`--resume` 时与快照规则**叠加**不覆盖。刻意不支持 `Read(src/**)`：本仓 path glob 是全局的，翻过去会连 `Write` 一起放行。详见 [PERMISSIONS.md](./PERMISSIONS.md) §5 |
-| **真·本地搜索路径** | preset 位已留，但需用户自建桥 | SearXNG 不讲 MCP，须自跑桥；真「不出本机」只有 YaCy/自建 Marginalia。Bolo **不代跑第三方进程**（供应链 + 零依赖红线），能做的是把配置写对、去向说清。缺一份可照抄的 compose 文档 |
-| **本地抓取 preset** | 无 | `fetcher-mcp`/`mcp-server-fetch` 可完全本地抓取，但均为 stdio，需先扩 preset 支持 stdio 形状 |
+| **真·本地搜索路径** | ✅ 文档已交付 | [LOCAL_SEARCH_AND_FETCH.md](./LOCAL_SEARCH_AND_FETCH.md)：已核实的 SearXNG compose（含最易卡住的一步——默认只开 `html`，须显式加 `json`，否则桥连上了也只拿得到 HTML）+ mcp.json 形状 + 断网自测。**仍不做 preset**：npm 上至少十个互相竞争的 SearXNG 桥，**没有一个是权威实现**，全是单人维护包——为「不信任第三方」的需求去背书一个未审计的包，方向是反的。文档里的配置片段有门禁守着漂移（`test-docs-config-snippets.ts`）。另记录了一条已评估未实施的替代：**Bolo 直连 SearXNG 的 JSON 接口**，可省掉整个桥，但它反转 `searchPresets.ts` 里一条已写下的架构决定，属所有者决定 |
+| **本地抓取 preset** | ✅ **书面关闭（不做）** | 重估后前提不成立：**抓取本来就是本地的**——`WebFetch` 是 Bolo 自己的工具，直连目标站点；Exa preset 也已用 `allowTools` 把它的远程抓取工具挡在外面。真实缺口只剩「需要执行 JS 才出内容的页面」，而补它意味着 preset 里写一条 `npx -y <包>`，即**下载并执行远端代码**去解决一个信任问题。且 stdio 早就能用（`McpServerConfig.command`），用户手写进 mcp.json 即可——preset 省的只是打字，换来的是一次背书。代价见 [LOCAL_SEARCH_AND_FETCH.md](./LOCAL_SEARCH_AND_FETCH.md) §4。**重开条件**：出现权威且可审计的本地抓取实现，且有具体到「哪个页面拿不到内容」的需求 |
 | **前台命令自动后台化** | 无 | 参考实现有阻塞预算超时自动转后台；语义复杂，暂不做 |
 | **LSP** | 无 | 体量大，归 AR4 证据门控 |
 
