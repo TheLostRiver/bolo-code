@@ -25,7 +25,7 @@
 
 - ROADMAP §0/§13.11、handoff、README 与 autonomous prompt 使用同一队列，
   并在 OI-04 关闭后统一把 OI-06 标为当前，同时保留外部/人工阻塞标记。
-- AR4 ADR 已按正文改为六个候选；RELEASE 与默认门禁现统一为 111 个脚本。
+- AR4 ADR 已按正文改为六个候选；RELEASE 与默认门禁现统一为 112 个脚本。
 - USAGE 已补 `--allowed-tools`、`--disallowed-tools`、`AskUserQuestion`
   与 Web search 的最短入口。
 - `test-dist-build.ts` 守住默认门禁条目和 package manager；
@@ -203,7 +203,7 @@
   成功/部分成功 exit 0，网络/JSON/空结果/全故障 exit 1，用法或未配置 exit 2。
 - `test:search-doctor` 的本地 HTTP fixture 覆盖 config/search 两阶段 HTTP、timeout、
   非 JSON、坏 shape、正常非空、合法空结果、全故障、部分成功与真实 CLI 入口；
-  已进入当前 111 项默认门禁，公网可用性不进入 `npm test`。
+  已进入当前 112 项默认门禁，公网可用性不进入 `npm test`。
 - 源码 CLI 与完整门禁产出的 `dist/bolo.mjs` 均已对真实
   `2026.7.26+b060c780d` 实例运行：8 条有效结果、working engines 与部分故障，
   `partial_success`、exit 0。
@@ -226,6 +226,36 @@
   Bolo config，之后可再次 `setup`。
 - fake runner 专项已进入默认门禁；源码与 `dist/bolo.mjs` 均完成真实
   setup → status → doctor → logs → stop，且没有触碰 OI-X1 的 8888 实例。
+
+### OI-08B · CLI 首次启动仍依赖手工初始化叙述
+
+**状态：CLOSED（代码 `22c0d0c` · 文档同步批次）**
+
+准入证据：
+
+- USAGE、CONFIG 与 handoff 把 `npm run bolo:init` / `scripts/bolo-init.ts` 放在首次启动
+  主路径，最终用户容易理解为 `bolo` 前必须手工初始化。
+- 旧 `loadWorkspace.ensureDefaults` 同时 materialize 用户与项目布局；普通 `bolo` 会在
+  任意 cwd 创建项目 `.bolo/`，只读 load 即使传 false 仍会创建空目录。
+- 顶层没有真正的 `bolo init` 子命令；`bolo init` 会落入 prompt parser 并把 `init`
+  发给模型。
+- 新会话、默认 subagent 侧链与超长 tool-result spill 都写项目
+  `.bolo/sessions`，因此只修文案仍会在正常工作中污染仓库。
+
+关闭证据：
+
+- `materializeUserState` 明确只准备用户布局，项目配置、rules、plugins、memory 始终
+  只读发现；search/status/list 等只读路径不创建目录。
+- 新会话、默认 subagent transcript 与 tool-result spill 统一写入用户级
+  `sessions/workspaces/<workspace-hash>/`；workspace identity 对规范化 cwd 做哈希。
+- `listWorkspaceSessions` 与纯 id resume 按新 workspace、旧项目、cwd 匹配的旧用户路径
+  发现并去重；旧文件不迁移、不覆盖，显式 filePath 继续原位续写。
+- `bolo init [--project] [--cwd <dir>]` 与 `bolo init --user` 已成为真实、幂等、
+  不覆盖的 CLI 子命令；`init` 在通用 prompt parser 前分发，`/init project` 保留。
+- `test-cli-first-run` 覆盖真实 CLI 子进程、fresh cwd 零项目副作用、existing `.bolo`
+  读取、legacy list/resume、无效用户目录、init 幂等，以及 subagent/tool spill 路径。
+- typecheck、专项、dist pack/install、Desktop bundle/真实 launch 与当前 112 项完整
+  `npm test` 在 Windows EXIT=0。
 
 ## 2. 外部资源项（已关闭）
 
@@ -280,7 +310,7 @@ Ctrl-C/Esc 以及 REPL 是否抢占 stdin。需要人在真实终端按键确认
 
 - ROADMAP、RELEASE、AGENT_HANDOFF、USAGE、ARCHITECTURE、AR4 ADR、
   Desktop 与本地搜索专题文档；
-- 根与 Desktop package metadata、111 项默认测试串及 146 个 `test-*.ts` 的注册差集；
+- 根与 Desktop package metadata、112 项默认测试串及 147 个 `test-*.ts` 的注册差集；
 - 历史 SearXNG preset、WebFetch、工具注册、权限分类、runtime client、Desktop IPC/renderer；
 - 代码中的 TODO/FIXME、空 catch 与未实现标记；
 - 当前完整门禁、electron-builder registry 版本与真实 NSIS 构建。

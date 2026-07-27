@@ -12,9 +12,9 @@
 | 层 | 粗估 | 说明 |
 |----|------|------|
 | **Headless 核心** | **~82–90%** | loop/STE/权限/auto/snip/policy/OS sandbox；partial stream fail-closed |
-| **分发（CLI）** | **~85–92%** | `npm i -g` / `npx` 单文件产物 · 零运行时依赖 · pack→install→run E2E 进门禁；见 §15 与 [RELEASE.md](./RELEASE.md) |
+| **分发（CLI）** | **~87–93%** | `npm i -g` / `npx` 单文件产物 · **安装后直接 `bolo`，无需 init** · 零运行时依赖 · pack→install→run E2E 进门禁；见 §15 与 [RELEASE.md](./RELEASE.md) |
 | **Agent 能力面（工具集）** | **~82–88%** | 15 个常驻/可选工具 + 显式 SearXNG `WebSearch`；六条搜索线路均有活体验证，SearXNG 另有可重复 fixture 与上游故障诊断：Bash（含 `run_in_background`）· BashOutput · KillShell · Read/Write/Edit/apply_patch · Glob/Grep · Skill · WebFetch · Agent · **TodoWrite** · **ExitPlanMode** · **AskUserQuestion**；见 §14 |
-| 会话与 CLI | **~91–96%** | JSONL · new/resume 同构 runtime · durable controls/tasks · background FIFO/promotion · versioned runtime protocol · **`--allowed-tools` / `--disallowed-tools` 工具级放行**（headless 不必再整档开 bypass） |
+| 会话与 CLI | **~92–97%** | 用户级 workspace JSONL · 旧项目/用户会话兼容 · 零项目副作用首次启动 · new/resume 同构 runtime · durable controls/tasks · background FIFO/promotion · versioned runtime protocol · **`--allowed-tools` / `--disallowed-tools` 工具级放行** |
 | **扩展面** | **~80–88%** | MCP×3 · Skills · Plugins · WebFetch · OAuth 本地 |
 | **Subagent** | **~89–95%** | Spec v0；durable task/result · overflow FIFO/cancel · safe-boundary delivery · worktree fail-closed |
 | **Rules / Creators** | **~75–85%** | 日用齐 |
@@ -31,12 +31,12 @@
 | **Provider UX · 便利层** | **~95–98%** | **CX0–CX8 已落地**（ultrathink 默认 off）· [PROVIDER_UX.md](./PROVIDER_UX.md) |
 | **产品整体（相对 HC）** | **~74–88%** | 日用高；UI 全家桶另计 |
 
-**已闭环主线：** headless 日用 → Diff（D0–D7 / U0–U4）· Hooks（H0–H5）· Compact（C0–C5）· Provider（P0–P4.1）· Effort（E0–E9）· Provider UX（CX0–CX8）· 可靠性（R0–R4）· **Durable Runtime（DR0–DR4）** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR3 Desktop 产品接线** · **OI-07 SearXNG 上游诊断、`search doctor` 与可选 Docker setup**。切片明细 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
+**已闭环主线：** headless 日用 → Diff（D0–D7 / U0–U4）· Hooks（H0–H5）· Compact（C0–C5）· Provider（P0–P4.1）· Effort（E0–E9）· Provider UX（CX0–CX8）· 可靠性（R0–R4）· **Durable Runtime（DR0–DR4）** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR3 Desktop 产品接线** · **OI-07 SearXNG 上游诊断、`search doctor` 与可选 Docker setup** · **OI-08B CLI 零步骤首次启动**。切片明细 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
 
-**当前主线：** 没有默认的 agent 可闭环开放项。OI-07A 已以 `7754525` 收口
-`unresponsive_engines` 契约，OI-07B 已以 `3e96573` 落地只读 doctor，OI-07C 已以
-`ef03f3d` / `f623ad9` 交付显式 `bolo search searxng setup|status|logs|stop`。
-Docker 仍由用户自行安装；除显式 `setup` 外不创建文件、不启动容器。
+**当前主线：** 没有默认的 agent 可闭环开放项。OI-08B 已以 `22c0d0c` 落地：普通
+`bolo` 自动准备用户状态但不创建项目 `.bolo/`，新会话写用户级 workspace 分桶，
+显式 `bolo init [--project]` / `--user` 才创建模板，旧项目/用户会话继续兼容。
+OI-07 搜索诊断与可选 Docker 管理也已关闭；Docker 仍由用户自行安装。
 
 **外部或人工阻塞项单列，不与 agent 队列混淆：**
 
@@ -50,8 +50,8 @@ Docker 仍由用户自行安装；除显式 `setup` 外不创建文件、不启�
 
 **已插队并收口：** **AR-T · Agent 能力面**（§14）。准入证据：基础设施深度（DR0–DR4 + AR1）已远超能力广度——彼时 agent 无法跨步骤记住计划，也无法启动任何活过一次工具调用的进程。AR2 压缩深化顺延，A0a/A0b 成果不受影响。
 
-**agent 可闭环开放项：** 无。SearXNG Docker 管理已关闭为显式可选能力，不是
-默认安装步骤；真人验收状态见 [OPEN_ISSUES.md](./OPEN_ISSUES.md)。
+**agent 可闭环开放项：** 无。CLI init 不再是默认安装步骤，SearXNG Docker 管理也
+只是显式可选能力；真人验收状态见 [OPEN_ISSUES.md](./OPEN_ISSUES.md)。
 
 ---
 
@@ -128,10 +128,9 @@ Docker 仍由用户自行安装；除显式 `setup` 外不创建文件、不启�
 
 **一句话：** 主路径、Diff、Hooks、Compact、多 Provider、Effort、Provider UX、可靠性 R0–R4、Durable Runtime DR0–DR4、AR1 runtime UX、**AR-T1/AR-T2 能力面**已收口。
 
-**当前主线：** 默认 agent 队列为空。OI-07 已完成正常空结果/全故障/部分成功诊断、
-text/JSON doctor，以及显式、可回滚的 Docker setup/status/logs/stop。OI-X1、doctor
-与 managed setup 均已用真实 SearXNG/upstream 闭环；真人验收仍单列，不以 Electron
-自动化冒充完成。
+**当前主线：** 默认 agent 队列为空。OI-08B 已完成 CLI 零步骤首次启动、用户级
+workspace session store 与旧路径兼容；普通启动不再污染项目。OI-07 的搜索诊断、
+doctor 与可选 Docker 管理也已闭环；真人验收仍单列，不以 Electron 自动化冒充完成。
 中段压缩与远端压缩按证据门控**显式关闭**
 （后者见 [ADR_COMPACT_REMOTE.md](./ADR_COMPACT_REMOTE.md)）。
 
@@ -404,6 +403,7 @@ AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 regis
 | 20 | **AR5A–D**（AR5C 已提前完成） | A ✅ 迁移幂等/失败不覆盖源 · B ✅ 故障注入 · D ✅ 发布门 | clean clone 安装、升级、恢复手册 | full test + cross-platform smoke + security audit | ✅ **看板走完**。发布门含 SBOM · 性能预算 · 安全自查 · **已知限制** · 恢复手册 · 可执行 checklist → [RELEASE.md](./RELEASE.md) §6 |
 | 21 | **OI-04 · SearXNG 直连** | 显式配置 · fail-closed endpoint · 零依赖 JSON 工具 · 动态启用 | `bolo search status` · CLI/Desktop warning · 无第三方桥 | 本地 fixture + 真实 Docker/upstream smoke | ✅ `c058998`；OI-X1 于 2026-07-27 闭环 |
 | 22 | **OI-07 · SearXNG 诊断/部署体验** | A ✅ `unresponsive_engines` 契约 · B ✅ `search doctor` · C ✅ 可选 Docker setup | 区分正常空结果/全故障/部分成功；一键只读诊断；显式 setup 不安装 Docker | fixture + 非空 smoke + rollback/端口预检/零依赖护栏 + 源码/dist live | ✅ A `7754525` · B `3e96573` · C `ef03f3d` / `f623ad9` |
+| 23 | **OI-08B · CLI 零步骤首次启动** | 用户状态 materialize / 项目只读发现 · workspace session store · legacy discovery · 显式 init | 安装后直接 `bolo`；普通启动不创建项目 `.bolo`；旧会话可恢复 | first-run 真实 CLI + spill/subagent 路径 + 112 项完整门禁 | ✅ 代码 `22c0d0c`；文档已同步 |
 
 固定 checkpoint：
 

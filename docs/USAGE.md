@@ -6,32 +6,46 @@
 
 ---
 
-## 1. 安装与初始化
+## 1. 安装与首次启动
 
 **要求：** Node ≥ 20 · npm 11（根 `packageManager` 锁定 11.17.0）
 
 ```bash
-git clone https://github.com/TheLostRiver/bolo-code.git
-cd bolo-code
-npm install
-
-# 创建全局 ~/.bolo 与项目 .bolo（不覆盖已有文件）
-npm run bolo:init
-# 或
-npx tsx scripts/bolo-init.ts
+npm install -g bolo-code
+bolo
+# 或不安装
+npx bolo-code
 ```
 
-初始化后大致有：
+普通 `bolo` 是唯一首次启动主路径，不需要先运行 init。首次启动会按需创建用户级
+`~/.bolo`（或 `$BOLO_CONFIG_DIR`）及默认模板；**不会**仅因为当前项目缺少 `.bolo/`
+就修改仓库。新会话写入用户目录下按 workspace 分桶的 session store。
+
+只有明确需要项目级模板时才显式初始化：
+
+```bash
+bolo init               # 等同 bolo init --project
+bolo init --user        # 显式补齐用户级模板
+```
+
+两条命令都幂等且不覆盖已有文件。源码开发对应入口是
+`npm run dev -- init [--project|--user]`；旧 `npm run bolo:init` 只是仓库开发辅助，
+不是最终用户的启动前置步骤。
+
+首次运行或显式初始化后，相关目录大致有：
 
 ```text
 ~/.bolo/
   config.json      # 用户级（JSONC，可写 // 注释）
   agents/          # 用户 subagent 类型 *.md
-  skills/ hooks/ mcp.json sessions/ memory/ rules/ plugins/ …
+  skills/ hooks/ mcp.json memory/ rules/ plugins/ …
+  sessions/
+    workspaces/<hash>/   # 新会话、tool spill、subagent transcript
 
-<repo>/.bolo/
+<repo>/.bolo/      # 仅已存在或显式 bolo init [--project] 时
   config.json      # 项目级（覆盖用户同名字段）
   agents/ skills/ …
+  sessions/        # 旧项目会话兼容读取；新会话不再默认写这里
 ```
 
 合并优先级：
@@ -252,10 +266,10 @@ set BOLO_DESKTOP_MOCK=1    # 先 mock；真网则 =0 并配好 key
 npm start
 ```
 
-左侧会话列表支持鼠标点击，也支持聚焦后按 `Enter` / `Space`，会从当前项目的
-`.bolo/sessions` 恢复所选会话。当前会话仍在 running、compacting、等待审批或
-stopping 时会拒绝切换；先完成/中断当前工作再切换。恢复只加载历史与 durable
-诊断，**不会自动 replay interrupted work**。
+左侧会话列表支持鼠标点击，也支持聚焦后按 `Enter` / `Space`，会从当前 workspace
+的用户级 session 分桶以及旧项目/旧用户兼容路径中恢复所选会话。当前会话仍在
+running、compacting、等待审批或 stopping 时会拒绝切换；先完成/中断当前工作再切换。
+恢复只加载历史与 durable 诊断，**不会自动 replay interrupted work**。
 
 composer 在空闲时使用 **Send**。turn 运行中仍可输入，并显式选择 **Queue**
 （当前 turn 结束后 FIFO 执行）、**Steer**（下一个安全边界注入）或
@@ -369,7 +383,8 @@ builtin: explore / general / plan / fork
   ← <cwd>/.bolo/agents/*.md
 ```
 
-`bolo:init` / ensure layout 会建空 `agents/`；可参考项目内说明或下面模板。
+`bolo init [--project]` / `bolo init --user` 会在对应作用域创建空 `agents/` 与说明；
+普通启动只准备用户级目录，不会自动创建项目 `.bolo/`。
 
 **最小自定义示例** — `.bolo/agents/reviewer.md`：
 
@@ -514,7 +529,9 @@ CLI：
 
 ## 9. 会话与 resume
 
-- 落盘：`~/.bolo/sessions/` 或项目 sessions（见 [SESSIONS.md](./SESSIONS.md)）  
+- 新会话默认落盘：`~/.bolo/sessions/workspaces/<workspace-hash>/`；旧
+  `<cwd>/.bolo/sessions` 与旧用户 sessions 继续只读发现、list/resume，不自动迁移
+  （见 [SESSIONS.md](./SESSIONS.md)）
 - resume 会尝试恢复 **`providerId` + model + effort**，并与新会话共用当前 workspace 的 hooks / skills / plugins / agent / MCP 装配（缺 key 降级 + 警告）
 - `/diff` 摘要可经 transcript `file_diff` 恢复（无全文 hunk）  
 - 持久化 CLI turn 会在调用模型前写入 `admitted/running`；完成、错误或取消后写 terminal。若进程中断，resume 将未完成 turn 识别为 `interrupted`，但不会自动重放可能已有副作用的工作。

@@ -1,5 +1,10 @@
 # TODO：会话持久化对齐 HelsincyCode（JSONL transcript）
 
+> **历史规划，路径结论已被 OI-08B supersede。** 本文保留 JSONL 迁移过程，不是当前
+> 路径真源。现行默认写入
+> `~/.bolo/sessions/workspaces/<workspace-hash>/`，旧项目/用户 sessions 只读兼容；
+> 以 [SESSIONS.md](./SESSIONS.md) 为准。
+>
 > 状态：**主路径已齐**（A–F 最小 + **J-D 含 T3**：默认只写 jsonl、meta 配置切片、`migrateSessionToJsonl`、R1、list 跟 jsonl）；余量见 §10。  
 > 目标：把 Bolo 从「整文件 JSON 快照」贴向 HC 的 **JSONL 追加 transcript**，服务 resume / 列表 / 崩溃恢复。  
  

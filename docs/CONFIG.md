@@ -18,6 +18,8 @@
   plugins/
     <plugin-id>/bolo.plugin.json
   sessions/
+    workspaces/
+      <workspace-hash>/      # 新会话 JSONL + tool-results + subagent transcript
   rules/
   agents/                   # subagent 类型 *.md + README.md（字段说明）
     README.md
@@ -27,7 +29,8 @@
 
 ### 项目（仓库根下的 `.bolo/`）
 
-与全局**同一套子目录名**，只是作用域是当前项目：
+项目目录是**可选配置层**。普通 `bolo` 只读发现已经存在的 `.bolo/`，不会自动创建它；
+显式项目 init 后使用与全局相近的子目录名：
 
 ```
 <repo>/.bolo/
@@ -37,7 +40,7 @@
   skills/
     <id>/SKILL.md
   plugins/
-  sessions/
+  sessions/                 # 旧项目会话兼容路径；新会话默认不写
   rules/
   agents/                   # 项目 subagent；见 agents/README.md · SUBAGENT_SPEC.md
     README.md
@@ -45,14 +48,16 @@
 
 对照 Claude Code：项目级常落在仓库的 `.claude/`；Bolo 固定用 **`.bolo/`**。
 
-初始化项目布局：
+显式初始化项目布局：
 
 ```bash
-npx tsx scripts/bolo-init.ts
-# 或在代码里 ensureProjectLayout(cwd)
+bolo init                   # 等同 bolo init --project
+bolo init --cwd /path/to/repo
+bolo init --user            # 仅补齐用户级模板
 ```
 
-会写入**带注释**的默认 `config.json`（JSONC）与 `agents/README.md`（不覆盖已有文件）。
+`bolo init` 会写入**带注释**的默认 `config.json`（JSONC）与 `agents/README.md`
+（不覆盖已有文件）。普通首次启动会自动补齐用户级模板，所以最终用户无需先 init。
 
 ## 1.1 `config.json` 支持注释（JSONC）
 
@@ -338,9 +343,10 @@ API：`saveSession` / `loadSession` / `resumeSession`；可选 `createSession({ 
 
 ## 9. Git 建议
 
-项目 `.bolo/config.json` 可提交非密钥字段；密钥用 env。  
+项目 `.bolo/config.json` 可提交非密钥字段；密钥用 env。普通启动不会自动创建项目
+`.bolo/`。
 `BOLO.md` **适合提交**到仓库（团队共享约定）。  
-可在项目 `.gitignore` 增加：
+若仓库仍保留旧项目会话，可在项目 `.gitignore` 增加：
 
 ```
 .bolo/sessions/
@@ -351,8 +357,11 @@ API：`saveSession` / `loadSession` / `resumeSession`；可选 `createSession({ 
 ## 10. 命令
 
 ```bash
-npx tsx scripts/bolo-init.ts          # 初始化全局 + 当前项目布局
+bolo                                  # 首次启动；自动准备用户状态
+bolo init [--project]                 # 可选：显式创建项目模板
+bolo init --user                      # 可选：显式补齐用户模板
 npx tsx scripts/test-config.ts        # 配置单测
+npx tsx scripts/test-cli-first-run.ts # 零步骤首次启动 + session 路径
 npx tsx scripts/test-system-prompt.ts # 系统提示词 + BOLO.md
 npx tsx scripts/test-rules.ts         # .bolo/rules 装载 + 注入
 ```

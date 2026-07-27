@@ -208,20 +208,21 @@ Renderer  ──IPC──►  Main  ──invoke──►  Core Runtime
   hooks.json
   skills/
   plugins/
-  sessions/
+  sessions/workspaces/<hash>/  # 新会话默认写
 
-<project>/.bolo/
+<project>/.bolo/               # 只读发现或显式 bolo init 创建
   config.json      # 覆盖全局
   mcp.json
   hooks.json
   skills/
   plugins/
-  sessions/
+  sessions/         # 旧项目会话兼容读取
 ```
 
 合并：defaults < user < project < 环境变量（API Key 等最高）。
 
-代码：`packages/config` · `loadWorkspace({ cwd })` · `npx tsx scripts/bolo-init.ts`
+代码：`packages/config` · `loadWorkspace({ cwd, materializeUserState })` ·
+`bolo init [--project|--user]`
 
 ## 9. 实现顺序（与 ROADMAP 对齐）
 

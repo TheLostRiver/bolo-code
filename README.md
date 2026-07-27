@@ -27,7 +27,7 @@
 |----|------|------|
 | Headless 核心 | ~82–90% | queryLoop · 权限 · tools · STE；partial stream fail-closed |
 | **Agent 能力面（工具集）** | **~82–88%** | 15 个常驻/可选工具 + **Web search**（hosted、MCP、SearXNG 均已活体验证） |
-| 会话 / CLI | ~92–97% | JSONL · durable runtime · query/action CLI · TTY pager · pipe/JSON automation |
+| 会话 / CLI | ~92–97% | **零步骤首次启动** · 用户级 workspace JSONL · 旧项目会话兼容 · durable runtime · query/action CLI · TTY pager · pipe/JSON automation |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
 | Subagent | ~89–95% | `config.agents` + `agents/*.md` · durable task/result · overflow FIFO/cancel · safe delivery · worktree 保全 |
 | 文件 Diff 日用 | ~95%+ | D0–D7 · U0–U4 |
@@ -40,12 +40,13 @@
 | Electron GUI | ~80–88% | 壳 + 流式 + 权限 + runtime IPC/client + 会话切换/恢复 + composer controls + model/effort + control/tool progress 投影 + 多 provider；真人点击/视觉未验 |
 | 相对 HC 全家桶 UI | 另计 | 不设 100% |
 
-**已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Runtime DR0–DR4 · Autonomous Road AR1 CLI/TUI runtime UX · **AR-T1–T3+ Agent 能力面** · AR2 Compact depth · AR3 Desktop 产品接线 · AR4 evidence gate · AR5 release hardening · **OI-04 SearXNG 直连、OI-X1 真实实例 smoke、OI-07 上游诊断 / `search doctor` / 可选 Docker setup**。
+**已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Runtime DR0–DR4 · Autonomous Road AR1 CLI/TUI runtime UX · **AR-T1–T3+ Agent 能力面** · AR2 Compact depth · AR3 Desktop 产品接线 · AR4 evidence gate · AR5 release hardening · **OI-04 SearXNG 直连、OI-X1 真实实例 smoke、OI-07 上游诊断 / `search doctor` / 可选 Docker setup、OI-08B CLI 零步骤首次启动**。
 
-**当前主线：** 没有默认的 agent 可闭环开放项。SearXNG 的只读
-`bolo search doctor [--json]` 与显式
-`bolo search searxng setup|status|logs|stop` 已落地。Docker 仍须用户自行安装；
-Bolo 不把它列为默认依赖，也不会在未执行 `setup` 时创建文件或启动容器。
+**当前主线：** 没有默认的 agent 可闭环开放项。普通 `bolo` 已是唯一首次启动主路径：
+自动准备用户级 `~/.bolo`，新会话写入用户目录下的 workspace 分桶，不会仅因进入仓库
+就在 cwd 创建 `.bolo/`。项目模板只由显式 `bolo init [--project]` 创建；旧项目会话
+继续可 list/resume。SearXNG 的只读 doctor 与显式 Docker 管理也已落地，Docker 仍不是
+默认依赖。
 
 **人工项：** AskUserQuestion 真 TTY、Desktop 点击与视觉走查需要真人验证，不以自动测试冒充完成。SearXNG 已在真实 Docker 实例和上游引擎上完成 live smoke。
 
@@ -59,13 +60,21 @@ Bolo 不把它列为默认依赖，也不会在未执行 `setup` 时创建文件
 
 ```bash
 npm install -g bolo-code
-bolo --help
+bolo
 ```
 
 或者不装，直接跑：
 
 ```bash
 npx bolo-code
+```
+
+首次运行不需要 `init`。Bolo 会自动准备用户状态，但不会自动修改当前项目；只有明确需要
+项目级配置模板时才运行：
+
+```bash
+bolo init               # 等同 --project，幂等且不覆盖已有文件
+bolo init --user        # 显式补齐用户级模板
 ```
 
 然后配 API key（二选一即可）：
@@ -134,6 +143,8 @@ Key 走环境变量（`OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / profile `apiKeyEn
 
 ```bash
 bolo
+bolo init [--project]
+bolo init --user
 bolo -p "hello"
 bolo --list
 bolo --resume <id>

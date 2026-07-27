@@ -25,13 +25,16 @@ agent 独立解决的问题。** 不要越过外部/人工阻塞项，也不要�
 | 3 | OI-06 · Desktop runtime 生产接线 | ✅ 已收口 |
 | 4 | OI-X1 · 真实 SearXNG live smoke | ✅ 已收口（2026-07-27） |
 | 5 | OI-07 · 上游诊断、doctor 与可选 Docker setup | ✅ 已收口（`7754525` · `3e96573` · `ef03f3d` · `f623ad9`） |
-| 6 | 默认 agent 可闭环队列 | 无；不要自行从历史 TODO 发明任务 |
-| 7 | OI-H1/H2 · 真 TTY、真人点击与视觉走查 | 人工阻塞 |
+| 6 | OI-08B · CLI 零步骤首次启动 | ✅ 已收口（代码 `22c0d0c`） |
+| 7 | 默认 agent 可闭环队列 | 无；不要自行从历史 TODO 发明任务 |
+| 8 | OI-H1/H2 · 真 TTY、真人点击与视觉走查 | 人工阻塞 |
 
 OI-04 已完成零依赖、显式配置、fail-closed 的 SearXNG JSON 搜索契约、fixture、
 CLI/Desktop warning 与文档收口；OI-X1 已补齐真实 Docker 实例和上游搜索证据；
 OI-07 已完成上游故障诊断、只读 doctor 与显式 Docker setup/status/logs/stop。
-Docker 不是默认依赖，公网 live 不进默认门禁。不要重复实现。
+OI-08B 已完成安装后直接 `bolo`、用户级 workspace session store、旧路径兼容与显式
+`bolo init`；普通启动不创建项目 `.bolo/`。Docker 不是默认依赖，公网 live 不进默认
+门禁。不要重复实现。
 
 **一条已知的遗留（不阻塞，顺手可做）：** `AskUserQuestion` 的**真人在真终端按键**没验过——
 控件测试注入 `readKey`，覆盖不到真实 raw-mode 与 REPL 抢 stdin 的问题。

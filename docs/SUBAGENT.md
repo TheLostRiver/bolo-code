@@ -158,14 +158,17 @@ fork 路径不走白名单表，直接 `parent.allTools` 去掉 `Agent`。
 - worktree 路径从 Git repo root 计算；同路径若属于其它仓库会 fail-closed，不跨仓库复用。
 - 保留时 `RunSubagentResult.worktreeCleanup` 与工具摘要返回绝对路径和原因，便于恢复成果。
 - `cleanupWorktree: false` 可显式保留调试。
-- 侧链 transcript 写在**父 cwd** 的 sessions，避免 worktree 清掉后丢文件。
+- 侧链 transcript 按**父 cwd 的 workspace identity**写入用户级 sessions 分桶，避免
+  worktree 清掉后丢文件，也不因启用侧链自动创建项目 `.bolo/`。
 
 ## 刻意不做（P2+）
 
 - swarm / teammate / 跨会话完整 prompt cache 共享
 - 遥测 / GrowthBook
 
-侧链 transcript（可选）：`runSubagent({ writeTranscript: true })` 写入 `{cwd}/.bolo/sessions/agent-{id}.jsonl`；`SubagentStop` 可带 `agent_transcript_path`。
+侧链 transcript（可选）：`runSubagent({ writeTranscript: true })` 写入
+`~/.bolo/sessions/workspaces/<workspace-hash>/agent-{id}.jsonl`；显式传入字符串目录时
+仍按调用方目录写。`SubagentStop` 可带 `agent_transcript_path`。
 
 **S12 / DR3A async：** Agent 工具 `run_in_background` 后台 `runSubagent`；会话 `backgroundAgents.pendingAgents` / `backgroundAgentResults`；持久化主路径先写 `task(admitted/running)`，完成时写 `task_result` 再写 terminal。background Promise **不**异步修改父 `session.messages`。
 

@@ -108,8 +108,8 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 |----|------|----------|
 | Headless 核心 | ~82–90% | queryLoop · STE · 权限 · tools；partial stream fail-closed |
 | **Agent 能力面（工具集）** | **~82–88%** | 15 个常驻/可选工具 + 显式 SearXNG `WebSearch`（ROADMAP §14 · [TOOLS.md](./TOOLS.md)） |
-| **分发（CLI）** | **~85–92%** | `npm i -g` / `npx` 单文件产物；零运行时依赖（ROADMAP §15 · [RELEASE.md](./RELEASE.md)） |
-| 会话 / CLI | ~90–96% | JSONL · new/resume 同构 runtime · durable controls/tasks · background FIFO/promotion · versioned runtime protocol |
+| **分发（CLI）** | **~87–93%** | `npm i -g` / `npx` 单文件产物；安装后直接 `bolo`，无需 init；零运行时依赖（ROADMAP §15 · [RELEASE.md](./RELEASE.md)） |
+| 会话 / CLI | ~92–97% | 用户级 workspace JSONL · 旧项目/用户会话兼容 · 零项目副作用首次启动 · new/resume 同构 runtime · durable controls/tasks |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
 | Subagent | ~89–95% | Spec v0；durable task/result · overflow FIFO/cancel · safe-boundary delivery · worktree 成果保全 |
 | 文件 Diff 日用 | ~95%+ | **D0–D7** |
@@ -123,12 +123,12 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | Electron GUI | ~80–88% | runtime IPC/client、会话切换/恢复、composer controls、model/effort 与 control/tool progress 已真接并经 Electron 自动化；真人点击/视觉未验 |
 | 产品相对 HC 全家桶 | ~74–88% | 日用高；UI 密度另计 |
 
-**已闭环：** Diff · Hooks · Compact（含 AR2 全段）· Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR-T1–T3+ Agent 能力面** · **AR3/OI-06 Desktop 产品接线** · **AR4 evidence gate** · **AR5 release hardening** · **OI-04 SearXNG 直连、OI-X1 真实实例 smoke、OI-07 上游诊断 / doctor / 可选 Docker setup**。
+**已闭环：** Diff · Hooks · Compact（含 AR2 全段）· Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR-T1–T3+ Agent 能力面** · **AR3/OI-06 Desktop 产品接线** · **AR4 evidence gate** · **AR5 release hardening** · **OI-04 SearXNG 直连、OI-X1 真实实例 smoke、OI-07 上游诊断 / doctor / 可选 Docker setup、OI-08B CLI 零步骤首次启动**。
 
-**当前主线：** 默认 agent 可闭环队列为空。OI-07B 已以 `3e96573` 落地只读
-`bolo search doctor [--json]`；OI-07C 已以 `ef03f3d` / `f623ad9` 落地显式
-`bolo search searxng setup|status|logs|stop`，并完成源码/发行产物真实验证。
-Docker 仍须用户预装，不是 Bolo 依赖，也不会被静默启动。
+**当前主线：** 默认 agent 可闭环队列为空。OI-08B 已以 `22c0d0c` 落地：普通
+`bolo` 自动准备用户状态、不创建项目 `.bolo/`；新会话写用户 workspace 分桶；
+`bolo init [--project]` / `--user` 只用于显式模板；旧项目/用户会话继续兼容。
+OI-07 搜索诊断与 Docker 管理仍是已关闭的显式可选能力。
 
 OI-X1 已在 SearXNG `2026.7.26-b060c780d` 真实 Docker 实例完成：JSON API、
 生产配置/status、permission-gated `WebSearch` 与真实上游 URL 全链通过；默认引擎
@@ -347,9 +347,11 @@ npx tsx scripts/test-config.ts
 
 ```bash
 npm install
-npm run bolo:init
 # 配置 ~/.bolo/config.json + API key env
-npx bolo
+npm run dev --
+
+# 可选：只有需要项目模板时
+npm run dev -- init [--project]
 
 # Desktop
 cd apps/desktop && npm install && set BOLO_DESKTOP_MOCK=1 && npm start
@@ -409,6 +411,7 @@ cd apps/desktop && npm install && set BOLO_DESKTOP_MOCK=1 && npm start
 | **AR-T3a** | `ExitPlanMode`：plan 模式补出口；权限层 deny→**ask**（非 allow），批准落 `default` 而非 acceptEdits |
 | **AR-T3b** | Web search 方言表（意图↔wire 分离）· anthropic/responses hosted 两条腿**已活体验证零告警** · compatible 走既有 MCP · 未知块兜底防「搜了没结果」 |
 | **OI-07** | SearXNG `unresponsive_engines` 诊断 · 只读 `search doctor` · 固定 digest/loopback/secret/rollback 的显式 Docker setup/status/logs/stop · 源码/dist 真实 smoke |
+| **OI-08B** | 安装后直接 `bolo` · 用户级 workspace sessions · 旧项目/用户会话兼容 · 显式 `bolo init` · 普通启动零项目副作用 |
 | **AR5C-early** | esbuild 单文件产物 · 发布元数据 · `getBundledSkillsDir()` 双布局 · pack→install→run E2E 进门禁 · [RELEASE.md](./RELEASE.md) |
 
 最新 commit 以 `git log` 为准。

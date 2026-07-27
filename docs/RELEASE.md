@@ -20,6 +20,7 @@ npx bolo-code              →   bolo
 | tarball 内容 | `dist/`（含 `bundled-skills/`）+ `README.md` + `LICENSE` + `package.json`，共 6 项 |
 | Node 要求 | ≥ 20 |
 | bin | `./dist/bolo.mjs`（产物自带 shebang，没有 wrapper 层） |
+| 首次启动 | 安装后直接 `bolo`；自动准备用户状态，不创建项目 `.bolo/` |
 
 ---
 
@@ -216,8 +217,10 @@ git push --follow-tags
 
 ### 6.5 恢复手册
 
-**前提：transcript（`.bolo/sessions/*.jsonl`）是唯一真源，append-only 语义。
-任何恢复动作都不要先删它。**
+**前提：新 transcript 位于
+`~/.bolo/sessions/workspaces/<workspace-hash>/*.jsonl`，旧项目
+`.bolo/sessions/*.jsonl` 与旧用户 sessions 仍可能是兼容真源；它们都采用 append-only
+语义。任何恢复动作都不要先删，也不要为了“统一路径”手工迁移或覆盖。**
 
 | 症状 | 原因 | 怎么办 |
 |---|---|---|
@@ -231,7 +234,7 @@ git push --follow-tags
 ### 6.6 发布 checklist（逐项可执行）
 
 ```bash
-npm test                              # typecheck + 111 个门禁脚本，必须 EXIT=0
+npm test                              # typecheck + 112 个门禁脚本，必须 EXIT=0
 node -e "console.log(JSON.stringify(require('./package.json').dependencies))"
                                       # 必须输出 {}
 npm pack --dry-run                    # 清单只应有 6 项

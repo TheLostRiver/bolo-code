@@ -1,7 +1,9 @@
 # 会话持久化与 Resume（最小可用）
 
 > 对照 HelsincyCode `sessionStorage`：有 session id、落盘、resume。  
-> Bolo：**T3 默认只写 `.jsonl`**（`sessionTranscript.ts`）；旧 `.json` **只读兼容**；`writeJsonSnapshot: true` 可双写。  
+> Bolo：**T3 默认只写 `.jsonl`**（`sessionTranscript.ts`）；OI-08B 起新会话默认写
+> 用户级 workspace 分桶，旧项目/用户路径只读兼容；旧 `.json` **只读兼容**；
+> `writeJsonSnapshot: true` 可双写。
 > **`loadSession` / `resumeSession`（J-C+ / J-D）**：同 id 同时存在 `.json` 与 `.jsonl` 时，**messages 优先 jsonl**（须有至少一条有效 message；空/全坏行回退 JSON）；配置切片优先 JSON，仅 jsonl 时从 **meta 扩展字段**恢复。仅有其一则用其一。  
 > **compact R1：** `loadTranscriptMessages` 只重建**最后一个** `compact_boundary` 之后的 message 链。
 
@@ -9,13 +11,17 @@
 
 | Scope | 路径 |
 |-------|------|
-| **project**（默认写） | `<cwd>/.bolo/sessions/<sessionId>.jsonl` |
-| **user** | `~/.bolo/sessions/<sessionId>.jsonl`（或 `$BOLO_CONFIG_DIR/sessions/`） |
+| **workspace**（默认写） | `~/.bolo/sessions/workspaces/<workspace-hash>/<sessionId>.jsonl`（或 `$BOLO_CONFIG_DIR/sessions/workspaces/...`） |
+| **legacy project**（只读兼容） | `<cwd>/.bolo/sessions/<sessionId>.jsonl` |
+| **legacy user**（只读兼容） | `~/.bolo/sessions/<sessionId>.jsonl`（或 `$BOLO_CONFIG_DIR/sessions/`） |
 | **旧 JSON（只读）** | 同目录 `<sessionId>.json`（resume / list 仍识别） |
 | **可选双写** | `saveSession(..., { writeJsonSnapshot: true })` 仍写 JSON 快照 |
 
-- 目录由 `ensureUserLayout` / `ensureProjectLayout` 创建。
-- 项目 `.bolo/sessions/` 已在仓库 `.gitignore` 中。
+- `getWorkspaceSessionsDir(cwd)` 对规范化 cwd 做 SHA-256 并取前 32 位，避免暴露深层/
+  非 ASCII 路径并控制 Windows 路径长度。
+- 普通 `bolo` 只 materialize 用户状态；缺少项目 `.bolo/` 是正常状态。
+- list/search/status/doctor 等只读路径不会创建用户或项目目录。
+- 旧项目 `.bolo/sessions/` 不迁移、不覆盖；若仍使用，可保留仓库 `.gitignore`。
 - 也可传入绝对 `filePath` / `sessionsDir`（测试或自定义）。
 
 ### 1.1 格式 v2：JSONL（T3 主路径）
@@ -232,16 +238,14 @@ import {
   submitPrompt,
   saveSession,
   loadSession,
-  listProjectSessions,
+  listWorkspaceSessions,
   resumeSession,
   persistSession,
   migrateSessionToJsonl,
 } from '../packages/core/src/index.ts'
 
 // 显式保存（T3：默认只写 jsonl）
-const { path, snapshot, transcriptPath } = await saveSession(session, {
-  scope: 'project',
-})
+const { path, snapshot, transcriptPath } = await saveSession(session)
 
 // 可选：仍双写 JSON
 await saveSession(session, { writeJsonSnapshot: true })
@@ -264,7 +268,7 @@ const { session: s2 } = await resumeSession({
 // 每轮 query 结束后自动写盘（T3：jsonl）
 const session = await createSession({
   cwd,
-  autoSave: true, // 或 { scope: 'user', sessionsDir }
+  autoSave: true, // 默认 workspace；也可显式传 sessionsDir/filePath
   // ...
 })
 ```
@@ -277,7 +281,8 @@ const session = await createSession({
 | `loadTranscriptFile` / `loadTranscriptMessages` | 读 jsonl → entries / **R1** 线性 messages（最后 boundary 之后） |
 | `migrateSessionToJsonl` | 旧 JSON 旁路写出 jsonl（D2；可选 `deleteJson` / `force`） |
 | `setSessionTitle` | 追加 `title` entry（last-wins；不进模型链） |
-| `listProjectSessions` | 扫 `*.json` + `*.jsonl`（path/配置优先 JSON；messageCount/preview 跟可用 jsonl；**title** 来自 jsonl last-wins；updatedAt 取较新；去重；坏文件跳过） |
+| `listWorkspaceSessions` | 合并 workspace 分桶、旧项目目录与 cwd 匹配的旧用户会话；同 id 按新→旧优先，updatedAt 降序，坏文件跳过 |
+| `listProjectSessions` | 兼容别名；当前行为委托 `listWorkspaceSessions` |
 | `resumeSession` | `loadSession` + `createSession` + 恢复 messages/配置 |
 | `resolveSessionFilePath` | 解析「逻辑 JSON」路径（配对用） |
 
@@ -286,7 +291,7 @@ const session = await createSession({
 | HelsincyCode | Bolo（T3） |
 |--------------|------------|
 | JSONL 追加 transcript | **默认只写** `.jsonl` 增量 append；旧 JSON 只读 |
-| 项目哈希目录 + 多类 entry | 固定 `.bolo/sessions/<id>.jsonl`（+ 可选旧 `.json`） |
+| 项目哈希目录 + 多类 entry | 用户级 `sessions/workspaces/<hash>/<id>.jsonl`；旧项目/用户路径兼容读 |
 | 丰富元数据 / 侧链 agent | 主会话 messages + meta 配置切片；entry 最小集 meta/message/boundary/**title** |
 
 Resume 主路径：`loadSessionPair` — **messages 以 jsonl 为准**（有效 message 非空时），JSON 提供 meta/配置；仅 jsonl 时 meta 扩展字段恢复配置；jsonl 仅 meta/坏行时回退 JSON messages。
@@ -306,11 +311,11 @@ npx tsx scripts/test-session-title.ts
 
 ```bash
 # 仓库内（需已安装依赖；tsx 在根 devDependencies）
-# 非交互列项目会话
+# 非交互列当前 workspace 会话
 npx bolo --list
 npx bolo -l
 
-# 无 id：列出当前项目会话（TTY 选择 / 非 TTY 打印列表）
+# 无 id：列出当前 workspace 会话（TTY 选择 / 非 TTY 打印列表）
 npx bolo --resume
 npx bolo -r
 
@@ -331,7 +336,7 @@ npx bolo --resume <id> --print
 npx bolo --resume <id> -p "继续上次任务"
 npx bolo --resume <id> "位置参数也会当作 prompt"
 
-# 指定解析 project sessions 的 cwd
+# 指定 workspace identity 与 legacy project sessions 的 cwd
 npx bolo --resume <id> --cwd /path/to/project
 
 # 只读 runtime query（不会调用模型）
@@ -347,9 +352,9 @@ npx bolo runtime inspect turn <turnId> --resume <id> --json
 | 场景 | 行为 |
 |------|------|
 | `--resume <id>` 成功 | 打印摘要：id、cwd、文件路径、消息数、最近一条 |
-| **`--resume` / `-r` 无 id（已实现 RS1–RS6）** | `listProjectSessions` 扫当前项目 `.bolo/sessions`；TTY 编号选择后 `resumeSession`；非 TTY 打印列表并要求 `--resume <id>`（exit 2）；空列表提示 `bolo` 新建（exit 1） |
-| **`--continue` / `-c`（RS9）** | `listProjectSessions` 第一条（最新）→ `resumeSession`；空列表 exit 1 |
-| **`--list` / `-l`** | 非交互打印 `listProjectSessions`（title 优先于 preview 展示） |
+| **`--resume` / `-r` 无 id（已实现 RS1–RS6）** | `listWorkspaceSessions` 合并新 workspace 与旧兼容路径；TTY 编号选择后 `resumeSession`；非 TTY 打印列表并要求 `--resume <id>`（exit 2）；空列表提示 `bolo` 新建（exit 1） |
+| **`--continue` / `-c`（RS9）** | `listWorkspaceSessions` 第一条（最新）→ `resumeSession`；空列表 exit 1 |
+| **`--list` / `-l`** | 非交互打印 `listWorkspaceSessions`（title 优先于 preview 展示） |
 | **`--migrate-session` / `migrate-session`** | 包装 `migrateSessionToJsonl`；`--force` / `--delete-json` |
 | **`runtime list|inspect`（AR1A）** | 必须显式 `--resume <id|path>` 或 `--continue`；共用 shared query view；无 banner/provider call；`--json` stdout 为单 payload |
 | 另有 prompt（`-p` / 位置参数 / 管道 stdin） | `submitPrompt` 一轮并打印助手文本；默认 autoSave |
@@ -359,9 +364,11 @@ npx bolo runtime inspect turn <turnId> --resume <id> --json
 
 ### 查找顺序（纯 id）
 
-1. `<cwd>/.bolo/sessions/<id>.jsonl` / `.json`（project，`loadSessionPair`）
-2. `~/.bolo/sessions/<id>.*` 或 `$BOLO_CONFIG_DIR/sessions/`（user）
-3. 含路径分隔符或 `.json` / `.jsonl` 后缀 → 当作文件路径
+1. `~/.bolo/sessions/workspaces/<workspace-hash>/<id>.jsonl`（新主路径）
+2. `<cwd>/.bolo/sessions/<id>.jsonl` / `.json`（legacy project）
+3. `~/.bolo/sessions/<id>.*` 或 `$BOLO_CONFIG_DIR/sessions/`（legacy user）
+
+含路径分隔符或 `.json` / `.jsonl` 后缀时直接按显式文件路径读取。
 
 与 `loadSession` / `resumeSession` 一致。
 
@@ -372,6 +379,7 @@ npx tsx scripts/test-session-persist.ts
 npx tsx scripts/test-transcript-append.ts
 npx tsx scripts/test-transcript-load.ts
 npx tsx scripts/test-cli-resume.ts
+npx tsx scripts/test-cli-first-run.ts
 npx tsx scripts/test-session-list.ts
 npx tsx scripts/test-session-title.ts
 ```

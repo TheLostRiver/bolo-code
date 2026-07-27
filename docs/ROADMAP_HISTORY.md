@@ -395,3 +395,20 @@ C4: compact 成功且非 override system 时可选刷新短 skill catalog 段（
 - 不为 pager 引入 Ink/React/ratatui；若现有 TypeScript primitive 无法通过验收，按 AR4 独立举证。
 - 不改变 interrupted 默认只诊断、不 replay 的语义。
 - 不让 JSON/pipe 路径输出 ANSI、clear-screen、banner、provider warning 或人类摘要。
+
+---
+
+## H8. OI-08B · CLI 零步骤首次启动
+
+- 普通 `bolo` 自动 materialize 用户级 `~/.bolo`，项目 `.bolo/` 始终只读发现；缺少项目
+  配置是正常状态，search/status/list 等只读路径不创建目录。
+- 新会话默认写入
+  `~/.bolo/sessions/workspaces/<SHA-256(canonical-cwd)[0:32]>/`；超长 tool-result spill
+  与默认 subagent 侧链使用同一 workspace 分桶，不再自动污染仓库。
+- `listWorkspaceSessions` 与纯 id resume 按 workspace → legacy project → legacy user
+  发现；旧路径不迁移、不覆盖，显式 filePath 继续原位续写。
+- `bolo init [--project] [--cwd <dir>]` 与 `bolo init --user` 提供幂等、不覆盖的显式
+  脚手架；`init` 在 prompt parser 前分发，会话内 `/init project` 保留。
+- `test-cli-first-run` 覆盖真实 CLI 子进程、fresh cwd 零项目副作用、existing `.bolo`
+  读取、旧 session 兼容、无效用户目录失败、显式 init 幂等、subagent 与 tool spill
+  路径。代码批 `22c0d0c` 已通过 112 项完整门禁。

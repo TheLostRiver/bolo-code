@@ -441,7 +441,9 @@ truncateMiddle(text, { maxChars, headFraction=0.6 })
 - **预算表驱动**（`toolOutputBudgetBytes`）：显式覆盖（`ctx.maxToolResultChars`）> per-tool 表（Bash 16k · Read 40k · Grep 12k · WebFetch 8k）> 默认 10k；禁止工具/厂商 if-else 散落
 - **幂等**：已含标注的文本不再二次截断（exec → micro 两层不叠标注）
 - **只在产出时应用一次**，绝不回溯改写历史消息（prompt cache 前缀稳定）
-- spill 不变：完整输出仍写 `.bolo/sessions/tool-results/`，`[full result: path]` 指向完整数据
+- spill：完整输出写用户级
+  `~/.bolo/sessions/workspaces/<workspace-hash>/tool-results/`，不会因长输出自动创建项目
+  `.bolo/`；`[full result: path]` 指向完整数据
 - 应用层：`toolExecution.truncateToolResultOutput`（exec 边界）与 microcompact `truncateToolContent` 共用同一 util；单测 `test-truncate-middle`
 
 ---
