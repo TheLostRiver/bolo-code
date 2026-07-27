@@ -54,7 +54,7 @@ async function main() {
   // bundled-skills 是数据资产，随产物一起发；路径解析见 skills/getBundledSkillsDir
   const skillsSrc = path.join(repoRoot, 'packages', 'bundled-skills')
   const skillsDst = path.join(outDir, 'bundled-skills')
-  await fs.cp(skillsSrc, skillsDst, { recursive: true }).catch(() => {})
+  await fs.cp(skillsSrc, skillsDst, { recursive: true })
 
   await fs.chmod(outFile, 0o755).catch(() => {})
 

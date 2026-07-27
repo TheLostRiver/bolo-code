@@ -67,7 +67,46 @@ async function main() {
     'prepack rebuilds so a tarball can never carry a stale artifact',
   )
 
-  // ── 2) 零运行时依赖红线 ──
+  // ── 2) 仓库工具链与默认门禁不能靠文档约定 ──
+  assert(
+    pkg.packageManager === 'npm@11.17.0',
+    `packageManager must match package-lock.json and the supported npm toolchain, got ${String(pkg.packageManager)}`,
+  )
+  assert(
+    await exists(path.join(repoRoot, 'package-lock.json')),
+    'npm packageManager has a package-lock.json',
+  )
+  assert(
+    !(await exists(path.join(repoRoot, 'pnpm-lock.yaml'))),
+    'the npm workspace must not carry a competing pnpm lockfile',
+  )
+
+  const scripts = (pkg.scripts ?? {}) as Record<string, string>
+  const defaultGate = scripts.test ?? ''
+  for (const required of [
+    'scripts/test-ptl-retry.ts',
+    'scripts/test-desktop-launch.ts',
+  ]) {
+    assert(
+      defaultGate.includes(required),
+      `${required} stays in the default npm test gate`,
+    )
+  }
+
+  // 发布资产复制失败必须让 prepack 失败，不能靠事后的测试碰运气。
+  const buildSource = await fs.readFile(
+    path.join(repoRoot, 'scripts', 'build-dist.ts'),
+    'utf8',
+  )
+  const copyStart = buildSource.indexOf('await fs.cp(')
+  const chmodStart = buildSource.indexOf('await fs.chmod(', copyStart)
+  assert(copyStart >= 0 && chmodStart > copyStart, 'build copies bundled skills before chmod')
+  assert(
+    !buildSource.slice(copyStart, chmodStart).includes('.catch('),
+    'bundled-skills copy errors must propagate out of the build',
+  )
+
+  // ── 3) 零运行时依赖红线 ──
   const deps = (pkg.dependencies ?? {}) as Record<string, string>
   assert(
     Object.keys(deps).length === 0,
@@ -76,7 +115,7 @@ async function main() {
   const devDeps = (pkg.devDependencies ?? {}) as Record<string, string>
   assert('esbuild' in devDeps, 'esbuild is a devDependency')
 
-  // ── 3) bin 指向产物，不再 spawn tsx ──
+  // ── 4) bin 指向产物，不再 spawn tsx ──
   const bin = pkg.bin as Record<string, string> | string
   const binPath = typeof bin === 'string' ? bin : Object.values(bin)[0]!
   assert(
@@ -84,7 +123,7 @@ async function main() {
     `bin must point at the built artifact, got ${binPath}`,
   )
 
-  // ── 4) 构建 ──
+  // ── 5) 构建 ──
   await execFileAsync(
     process.execPath,
     [path.join(repoRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs'), path.join(repoRoot, 'scripts', 'build-dist.ts')],
@@ -104,7 +143,7 @@ async function main() {
   const bundle = await fs.readFile(distEntry, 'utf8')
   assert(bundle.length > 50_000, `bundle looks too small (${bundle.length} bytes)`)
 
-  // ── 5) 产物不得再依赖 tsx / TypeScript 源 ──
+  // ── 6) 产物不得再依赖 tsx / TypeScript 源 ──
   assert(
     !/require\(["']tsx|from ["']tsx["']|tsx\/cli/.test(bundle),
     'bundle must not reference tsx at runtime',
@@ -114,7 +153,7 @@ async function main() {
     'bundle must not import .ts sources at runtime',
   )
 
-  // ── 6) 产物可执行 ──
+  // ── 7) 产物可执行 ──
   const { stdout } = await execFileAsync(process.execPath, [distEntry, '--help'], {
     cwd: repoRoot,
     maxBuffer: 8 * 1024 * 1024,
@@ -122,7 +161,7 @@ async function main() {
   assert(/bolo/i.test(stdout), 'built CLI prints help')
   assert(/--resume/.test(stdout), 'help lists real commands')
 
-  // ── 7) bin 就是产物本身：没有 wrapper，也就没有 wrapper 会走偏 ──
+  // ── 8) bin 就是产物本身：没有 wrapper，也就没有 wrapper 会走偏 ──
   const binAbs = path.join(repoRoot, binPath.replace(/^\.\//, ''))
   assert(await exists(binAbs), `bin file exists at ${binPath}`)
   assert(
@@ -131,7 +170,7 @@ async function main() {
   )
   assert(bundle.startsWith('#!'), 'bundle carries a shebang so it is directly executable')
 
-  // ── 8) bundled-skills 资产随产物一起发（skills 双布局探测依赖它在 dist 下） ──
+  // ── 9) bundled-skills 资产随产物一起发（skills 双布局探测依赖它在 dist 下） ──
   const packagedSkill = path.join(
     repoRoot,
     'dist',
