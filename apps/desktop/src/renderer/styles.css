@@ -364,3 +364,39 @@ select, input[type='text'] {
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* AskUserQuestion 对话框：复用 .perm 遮罩，只补问题列表的排版 */
+.ask-q { margin: 0 0 18px; }
+.ask-q:last-of-type { margin-bottom: 4px; }
+
+.ask-header {
+  display: inline-block;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 8px;
+  margin-bottom: 6px;
+}
+
+.ask-question { font-size: 13.5px; margin: 0 0 8px; }
+
+.ask-option {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 6px;
+  cursor: pointer;
+}
+.ask-option:hover { border-color: var(--accent, var(--fg-dim)); }
+.ask-option-label { font-size: 13px; }
+.ask-option-desc { font-size: 12px; color: var(--fg-dim); margin-top: 2px; }
+
+/* 自由文本：用户始终可以不选、自己写。工具描述里对模型也是这么说的， 
+   所以 UI 必须真的提供这条路——否则那句描述就是假的。 */
+.ask-custom { width: 100%; box-sizing: border-box; margin-top: 4px; }

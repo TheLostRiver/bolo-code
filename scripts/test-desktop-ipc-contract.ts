@@ -65,11 +65,25 @@ async function main() {
     preloadSrc,
     /ipcRenderer\.invoke\(\s*'([^']+)'/g,
   )
+  // 主进程侧**不止一个文件**：桥模块（不 import electron，便于离线测）
+  // 通过注入的 send 回调推送，通道名在它自己的常量里。
+  // 只扫 index.ts 会漏掉那条通道，于是「preload 听着一个没人发的通道」
+  // 这种断路正好从缝里漏过去——本刀接线时就是这样被漏掉的。
+  const mainSideSrc = [
+    mainSrc,
+    await readOrExplain(
+      path.join('apps', 'desktop', 'src', 'main', 'askUserQuestionBridge.ts'),
+      'the main-side push channel for AskUserQuestion lives here, not in index.ts',
+    ),
+  ].join('\n')
+
   // 主进程用一个本地 send() 包装转发，不直接调 webContents.send，
-  // 所以两种写法都要认 —— 只认后者会抽出 0 个通道，让下面的断言变成空的
+  // 所以两种写法都要认 —— 只认后者会抽出 0 个通道，让下面的断言变成空的。
+  // 第三种：以常量形式导出的通道名（桥用的是这种）。
   const sent = new Set([
-    ...collect(mainSrc, /webContents\.send\(\s*'([^']+)'/g),
-    ...collect(mainSrc, /\bsend\(\s*'([^']+)'/g),
+    ...collect(mainSideSrc, /webContents\.send\(\s*'([^']+)'/g),
+    ...collect(mainSideSrc, /\bsend\(\s*'([^']+)'/g),
+    ...collect(mainSideSrc, /_CHANNEL\s*=\s*'([^']+)'/g),
   ])
   const listened = collect(preloadSrc, /ipcRenderer\.on\(\s*'([^']+)'/g)
 
@@ -112,6 +126,18 @@ async function main() {
   assert(
     unheard.length === 0,
     `main process sends event(s) preload never listens for: ${unheard.join(', ')}`,
+  )
+
+  // ④ 反向：preload 听着的通道主进程必须真的会发。
+  //
+  // 这一条原本没有，而它挡的正是最不容易发现的一种断路——
+  // renderer 装好了监听、UI 也写好了，只是那个事件**永远不来**。
+  // 表现是「这个功能没反应」，而不是任何一处报错。
+  const neverSent = [...listened].filter((c) => !sent.has(c))
+  assert(
+    neverSent.length === 0,
+    `preload listens for event(s) the main process never sends: ${neverSent.join(', ')} — ` +
+      `the renderer waits forever and the feature looks dead. main sends: ${[...sent].sort().join(', ')}`,
   )
 
   console.log(

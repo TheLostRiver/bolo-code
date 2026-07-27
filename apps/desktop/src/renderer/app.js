@@ -8,6 +8,8 @@ const promptEl = document.getElementById('prompt')
 const sendBtn = document.getElementById('send')
 const permEl = document.getElementById('perm')
 const permText = document.getElementById('perm-text')
+const askEl = document.getElementById('ask')
+const askQuestionsEl = document.getElementById('ask-questions')
 const settingsEl = document.getElementById('settings')
 const setMode = document.getElementById('set-mode')
 const setMock = document.getElementById('set-mock')
@@ -522,6 +524,126 @@ function respondPerm(decision) {
   void window.bolo.respondPermission(id, decision)
 }
 
+/**
+ * AskUserQuestion 对话框。
+ *
+ * 唯一需要小心的地方：**「没答」不能被表达成一个答案。**
+ * 取消走 `{ cancelled: true }`；提交时若有任何一问没选也没写，
+ * 就不让提交——交一个空 selected 下去，主进程那边会当成「答了」，
+ * 而下游投影只会给出一句 `empty_selection`，用户看不懂发生了什么。
+ */
+let currentAskId = null
+
+function renderAskQuestions(questions) {
+  askQuestionsEl.textContent = ""
+  questions.forEach((q, qi) => {
+    const wrap = document.createElement("div")
+    wrap.className = "ask-q"
+
+    if (q.header) {
+      const chip = document.createElement("div")
+      chip.className = "ask-header"
+      chip.textContent = q.header
+      wrap.appendChild(chip)
+    }
+
+    const title = document.createElement("p")
+    title.className = "ask-question"
+    title.textContent = q.question
+    wrap.appendChild(title)
+
+    const type = q.multiSelect ? "checkbox" : "radio"
+    ;(q.options || []).forEach((opt, oi) => {
+      const row = document.createElement("label")
+      row.className = "ask-option"
+      const input = document.createElement("input")
+      input.type = type
+      input.name = "ask-q-" + qi
+      input.value = opt.label
+      input.dataset.qi = String(qi)
+      input.dataset.oi = String(oi)
+      const text = document.createElement("div")
+      const label = document.createElement("div")
+      label.className = "ask-option-label"
+      label.textContent = opt.label
+      text.appendChild(label)
+      if (opt.description) {
+        const desc = document.createElement("div")
+        desc.className = "ask-option-desc"
+        desc.textContent = opt.description
+        text.appendChild(desc)
+      }
+      row.appendChild(input)
+      row.appendChild(text)
+      wrap.appendChild(row)
+    })
+
+    const custom = document.createElement("input")
+    custom.type = "text"
+    custom.className = "ask-custom"
+    custom.placeholder = "Or answer in your own words"
+    custom.dataset.custom = String(qi)
+    wrap.appendChild(custom)
+
+    askQuestionsEl.appendChild(wrap)
+  })
+}
+
+/** 收集选择。返回 null = 有问题没答，调用方不得提交。 */
+function collectAskSelections(count) {
+  const out = []
+  for (let qi = 0; qi < count; qi++) {
+    const custom = askQuestionsEl.querySelector('[data-custom="' + qi + '"]')
+    const typed = (custom && custom.value ? custom.value : "").trim()
+    if (typed) {
+      out.push({ selected: [typed], custom: true })
+      continue
+    }
+    const checked = [...askQuestionsEl.querySelectorAll('input[name="ask-q-' + qi + '"]')]
+      .filter((i) => i.checked)
+      .map((i) => i.value)
+    if (checked.length === 0) return null
+    out.push({ selected: checked })
+  }
+  return out
+}
+
+window.bolo.onAskUserQuestion((payload) => {
+  const questions = (payload && payload.questions) || []
+  currentAskId = payload && payload.id
+  renderAskQuestions(questions)
+  askEl.hidden = false
+  askEl.dataset.count = String(questions.length)
+})
+
+function closeAsk() {
+  askEl.hidden = true
+  askQuestionsEl.textContent = ""
+}
+
+document.getElementById('ask-cancel')?.addEventListener('click', () => {
+  if (!currentAskId) return
+  const id = currentAskId
+  currentAskId = null
+  closeAsk()
+  // 明确表达「放弃」，而不是交一个空答案
+  void window.bolo.respondAskUserQuestion(id, { cancelled: true })
+})
+
+document.getElementById('ask-submit')?.addEventListener('click', () => {
+  if (!currentAskId) return
+  const count = Number(askEl.dataset.count || "0")
+  const selections = collectAskSelections(count)
+  if (!selections) {
+    // 不静默、不代答：说清还差什么
+    appendMsg("system", "Answer every question, or press Cancel.")
+    return
+  }
+  const id = currentAskId
+  currentAskId = null
+  closeAsk()
+  void window.bolo.respondAskUserQuestion(id, { selections })
+})
 document.getElementById('perm-allow')?.addEventListener('click', () =>
   respondPerm('allow'),
 )

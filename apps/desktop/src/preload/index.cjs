@@ -17,6 +17,10 @@ contextBridge.exposeInMainWorld('bolo', {
   addProvider: (payload) => ipcRenderer.invoke('bolo:addProvider', payload),
   respondPermission: (id, decision) =>
     ipcRenderer.invoke('bolo:permission_response', { id, decision }),
+  // AskUserQuestion：一次 push + 一次回包。cancelled 与 selections 互斥，
+  // 「没答」绝不能被表达成一个空答案——见 askUserQuestionBridge.ts。
+  respondAskUserQuestion: (id, response) =>
+    ipcRenderer.invoke('bolo:ask_user_question_response', { id, ...response }),
   onEvent: (cb) => {
     const handler = (_e, payload) => cb(payload)
     ipcRenderer.on('bolo:event', handler)
@@ -27,5 +31,11 @@ contextBridge.exposeInMainWorld('bolo', {
     ipcRenderer.on('bolo:permission_request', handler)
     return () =>
       ipcRenderer.removeListener('bolo:permission_request', handler)
+  },
+  onAskUserQuestion: (handler) => {
+    ipcRenderer.on('bolo:ask_user_question', handler)
+    return () => {
+      ipcRenderer.removeListener('bolo:ask_user_question', handler)
+    }
   },
 })

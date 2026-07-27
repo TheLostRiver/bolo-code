@@ -4,6 +4,10 @@
  */
 
 import { app, BrowserWindow, ipcMain } from 'electron'
+import {
+  createDesktopAskUserQuestion,
+  type DesktopAskUserQuestionBridge,
+} from './askUserQuestionBridge.ts'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -91,6 +95,22 @@ const desktopSettings: {
 function send(channel: string, payload: unknown) {
   mainWindow?.webContents.send(channel, payload)
 }
+
+/**
+ * AskUserQuestion 的桥。
+ *
+ * `send` 返回**是否真的推出去了**——没有窗口时桥立刻回 `unavailable`，
+ * 而不是挂在那里等一个永远不会来的回包（那表现为 agent 整轮卡死）。
+ * 逻辑与形状在 `askUserQuestionBridge.ts`，不 import electron，可离线测。
+ */
+const askUserQuestionBridge: DesktopAskUserQuestionBridge =
+  createDesktopAskUserQuestion({
+    send: (channel, payload) => {
+      if (!mainWindow || mainWindow.isDestroyed()) return false
+      mainWindow.webContents.send(channel, payload)
+      return true
+    },
+  })
 
 type DesktopPermissionDecision = 'allow' | 'deny' | 'allow_always'
 
@@ -230,6 +250,7 @@ async function ensureSession(forceNew = false) {
     session.deps = productionDeps(session.provider)
   }
   session.askPermission = createDesktopAskPermission()
+  session.askUserQuestion = askUserQuestionBridge.asker
   if (
     desktopSettings.permissionMode &&
     session.permissionMode !== desktopSettings.permissionMode
@@ -520,6 +541,17 @@ function registerIpc() {
     })
   })
 
+  ipcMain.handle('bolo:ask_user_question_response', async (_evt, payload) => {
+    const id = payload?.id
+    if (typeof id !== 'string' || !id) {
+      return { ok: false, error: 'missing question id' }
+    }
+    // 形状不在这里判：桥原样上交，由 projectAskUserQuestionAnswers 拒绝，
+    // 它给的理由更精确。这里只负责认领 id。
+    const accepted = askUserQuestionBridge.resolve(id, payload)
+    return accepted ? { ok: true } : { ok: false, error: 'unknown question id' }
+  })
+
   ipcMain.handle('bolo:permission_response', async (_evt, payload) => {
     const id = payload?.id
     const decision = payload?.decision
@@ -548,6 +580,8 @@ app.whenReady().then(() => {
 app.on('window-all-closed', async () => {
   for (const [, resolve] of pendingPermissions) resolve('deny')
   pendingPermissions.clear()
+  // 没有窗口就没有人可答；挂着的问题收成 cancelled 而不是编一个答案
+  askUserQuestionBridge.cancelAll()
   await destroySession()
   if (process.platform !== 'darwin') app.quit()
 })
