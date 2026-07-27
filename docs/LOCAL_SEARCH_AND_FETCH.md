@@ -96,6 +96,20 @@ curl 'http://127.0.0.1:8888/search?q=test&format=json' | head -c 200
 
 拿到 JSON 才继续往下。
 
+**200 但 `results: []` 仍然不算成功。** 真实上游会按出口 IP 限流、出
+CAPTCHA 或超时；先看 JSON 的 `unresponsive_engines`。必要时在
+`settings.yml` 显式启用当前网络可达的引擎，例如本仓 2026-07 live smoke
+所在网络中 Bing 可用：
+
+```yaml
+engines:
+  - name: bing
+    disabled: false
+```
+
+这不是推荐所有人固定用 Bing，而是提醒：SearXNG 的“服务已启动”与“至少一个
+上游能返回结果”是两个验收点。修改后 restart，再要求 `results` 非空。
+
 ---
 
 ## 3. 把它接进 Bolo
@@ -155,12 +169,16 @@ npm run test:searxng-search
 
 它使用本地 HTTP fixture 覆盖参数、响应解析、错误分类、超时、响应/输出预算、
 配置继承、reload 去重与生产 session 接线。它**没有**连接真实 SearXNG，也没有
-验证上游引擎。
+验证上游引擎；这是可重复的默认门禁，不应改成依赖公网的测试。
 
-真实实例先用 §2 的 `curl` 确认 JSON，再在 Bolo 会话里发起搜索。断网后
+OI-X1 已于 2026-07-27 在官方 Docker 镜像 `2026.7.26-b060c780d` 上完成真实
+live smoke：直接 JSON 查询返回真实 URL；生产 status/session/permission-gated
+`WebSearch` 全链通过，工具调用 2.32s 返回 5 条、6 个 URL。
+
+活体也证明默认引擎会快速出现 Brave 429、Startpage CAPTCHA 和多引擎 timeout；
+原始 JSON 与 Bolo 都如实返回空结果，启用当前网络可达的 Bing 后恢复。断网后
 SearXNG 通常无法取得新结果，因为它仍依赖上游引擎；不能用“服务跑在本机”
-推导“查询内容不出机器”。真实 live smoke 仍列在
-[OPEN_ISSUES.md](./OPEN_ISSUES.md) OI-X1。
+推导“查询内容不出机器”。完整证据见 [OPEN_ISSUES.md](./OPEN_ISSUES.md) OI-X1。
 
 ---
 

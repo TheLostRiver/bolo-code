@@ -96,7 +96,7 @@
 - `bolo search status` 同时列出 hosted、SearXNG direct 与 MCP 线路；配置 warning
   在 CLI 与 Desktop 都可见。
 - `test-searxng-search.ts` 使用本地 HTTP fixture 覆盖请求、解析、错误、预算和生产
-  接线，并已进入独立 script 与 108 项默认门禁。真实实例仍单列 OI-X1。
+  接线，并已进入独立 script 与 108 项默认门禁；OI-X1 已另补真实实例证据。
 
 ### OI-05 · CLI 构建会吞掉 bundled skills 复制失败
 
@@ -160,15 +160,24 @@
 - `test:desktop-runtime-events`、typecheck、IPC/event 契约、dist install、Desktop
   bundle/launch 与完整 `npm test` 全绿。真人点击与视觉验收仍单列 OI-H2。
 
-## 2. 需要外部资源
+## 2. 外部资源项（已关闭）
 
 ### OI-X1 · SearXNG 真实实例 live smoke
 
-**状态：BLOCKED: EXTERNAL**
+**状态：CLOSED（2026-07-27 真实实例）**
 
-本地 fixture 可以验证 Bolo 的请求与解析，但不能证明任意真实 SearXNG 实例已启用
-`search.formats: [html, json]`，也不能替代真实上游引擎行为。需要一个可访问实例 URL
-后才能运行 live smoke。没有 URL 时必须保留“未真连”标记。
+- 官方镜像 `SearXNG 2026.7.26-b060c780d`，digest
+  `sha256:d0aaeb14880e6e92bde1518fcc7261e995783367d63d95203383607bef9c6516`，
+  只绑定 `127.0.0.1:8888`，显式启用 JSON。
+- 直接 JSON 搜索返回 20/26 条真实结果；生产 `bolo search status` 正确显示
+  `/search` endpoint，session 注册 permission-gated `WebSearch`。
+- 生产工具调用 2.32s 返回 5 条、6 个 URL，首条为
+  `https://developers.openai.com/api/docs`，结果来自 Google CSE、DuckDuckGo、
+  Bing；`/websearch off/on` 动态门控通过。
+- 活体同时暴露默认引擎不稳定：Brave 429、Startpage CAPTCHA、DuckDuckGo /
+  Google CSE / Wikipedia 超时曾令同一查询返回 0。启用当前网络可达的 Bing 后，
+  默认 JSON 查询 1.94s 返回 37 条。部署验收必须要求**非空结果**，不能只看 200。
+- `npm run test:searxng-search` 继续 EXIT=0；公网 live 不进入默认门禁。
 
 ## 3. 必须真人验证
 

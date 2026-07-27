@@ -123,17 +123,20 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | Electron GUI | ~80–88% | runtime IPC/client、会话切换/恢复、composer controls、model/effort 与 control/tool progress 已真接并经 Electron 自动化；真人点击/视觉未验 |
 | 产品相对 HC 全家桶 | ~74–88% | 日用高；UI 密度另计 |
 
-**已闭环：** Diff · Hooks · Compact（含 AR2 全段）· Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR-T1–T3+ Agent 能力面** · **AR3/OI-06 Desktop 产品接线** · **AR4 evidence gate** · **AR5 release hardening** · **OI-04 SearXNG 直连**。
+**已闭环：** Diff · Hooks · Compact（含 AR2 全段）· Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR-T1–T3+ Agent 能力面** · **AR3/OI-06 Desktop 产品接线** · **AR4 evidence gate** · **AR5 release hardening** · **OI-04 SearXNG 直连与 OI-X1 真实实例 smoke**。
 
 **当前主线：** [OPEN_ISSUES.md](./OPEN_ISSUES.md) 的 agent 可解决项 OI-01–OI-06
 已全部关闭。Desktop 关键 `control/tool_progress` 投影以 `9f0f687` 收口；
 当前没有可由 agent 独立闭环的开放代码项。
 
+OI-X1 已在 SearXNG `2026.7.26-b060c780d` 真实 Docker 实例完成：JSON API、
+生产配置/status、permission-gated `WebSearch` 与真实上游 URL 全链通过；默认引擎
+会出现 429/CAPTCHA/timeout，部署必须以非空结果验收并配置当前网络可用的引擎。
+
 **其它开放轨（非阻塞）：**
 
 | 项 | 说明 |
 |----|------|
-| OI-X1 | SearXNG live smoke；需要真实实例，fixture 不能冒充 |
 | OI-H1 | `AskUserQuestion` 真 TTY 按键；自动化未覆盖真人终端 |
 | OI-H2 | Desktop 点击、键盘与视觉走查；自动化只证明窗口与 IPC 可用 |
 | LSP / remote compact / 任意中段 rewrite | 已按证据门控关闭；满足专题 ADR 的重开条件前不立项 |

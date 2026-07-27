@@ -201,7 +201,9 @@ Anthropic、OpenAI Responses 等 hosted 线路不需要本地工具；其它 pro
 
 SearXNG 必须启用 JSON format；部署、HTTPS/LAN 限制、隐私去向与验证边界以
 [LOCAL_SEARCH_AND_FETCH.md](./LOCAL_SEARCH_AND_FETCH.md) 为准。仓库 fixture
-已覆盖协议，但真实实例 live smoke 仍未完成。
+持续覆盖协议；真实 Docker 实例与上游引擎 live smoke 也已完成。若 JSON 合法但
+`results` 为空，应先检查 `unresponsive_engines`，再启用当前网络真正可达的引擎；
+仅 HTTP 200 不算搜索配置成功。
 
 `AskUserQuestion` 不是斜杠命令：在 `npx bolo` 的真实 TTY 会话里，模型遇到会
 实质改变结果的歧义时会调用它并显示选择面板。`-p`、pipe 等非交互会话会立即返回

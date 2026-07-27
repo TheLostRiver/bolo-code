@@ -292,7 +292,7 @@ Responses 侧按 `item.type` 分流即可，**永远不要按 id 前缀判断**�
 **③ hosted 条目必须在 cache 断点之前混入。** 否则落在缓存前缀之外，每轮重新计费。
 同理 `max_uses` 是常量：被缓存的 tool 定义里放按调用变化的字段会击穿缓存。
 
-### 3.3 ✅ 验证状态（2026-07）· 五条活体 + 一条本地 fixture
+### 3.3 ✅ 验证状态（2026-07）· 六条线路均有活体证据
 
 **两条 hosted 线路均通过第三方中转实测**——比官方端点更严格，中转还得能正确代理服务端工具。
 
@@ -303,7 +303,7 @@ Responses 侧按 `item.type` 分流即可，**永远不要按 id 前缀判断**�
 | `openai-compatible`（普通端点） | ✅ **活体验证**（DeepSeek 官方 API） | 确认**无** hosted 搜索；不 400；降级措辞正确 |
 | `openrouter-plugin` | ✅ **活体验证**（免费模型，零余额） | `plugins:[{id:'web'}]` 生效；引用正确解析 |
 | `mcp-external` | ✅ **活体验证**（Exa 免密层） | 见 §3.3b —— 连接 → 列工具 → 真调用 → 端到端 |
-| `searxng-direct` | ⚠️ **仅本地 fixture** | 参数、解析、预算、超时、错误、配置/reload/生产接线全绿；**未连接真实实例** |
+| `searxng-direct` | ✅ **活体验证**（真实 Docker/upstream） | JSON API → 生产 status/session → permission-gated `WebSearch` → 真实 URL；另有本地 fixture |
 
 「零告警」是有意义的证据：未知块兜底一次都没触发，说明**没有任何块被静默丢弃**，
 猜的块类型名全部命中。
@@ -361,6 +361,27 @@ OpenRouter Chat Completions 是**嵌套** `annotations[].url_citation.url`。
 **两条腿的能力差异（非 bug）：** Responses 没有独立的结果块，所以拿不到结果计数。
 实现在这种情况下**不填、不伪造**——用户看到查询词与引用，而不是一个编出来的数字。
 
+### 3.3c `searxng-direct` 活体验证（OI-X1）
+
+2026-07-27 使用官方镜像 `SearXNG 2026.7.26-b060c780d`，digest
+`sha256:d0aaeb14880e6e92bde1518fcc7261e995783367d63d95203383607bef9c6516`，
+只绑定 `127.0.0.1:8888` 并显式启用 JSON。
+
+| 步骤 | 实测结果 |
+|------|----------|
+| 实例 | 真实 Docker 服务，空闲约 116 MiB；镜像约 97 MB |
+| 直接 JSON | 首轮两次分别 20/26 条真实结果；URL、engine、snippet 形状命中解析器 |
+| 生产配置 | `bolo search status` 显示 `direct JSON via configured SearXNG` 与最终 `/search` |
+| 会话装配 | 唯一 `WebSearch`，`requiresPermission=true`；`/websearch off/on` 动态门控 |
+| 生产调用 | 2.32s 返回 5 条、6 个 URL；首条为 OpenAI 官方 API 文档 |
+| fixture 回归 | `npm run test:searxng-search` EXIT=0 |
+
+**活体发现的限制：** 初始成功后，Brave 429、Startpage CAPTCHA、DuckDuckGo /
+Google CSE / Wikipedia timeout 曾让同一查询在原始 JSON 中变成 0 条；这不是
+Bolo 解析丢失。逐引擎探测确认该网络的 Bing 可用，显式启用后默认 JSON 查询
+1.94s 返回 37 条，生产调用恢复。部署 smoke 必须要求**非空结果**并查看
+`unresponsive_engines`；HTTP 200 或容器 running 都不能单独证明搜索可用。
+
 ### 3.4 只有真跑才发现的问题
 
 每条线路的活体测试都抓到了假流测不出来的缺陷：
@@ -373,6 +394,7 @@ OpenRouter Chat Completions 是**嵌套** `annotations[].url_citation.url`。
 | MCP 工具失败时只吐两个词 `fetch failed` | `describeMcpCallError()`：指名 server、分类网络/超时、标注可重试；**原文一律保留**（`test-mcp-tool-error.ts`） |
 | 启用「搜索」搭售了一个**远程抓取**工具，模型拿它顶掉了本地 `WebFetch` | `McpServerConfig.allowTools` / `excludeTools`；exa preset 只注册 `web_search_exa`（`test-mcp-tool-filter.ts`） |
 | 高优先级畸形 `search.searxng` 被对象展开吞掉，低优先级 endpoint 仍启用 | 只有合法对象才深合并；畸形覆盖原样交给解析器并禁用工具（`test-searxng-search.ts`） |
+| SearXNG 容器正常、JSON 也是 200，但默认引擎在数次查询后全部 429/CAPTCHA/timeout → 0 结果 | setup/live smoke 必须断言 `results` 非空、展示 `unresponsive_engines`，并配置当前网络可用的引擎 |
 
 倒数第二条同样是端到端跑出来的：`bolo search enable exa` 会一次带进
 `web_search_exa` **和** `web_fetch_exa`，而实测中模型**选了后者**——于是用户的

@@ -22,12 +22,13 @@ agent 独立解决的问题。** 不要越过外部/人工阻塞项，也不要�
 |---|---|---|
 | 1 | OI-01 · 跨文档状态漂移 | ✅ 已收口 |
 | 2 | OI-04 · SearXNG 产品契约矛盾 | ✅ 已收口（`c058998`） |
-| 3 | **OI-06 · Desktop runtime 生产接线** | **当前** |
-| 4 | OI-X1 · 真实 SearXNG live smoke | 外部阻塞 |
+| 3 | OI-06 · Desktop runtime 生产接线 | ✅ 已收口 |
+| 4 | OI-X1 · 真实 SearXNG live smoke | ✅ 已收口（2026-07-27） |
 | 5 | OI-H1/H2 · 真 TTY、真人点击与视觉走查 | 人工阻塞 |
 
-**从 OI-06 开始。** OI-04 已完成零依赖、显式配置、fail-closed 的
-SearXNG JSON 搜索契约、fixture、CLI/Desktop warning 与文档收口；不要重复实现。
+OI-04 已完成零依赖、显式配置、fail-closed 的 SearXNG JSON 搜索契约、fixture、
+CLI/Desktop warning 与文档收口；OI-X1 已补齐真实 Docker 实例和上游搜索证据。
+不要重复实现或把公网依赖塞进默认门禁。
 
 **一条已知的遗留（不阻塞，顺手可做）：** `AskUserQuestion` 的**真人在真终端按键**没验过——
 控件测试注入 `readKey`，覆盖不到真实 raw-mode 与 REPL 抢 stdin 的问题。

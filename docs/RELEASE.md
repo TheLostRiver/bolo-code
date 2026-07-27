@@ -209,7 +209,7 @@ git push --follow-tags
 | **桌面窗口的视觉呈现** | ❌ 未验证 | 应用**能启动**且 renderer 挂载已由 `test-desktop-launch.ts` 实证；但布局观感、Windows 主题切换与 maximize 渲染、键盘走查、长会话滚动**没有肉眼验证过** |
 | **`AskUserQuestion` 的真 TTY 交互** | ❌ 未验证 | 控件逻辑测试注入 `readKey`，覆盖不到真实 raw-mode 与 REPL 抢 stdin |
 | **`mcp-external` 搜索** | ⚠️ 仅验过 Exa | Exa 免密层已真连；其它 MCP 搜索服务仍取决于外部端点 |
-| **SearXNG 直连** | ⚠️ 仅本地 fixture | JSON 请求、解析、预算、错误与生产接线已自动验证；真实实例及上游引擎**从未真连过** |
+| **SearXNG 直连** | ✅ 真实实例已验证 | `2026.7.26-b060c780d` Docker 实例：JSON API、生产 status/session/`WebSearch` 与真实 URL 全链通过；默认引擎仍可能 429/CAPTCHA/timeout，部署必须做非空结果 smoke |
 | **中段 compact** | 🚫 显式不启用 | 契约就绪但产品代码零调用；两个参考实现都没真正跑过它 → §13.10.2 |
 | **远端 compaction** | 🚫 显式不实施 | 见 [ADR_COMPACT_REMOTE.md](./ADR_COMPACT_REMOTE.md) |
 | **token 估算对非 CJK 的高估** | ⚠️ 已收窄，仍有偏差 | 最差 **+19.5%**（JSON 工具 schema），英文散文已从 +41% 降到 +8.9%。做法：删掉前提被推翻的「密文」类，改分散文 4.5 / 其余 3.5 字符/token。剩余偏差是无依赖启发式的固有上限——JSON 真实 4.18 而日志 3.31，一个常量服务不了这个跨度，只能贴着最密的一类取。方向安全（提前压缩），代价是多花摘要调用 → `test-token-estimate-accuracy.ts` |
