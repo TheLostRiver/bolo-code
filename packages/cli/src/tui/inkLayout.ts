@@ -1,23 +1,21 @@
-/**
- * F-T8-INK：Ink 等价布局骨架（无 ink 依赖，纯文本框 + 区域）。
- * plain 回退仍走 banner/status 旧路径。
- */
+/** Compact one-time welcome panel. The live input is rendered elsewhere. */
 
 import {
   getTerminalColumns,
   isNarrowTerminal,
-  renderWelcomeBanner,
   type BannerOptions,
 } from './banner.ts'
-import {
-  formatSessionStatusLine,
-  type StatusLineSession,
-} from './statusLine.ts'
+import type { StatusLineSession } from './statusLine.ts'
 import {
   resolveTuiTheme,
   type TuiThemeId,
   type ResolveTuiThemeOptions,
 } from './theme.ts'
+import {
+  clipTerminalText,
+  measureTerminalText,
+  padTerminalText,
+} from './terminalText.ts'
 
 export type InkLayoutOptions = BannerOptions &
   ResolveTuiThemeOptions & {
@@ -29,25 +27,26 @@ export type InkLayoutOptions = BannerOptions &
     hint?: string
   }
 
-function hline(width: number, ch = '─'): string {
-  return ch.repeat(Math.max(8, width))
+function row(content: string, width: number): string {
+  return `│${padTerminalText(content, width - 2)}│`
 }
 
-function row(content: string, width: number): string {
+function border(
+  left: string,
+  right: string,
+  width: number,
+  label = '',
+): string {
   const inner = width - 2
-  const plain = content.replace(/\x1b\[[0-9;]*m/g, '')
-  let body = content
-  if (plain.length > inner) {
-    body = plain.slice(0, Math.max(0, inner - 1)) + '…'
-  } else {
-    body = content + ' '.repeat(Math.max(0, inner - plain.length))
-  }
-  return `│${body}│`
+  const prefix = label ? `─ ${label} ` : ''
+  return `${left}${prefix}${'─'.repeat(
+    Math.max(0, inner - measureTerminalText(prefix)),
+  )}${right}`
 }
 
 /**
- * 渲染「欢迎区 / 状态 / 消息预览 / 输入提示」四段框。
- * 窄终端或 plain → 退回 renderWelcomeBanner + status 行。
+ * Render a compact identity/workspace panel. It deliberately does not contain
+ * an input hint that looks interactive; runRepl owns the real input box.
  */
 export function renderInkLayout(opts: InkLayoutOptions = {}): string {
   const theme = resolveTuiTheme(opts)
@@ -57,68 +56,40 @@ export function renderInkLayout(opts: InkLayoutOptions = {}): string {
     theme.id === 'plain'
 
   if (plain) {
-    const ban = renderWelcomeBanner({
-      ...opts,
-      plain: true,
-    })
-    const lines = [ban]
-    if (opts.session) {
-      lines.push(
-        formatSessionStatusLine(opts.session, {
-          columns: opts.columns,
-          env: opts.env,
-        }),
-      )
-    }
-    if (opts.hint) lines.push(opts.hint)
+    const lines = [`BOLO v${opts.version ?? '0.0.1'}`]
+    if (opts.cwd) lines.push(clipTerminalText(opts.cwd, getTerminalColumns(opts)))
+    if (opts.model) lines.push(`model ${opts.model}`)
     return lines.join('\n')
   }
 
-  const cols = Math.min(100, Math.max(40, getTerminalColumns(opts)))
-  const w = cols
-  const top = `┌${hline(w - 2)}┐`
-  const mid = `├${hline(w - 2)}┤`
-  const bot = `└${hline(w - 2)}┘`
-
-  const ban = renderWelcomeBanner({
-    ...opts,
-    plain: false,
-    columns: 120, // 框内再裁
-  })
-  const banLines = ban.split(/\r?\n/)
-  const out: string[] = [top]
-  out.push(row(' BOLO · session layout (ink-equiv)', w))
-  out.push(mid)
-  for (const line of banLines) {
-    out.push(row(' ' + line, w))
-  }
-  if (opts.session) {
-    out.push(mid)
-    out.push(
-      row(
-        ' ' +
-          formatSessionStatusLine(opts.session, {
-            columns: 120,
-            env: opts.env,
-          }),
-        w,
-      ),
-    )
-  }
+  const cols = getTerminalColumns(opts)
+  const w = Math.min(112, Math.max(36, cols - 2))
+  const out: string[] = [
+    border('╭', '╮', w, `BOLO v${opts.version ?? '0.0.1'}`),
+  ]
+  if (opts.cwd) out.push(row(`  ${opts.cwd}`, w))
+  const detail = [
+    opts.model ? `model ${opts.model}` : '',
+    opts.sessionId ? `session ${opts.sessionId}` : '',
+  ]
+    .filter(Boolean)
+    .join('  ·  ')
+  if (detail) out.push(row(`  ${detail}`, w))
   const preview = opts.messagePreview?.filter(Boolean).slice(-5) ?? []
   if (preview.length) {
-    out.push(mid)
-    out.push(row(' messages', w))
+    out.push(row('', w))
     for (const p of preview) {
-      out.push(row('  ' + p.replace(/\s+/g, ' ').slice(0, w - 6), w))
+      out.push(row(`  ${p.replace(/\s+/g, ' ')}`, w))
     }
   }
-  out.push(mid)
-  out.push(row(' ' + (opts.hint ?? 'bolo> (type /help)'), w))
-  out.push(bot)
-  if (theme.ansi) {
-    // 轻量：整块 dim 边框观感由调用方可选；此处不强制染色以免测不稳定
-  }
+  out.push(
+    border(
+      '╰',
+      '╯',
+      w,
+      clipTerminalText(opts.hint ?? '/help commands', Math.max(8, w - 8)),
+    ),
+  )
   return out.join('\n')
 }
 

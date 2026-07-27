@@ -77,6 +77,37 @@ export {
   type SessionEventPrinter,
 } from './tui/formatSessionEvent.ts'
 export {
+  measureTerminalText,
+  clipTerminalText,
+  padTerminalText,
+  wrapTerminalText,
+  stripTerminalAnsi,
+  splitTerminalGraphemes,
+  terminalGraphemeWidth,
+} from './tui/terminalText.ts'
+export {
+  applyTuiInputKey,
+  canUseTuiInput,
+  createTuiInputState,
+  readTuiInput,
+  renderTuiInputBox,
+  renderUserMessage,
+  shouldUseDynamicTui,
+  type ApplyTuiInputKeyResult,
+  type ReadTuiInputResult,
+  type RenderedTuiInputBox,
+  type TuiInputAction,
+  type TuiInputKey,
+  type TuiInputState,
+  type TuiInputStatus,
+} from './tui/inputBox.ts'
+export {
+  createTurnActivityIndicator,
+  formatTurnActivityLine,
+  type TurnActivityEvent,
+  type TurnActivityIndicator,
+} from './tui/turnActivity.ts'
+export {
   createTtyAskPermission,
   parsePermissionAnswer,
   formatPermissionPrompt,

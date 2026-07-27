@@ -18,6 +18,7 @@ import { createTtyAskUserQuestion } from './tui/askUserQuestionTty.ts'
 import { renderWelcomeBanner } from './tui/banner.ts'
 import { formatSessionStatusLine } from './tui/statusLine.ts'
 import { renderInkLayout } from './tui/inkLayout.ts'
+import { shouldUseDynamicTui } from './tui/inputBox.ts'
 import {
   attachSessionEventPrinter,
   createCliOnEvent,
@@ -59,6 +60,11 @@ export async function runNewSessionCli(
   const writeErr = opts.writeErr ?? ((s) => process.stderr.write(s))
   const cwd = opts.cwd ?? process.cwd()
   const isTty = opts.isTty ?? process.stdin.isTTY === true
+  const dynamicTui =
+    opts.print !== true && shouldUseDynamicTui({ isTty })
+  const color =
+    process.env.NO_COLOR === undefined &&
+    process.env.BOLO_THEME?.trim().toLowerCase() !== 'plain'
 
   const thinkingGate: { session: BoloSession | null } = { session: null }
   const { printer, onEvent } = createCliOnEvent({
@@ -66,6 +72,9 @@ export async function runNewSessionCli(
     writeErr,
     onSessionEvent: opts.onSessionEvent,
     showThinking: () => thinkingGate.session?.showThinking !== false,
+    timeline: dynamicTui,
+    color,
+    columns: process.stdout.columns,
     explainError: createSessionErrorExplainer(thinkingGate),
   })
 
@@ -149,7 +158,7 @@ export async function runNewSessionCli(
           providerId: session.providerId,
           providerKind: session.provider?.id,
         },
-        hint: 'bolo> type a message or /help · /provider',
+        hint: '/help commands · /provider model',
       })
       writeOut(layout.endsWith('\n') ? layout : `${layout}\n`)
     } else {

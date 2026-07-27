@@ -48,15 +48,17 @@ export function getTerminalColumns(opts?: {
   if (typeof opts?.columns === 'number' && opts.columns > 0) {
     return Math.floor(opts.columns)
   }
-  const env = opts?.env ?? process.env
-  const fromEnv = Number(env.COLUMNS)
-  if (Number.isFinite(fromEnv) && fromEnv > 0) return Math.floor(fromEnv)
   const sc =
     opts?.stdoutColumns ??
     (typeof process.stdout?.columns === 'number'
       ? process.stdout.columns
       : undefined)
   if (typeof sc === 'number' && sc > 0) return sc
+  // COLUMNS is a useful non-TTY fallback, but wrappers can leave it stale.
+  // A live terminal's reported width is authoritative.
+  const env = opts?.env ?? process.env
+  const fromEnv = Number(env.COLUMNS)
+  if (Number.isFinite(fromEnv) && fromEnv > 0) return Math.floor(fromEnv)
   return 120
 }
 

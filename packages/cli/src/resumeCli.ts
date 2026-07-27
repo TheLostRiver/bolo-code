@@ -27,10 +27,19 @@ import { createSessionErrorExplainer } from './explainSessionError.ts'
 import { createTtyAskPermission } from './tui/askPermissionTty.ts'
 import { applyToolSpecsToSession, type ToolSpecCliArgs } from './applyToolSpecs.ts'
 import { renderWelcomeBanner } from './tui/banner.ts'
+import { renderInkLayout } from './tui/inkLayout.ts'
 import {
   createSessionEventPrinter,
   type SessionEventPrinter,
 } from './tui/formatSessionEvent.ts'
+import {
+  readTuiInput,
+  shouldUseDynamicTui,
+} from './tui/inputBox.ts'
+import {
+  createTurnActivityIndicator,
+  type TurnActivityIndicator,
+} from './tui/turnActivity.ts'
 import { formatSessionStatusLine } from './tui/statusLine.ts'
 import {
   runArrowPicker,
@@ -424,16 +433,33 @@ export function createCliOnEvent(opts: {
    * 可传函数以绑定 session.showThinking（/thinking off）。
    */
   showThinking?: boolean | (() => boolean)
+  timeline?: boolean
+  color?: boolean
+  columns?: number
+  activity?: TurnActivityIndicator
   /** 把 provider 原始错误变成「怎么了 + 下一步」（晚绑定到活跃 session） */
   explainError?: (message: string) => string
 }): {
   printer: SessionEventPrinter
   onEvent: (e: SessionEvent) => void
 } {
+  const activity =
+    opts.timeline === true
+      ? (opts.activity ??
+        createTurnActivityIndicator({
+          writeOut: opts.writeOut,
+          color: opts.color,
+          columns: () => process.stdout.columns ?? opts.columns,
+        }))
+      : undefined
   const printer = createSessionEventPrinter({
     writeOut: opts.writeOut,
     writeErr: opts.writeErr,
     showThinking: opts.showThinking,
+    timeline: opts.timeline,
+    color: opts.color,
+    columns: opts.columns,
+    activity,
     ...(opts.explainError ? { explainError: opts.explainError } : {}),
   })
   return {
@@ -455,6 +481,11 @@ export async function resumeFromIdOrPath(
   const writeOut = opts.writeOut ?? ((s) => process.stdout.write(s))
   const writeErr = opts.writeErr ?? ((s) => process.stderr.write(s))
   const isTty = opts.isTty ?? process.stdin.isTTY === true
+  const dynamicTui =
+    opts.print !== true && shouldUseDynamicTui({ isTty })
+  const color =
+    process.env.NO_COLOR === undefined &&
+    process.env.BOLO_THEME?.trim().toLowerCase() !== 'plain'
 
   // 打印机创建早于 session；绑定后读 session.showThinking（/thinking）
   const thinkingGate: { session: BoloSession | null } = { session: null }
@@ -464,6 +495,9 @@ export async function resumeFromIdOrPath(
     onSessionEvent: opts.onSessionEvent,
     onEvent: opts.onEvent,
     showThinking: () => thinkingGate.session?.showThinking !== false,
+    timeline: dynamicTui,
+    color,
+    columns: process.stdout.columns,
     explainError: createSessionErrorExplainer(thinkingGate),
   })
 
@@ -555,7 +589,12 @@ export async function runOnePrompt(
   const writeOut = options?.writeOut ?? ((s) => process.stdout.write(s))
   const writeErr = options?.writeErr ?? ((s) => process.stderr.write(s))
   const printer = getSessionEventPrinter(session)
-  printer?.beginTurn()
+  let terminalReason = 'failed'
+  printer?.beginTurn({
+    prompt,
+    echoUser: true,
+    activity: !prompt.trimStart().startsWith('/'),
+  })
   const before = session.messages.length
   try {
     const result = await submitUserInput(session, prompt, {
@@ -565,10 +604,12 @@ export async function runOnePrompt(
     })
 
     if (result.type === 'empty') {
+      terminalReason = 'empty'
       return { terminalReason: 'empty', assistantText: '' }
     }
 
     if (result.type === 'slash') {
+      terminalReason = 'slash'
       // U1：TTY 且 /diff 请求面板 → 交互 diffPane；失败回落文本
       if (
         result.interactiveDiff &&
@@ -731,6 +772,7 @@ export async function runOnePrompt(
     }
 
     const terminal = result.terminal
+    terminalReason = terminal.reason
     const assistantText = lastAssistantText(session.messages, before)
     // T4：已流式打印 text 则不再整段回放；未流式则整段输出
     if (assistantText && !printer?.didStreamText()) {
@@ -744,7 +786,7 @@ export async function runOnePrompt(
     }
     return { terminalReason: terminal.reason, assistantText }
   } finally {
-    printer?.endTurn()
+    printer?.endTurn({ terminalReason })
   }
 }
 
@@ -785,10 +827,7 @@ export async function takeNextQueuedReplPrompt(
   }
 }
 
-/**
- * 极简 REPL：一行输入 → submitUserInput（含 slash）→ 流式/工具行
- * 每次 prompt 前打印 T3 状态行；权限 ask 共用同一 readline。
- */
+/** Interactive REPL with a real TTY input surface and a plain fallback. */
 export async function runRepl(
   session: BoloSession,
   options?: {
@@ -801,22 +840,33 @@ export async function runRepl(
 ): Promise<void> {
   const writeOut = options?.writeOut ?? ((s) => process.stdout.write(s))
   const writeErr = options?.writeErr ?? ((s) => process.stderr.write(s))
-  writeOut(
-    'Interactive mode (empty line or /exit to quit). Type /help for commands.\n',
-  )
-
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-    terminal: true,
-  })
+  const isTty = options?.isTty ?? process.stdin.isTTY === true
+  const dynamicTui = shouldUseDynamicTui({ isTty })
+  const color =
+    process.env.NO_COLOR === undefined &&
+    process.env.BOLO_THEME?.trim().toLowerCase() !== 'plain'
+  const history: string[] = []
+  const rl = dynamicTui
+    ? null
+    : readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+        terminal: isTty,
+      })
+  if (!dynamicTui) {
+    writeOut(
+      'Interactive mode (/exit to quit). Type /help for commands.\n',
+    )
+  } else {
+    writeOut('\n')
+  }
 
   let replClosed = false
   const question = (
     q: string,
     signal?: AbortSignal,
   ): Promise<string | null> => {
-    if (replClosed || signal?.aborted) return Promise.resolve(null)
+    if (!rl || replClosed || signal?.aborted) return Promise.resolve(null)
     return new Promise<string | null>((resolve, reject) => {
       let settled = false
       const finish = (answer: string | null) => {
@@ -848,9 +898,10 @@ export async function runRepl(
     })
   }
 
-  // T5/U2：REPL 内权限与输入共用 readline；有 files 时开审批面板并 pause rl
-  const isTty = options?.isTty ?? process.stdin.isTTY === true
+  // Plain fallback shares readline with permission prompts. Dynamic input is
+  // short-lived and has already released stdin before a turn starts.
   const pauseRl = () => {
+    if (!rl) return
     try {
       rl.pause()
     } catch {
@@ -858,6 +909,7 @@ export async function runRepl(
     }
   }
   const resumeRl = () => {
+    if (!rl) return
     try {
       rl.resume()
     } catch {
@@ -890,12 +942,13 @@ export async function runRepl(
     }
     replClosed = true
     writeOut('^C\n')
-    rl.close()
+    rl?.close()
   }
   const onSigint = () => {
     void interrupt()
   }
-  rl.on('SIGINT', onSigint)
+  if (dynamicTui) process.on('SIGINT', onSigint)
+  else rl?.on('SIGINT', onSigint)
   const onExternalAbort = () => {
     void interrupt()
   }
@@ -903,17 +956,48 @@ export async function runRepl(
 
   try {
     while (!replClosed) {
-      writeOut(`${formatSessionStatusLine(session)}\n`)
       const queued = await takeNextQueuedReplPrompt(session)
       let text: string
       if (queued) {
         text = queued.prompt
-        writeOut(`[queued ${queued.controlId}] ${text}\n`)
+        if (!dynamicTui) {
+          writeOut(`[queued ${queued.controlId}] ${text}\n`)
+        }
+      } else if (dynamicTui) {
+        const input = await readTuiInput({
+          writeOut,
+          columns: process.stdout.columns,
+          color,
+          history,
+          signal: options?.signal,
+          status: {
+            permissionMode: session.permissionMode,
+            providerId: session.providerId,
+            providerKind: session.provider?.id,
+            model: session.model,
+            effortLevel: session.effortLevel,
+          },
+        })
+        if (input.type !== 'submit') {
+          replClosed = true
+          writeOut(input.type === 'exit' ? '^C\n' : '\n')
+          break
+        }
+        text = input.value.trim()
+        if (!text) continue
+        if (text === '/exit' || text === '/quit') {
+          replClosed = true
+          writeOut('Session closed.\n')
+          break
+        }
+        if (history[history.length - 1] !== text) history.push(text)
+        if (history.length > 100) history.shift()
       } else {
         const line = await question('bolo> ', options?.signal)
         if (line == null) break
         text = line.trim()
-        if (!text || text === '/exit' || text === '/quit') break
+        if (!text) continue
+        if (text === '/exit' || text === '/quit') break
       }
       const turnController = new AbortController()
       activeTurn = turnController
@@ -921,8 +1005,12 @@ export async function runRepl(
       options?.signal?.addEventListener('abort', onParentAbort, { once: true })
       session.askPermission = createTtyAskPermission({
         isTty,
-        readAnswer: async (prompt) =>
-          (await question(prompt, turnController.signal)) ?? '',
+        ...(dynamicTui
+          ? {}
+          : {
+              readAnswer: async (prompt: string) =>
+                (await question(prompt, turnController.signal)) ?? '',
+            }),
         nonTtyDecision: 'deny',
         writeOut,
         pauseInput: pauseRl,
@@ -958,9 +1046,10 @@ export async function runRepl(
     if (activeTurn && !activeTurn.signal.aborted) {
       activeTurn.abort('repl_closed')
     }
-    rl.removeListener('SIGINT', onSigint)
+    if (dynamicTui) process.removeListener('SIGINT', onSigint)
+    else rl?.removeListener('SIGINT', onSigint)
     options?.signal?.removeEventListener('abort', onExternalAbort)
-    rl.close()
+    rl?.close()
     // H0：REPL 正常退出 → SessionEnd
     try {
       const { endSession } = await import('../../core/src/index.ts')
@@ -1002,22 +1091,44 @@ export async function runResumeCli(
     writeErr,
   })
 
-  // T7：resume 后缩略一行 BOLO + id
-  writeOut(
-    `${renderWelcomeBanner({
-      condensed: true,
-      sessionId: result.session.id,
-      model: result.session.model,
-      version: '0.0.1',
-    })}\n`,
-  )
-  writeOut(`${formatSessionSummary(result.summary)}\n`)
-  writeOut(`${formatSessionStatusLine(result.session)}\n`)
-
   const prompt = opts.prompt?.trim()
   const print = opts.print === true
+  const isTty = opts.isTty ?? process.stdin.isTTY === true
   const interactive =
-    !print && !prompt && process.stdin.isTTY === true
+    !print && !prompt && isTty
+  const dynamicTui = interactive && shouldUseDynamicTui({ isTty })
+
+  if (dynamicTui) {
+    const active =
+      result.session.providerId != null
+        ? `${result.session.providerId}/${result.session.model ?? result.session.provider?.id ?? '?'}`
+        : result.session.model
+    const layout = renderInkLayout({
+      version: '0.0.1',
+      cwd: result.session.cwd,
+      model: active,
+      sessionId: result.session.id,
+      messagePreview: result.summary.lastMessage
+        ? [
+            `resumed ${result.summary.messageCount} messages · ${result.summary.lastMessage.preview}`,
+          ]
+        : [`resumed ${result.summary.messageCount} messages`],
+      hint: '/help commands · /provider model',
+    })
+    writeOut(layout.endsWith('\n') ? layout : `${layout}\n`)
+  } else {
+    // Non-interactive output remains stable and machine-readable line by line.
+    writeOut(
+      `${renderWelcomeBanner({
+        condensed: true,
+        sessionId: result.session.id,
+        model: result.session.model,
+        version: '0.0.1',
+      })}\n`,
+    )
+    writeOut(`${formatSessionSummary(result.summary)}\n`)
+    writeOut(`${formatSessionStatusLine(result.session)}\n`)
+  }
 
   if (prompt) {
     const turn = await runOnePrompt(result.session, prompt, {
