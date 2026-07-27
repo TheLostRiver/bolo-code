@@ -35,6 +35,7 @@ import {
   derivePromptCacheKey,
   isPromptCachingEnabled,
 } from './promptCache.ts'
+import { createProviderRequestAbort } from './requestAbort.ts'
 
 export type OpenAIResponsesConfig = {
   apiKey: string
@@ -586,11 +587,13 @@ export function createOpenAIResponsesProvider(
       },
     )
 
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), timeoutMs)
     const signal = options?.signal
-    const onAbort = () => controller.abort()
-    signal?.addEventListener('abort', onAbort)
+    const requestAbort = createProviderRequestAbort({
+      label: 'OpenAI Responses',
+      endpoint: url,
+      timeoutMs,
+      ...(signal ? { parent: signal } : {}),
+    })
 
     const state = {
       toolAcc: new Map<string, { id: string; name: string; arguments: string }>(),
@@ -606,7 +609,7 @@ export function createOpenAIResponsesProvider(
           Authorization: `Bearer ${config.apiKey}`,
         },
         body: JSON.stringify(body),
-        signal: controller.signal,
+        signal: requestAbort.signal,
       })
 
       if (!res.ok) {
@@ -696,12 +699,10 @@ export function createOpenAIResponsesProvider(
       if (streamUsage) yield { type: 'usage', usage: streamUsage }
       yield { type: 'done' }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      yield { type: 'error', message: msg }
+      yield { type: 'error', message: requestAbort.normalizeError(e).message }
       yield { type: 'done' }
     } finally {
-      clearTimeout(timer)
-      signal?.removeEventListener('abort', onAbort)
+      requestAbort.dispose()
     }
   }
 
@@ -733,41 +734,53 @@ export function createOpenAIResponsesProvider(
     )
     body.stream = false
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${config.apiKey}`,
-      },
-      body: JSON.stringify(body),
-      signal: options?.signal,
+    const requestAbort = createProviderRequestAbort({
+      label: 'OpenAI Responses',
+      endpoint: url,
+      timeoutMs,
+      ...(options?.signal ? { parent: options.signal } : {}),
     })
-    if (!res.ok) {
-      const errText = await res.text().catch(() => '')
-      throw new Error(
-        `OpenAI Responses HTTP ${res.status}: ${errText.slice(0, 500)}`,
-      )
-    }
-    const json = (await res.json()) as {
-      output_text?: string
-      output?: Array<{
-        type?: string
-        content?: Array<{ type?: string; text?: string }>
-      }>
-    }
-    if (typeof json.output_text === 'string' && json.output_text) {
-      return json.output_text
-    }
-    // 从 output message 拼文本
-    const parts: string[] = []
-    for (const item of json.output ?? []) {
-      if (item.type === 'message' && Array.isArray(item.content)) {
-        for (const c of item.content) {
-          if (c.type === 'output_text' && c.text) parts.push(c.text)
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${config.apiKey}`,
+        },
+        body: JSON.stringify(body),
+        signal: requestAbort.signal,
+      })
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '')
+        throw new Error(
+          `OpenAI Responses HTTP ${res.status}: ${errText.slice(0, 500)}`,
+        )
+      }
+      const json = (await res.json()) as {
+        output_text?: string
+        output?: Array<{
+          type?: string
+          content?: Array<{ type?: string; text?: string }>
+        }>
+      }
+      if (typeof json.output_text === 'string' && json.output_text) {
+        return json.output_text
+      }
+      // 从 output message 拼文本
+      const parts: string[] = []
+      for (const item of json.output ?? []) {
+        if (item.type === 'message' && Array.isArray(item.content)) {
+          for (const c of item.content) {
+            if (c.type === 'output_text' && c.text) parts.push(c.text)
+          }
         }
       }
+      return parts.join('')
+    } catch (error) {
+      throw requestAbort.normalizeError(error)
+    } finally {
+      requestAbort.dispose()
     }
-    return parts.join('')
   }
 
   return {
