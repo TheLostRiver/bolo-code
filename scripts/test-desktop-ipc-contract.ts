@@ -140,6 +140,19 @@ async function main() {
       `the renderer waits forever and the feature looks dead. main sends: ${[...sent].sort().join(', ')}`,
   )
 
+  // OI-06：不能只靠“数量对得上”。三条 runtime 通道是 Desktop 消费
+  // RuntimeClient 的生产入口，任一条缺失都会让 hello/query/command 链断开。
+  for (const channel of [
+    'bolo:runtimeHello',
+    'bolo:runtimeQuery',
+    'bolo:runtimeCommand',
+  ]) {
+    assert(
+      handlers.has(channel) && invoked.has(channel),
+      `${channel} is wired through main and preload for the production runtime client`,
+    )
+  }
+
   console.log(
     `  ${handlers.size} request channels + ${sent.size} push channels, both sides aligned`,
   )

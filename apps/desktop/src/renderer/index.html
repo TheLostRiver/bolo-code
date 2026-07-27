@@ -54,7 +54,16 @@
             </button>
             <button type="button" id="btn-settings" class="ghost">Settings</button>
           </div>
-          <div id="status" class="status">loading…</div>
+          <div class="status-stack">
+            <div
+              id="runtime-status"
+              class="status runtime-status"
+              aria-live="polite"
+            >
+              Runtime connecting…
+            </div>
+            <div id="status" class="status">loading…</div>
+          </div>
         </header>
 
         <main id="log" class="log" aria-live="polite" aria-label="Conversation"></main>

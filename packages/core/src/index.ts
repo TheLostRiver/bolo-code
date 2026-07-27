@@ -3185,6 +3185,11 @@ export {
 } from './runtimeCommand.ts'
 
 export {
+  createSessionRuntimeTransport,
+  type RuntimeSessionResolver,
+} from './runtimeTransport.ts'
+
+export {
   renderRuntimeText,
   type RuntimeTextRenderOptions,
   type RuntimeTextPage,

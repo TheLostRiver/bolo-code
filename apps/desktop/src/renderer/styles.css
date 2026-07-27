@@ -152,6 +152,14 @@ html, body {
 
 .top-actions { display: flex; gap: 8px; align-items: center; }
 
+.status-stack {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
 .status {
   font-family: var(--mono);
   font-size: 12px;
@@ -159,6 +167,11 @@ html, body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.runtime-status[data-state="error"],
+.runtime-status[data-state="incompatible"] {
+  color: var(--attention);
 }
 
 .log {

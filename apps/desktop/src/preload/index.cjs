@@ -1,6 +1,10 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('bolo', {
+  runtimeHello: () => ipcRenderer.invoke('bolo:runtimeHello'),
+  runtimeQuery: (request) => ipcRenderer.invoke('bolo:runtimeQuery', request),
+  runtimeCommand: (command) =>
+    ipcRenderer.invoke('bolo:runtimeCommand', command),
   getStatus: () => ipcRenderer.invoke('bolo:getStatus'),
   getSettings: () => ipcRenderer.invoke('bolo:getSettings'),
   setSettings: (patch) => ipcRenderer.invoke('bolo:setSettings', patch),

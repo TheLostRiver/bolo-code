@@ -86,6 +86,7 @@ async function main() {
   for (const required of [
     'scripts/test-ptl-retry.ts',
     'scripts/test-desktop-launch.ts',
+    'scripts/test-runtime-core-transport.ts',
   ]) {
     assert(
       defaultGate.includes(required),

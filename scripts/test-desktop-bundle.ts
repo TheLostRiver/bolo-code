@@ -90,6 +90,7 @@ async function main() {
     'preload.cjs',
     path.join('renderer', 'index.html'),
     path.join('renderer', 'app.js'),
+    path.join('renderer', 'runtime-client.js'),
     path.join('renderer', 'styles.css'),
   ]) {
     assert(
@@ -97,6 +98,18 @@ async function main() {
       `${rel} is emitted — a main bundle alone is a shell that cannot start`,
     )
   }
+  const runtimeClient = await fs.readFile(
+    path.join(OUT_DIR, 'renderer', 'runtime-client.js'),
+    'utf8',
+  )
+  assert(
+    runtimeClient.includes('createRuntimeClient'),
+    'the renderer runtime bundle contains the shared RuntimeClient implementation',
+  )
+  assert(
+    !/from\s+['"][^'"]+\.ts['"]/.test(runtimeClient),
+    'the browser runtime client has no TypeScript imports left for Electron to resolve',
+  )
 
   // ── 产物里引用的资源路径必须真的存在 ──
   //
@@ -144,7 +157,7 @@ async function main() {
   )
 
   console.log(
-    `  main.mjs ${(src.length / 1024).toFixed(0)} KB · preload + renderer emitted · electron external`,
+    `  main.mjs ${(src.length / 1024).toFixed(0)} KB · preload + renderer/runtime client emitted · electron external`,
   )
   console.log('PASS: desktop bundle')
 }

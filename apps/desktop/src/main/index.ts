@@ -33,6 +33,7 @@ import {
   loadSessionListEntries,
   getSessionPersistMeta,
   buildRuntimeSnapshot,
+  createSessionRuntimeTransport,
 } from '../../../../packages/core/src/index.ts'
 import {
   buildTimelineCards,
@@ -264,6 +265,10 @@ async function ensureSession(forceNew = false) {
   return session
 }
 
+const desktopRuntimeTransport = createSessionRuntimeTransport(() =>
+  ensureSession(),
+)
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1000,
@@ -302,18 +307,35 @@ function createWindow() {
         .executeJavaScript(
           // 三样都查：DOM 挂上了、preload 桥接可用、样式表真的加载了。
           // 只查 DOM 会漏掉「preload 路径错」和「CSS 404」这两种白屏成因。
-          `JSON.stringify({
-             log: !!document.getElementById('log'),
-             sidebar: !!document.getElementById('session-list'),
-             bridge: typeof window.bolo === 'object' && window.bolo !== null,
-             styled: getComputedStyle(document.body).display !== '',
-             sheets: document.styleSheets.length,
+          `new Promise((resolve) => {
+             const started = Date.now()
+             const report = () => {
+               const runtime = document.documentElement.dataset.runtimeState || 'missing'
+               if (runtime === 'connecting' && Date.now() - started < 10000) {
+                 return setTimeout(report, 25)
+               }
+               resolve(JSON.stringify({
+                 log: !!document.getElementById('log'),
+                 sidebar: !!document.getElementById('session-list'),
+                 bridge: typeof window.bolo === 'object' && window.bolo !== null,
+                 styled: getComputedStyle(document.body).display !== '',
+                 sheets: document.styleSheets.length,
+                 runtime,
+               }))
+             }
+             report()
            })`,
         )
         .then((raw: string) => {
           const r = JSON.parse(raw) as Record<string, unknown>
           const missing = Object.entries(r)
-            .filter(([k, v]) => (k === 'sheets' ? v === 0 : v !== true))
+            .filter(([k, v]) =>
+              k === 'sheets'
+                ? v === 0
+                : k === 'runtime'
+                  ? v !== 'ready'
+                  : v !== true,
+            )
             .map(([k]) => k)
           if (missing.length) return fail(`renderer incomplete: ${missing.join(', ')}`)
           process.stdout.write(`desktop smoke ok: ${raw}
@@ -328,6 +350,18 @@ function createWindow() {
 }
 
 function registerIpc() {
+  ipcMain.handle('bolo:runtimeHello', async () =>
+    desktopRuntimeTransport.hello(),
+  )
+
+  ipcMain.handle('bolo:runtimeQuery', async (_evt, request) =>
+    desktopRuntimeTransport.query(request),
+  )
+
+  ipcMain.handle('bolo:runtimeCommand', async (_evt, command) =>
+    desktopRuntimeTransport.command(command),
+  )
+
   ipcMain.handle('bolo:getStatus', async () => {
     const s = await ensureSession()
     return sessionStatusPayload(s)

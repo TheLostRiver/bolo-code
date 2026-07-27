@@ -114,6 +114,10 @@ async function main() {
     typeof report.sheets === 'number' && report.sheets > 0,
     `stylesheets actually loaded, got ${String(report.sheets)} — zero means a 404 and an unstyled window`,
   )
+  assert(
+    report.runtime === 'ready',
+    `the renderer RuntimeClient completes a real hello/query handshake, got ${String(report.runtime)}`,
+  )
 
   console.log(`  launched, renderer mounted: ${JSON.stringify(report)}`)
   console.log('PASS: desktop launch')

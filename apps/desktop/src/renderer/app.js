@@ -2,7 +2,10 @@
  * Renderer — 会话 · 流式 · 权限 · 设置 · 多 provider（CX7）
  */
 
+import { createRuntimeClient } from './runtime-client.js'
+
 const statusEl = document.getElementById('status')
+const runtimeStatusEl = document.getElementById('runtime-status')
 const logEl = document.getElementById('log')
 const promptEl = document.getElementById('prompt')
 const sendBtn = document.getElementById('send')
@@ -32,6 +35,39 @@ let lastProviders = []
 /** @type {{ id: string, label?: string }[]} */
 let lastPresets = []
 let fillingProviderSelect = false
+
+const runtimeClient = createRuntimeClient({
+  transport: {
+    hello: () => window.bolo.runtimeHello(),
+    query: (request) => window.bolo.runtimeQuery(request),
+    command: (command) => window.bolo.runtimeCommand(command),
+  },
+})
+
+function renderRuntimeState(state) {
+  document.documentElement.dataset.runtimeState = state.status
+  if (!runtimeStatusEl) return
+  runtimeStatusEl.dataset.state = state.status
+  if (state.status === 'ready') {
+    runtimeStatusEl.textContent = `Runtime v${state.protocolVersion} ready`
+    return
+  }
+  if (state.status === 'incompatible') {
+    runtimeStatusEl.textContent =
+      `Runtime incompatible: ${String(state.detail).slice(0, 240)}`
+    return
+  }
+  if (state.status === 'error') {
+    runtimeStatusEl.textContent =
+      `Runtime unavailable: ${String(state.detail).slice(0, 240)}`
+    return
+  }
+  runtimeStatusEl.textContent =
+    state.status === 'connecting' ? 'Runtime connecting…' : 'Runtime disconnected'
+}
+
+runtimeClient.subscribe(renderRuntimeState)
+renderRuntimeState(runtimeClient.getState())
 
 /**
  * 会话侧栏。
@@ -427,6 +463,7 @@ async function send() {
     }
     if (r.status) statusEl.textContent = formatStatusLine(r.status)
     else await refreshStatus()
+    await runtimeClient.refresh()
     await refreshProviders()
   } catch (e) {
     appendMsg('system', `error: ${e?.message ?? e}`)
@@ -717,6 +754,7 @@ promptEl.addEventListener('keydown', (ev) => {
 })
 
 void (async () => {
+  await runtimeClient.connect()
   await refreshStatus()
   await refreshProviders()
   await refreshSessions()

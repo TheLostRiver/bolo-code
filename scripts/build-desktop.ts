@@ -64,9 +64,24 @@ async function main() {
     path.join(outDir, 'preload.cjs'),
   )
 
-  // renderer 是原生 JS/CSS/HTML，同样原样拷贝
+  // renderer 壳仍是原生 JS/CSS/HTML，原样拷贝；共享 RuntimeClient 是
+  // TypeScript，需要单独打成浏览器 ESM，避免在 app.js 复制协议状态机。
   const rendererOut = path.join(outDir, 'renderer')
   await fs.mkdir(rendererOut, { recursive: true })
+  await build({
+    entryPoints: [
+      path.join(repoRoot, 'packages', 'shared', 'src', 'runtimeClient.ts'),
+    ],
+    outfile: path.join(rendererOut, 'runtime-client.js'),
+    bundle: true,
+    platform: 'browser',
+    target: 'es2022',
+    format: 'esm',
+    minify: false,
+    sourcemap: false,
+    legalComments: 'none',
+    logLevel: 'warning',
+  })
   for (const name of ['index.html', 'app.js', 'styles.css']) {
     await fs.copyFile(
       path.join(appDir, 'src', 'renderer', name),
