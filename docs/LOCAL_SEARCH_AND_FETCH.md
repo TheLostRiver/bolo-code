@@ -160,6 +160,18 @@ endpoint。会话内 `/websearch off` 会把直连 `WebSearch` schema 从后续�
 移除；`on` / `auto` 会恢复它。`search status` **只读配置、不访问 endpoint**，
 所以它显示 on 不能证明上游引擎可用。
 
+部署验收与排障请运行：
+
+```bash
+bolo search doctor
+bolo search doctor --json
+```
+
+doctor 不修改配置、不启动容器：它读取 `/config` 的版本/instance/engines，再执行
+固定的非空 JSON smoke query，列出 working 与 `unresponsive_engines`。部分故障但
+仍有结果时成功并返回 `partial_success`；合法空结果也会以 `empty_results` 非零退出，
+因为“这次查询没有答案”对工具是合法的，但对**部署 smoke**不算通过。
+
 OI-07A 起，直连工具会读取 `unresponsive_engines`：
 
 - `results: []` 且没有有效故障诊断：正常空结果，`ok: true`；
@@ -182,6 +194,16 @@ npm run test:searxng-search
 session 接线。它**没有**连接真实 SearXNG，也没有验证上游引擎；这是可重复的
 默认门禁，不应改成依赖公网的测试。
 
+doctor 的可重复门禁另有：
+
+```bash
+npm run test:search-doctor
+```
+
+它覆盖 `/config` 与 `/search` 两阶段 HTTP/timeout/JSON/shape、非空、合法空结果、
+全故障、部分成功、text/JSON/exit code、无配置写入、status 零网络请求与真实 CLI
+入口。公网可用性仍不进入默认门禁。
+
 OI-X1 已于 2026-07-27 在官方 Docker 镜像 `2026.7.26-b060c780d` 上完成真实
 live smoke：直接 JSON 查询返回真实 URL；生产 status/session/permission-gated
 `WebSearch` 全链通过，工具调用 2.32s 返回 5 条、6 个 URL。
@@ -192,6 +214,10 @@ OI-07A 之前原始 JSON 与 Bolo 都只表现为空结果；现在全故障会�
 曾恢复结果，但它不是所有网络的默认答案。断网后 SearXNG 通常无法取得新结果，
 因为它仍依赖上游引擎；不能用“服务跑在本机”推导“查询内容不出机器”。完整证据见
 [OPEN_ISSUES.md](./OPEN_ISSUES.md) OI-X1/OI-07。
+
+OI-07B 完成后，源码 CLI 与门禁构建出的 `dist/bolo.mjs` 又对同一真实实例执行
+doctor：报告 `2026.7.26+b060c780d`、279 个已配置引擎、8 条有效结果及可工作/故障
+引擎，`partial_success` / exit 0。
 
 ---
 

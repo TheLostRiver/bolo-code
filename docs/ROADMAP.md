@@ -31,11 +31,11 @@
 | **Provider UX · 便利层** | **~95–98%** | **CX0–CX8 已落地**（ultrathink 默认 off）· [PROVIDER_UX.md](./PROVIDER_UX.md) |
 | **产品整体（相对 HC）** | **~74–88%** | 日用高；UI 全家桶另计 |
 
-**已闭环主线：** headless 日用 → Diff（D0–D7 / U0–U4）· Hooks（H0–H5）· Compact（C0–C5）· Provider（P0–P4.1）· Effort（E0–E9）· Provider UX（CX0–CX8）· 可靠性（R0–R4）· **Durable Runtime（DR0–DR4）** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR3 Desktop 产品接线** · **OI-07A SearXNG 上游诊断**。切片明细 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
+**已闭环主线：** headless 日用 → Diff（D0–D7 / U0–U4）· Hooks（H0–H5）· Compact（C0–C5）· Provider（P0–P4.1）· Effort（E0–E9）· Provider UX（CX0–CX8）· 可靠性（R0–R4）· **Durable Runtime（DR0–DR4）** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR3 Desktop 产品接线** · **OI-07A SearXNG 上游诊断** · **OI-07B `search doctor`**。切片明细 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
 
-**当前主线：** [OPEN_ISSUES.md](./OPEN_ISSUES.md) OI-07。OI-07A 已以
-`7754525` 收口 `unresponsive_engines` 契约；当前推进 OI-07B
-`bolo search doctor`。OI-07C Docker setup 只在用户显式选择、本机已有 Docker
+**当前主线：** [OPEN_ISSUES.md](./OPEN_ISSUES.md) OI-07C 评估。OI-07A 已以
+`7754525` 收口 `unresponsive_engines` 契约，OI-07B 已以 `3e96573` 落地只读
+`bolo search doctor [--json]`。Docker setup 只在用户显式选择、本机已有 Docker
 且 doctor 契约稳定后评估，不把第三方基础设施变成强制依赖。
 
 **外部或人工阻塞项单列，不与 agent 队列混淆：**
@@ -50,8 +50,8 @@
 
 **已插队并收口：** **AR-T · Agent 能力面**（§14）。准入证据：基础设施深度（DR0–DR4 + AR1）已远超能力广度——彼时 agent 无法跨步骤记住计划，也无法启动任何活过一次工具调用的进程。AR2 压缩深化顺延，A0a/A0b 成果不受影响。
 
-**agent 可闭环开放项：** OI-07B（只读 endpoint/JSON/非空结果诊断）。
-外部端点、可选 Docker setup 与真人验收状态见 [OPEN_ISSUES.md](./OPEN_ISSUES.md)。
+**agent 可闭环开放项：** 无。OI-07C 是用户显式选择后的 gated 产品评估，不是
+默认安装步骤；真人验收状态见 [OPEN_ISSUES.md](./OPEN_ISSUES.md)。
 
 ---
 
@@ -128,9 +128,10 @@
 
 **一句话：** 主路径、Diff、Hooks、Compact、多 Provider、Effort、Provider UX、可靠性 R0–R4、Durable Runtime DR0–DR4、AR1 runtime UX、**AR-T1/AR-T2 能力面**已收口。
 
-**当前主线：** [OPEN_ISSUES.md](./OPEN_ISSUES.md) OI-07。OI-07A 已区分正常空结果、
-全上游故障与部分成功；当前下一刀是 OI-07B `bolo search doctor`。OI-X1 已用真实
-SearXNG 实例与上游引擎闭环；真人验收仍单列，不以 Electron 自动化冒充完成。
+**当前主线：** [OPEN_ISSUES.md](./OPEN_ISSUES.md) OI-07C 评估。OI-07A 已区分
+正常空结果、全上游故障与部分成功；OI-07B 已提供 text/JSON doctor、稳定机器码和
+0/1/2 退出码。OI-X1 与 doctor 均已用真实 SearXNG/upstream 闭环；真人验收仍单列，
+不以 Electron 自动化冒充完成。
 中段压缩与远端压缩按证据门控**显式关闭**
 （后者见 [ADR_COMPACT_REMOTE.md](./ADR_COMPACT_REMOTE.md)）。
 
@@ -402,7 +403,7 @@ AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 regis
 | 19 | **AR4** | 逐项 evidence gate | 有证据实施；无证据书面关闭 | 场景/基准/兼容证据 | ✅ **六条全部书面决定**（含重开条件）→ [ADR_AR4_EVIDENCE_GATE.md](./ADR_AR4_EVIDENCE_GATE.md) |
 | 20 | **AR5A–D**（AR5C 已提前完成） | A ✅ 迁移幂等/失败不覆盖源 · B ✅ 故障注入 · D ✅ 发布门 | clean clone 安装、升级、恢复手册 | full test + cross-platform smoke + security audit | ✅ **看板走完**。发布门含 SBOM · 性能预算 · 安全自查 · **已知限制** · 恢复手册 · 可执行 checklist → [RELEASE.md](./RELEASE.md) §6 |
 | 21 | **OI-04 · SearXNG 直连** | 显式配置 · fail-closed endpoint · 零依赖 JSON 工具 · 动态启用 | `bolo search status` · CLI/Desktop warning · 无第三方桥 | 本地 fixture + 真实 Docker/upstream smoke | ✅ `c058998`；OI-X1 于 2026-07-27 闭环 |
-| 22 | **OI-07 · SearXNG 诊断/部署体验** | A ✅ `unresponsive_engines` 契约 · B `search doctor` · C 可选 Docker setup | 区分正常空结果/全故障/部分成功；一键只读诊断；setup 不强制 Docker | fixture + 非空 smoke + 无副作用/零依赖护栏 | 🚧 A ✅ `7754525`；**B 当前**；C 需显式选择 |
+| 22 | **OI-07 · SearXNG 诊断/部署体验** | A ✅ `unresponsive_engines` 契约 · B ✅ `search doctor` · C 可选 Docker setup | 区分正常空结果/全故障/部分成功；一键只读诊断；setup 不强制 Docker | fixture + 非空 smoke + 无副作用/零依赖护栏 | 🚧 A ✅ `7754525` · B ✅ `3e96573`；C 需显式选择 |
 
 固定 checkpoint：
 

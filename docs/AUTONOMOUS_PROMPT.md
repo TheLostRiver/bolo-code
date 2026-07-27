@@ -24,11 +24,13 @@ agent 独立解决的问题。** 不要越过外部/人工阻塞项，也不要�
 | 2 | OI-04 · SearXNG 产品契约矛盾 | ✅ 已收口（`c058998`） |
 | 3 | OI-06 · Desktop runtime 生产接线 | ✅ 已收口 |
 | 4 | OI-X1 · 真实 SearXNG live smoke | ✅ 已收口（2026-07-27） |
-| 5 | OI-H1/H2 · 真 TTY、真人点击与视觉走查 | 人工阻塞 |
+| 5 | OI-07A/B · 上游诊断与 `search doctor` | ✅ 已收口（`7754525` · `3e96573`） |
+| 6 | OI-07C · 可选 Docker setup | GATED：用户显式选择且本机已有 Docker 后评估 |
+| 7 | OI-H1/H2 · 真 TTY、真人点击与视觉走查 | 人工阻塞 |
 
 OI-04 已完成零依赖、显式配置、fail-closed 的 SearXNG JSON 搜索契约、fixture、
-CLI/Desktop warning 与文档收口；OI-X1 已补齐真实 Docker 实例和上游搜索证据。
-不要重复实现或把公网依赖塞进默认门禁。
+CLI/Desktop warning 与文档收口；OI-X1 已补齐真实 Docker 实例和上游搜索证据；
+OI-07A/B 已补上游故障诊断与只读 doctor。不要重复实现或把公网依赖塞进默认门禁。
 
 **一条已知的遗留（不阻塞，顺手可做）：** `AskUserQuestion` 的**真人在真终端按键**没验过——
 控件测试注入 `readKey`，覆盖不到真实 raw-mode 与 REPL 抢 stdin 的问题。

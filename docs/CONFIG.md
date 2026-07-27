@@ -152,6 +152,8 @@ defaults
 公开 endpoint 必须 HTTPS；HTTP 只允许显式 loopback/LAN 主机。URL 不允许凭据、
 query 或 fragment。错误配置会禁用工具并产生 CLI/Desktop warning。
 `bolo search status` 可查看最终 endpoint 与同时配置的 hosted/MCP 线路。
+它只读配置、不联网；`bolo search doctor [--json]` 才检查 SearXNG 版本/JSON 能力、
+运行非空 smoke 并列出 working/unresponsive engines。
 完整部署、隐私和 fixture/live 边界见
 [LOCAL_SEARCH_AND_FETCH.md](./LOCAL_SEARCH_AND_FETCH.md)。
 

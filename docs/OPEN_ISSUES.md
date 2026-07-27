@@ -23,7 +23,7 @@
 
 - ROADMAP §0/§13.11、handoff、README 与 autonomous prompt 使用同一队列，
   并在 OI-04 关闭后统一把 OI-06 标为当前，同时保留外部/人工阻塞标记。
-- AR4 ADR 已按正文改为六个候选；RELEASE 与默认门禁现统一为 108 个脚本。
+- AR4 ADR 已按正文改为六个候选；RELEASE 与默认门禁现统一为 109 个脚本。
 - USAGE 已补 `--allowed-tools`、`--disallowed-tools`、`AskUserQuestion`
   与 Web search 的最短入口。
 - `test-dist-build.ts` 守住默认门禁条目和 package manager；
@@ -96,7 +96,7 @@
 - `bolo search status` 同时列出 hosted、SearXNG direct 与 MCP 线路；配置 warning
   在 CLI 与 Desktop 都可见。
 - `test-searxng-search.ts` 使用本地 HTTP fixture 覆盖请求、解析、错误、预算和生产
-  接线，并已进入独立 script 与 108 项默认门禁；OI-X1 已另补真实实例证据。
+  接线，并已进入独立 script 与默认门禁；OI-X1 已另补真实实例证据。
 
 ### OI-05 · CLI 构建会吞掉 bundled skills 复制失败
 
@@ -156,13 +156,13 @@
 - critical event projector 对无效事件 fail-closed，不把原始 steer prompt 字段传给
   renderer；tool progress 原位更新同一行，steer 只在 safe boundary 真正应用后呈现。
 - 真实 Electron smoke 已返回 `runtime:"ready"`，自动点击 session row 恢复目标，
-  并经真实 IPC 修改/回读 `desktop-smoke-model/high`；108 项默认门禁 EXIT=0。
+  并经真实 IPC 修改/回读 `desktop-smoke-model/high`；默认门禁 EXIT=0。
 - `test:desktop-runtime-events`、typecheck、IPC/event 契约、dist install、Desktop
   bundle/launch 与完整 `npm test` 全绿。真人点击与视觉验收仍单列 OI-H2。
 
 ### OI-07 · SearXNG 诊断与部署体验
 
-**状态：IN PROGRESS（A 已关闭；B 当前；C 可选）**
+**状态：IN PROGRESS（A/B 已关闭；C 可选且 gated）**
 
 准入证据：
 
@@ -184,20 +184,27 @@
 - 部分成功保持 `ok: true`、保留有效结果，在输出尾部追加简短 warning；即使结果
   很长，warning 也不会被 12,000 字符预算截掉。
 - fixture 覆盖正常空结果、全故障、部分成功、去重、畸形诊断与长输出预算；
-  专项、typecheck、108 项默认门禁与真实实例全故障分支均已验证。
+  专项、typecheck、默认门禁与真实实例全故障分支均已验证。
 
 #### OI-07B · `bolo search doctor`
 
-**状态：OPEN（下一刀）**
+**状态：CLOSED（`3e96573`）**
 
-关闭条件：
+关闭证据：
 
-- 与只读配置展示 `search status` 分离；doctor 实际检查 endpoint 可达性、JSON format
-  与 SearXNG 版本/能力，不修改配置或启动服务。
-- 运行真实 smoke query 并要求结果非空；分别显示可工作与
-  `unresponsive_engines`，失败返回稳定机器码与非零退出码。
-- text/JSON 输出、超时、非 JSON、合法空结果、全故障与部分成功进入本地 fixture
-  和默认门禁；公网实例不进入默认 `npm test`。
+- `probeSearxng` 与生产 `WebSearch` 共享 HTTP、timeout、响应预算、JSON、结果与
+  `unresponsive_engines` 解析原语；CLI 没有复制第二套协议客户端。
+- `search status` 继续只读配置；`search doctor [--json]` 才访问 `/config` 和
+  `/search`，报告版本、instance、JSON 能力、配置引擎数、有效结果、working 与
+  unresponsive engines，不修改配置或启动服务。
+- text/JSON 都从同一有界 report 渲染；JSON stdout 只有一个 payload、stderr 干净。
+  成功/部分成功 exit 0，网络/JSON/空结果/全故障 exit 1，用法或未配置 exit 2。
+- `test:search-doctor` 的本地 HTTP fixture 覆盖 config/search 两阶段 HTTP、timeout、
+  非 JSON、坏 shape、正常非空、合法空结果、全故障、部分成功与真实 CLI 入口；
+  已进入 109 项默认门禁，公网可用性不进入 `npm test`。
+- 源码 CLI 与完整门禁产出的 `dist/bolo.mjs` 均已对真实
+  `2026.7.26+b060c780d` 实例运行：8 条有效结果、working engines 与部分故障，
+  `partial_success`、exit 0。
 
 #### OI-07C · 可选 Docker setup
 

@@ -207,8 +207,17 @@ SearXNG 必须启用 JSON format；部署、HTTPS/LAN 限制、隐私去向与�
 按 warning 调整当前网络可达的引擎；仅 HTTP 200 不算搜索配置成功。
 
 `bolo search status` 只展示解析后的配置与 endpoint，**不会发起探活查询**；
-因此 status 为 on 不等于上游可用。完整健康检查属于当前 OI-07B，命令落地前不要把
-status 当作 doctor。
+因此 status 为 on 不等于上游可用。部署或排障时运行：
+
+```bash
+bolo search doctor
+bolo search doctor --json
+```
+
+doctor 会只读访问 SearXNG `/config` 与 `/search`：检查版本、JSON 能力并执行非空
+smoke query，列出有效结果、可工作与不可用引擎。部分引擎故障但仍有结果时
+`partial_success` / exit 0；网络、JSON、空结果或全故障 exit 1；未配置、配置无效
+或用法错误 exit 2。`--json` 的 stdout 只有一个 JSON payload，适合脚本解析。
 
 `AskUserQuestion` 不是斜杠命令：在 `npx bolo` 的真实 TTY 会话里，模型遇到会
 实质改变结果的歧义时会调用它并显示选择面板。`-p`、pipe 等非交互会话会立即返回

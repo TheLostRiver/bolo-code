@@ -40,12 +40,12 @@
 | Electron GUI | ~80–88% | 壳 + 流式 + 权限 + runtime IPC/client + 会话切换/恢复 + composer controls + model/effort + control/tool progress 投影 + 多 provider；真人点击/视觉未验 |
 | 相对 HC 全家桶 UI | 另计 | 不设 100% |
 
-**已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Runtime DR0–DR4 · Autonomous Road AR1 CLI/TUI runtime UX · **AR-T1–T3+ Agent 能力面** · AR2 Compact depth · AR3 Desktop 产品接线 · AR4 evidence gate · AR5 release hardening · **OI-04 SearXNG 直连、OI-X1 真实实例 smoke 与 OI-07A 上游诊断**。
+**已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Runtime DR0–DR4 · Autonomous Road AR1 CLI/TUI runtime UX · **AR-T1–T3+ Agent 能力面** · AR2 Compact depth · AR3 Desktop 产品接线 · AR4 evidence gate · AR5 release hardening · **OI-04 SearXNG 直连、OI-X1 真实实例 smoke、OI-07A 上游诊断与 OI-07B `search doctor`**。
 
-**当前主线：** [开放问题清单](docs/OPEN_ISSUES.md) 的 OI-07。OI-07A 已让
-SearXNG `WebSearch` 区分正常空结果、全上游故障与部分成功；下一刀是只读的
-`bolo search doctor`（OI-07B）。Docker setup（OI-07C）仍是显式选择后的可选项，
-不会成为安装依赖或被静默启动。
+**当前主线：** [开放问题清单](docs/OPEN_ISSUES.md) 的 OI-07C 评估。只读
+`bolo search doctor [--json]` 已落地：检查 `/config` 版本/能力与 JSON 搜索，
+运行非空 smoke，并区分 working / unresponsive engines。Docker setup 仍是显式选择
+后的可选项，不会成为安装依赖或被静默启动。
 
 **人工项：** AskUserQuestion 真 TTY、Desktop 点击与视觉走查需要真人验证，不以自动测试冒充完成。SearXNG 已在真实 Docker 实例和上游引擎上完成 live smoke。
 
@@ -197,7 +197,9 @@ npm start
 
 **Web search** 由你正在对话的 provider 服务端执行——不引入新的第三方接收方，
 所以默认开启。`/websearch [on|off|auto]` 可切换。
-Anthropic 与 OpenAI Responses 两条线路已实测；其它端点可配一个搜索 MCP server 获得同等能力。
+Anthropic 与 OpenAI Responses 两条线路已实测；其它端点可配搜索 MCP server，
+也可显式直连自己的 SearXNG。`bolo search status` 只看配置；
+`bolo search doctor [--json]` 才实际探活并要求 smoke 结果非空。
 
 后台 shell **跨 turn 存活，但绝不越过会话**：`endSession` 统一收尸，不留僵尸进程。
 实现无任何运行时依赖（进程树 kill 走 POSIX 进程组 / Windows `taskkill /T /F`）。

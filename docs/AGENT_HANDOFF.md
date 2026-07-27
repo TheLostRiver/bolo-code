@@ -123,12 +123,12 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | Electron GUI | ~80–88% | runtime IPC/client、会话切换/恢复、composer controls、model/effort 与 control/tool progress 已真接并经 Electron 自动化；真人点击/视觉未验 |
 | 产品相对 HC 全家桶 | ~74–88% | 日用高；UI 密度另计 |
 
-**已闭环：** Diff · Hooks · Compact（含 AR2 全段）· Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR-T1–T3+ Agent 能力面** · **AR3/OI-06 Desktop 产品接线** · **AR4 evidence gate** · **AR5 release hardening** · **OI-04 SearXNG 直连、OI-X1 真实实例 smoke 与 OI-07A 上游诊断**。
+**已闭环：** Diff · Hooks · Compact（含 AR2 全段）· Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR-T1–T3+ Agent 能力面** · **AR3/OI-06 Desktop 产品接线** · **AR4 evidence gate** · **AR5 release hardening** · **OI-04 SearXNG 直连、OI-X1 真实实例 smoke、OI-07A 上游诊断与 OI-07B doctor**。
 
-**当前主线：** [OPEN_ISSUES.md](./OPEN_ISSUES.md) OI-07B：
-`bolo search doctor`。OI-07A 已以 `7754525` 让生产 `WebSearch` 区分正常空结果、
-全上游故障与部分成功。OI-07C Docker setup 仍为 gated 可选项，不得静默安装或
-把 Docker 变成 Bolo 依赖。
+**当前主线：** [OPEN_ISSUES.md](./OPEN_ISSUES.md) OI-07C 评估。OI-07B 已以
+`3e96573` 落地 `bolo search doctor [--json]`，与配置型 status 分离并经真实
+源码/发行产物验证。OI-07C Docker setup 仍为 gated 可选项，不得静默安装或把
+Docker 变成 Bolo 依赖。
 
 OI-X1 已在 SearXNG `2026.7.26-b060c780d` 真实 Docker 实例完成：JSON API、
 生产配置/status、permission-gated `WebSearch` 与真实上游 URL 全链通过；默认引擎
@@ -139,7 +139,7 @@ OI-X1 已在 SearXNG `2026.7.26-b060c780d` 真实 Docker 实例完成：JSON API
 
 | 项 | 说明 |
 |----|------|
-| OI-07B | 当前：只读 doctor，实际检查 endpoint/JSON/非空结果，与配置型 status 分离 |
+| OI-07B | ✅ `3e96573`：只读 doctor，版本/能力/非空 smoke/text+JSON/稳定退出码 |
 | OI-07C | GATED：可选 Docker setup；只在用户明确选择、本机已有 Docker 后评估 |
 | OI-H1 | `AskUserQuestion` 真 TTY 按键；自动化未覆盖真人终端 |
 | OI-H2 | Desktop 点击、键盘与视觉走查；自动化只证明窗口与 IPC 可用 |
@@ -180,8 +180,8 @@ DR2A 单 session runner ✅
 → OI-04 SearXNG 契约收口 ✅
 → OI-06 Desktop 生产接线 ✅
 → OI-07A SearXNG 上游诊断 ✅
-→ OI-07B search doctor（当前）
-→ OI-07C 可选 Docker setup（GATED）
+→ OI-07B search doctor ✅
+→ OI-07C 可选 Docker setup（GATED · 当前只评估）
 ```
 
 每刀都必须先改 `packages/*` 契约和失败测试，再接 CLI/Desktop；定向测试、typecheck、完整 `npm test`、scoped `diff --check` 全绿后，代码与文档分批 commit/push。遇到需要数据库/daemon/RPC、用户脏文件冲突、数据丢失或副作用自动重放风险时停止扩张。
