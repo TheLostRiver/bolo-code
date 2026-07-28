@@ -15,8 +15,53 @@
 
 ## 1. Agent 可直接解决
 
-当前默认 agent 可闭环队列为空。以下已关闭条目继续保留准入与关闭证据，防止后续
-重复实现或状态回退。
+当前默认 agent 可闭环队列为 **OI-13A → OI-13B → OI-13C → OI-13D**。以下已关闭
+条目继续保留准入与关闭证据，防止后续重复实现或状态回退。
+
+### OI-13 · CLI TUI 垂直节奏与水晶工作台
+
+**状态：IN PROGRESS（2026-07-28 登记）**
+
+准入证据：
+
+- 最新真实 Windows Terminal 截图中，Agent 正文结束后下一视觉行立即进入
+  composer 的 `Message` 标题边框；`TerminalSurface.composite()` 当前只生成
+  `[activity?, ...dock.lines]`，history、activity 与 dock 之间没有由 surface
+  拥有的固定 spacer。这是可由 VT 序列测试证明的结构缺陷，不是字体偏好。
+- 文档承诺每段思考结束后留下 `Thought for <duration>`，但截图中完全没有。
+  `finishReasoningSegment()` 已取得 activity elapsed，随后却在
+  `reasoningPrefixDone === false` 时直接返回；provider 没有发送可见 reasoning
+  delta、等待后直接进入正文的真实路径因此必然丢失 summary。现有测试只覆盖
+  `reasoning → reasoning_end`，没有覆盖 silent-thinking。
+- 欢迎页当前把水晶、居中字标/headline、两条全宽 divider、workspace/model/session
+  和 hint 全部纵向堆叠；每行又 pad 到 frame 全宽，信息高而松散。Pi、oh-my-pi、
+  OpenCode、Codex 与 HelsincyCode 的相关实现共同表明，启动面应让品牌资产与运行
+  状态形成一个受宽度约束、可响应式回落的组合，而不是元数据报表。
+- OI-11G 曾按当时约定禁止宽屏双列 welcome。用户最新指示已经更新该产品约定：
+  允许借鉴 Claude Code 的信息层级，但必须保留 Bolo 水晶吉祥物。新实现可以使用
+  Bolo 自有双列工作台；不得复制 Claude 的品牌文案、配色、图标或 action card。
+
+| 切片 | packages-first 交付 | 人类可见结果 | 自动关闭条件 | 状态 |
+|------|---------------------|--------------|--------------|------|
+| **OI-13A · silent thought completion** | formatter 将“活动段已结束”与“是否收到可见 reasoning 文本”解耦；每段只消费一次 elapsed | provider 直接进入正文前仍留下 `Thought for 4.2s`，不会重复或显示整轮累计时间 | 假时钟覆盖 silent-thinking、显式 reasoning_end、text/tool/error/warning 边界、重复 finish 与 activity-off | OPEN |
+| **OI-13B · surface breathing row** | `TerminalSurface` composite 固定拥有 history/activity 与 dock 之间的一行 spacer；行数、擦除和 cursor offset 同源 | Agent/Thought/Running 与常驻 composer 之间始终有完整空行，局部重绘不漂移 | 无/有 activity、append stdout/stderr、suspend/resume、增长/缩短 dock 的 VT 序列；无整屏 clear | OPEN |
+| **OI-13C · crystal workbench** | cell-aware welcome renderer：宽屏水晶+状态双列，中/紧凑屏单列，`<38` 纯文本 | 欢迎页更紧凑，水晶、品牌、Ready、workspace/model/session/mode 层级清楚；与 composer 节奏协调 | 38/46/56/76/96/120/160/220 列、CJK/emoji/长路径、Unicode/ASCII、NO_COLOR/mascot-off、每行精确宽度 | OPEN |
+| **OI-13D · 验收与文档** | 新专项进入默认门禁；README/TUI/USAGE/ROADMAP/OPEN_ISSUES/handoff/RELEASE 同步 | 源码、dist 与用户说明口径一致，旧 welcome 和 Thought 承诺不再虚假 | 专项、typecheck、完整 `npm test`、pack/install 与 Desktop/Electron 邻接轨全绿 | OPEN |
+
+实施顺序：
+
+1. OI-13A 先关闭可复现的数据面缺口，确保每次模型等待都有永久完成反馈。
+2. OI-13B 再把垂直间距纳入 surface 所有权，避免 welcome 改版掩盖 VT 回归。
+3. OI-13C 在运行期表面稳定后重排欢迎页；修改旧“双列禁止”测试时同时建立
+   Bolo 品牌、响应式和 exact-width 正向护栏。
+4. OI-13D 最后同步全部文档。A/B/C 各自独立中文提交并推送，文档批另提。
+
+自动/真人关闭边界：
+
+- 假时钟、字符串 golden、cell-width 与 VT 序列可以关闭 A/B/C 的代码缺陷；
+  自动化不得把这些测试冒充真实 Windows Terminal 的字体、颜色、动画流畅度或观感。
+- OI-H3 继续保留真人字体/颜色、鼠标粘贴、resize、组合键和长滚动走查，但不再承载
+  已知可自动复现的 Thought、spacer 或 welcome 结构缺陷。
 
 ### OI-12 · CLI TUI 信息架构与多行输入稳定性
 
