@@ -108,6 +108,10 @@ async function main() {
     resumed.session.messages[1]?.content === 'hello back',
     'resume second message',
   )
+  assert(
+    resumed.session.askUserQuestion != null,
+    'resume reattaches the CLI AskUserQuestion asker',
+  )
   assert(resumed.path === savedPath, `path match ${resumed.path}`)
 
   const summary = buildSessionSummary(resumed.session, resumed.path)

@@ -9,6 +9,7 @@ import {
   type CliTuiController,
 } from '../packages/cli/src/index.ts'
 import { measureTerminalText } from '../packages/cli/src/tui/terminalText.ts'
+import type { AskQuestion } from '../packages/shared/src/index.ts'
 import { HeadlessTerminalHarness } from './lib/headlessTerminalHarness.ts'
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -72,6 +73,21 @@ const request = {
   toolUseId: 'bash_overlay_1',
   cwd: 'E:\\DEV\\HelsincyAgent',
 }
+
+const questions: AskQuestion[] = [
+  {
+    header: 'Database',
+    question: 'Which database should Bolo use?',
+    multiSelect: false,
+    options: [{ label: 'Postgres' }, { label: 'SQLite' }],
+  },
+  {
+    header: 'Features',
+    question: 'Which features should be enabled?',
+    multiSelect: true,
+    options: [{ label: 'Search' }, { label: 'Cache' }],
+  },
+]
 
 async function createFixture(
   columns = 80,
@@ -257,6 +273,107 @@ async function main(): Promise<void> {
       'abort restores the closed overlay state',
     )
 
+    const question = fixture.controller.runQuestionOverlay({ questions })
+    await settle(fixture)
+    assert(
+      fixture.controller.getState().overlay.mode === 'question' &&
+        screen(fixture).includes('Which database should Bolo use?'),
+      'question overlay opens with the real first question',
+    )
+    fixture.input.send('\u001b[B')
+    fixture.input.send('\r')
+    await settle(fixture)
+    assert(
+      screen(fixture).includes('Which features should be enabled?'),
+      'answering advances inside the same question overlay',
+    )
+    fixture.input.send(' ')
+    fixture.input.send('\u001b[B')
+    fixture.input.send(' ')
+    fixture.input.send('\r')
+    const questionResult = await question
+    assert(
+      questionResult.kind === 'answered' &&
+        questionResult.selections[0]?.selected[0] === 'SQLite' &&
+        questionResult.selections[1]?.selected.join(',') === 'Search,Cache',
+      'question overlay preserves single and multi-select business results',
+    )
+
+    const custom = fixture.controller.runQuestionOverlay({
+      questions: [questions[0]!],
+    })
+    fixture.input.send('\u001b[B')
+    fixture.input.send('\u001b[B')
+    fixture.input.send('\r')
+    await settle(fixture)
+    assert(
+      screen(fixture).includes('Your answer'),
+      'Other opens an editor inside the same OverlayHost',
+    )
+    fixture.input.send('CockroachDB')
+    fixture.input.send('\r')
+    const customResult = await custom
+    assert(
+      customResult.kind === 'answered' &&
+        customResult.selections[0]?.custom === true &&
+        customResult.selections[0]?.selected[0] === 'CockroachDB',
+      'question overlay returns custom text without a second readline owner',
+    )
+
+    const cancelledQuestion = fixture.controller.runQuestionOverlay({
+      questions,
+    })
+    fixture.input.send('\u001b')
+    assert(
+      (await cancelledQuestion).kind === 'cancelled',
+      'Esc cancels the whole question batch',
+    )
+
+    const provider = fixture.controller.runPickerOverlay({
+      mode: 'provider',
+      items: [
+        { id: 'openai', label: 'OpenAI · active' },
+        { id: 'anthropic', label: 'Anthropic' },
+      ],
+      title: 'Select provider',
+      initialIndex: 0,
+    })
+    await settle(fixture)
+    assert(
+      fixture.controller.getState().overlay.mode === 'provider' &&
+        screen(fixture).includes('Anthropic'),
+      'provider picker uses the shared OverlayHost',
+    )
+    fixture.input.send('\u001b[B')
+    fixture.input.send('\r')
+    const providerResult = await provider
+    assert(
+      providerResult.ok && providerResult.id === 'anthropic',
+      'provider picker returns the selected id',
+    )
+
+    const effort = fixture.controller.runPickerOverlay({
+      mode: 'effort',
+      items: [
+        { id: 'auto', label: 'auto' },
+        { id: 'high', label: 'high' },
+      ],
+      title: 'Select effort',
+      initialIndex: 1,
+    })
+    await settle(fixture)
+    assert(
+      fixture.controller.getState().overlay.mode === 'effort' &&
+        screen(fixture).includes('Select effort'),
+      'effort picker exposes its retained mode and title',
+    )
+    fixture.input.send('\u001b')
+    const effortResult = await effort
+    assert(
+      !effortResult.ok && effortResult.reason === 'cancel',
+      'Esc cancels the effort picker without mutating settings',
+    )
+
     const stats = fixture.controller.getTerminalStats()
     assert(stats.externalWrites === 0, 'overlay never uses the legacy writer')
     assert(
@@ -286,8 +403,26 @@ async function main(): Promise<void> {
       ).length >= 2,
       'resume setup and each REPL turn inject the permission OverlayHost',
     )
+    assert(
+      newSessionSource.includes(
+        'runQuestionOverlay: controller.runQuestionOverlay',
+      ),
+      'new-session retained wiring injects the question OverlayHost',
+    )
+    assert(
+      resumeSource.includes('session.askUserQuestion = askUserQuestion'),
+      'resume reattaches AskUserQuestion instead of silently returning unavailable',
+    )
+    assert(
+      resumeSource.includes(
+        'return await controller.runPickerOverlay',
+      ) &&
+        resumeSource.includes("mode: 'provider'") &&
+        resumeSource.includes("mode: 'effort'"),
+      'one retained picker helper serves both provider and effort modes',
+    )
 
-    console.log('PASS: CLI retained OverlayHost permission lifecycle')
+    console.log('PASS: CLI retained OverlayHost interaction lifecycle')
   } finally {
     await fixture.controller.stop()
     fixture.terminal.dispose()

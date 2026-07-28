@@ -11,11 +11,13 @@ import {
   createCliTuiViewState,
   projectCliTuiSessionEvent,
   reduceCliTuiViewState,
+  type AskQuestion,
   type ChatMessage,
   type CliTuiSessionEvent,
   type CliTuiViewAction,
   type CliTuiViewState,
 } from '../../../shared/src/index.ts'
+import type { AskUserQuestionOutcome } from '../../../tools/src/index.ts'
 import {
   type CliSessionEvent,
   type SessionEventPrinter,
@@ -48,6 +50,10 @@ import type {
   AskPermissionDecision,
   AskPermissionRequest,
 } from './askPermissionTty.ts'
+import type {
+  ArrowPickItem,
+  ArrowPickResult,
+} from './arrowPicker.ts'
 
 export type RetainedWelcomeOptions = Omit<
   InkLayoutOptions,
@@ -72,6 +78,17 @@ export type CliTuiController = {
     signal?: AbortSignal
     onInterrupt?: () => void
   }): Promise<AskPermissionDecision>
+  runQuestionOverlay(options: {
+    questions: readonly AskQuestion[]
+    signal?: AbortSignal
+  }): Promise<AskUserQuestionOutcome>
+  runPickerOverlay(options: {
+    mode: 'provider' | 'effort'
+    items: ArrowPickItem[]
+    title?: string
+    initialIndex?: number
+    signal?: AbortSignal
+  }): Promise<ArrowPickResult>
   suspendForLegacyPanel(): Promise<void>
   resumeFromLegacyPanel(): Promise<void>
   isSuspended(): boolean
@@ -524,6 +541,20 @@ export function createRetainedTuiController(options: {
     runPermissionOverlay(overlayOptions) {
       if (stopped) return Promise.resolve('deny')
       return overlay.runPermission(overlayOptions)
+    },
+    runQuestionOverlay(overlayOptions) {
+      if (stopped) return Promise.resolve({ kind: 'cancelled' })
+      return overlay.runQuestion(overlayOptions)
+    },
+    runPickerOverlay(overlayOptions) {
+      if (stopped) {
+        return Promise.resolve({
+          ok: false,
+          reason: 'cancel',
+          message: 'cancelled',
+        })
+      }
+      return overlay.runPicker(overlayOptions)
     },
     async suspendForLegacyPanel() {
       if (!started || stopped || suspended) return

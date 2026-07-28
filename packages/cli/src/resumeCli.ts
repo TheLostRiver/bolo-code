@@ -25,6 +25,7 @@ import type { ChatMessage } from '../../shared/src/index.ts'
 import { createCliProvider, isExplicitMockProvider } from './provider.ts'
 import { createSessionErrorExplainer } from './explainSessionError.ts'
 import { createTtyAskPermission } from './tui/askPermissionTty.ts'
+import { createTtyAskUserQuestion } from './tui/askUserQuestionTty.ts'
 import { applyToolSpecsToSession, type ToolSpecCliArgs } from './applyToolSpecs.ts'
 import { renderWelcomeBanner } from './tui/banner.ts'
 import { renderInkLayout } from './tui/inkLayout.ts'
@@ -46,6 +47,7 @@ import { formatSessionStatusLine } from './tui/statusLine.ts'
 import {
   runArrowPicker,
   type ArrowPickItem,
+  type ArrowPickResult,
 } from './tui/arrowPicker.ts'
 import { getCliSlashCommandCandidates } from './slashCandidates.ts'
 import {
@@ -643,6 +645,16 @@ export async function resumeFromIdOrPath(
       : {}),
     signal: opts.signal,
   })
+  const askUserQuestion = createTtyAskUserQuestion({
+    isTty,
+    writeOut: controller?.writeOutput ?? writeOut,
+    ...(controller
+      ? {
+          runQuestionOverlay: controller.runQuestionOverlay,
+        }
+      : {}),
+    signal: opts.signal,
+  })
 
   const forced = opts.forceMock
     ? createCliProvider({ forceMock: true })
@@ -668,6 +680,7 @@ export async function resumeFromIdOrPath(
 
   thinkingGate.session = session
   if (opts.toolSpecs) applyToolSpecsToSession(session, opts.toolSpecs)
+  session.askUserQuestion = askUserQuestion
   attachSessionEventPrinter(session, printer)
   if (surface) attachSessionTerminalSurface(session, surface)
   if (controller) {
@@ -745,6 +758,31 @@ export async function runOnePrompt(
   const writeSlashOutput = (text: string) => {
     const line = text.endsWith('\n') ? text : `${text}\n`
     writeOut(withContentLayout(line))
+  }
+  const runInteractivePicker = async (picker: {
+    mode: 'provider' | 'effort'
+    items: ArrowPickItem[]
+    title: string
+    initialIndex?: number
+  }): Promise<ArrowPickResult> => {
+    if (controller) {
+      return await controller.runPickerOverlay({
+        ...picker,
+        ...(options?.signal ? { signal: options.signal } : {}),
+      })
+    }
+    await pauseInput?.()
+    try {
+      return await runArrowPicker({
+        items: picker.items,
+        writeOut,
+        isTty: true,
+        title: picker.title,
+        initialIndex: picker.initialIndex,
+      })
+    } finally {
+      await resumeInput?.()
+    }
   }
   const printer = getSessionEventPrinter(session)
   let terminalReason = 'failed'
@@ -835,30 +873,24 @@ export async function runOnePrompt(
         try {
           const items = buildProviderPickerItems(session)
           if (items.length) {
-            await pauseInput?.()
-            try {
-              const ar = await runArrowPicker({
-                items,
-                writeOut,
-                isTty: true,
-                title: 'Select provider (↑/↓ · Enter · q cancel)',
-                initialIndex: activeProviderPickerIndex(session),
-              })
-              if (ar.ok) {
-                const sw = switchSessionProvider(session, ar.id)
-                const out = sw.ok ? sw.message : sw.reason
-                writeSlashOutput(out)
-                return { terminalReason: 'slash', assistantText: out }
-              }
-              if (ar.reason === 'cancel') {
-                const msg = 'provider pick cancelled'
-                writeSlashOutput(msg)
-                return { terminalReason: 'slash', assistantText: msg }
-              }
-              // unsupported → fall through to text list
-            } finally {
-              await resumeInput?.()
+            const ar = await runInteractivePicker({
+              mode: 'provider',
+              items,
+              title: 'Select provider (↑/↓ · Enter · q cancel)',
+              initialIndex: activeProviderPickerIndex(session),
+            })
+            if (ar.ok) {
+              const sw = switchSessionProvider(session, ar.id)
+              const out = sw.ok ? sw.message : sw.reason
+              writeSlashOutput(out)
+              return { terminalReason: 'slash', assistantText: out }
             }
+            if (ar.reason === 'cancel') {
+              const msg = 'provider pick cancelled'
+              writeSlashOutput(msg)
+              return { terminalReason: 'slash', assistantText: msg }
+            }
+            // unsupported → fall through to text list
           }
         } catch {
           /* fall through to text dump */
@@ -895,46 +927,40 @@ export async function runOnePrompt(
             effortLevel: session.effortLevel,
           })
           if (items.length) {
-            await pauseInput?.()
-            try {
-              const ar = await runArrowPicker({
-                items,
-                writeOut,
-                isTty: true,
-                title: 'Select effort (↑/↓ · Enter · q cancel)',
-                initialIndex: activeEffortPickerIndex({
+            const ar = await runInteractivePicker({
+              mode: 'effort',
+              items,
+              title: 'Select effort (↑/↓ · Enter · q cancel)',
+              initialIndex: activeEffortPickerIndex({
+                dialect: dialect as string | undefined,
+                model,
+                isAgent: true,
+                effortLevel: session.effortLevel,
+              }),
+            })
+            if (ar.ok) {
+              if (ar.id === 'auto') {
+                session.effortLevel = undefined
+              } else {
+                session.effortLevel = ar.id
+              }
+              const out =
+                (ar.id === 'auto'
+                  ? 'effort set to auto\n'
+                  : `effort set to ${ar.id}\n`) +
+                formatEffortCapabilityStatus({
+                  effortLevel: ar.id === 'auto' ? 'auto' : ar.id,
                   dialect: dialect as string | undefined,
-                  model,
                   isAgent: true,
-                  effortLevel: session.effortLevel,
-                }),
-              })
-              if (ar.ok) {
-                if (ar.id === 'auto') {
-                  session.effortLevel = undefined
-                } else {
-                  session.effortLevel = ar.id
-                }
-                const out =
-                  (ar.id === 'auto'
-                    ? 'effort set to auto\n'
-                    : `effort set to ${ar.id}\n`) +
-                  formatEffortCapabilityStatus({
-                    effortLevel: ar.id === 'auto' ? 'auto' : ar.id,
-                    dialect: dialect as string | undefined,
-                    isAgent: true,
-                    model,
-                  })
-                writeSlashOutput(out)
-                return { terminalReason: 'slash', assistantText: out }
-              }
-              if (ar.reason === 'cancel') {
-                const msg = 'effort pick cancelled'
-                writeSlashOutput(msg)
-                return { terminalReason: 'slash', assistantText: msg }
-              }
-            } finally {
-              await resumeInput?.()
+                  model,
+                })
+              writeSlashOutput(out)
+              return { terminalReason: 'slash', assistantText: out }
+            }
+            if (ar.reason === 'cancel') {
+              const msg = 'effort pick cancelled'
+              writeSlashOutput(msg)
+              return { terminalReason: 'slash', assistantText: msg }
             }
           }
         } catch {

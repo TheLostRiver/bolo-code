@@ -15,6 +15,7 @@
  */
 
 import readline from 'node:readline'
+import type { AskQuestion } from '../../../shared/src/index.ts'
 import type {
   AskUserQuestionAskerRef,
   AskUserQuestionOutcome,
@@ -31,6 +32,11 @@ export type CreateTtyAskUserQuestionOptions = {
   /** 进 raw 面板前暂停 REPL 的 readline */
   pauseInput?: () => unknown | Promise<unknown>
   resumeInput?: () => unknown | Promise<unknown>
+  /** retained root 内的唯一 OverlayHost；提供时不暂停或转交 stdin。 */
+  runQuestionOverlay?: (options: {
+    questions: readonly AskQuestion[]
+    signal?: AbortSignal
+  }) => Promise<AskUserQuestionOutcome>
   signal?: AbortSignal
 }
 
@@ -62,6 +68,13 @@ export function createTtyAskUserQuestion(
         return { kind: 'unavailable', reason: 'no interactive terminal' }
       }
       if (signal?.aborted) return { kind: 'cancelled' }
+
+      if (opts.runQuestionOverlay) {
+        return await opts.runQuestionOverlay({
+          questions,
+          ...(signal ? { signal } : {}),
+        })
+      }
 
       // 与权限面板同一协议：raw 面板期间必须让出 stdin
       await opts.pauseInput?.()

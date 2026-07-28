@@ -26,6 +26,7 @@ import {
   runQuestionPicker,
   type QuestionPickerState,
 } from '../packages/cli/src/tui/questionPicker.ts'
+import { createTtyAskUserQuestion } from '../packages/cli/src/tui/askUserQuestionTty.ts'
 import type { AskQuestion } from '../packages/shared/src/index.ts'
 
 function assert(cond: unknown, msg: string) {
@@ -261,6 +262,35 @@ async function main() {
     const sel = (r as { selections: Array<{ selected: string[]; custom?: boolean }> })
       .selections
     assert(sel[0]!.custom !== true, 'blank input is not a custom answer')
+  }
+
+  // ── 15) retained adapter 不暂停 root，也不创建第二个 stdin owner ──
+  {
+    let overlayCalls = 0
+    let ownershipTransfers = 0
+    const asker = createTtyAskUserQuestion({
+      isTty: true,
+      runQuestionOverlay: async ({ questions }) => {
+        overlayCalls += 1
+        assert(questions[0] === SINGLE, 'overlay receives the original question')
+        return {
+          kind: 'answered',
+          selections: [{ selected: ['SQLite'] }],
+        }
+      },
+      pauseInput: () => ownershipTransfers++,
+      resumeInput: () => ownershipTransfers++,
+    })
+    const result = await asker.ask([SINGLE])
+    assert(
+      result.kind === 'answered' &&
+        result.selections[0]?.selected[0] === 'SQLite',
+      'retained adapter returns the OverlayHost result',
+    )
+    assert(
+      overlayCalls === 1 && ownershipTransfers === 0,
+      'retained question never pauses or transfers stdin ownership',
+    )
   }
 
   console.log('PASS: question picker')

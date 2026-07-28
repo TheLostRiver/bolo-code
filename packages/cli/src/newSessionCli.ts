@@ -113,6 +113,7 @@ export async function runNewSessionCli(
     writeOut: controller?.writeOutput ?? writeOut,
     ...(controller
       ? {
+          runQuestionOverlay: controller.runQuestionOverlay,
           pauseInput: controller.suspendForLegacyPanel,
           resumeInput: controller.resumeFromLegacyPanel,
         }
