@@ -86,6 +86,21 @@ export {
   type TerminalSurface,
 } from './tui/terminalSurface.ts'
 export {
+  createBoloTerminalAdapter,
+  type BoloTerminalAdapter,
+  type BoloTerminalOutput,
+  type BoloTerminalStats,
+} from './tui/boloTerminalAdapter.ts'
+export {
+  createRetainedTuiController,
+  type CliTuiController,
+  type RetainedWelcomeOptions,
+} from './tui/retainedTui.ts'
+export {
+  resolveCliTuiEngine,
+  type CliTuiEngine,
+} from './tui/tuiEngine.ts'
+export {
   resolveTuiTheme,
   type TuiTheme,
   type TuiThemeId,

@@ -19,9 +19,11 @@ import { renderWelcomeBanner } from './tui/banner.ts'
 import { formatSessionStatusLine } from './tui/statusLine.ts'
 import { renderInkLayout } from './tui/inkLayout.ts'
 import { shouldUseDynamicTui } from './tui/inputBox.ts'
+import { resolveCliTuiEngine } from './tui/tuiEngine.ts'
 import {
   attachSessionEventPrinter,
   attachSessionTerminalSurface,
+  attachSessionTuiController,
   createCliOnEvent,
   runOnePrompt,
   runRepl,
@@ -63,17 +65,24 @@ export async function runNewSessionCli(
   const isTty = opts.isTty ?? process.stdin.isTTY === true
   const dynamicTui =
     opts.print !== true && shouldUseDynamicTui({ isTty })
+  const engine = resolveCliTuiEngine({
+    dynamicTui,
+    env: process.env,
+  })
   const color =
     process.env.NO_COLOR === undefined &&
     process.env.BOLO_THEME?.trim().toLowerCase() !== 'plain'
 
   const thinkingGate: { session: BoloSession | null } = { session: null }
-  const { printer, onEvent, surface } = createCliOnEvent({
+  const { printer, onEvent, surface, controller } = createCliOnEvent({
     writeOut,
     writeErr,
     onSessionEvent: opts.onSessionEvent,
     showThinking: () => thinkingGate.session?.showThinking !== false,
     timeline: dynamicTui,
+    engine,
+    terminalOutput: process.stdout,
+    env: process.env,
     color,
     columns: process.stdout.columns,
     explainError: createSessionErrorExplainer(thinkingGate),
@@ -83,7 +92,14 @@ export async function runNewSessionCli(
     isTty,
     readAnswer: opts.readPermissionAnswer,
     nonTtyDecision: opts.nonTtyPermission ?? 'deny',
-    writeOut,
+    writeOut: controller?.writeOutput ?? writeOut,
+    ...(controller
+      ? {
+          pauseInput: controller.suspendForLegacyPanel,
+          resumeInput: controller.resumeFromLegacyPanel,
+          suspendTextPrompt: true,
+        }
+      : {}),
     signal: opts.signal,
   })
 
@@ -91,7 +107,13 @@ export async function runNewSessionCli(
   // 不在这里编一个默认答案。
   const askUserQuestion = createTtyAskUserQuestion({
     isTty,
-    writeOut,
+    writeOut: controller?.writeOutput ?? writeOut,
+    ...(controller
+      ? {
+          pauseInput: controller.suspendForLegacyPanel,
+          resumeInput: controller.resumeFromLegacyPanel,
+        }
+      : {}),
     signal: opts.signal,
   })
 
@@ -107,6 +129,7 @@ export async function runNewSessionCli(
   session.askUserQuestion = askUserQuestion
   attachSessionEventPrinter(session, printer)
   if (surface) attachSessionTerminalSurface(session, surface)
+  if (controller) attachSessionTuiController(session, controller)
 
   // 配置解析失败必须先说——否则用户会把「配置没生效」误当成别的问题排查
   for (const w of workspace.configWarnings ?? []) {
@@ -136,11 +159,34 @@ export async function runNewSessionCli(
     scope: 'workspace',
   })
 
-  if (!opts.skipBanner) {
-    const active =
-      session.providerId != null
-        ? `${session.providerId}/${session.model ?? session.provider?.id ?? '?'}`
-        : session.model
+  const active =
+    session.providerId != null
+      ? `${session.providerId}/${session.model ?? session.provider?.id ?? '?'}`
+      : session.model
+  if (controller) {
+    if (!opts.skipBanner) {
+      controller.configureWelcome({
+        version: '0.0.1',
+        headline: 'Welcome to Bolo Code',
+        cwd: session.cwd,
+        model: active,
+        sessionId: session.id,
+        plain: opts.plainBanner,
+        session: {
+          permissionMode: session.permissionMode,
+          model: session.model,
+          effortLevel: session.effortLevel,
+          messages: session.messages,
+          providerId: session.providerId,
+          providerKind: session.provider?.id,
+        },
+        hint: '/help commands · /provider model',
+      })
+    } else {
+      controller.setWelcomeVisible(false)
+    }
+    await controller.start()
+  } else if (!opts.skipBanner) {
     const useLayout =
       process.env.BOLO_TUI_LAYOUT !== '0' &&
       process.env.BOLO_TUI_LAYOUT !== 'false' &&
@@ -187,18 +233,25 @@ export async function runNewSessionCli(
   const interactive = !print && !prompt && isTty
 
   if (prompt) {
-    const turn = await runOnePrompt(session, prompt, {
-      writeOut,
-      writeErr,
-      signal: opts.signal,
-    })
     try {
-      const { endSession } = await import('../../core/src/index.ts')
-      await endSession(session, { reason: 'other' })
-    } catch {
-      /* ignore */
+      const turn = await runOnePrompt(session, prompt, {
+        writeOut: controller?.writeOutput ?? writeOut,
+        writeErr: controller?.writeError ?? writeErr,
+        isTty,
+        columns: process.stdout.columns,
+        color,
+        signal: opts.signal,
+      })
+      try {
+        const { endSession } = await import('../../core/src/index.ts')
+        await endSession(session, { reason: 'other' })
+      } catch {
+        /* ignore */
+      }
+      return { session, terminalReason: turn.terminalReason }
+    } finally {
+      await controller?.stop()
     }
-    return { session, terminalReason: turn.terminalReason }
   }
 
   if (interactive) {
@@ -214,6 +267,7 @@ export async function runNewSessionCli(
   writeErr(
     'Non-interactive terminal: pass a prompt, use --print with text, or --resume. See --help.\n',
   )
+  await controller?.stop()
   try {
     const { endSession } = await import('../../core/src/index.ts')
     await endSession(session, { reason: 'other' })

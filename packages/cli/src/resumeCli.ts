@@ -52,6 +52,15 @@ import {
   createTerminalSurface,
   type TerminalSurface,
 } from './tui/terminalSurface.ts'
+import {
+  createRetainedTuiController,
+  type CliTuiController,
+} from './tui/retainedTui.ts'
+import {
+  resolveCliTuiEngine,
+  type CliTuiEngine,
+} from './tui/tuiEngine.ts'
+import type { BoloTerminalOutput } from './tui/boloTerminalAdapter.ts'
 import { renderContextDashboard } from './tui/contextDashboard.ts'
 import {
   prefixTuiContentBlock,
@@ -415,6 +424,7 @@ export function lastAssistantText(
 /** 挂 session 上的 T4 打印机（CLI 内部） */
 const EVENT_PRINTER = Symbol.for('bolo.cli.eventPrinter')
 const TERMINAL_SURFACE = Symbol.for('bolo.cli.terminalSurface')
+const TUI_CONTROLLER = Symbol.for('bolo.cli.tuiController')
 
 export function getSessionEventPrinter(
   session: BoloSession,
@@ -450,6 +460,23 @@ export function attachSessionTerminalSurface(
   )[TERMINAL_SURFACE] = surface
 }
 
+export function getSessionTuiController(
+  session: BoloSession,
+): CliTuiController | undefined {
+  return (
+    session as BoloSession & { [TUI_CONTROLLER]?: CliTuiController }
+  )[TUI_CONTROLLER]
+}
+
+export function attachSessionTuiController(
+  session: BoloSession,
+  controller: CliTuiController,
+): void {
+  ;(
+    session as BoloSession & { [TUI_CONTROLLER]?: CliTuiController }
+  )[TUI_CONTROLLER] = controller
+}
+
 /**
  * 组装 CLI onEvent：T4 打印机 + 可选测试钩子
  */
@@ -467,24 +494,42 @@ export function createCliOnEvent(opts: {
   color?: boolean
   columns?: number
   activity?: TurnActivityIndicator
+  engine?: CliTuiEngine
+  terminalOutput?: BoloTerminalOutput
+  env?: NodeJS.ProcessEnv
   /** 把 provider 原始错误变成「怎么了 + 下一步」（晚绑定到活跃 session） */
   explainError?: (message: string) => string
 }): {
   printer: SessionEventPrinter
   onEvent: (e: SessionEvent) => void
   surface?: TerminalSurface
+  controller?: CliTuiController
 } {
+  const controller =
+    opts.timeline === true && opts.engine === 'retained'
+      ? createRetainedTuiController({
+          writeOut: opts.writeOut,
+          writeErr: opts.writeErr,
+          output: opts.terminalOutput ?? { columns: opts.columns },
+          env: opts.env,
+          fallbackColumns: opts.columns,
+          showThinking: opts.showThinking,
+          ...(opts.explainError ? { explainError: opts.explainError } : {}),
+        })
+      : undefined
   const surface =
-    opts.timeline === true
+    opts.timeline === true && !controller
       ? createTerminalSurface({
           writeOut: opts.writeOut,
           writeErr: opts.writeErr,
         })
       : undefined
-  const printerOut = surface?.writeOutput ?? opts.writeOut
-  const printerErr = surface?.writeError ?? opts.writeErr
+  const printerOut =
+    controller?.writeOutput ?? surface?.writeOutput ?? opts.writeOut
+  const printerErr =
+    controller?.writeError ?? surface?.writeError ?? opts.writeErr
   const activity =
-    opts.timeline === true
+    opts.timeline === true && !controller
       ? (opts.activity ??
         createTurnActivityIndicator({
           writeOut: printerOut,
@@ -498,19 +543,22 @@ export function createCliOnEvent(opts: {
             : {}),
         }))
       : undefined
-  const printer = createSessionEventPrinter({
-    writeOut: printerOut,
-    writeErr: printerErr,
-    showThinking: opts.showThinking,
-    timeline: opts.timeline,
-    color: opts.color,
-    columns: opts.columns,
-    activity,
-    ...(opts.explainError ? { explainError: opts.explainError } : {}),
-  })
+  const printer =
+    controller?.printer ??
+    createSessionEventPrinter({
+      writeOut: printerOut,
+      writeErr: printerErr,
+      showThinking: opts.showThinking,
+      timeline: opts.timeline,
+      color: opts.color,
+      columns: opts.columns,
+      activity,
+      ...(opts.explainError ? { explainError: opts.explainError } : {}),
+    })
   return {
     printer,
     ...(surface ? { surface } : {}),
+    ...(controller ? { controller } : {}),
     onEvent: (e) => {
       printer.onEvent(e)
       opts.onSessionEvent?.(e)
@@ -530,19 +578,26 @@ export async function resumeFromIdOrPath(
   const isTty = opts.isTty ?? process.stdin.isTTY === true
   const dynamicTui =
     opts.print !== true && shouldUseDynamicTui({ isTty })
+  const engine = resolveCliTuiEngine({
+    dynamicTui,
+    env: process.env,
+  })
   const color =
     process.env.NO_COLOR === undefined &&
     process.env.BOLO_THEME?.trim().toLowerCase() !== 'plain'
 
   // 打印机创建早于 session；绑定后读 session.showThinking（/thinking）
   const thinkingGate: { session: BoloSession | null } = { session: null }
-  const { printer, onEvent, surface } = createCliOnEvent({
+  const { printer, onEvent, surface, controller } = createCliOnEvent({
     writeOut,
     writeErr,
     onSessionEvent: opts.onSessionEvent,
     onEvent: opts.onEvent,
     showThinking: () => thinkingGate.session?.showThinking !== false,
     timeline: dynamicTui,
+    engine,
+    terminalOutput: process.stdout,
+    env: process.env,
     color,
     columns: process.stdout.columns,
     explainError: createSessionErrorExplainer(thinkingGate),
@@ -552,7 +607,14 @@ export async function resumeFromIdOrPath(
     isTty,
     readAnswer: opts.readPermissionAnswer,
     nonTtyDecision: opts.nonTtyPermission ?? 'deny',
-    writeOut,
+    writeOut: controller?.writeOutput ?? writeOut,
+    ...(controller
+      ? {
+          pauseInput: controller.suspendForLegacyPanel,
+          resumeInput: controller.resumeFromLegacyPanel,
+          suspendTextPrompt: true,
+        }
+      : {}),
     signal: opts.signal,
   })
 
@@ -582,6 +644,10 @@ export async function resumeFromIdOrPath(
   if (opts.toolSpecs) applyToolSpecsToSession(session, opts.toolSpecs)
   attachSessionEventPrinter(session, printer)
   if (surface) attachSessionTerminalSurface(session, surface)
+  if (controller) {
+    controller.restoreMessages(session.messages)
+    attachSessionTuiController(session, controller)
+  }
 
   // 快照读不了但从 append-only transcript 救回来了。
   // 静默恢复等于隐瞒损坏——说清楚发生了什么、坏文件在哪、我们没动它。
@@ -626,8 +692,8 @@ export async function runOnePrompt(
     columns?: number
     color?: boolean
     /** REPL：打开 raw 面板前暂停 readline */
-    pauseInput?: () => void
-    resumeInput?: () => void
+    pauseInput?: () => unknown | Promise<unknown>
+    resumeInput?: () => unknown | Promise<unknown>
     /** 当前 turn 取消信号 */
     signal?: AbortSignal
     /** queued control 已分配的 durable turn id。 */
@@ -640,8 +706,15 @@ export async function runOnePrompt(
   const writeErr = options?.writeErr ?? ((s) => process.stderr.write(s))
   const isTty = options?.isTty ?? process.stdin.isTTY === true
   const columns = options?.columns ?? process.stdout.columns ?? 80
+  const controller = getSessionTuiController(session)
+  const pauseInput =
+    options?.pauseInput ?? controller?.suspendForLegacyPanel
+  const resumeInput =
+    options?.resumeInput ?? controller?.resumeFromLegacyPanel
   const withContentLayout = (text: string): string =>
-    isTty ? prefixTuiContentBlock(text, { columns }) : text
+    isTty && !controller
+      ? prefixTuiContentBlock(text, { columns })
+      : text
   const writeSlashOutput = (text: string) => {
     const line = text.endsWith('\n') ? text : `${text}\n`
     writeOut(withContentLayout(line))
@@ -702,7 +775,7 @@ export async function runOnePrompt(
             pathFilter: result.interactiveDiff.pathFilter,
           })
           if (vm.files.length) {
-            options?.pauseInput?.()
+            await pauseInput?.()
             try {
               const pane = await runDiffPane({
                 model: vm,
@@ -717,7 +790,7 @@ export async function runOnePrompt(
                 }
               }
             } finally {
-              options?.resumeInput?.()
+              await resumeInput?.()
             }
           }
         } catch {
@@ -735,7 +808,7 @@ export async function runOnePrompt(
         try {
           const items = buildProviderPickerItems(session)
           if (items.length) {
-            options?.pauseInput?.()
+            await pauseInput?.()
             try {
               const ar = await runArrowPicker({
                 items,
@@ -757,7 +830,7 @@ export async function runOnePrompt(
               }
               // unsupported → fall through to text list
             } finally {
-              options?.resumeInput?.()
+              await resumeInput?.()
             }
           }
         } catch {
@@ -795,7 +868,7 @@ export async function runOnePrompt(
             effortLevel: session.effortLevel,
           })
           if (items.length) {
-            options?.pauseInput?.()
+            await pauseInput?.()
             try {
               const ar = await runArrowPicker({
                 items,
@@ -834,7 +907,7 @@ export async function runOnePrompt(
                 return { terminalReason: 'slash', assistantText: msg }
               }
             } finally {
-              options?.resumeInput?.()
+              await resumeInput?.()
             }
           }
         } catch {
@@ -923,11 +996,16 @@ export async function runRepl(
   const writeErr = options?.writeErr ?? ((s) => process.stderr.write(s))
   const isTty = options?.isTty ?? process.stdin.isTTY === true
   const dynamicTui = shouldUseDynamicTui({ isTty })
-  const surface = dynamicTui
+  const controller = dynamicTui
+    ? getSessionTuiController(session)
+    : undefined
+  const surface = dynamicTui && !controller
     ? getSessionTerminalSurface(session)
     : undefined
-  const runtimeOut = surface?.writeOutput ?? writeOut
-  const runtimeErr = surface?.writeError ?? writeErr
+  const runtimeOut =
+    controller?.writeOutput ?? surface?.writeOutput ?? writeOut
+  const runtimeErr =
+    controller?.writeError ?? surface?.writeError ?? writeErr
   const color =
     process.env.NO_COLOR === undefined &&
     process.env.BOLO_THEME?.trim().toLowerCase() !== 'plain'
@@ -943,7 +1021,7 @@ export async function runRepl(
     writeOut(
       'Interactive mode (/exit to quit). Type /help for commands.\n',
     )
-  } else {
+  } else if (!controller) {
     writeOut('\n')
   }
 
@@ -1002,11 +1080,15 @@ export async function runRepl(
       /* ignore */
     }
   }
-  const pauseInteractiveSurface = dynamicTui
-    ? () => surface?.suspend()
+  const pauseInteractiveSurface: () => void | Promise<void> = dynamicTui
+    ? controller
+      ? controller.suspendForLegacyPanel
+      : () => surface?.suspend()
     : pauseRl
-  const resumeInteractiveSurface = dynamicTui
-    ? () => surface?.resume()
+  const resumeInteractiveSurface: () => void | Promise<void> = dynamicTui
+    ? controller
+      ? controller.resumeFromLegacyPanel
+      : () => surface?.resume()
     : resumeRl
   let activeTurn: AbortController | null = null
   const interrupt = async () => {
@@ -1033,7 +1115,7 @@ export async function runRepl(
       return
     }
     replClosed = true
-    writeOut('^C\n')
+    runtimeOut('^C\n')
     rl?.close()
   }
   const onSigint = () => {
@@ -1056,32 +1138,38 @@ export async function runRepl(
           writeOut(`[queued ${queued.controlId}] ${text}\n`)
         }
       } else if (dynamicTui) {
-        const input = await readTuiInput({
-          writeOut,
-          columns: process.stdout.columns,
-          color,
-          history,
-          slashCandidates: getCliSlashCommandCandidates(session),
-          signal: options?.signal,
-          status: {
-            permissionMode: session.permissionMode,
-            providerId: session.providerId,
-            providerKind: session.provider?.id,
-            model: session.model,
-            effortLevel: session.effortLevel,
-            ...(session.usage ? { usage: session.usage } : {}),
-          },
-        })
+        await pauseInteractiveSurface()
+        let input
+        try {
+          input = await readTuiInput({
+            writeOut: runtimeOut,
+            columns: process.stdout.columns,
+            color,
+            history,
+            slashCandidates: getCliSlashCommandCandidates(session),
+            signal: options?.signal,
+            status: {
+              permissionMode: session.permissionMode,
+              providerId: session.providerId,
+              providerKind: session.provider?.id,
+              model: session.model,
+              effortLevel: session.effortLevel,
+              ...(session.usage ? { usage: session.usage } : {}),
+            },
+          })
+        } finally {
+          await resumeInteractiveSurface()
+        }
         if (input.type !== 'submit') {
           replClosed = true
-          writeOut(input.type === 'exit' ? '^C\n' : '\n')
+          runtimeOut(input.type === 'exit' ? '^C\n' : '\n')
           break
         }
         text = input.value.trim()
         if (!text) continue
         if (text === '/exit' || text === '/quit') {
           replClosed = true
-          writeOut('Session closed.\n')
+          runtimeOut('Session closed.\n')
           break
         }
         if (history[history.length - 1] !== text) history.push(text)
@@ -1170,6 +1258,7 @@ export async function runRepl(
     else rl?.removeListener('SIGINT', onSigint)
     options?.signal?.removeEventListener('abort', onExternalAbort)
     surface?.dispose()
+    await controller?.stop()
     rl?.close()
     // H0：REPL 正常退出 → SessionEnd
     try {
@@ -1218,8 +1307,28 @@ export async function runResumeCli(
   const interactive =
     !print && !prompt && isTty
   const dynamicTui = interactive && shouldUseDynamicTui({ isTty })
+  const controller = getSessionTuiController(result.session)
 
-  if (dynamicTui) {
+  if (controller) {
+    const active =
+      result.session.providerId != null
+        ? `${result.session.providerId}/${result.session.model ?? result.session.provider?.id ?? '?'}`
+        : result.session.model
+    controller.configureWelcome({
+      version: '0.0.1',
+      headline: 'Welcome back.',
+      cwd: result.session.cwd,
+      model: active,
+      sessionId: result.session.id,
+      messagePreview: result.summary.lastMessage
+        ? [
+            `resumed ${result.summary.messageCount} messages · ${result.summary.lastMessage.preview}`,
+          ]
+        : [`resumed ${result.summary.messageCount} messages`],
+      hint: '/help commands · /provider model',
+    })
+    await controller.start()
+  } else if (dynamicTui) {
     const active =
       result.session.providerId != null
         ? `${result.session.providerId}/${result.session.model ?? result.session.provider?.id ?? '?'}`
@@ -1253,19 +1362,25 @@ export async function runResumeCli(
   }
 
   if (prompt) {
-    const turn = await runOnePrompt(result.session, prompt, {
-      writeOut,
-      writeErr,
-      signal: opts.signal,
-    })
-    result.terminalReason = turn.terminalReason
     try {
-      const { endSession } = await import('../../core/src/index.ts')
-      await endSession(result.session, { reason: 'other' })
-    } catch {
-      /* ignore */
+      const turn = await runOnePrompt(result.session, prompt, {
+        writeOut: controller?.writeOutput ?? writeOut,
+        writeErr: controller?.writeError ?? writeErr,
+        isTty,
+        columns: process.stdout.columns,
+        signal: opts.signal,
+      })
+      result.terminalReason = turn.terminalReason
+      try {
+        const { endSession } = await import('../../core/src/index.ts')
+        await endSession(result.session, { reason: 'other' })
+      } catch {
+        /* ignore */
+      }
+      return result
+    } finally {
+      await controller?.stop()
     }
-    return result
   }
 
   if (interactive) {
@@ -1278,6 +1393,7 @@ export async function runResumeCli(
   }
 
   // --print 且无 prompt：仅摘要后结束
+  await controller?.stop()
   try {
     const { endSession } = await import('../../core/src/index.ts')
     await endSession(result.session, { reason: 'other' })

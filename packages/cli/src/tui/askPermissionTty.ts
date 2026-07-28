@@ -103,8 +103,8 @@ export type CreateTtyAskPermissionOptions = {
   /** 测试注入 raw key */
   readKey?: () => Promise<string>
   /** 面板前后（REPL 暂停 readline） */
-  pauseInput?: () => void
-  resumeInput?: () => void
+  pauseInput?: () => unknown | Promise<unknown>
+  resumeInput?: () => unknown | Promise<unknown>
   /** 文本权限询问也临时接管动态 composer 区域。 */
   suspendTextPrompt?: boolean
   /** 当前 turn 的取消信号；abort 时权限请求按 deny 收口 */
@@ -202,7 +202,7 @@ export function createTtyAskPermission(
           removed: req.preview.removed,
         })
         if (vm.files.length) {
-          opts.pauseInput?.()
+          await opts.pauseInput?.()
           try {
             const pane = await runDiffApprovePane({
               model: vm,
@@ -215,7 +215,7 @@ export function createTtyAskPermission(
             })
             if (pane.ok) return pane.decision
           } finally {
-            opts.resumeInput?.()
+            await opts.resumeInput?.()
           }
         }
       } catch {
@@ -224,7 +224,7 @@ export function createTtyAskPermission(
     }
 
     if (usePermissionPanel && !opts.readAnswer) {
-      opts.pauseInput?.()
+      await opts.pauseInput?.()
       try {
         return await runPermissionPanel({
           request: req,
@@ -237,11 +237,11 @@ export function createTtyAskPermission(
           onInterrupt: opts.onInterrupt,
         })
       } finally {
-        opts.resumeInput?.()
+        await opts.resumeInput?.()
       }
     }
 
-    if (opts.suspendTextPrompt) opts.pauseInput?.()
+    if (opts.suspendTextPrompt) await opts.pauseInput?.()
     try {
       const prompt = formatPermissionPrompt(req.toolName, req.preview)
       const raw = opts.readAnswer
@@ -249,7 +249,7 @@ export function createTtyAskPermission(
         : await defaultRead(prompt, signal)
       return parsePermissionAnswer(raw)
     } finally {
-      if (opts.suspendTextPrompt) opts.resumeInput?.()
+      if (opts.suspendTextPrompt) await opts.resumeInput?.()
     }
   }
 }

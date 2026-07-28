@@ -29,8 +29,8 @@ export type CreateTtyAskUserQuestionOptions = {
   /** 自由文本读取（测试注入）；缺省用 readline */
   readLine?: (prompt: string) => Promise<string>
   /** 进 raw 面板前暂停 REPL 的 readline */
-  pauseInput?: () => void
-  resumeInput?: () => void
+  pauseInput?: () => unknown | Promise<unknown>
+  resumeInput?: () => unknown | Promise<unknown>
   signal?: AbortSignal
 }
 
@@ -64,7 +64,7 @@ export function createTtyAskUserQuestion(
       if (signal?.aborted) return { kind: 'cancelled' }
 
       // 与权限面板同一协议：raw 面板期间必须让出 stdin
-      opts.pauseInput?.()
+      await opts.pauseInput?.()
       try {
         const r = await runQuestionPicker({
           questions,
@@ -76,7 +76,7 @@ export function createTtyAskUserQuestion(
         })
         return r
       } finally {
-        opts.resumeInput?.()
+        await opts.resumeInput?.()
       }
     },
   }
