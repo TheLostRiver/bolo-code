@@ -412,6 +412,102 @@ async function main(): Promise<void> {
   assert(fakeInput.listenerCount('keypress') === 0, 'keypress listener removed')
   assert(fakeInput.paused, 'stdin paused after idle editor exits')
 
+  const pasteInput = new FakeRawInput()
+  const pasteOut: string[] = []
+  const pasted = readTuiInput({
+    input: pasteInput as never,
+    writeOut: (text) => pasteOut.push(text),
+    columns: 50,
+    color: false,
+  })
+  assert(
+    pasteOut.includes('\u001b[?2004h'),
+    'raw driver enables terminal bracketed paste mode',
+  )
+  pasteInput.emit(
+    'data',
+    '\u001b[200~first line\r\n第二行🙂\u001b[201~',
+  )
+  assert(
+    pasteOut.filter((chunk) => chunk.includes('╭')).length === 2,
+    'one complete paste adds exactly one rendered frame',
+  )
+  pasteInput.emit('keypress', '\r', { name: 'return', sequence: '\r' })
+  const pastedResult = await pasted
+  assert(
+    pastedResult.type === 'submit' &&
+      pastedResult.value === 'first line\n第二行🙂',
+    `single-chunk paste is normalized without early submit: ${
+      pastedResult.type === 'submit'
+        ? JSON.stringify(pastedResult.value)
+        : pastedResult.type
+    }`,
+  )
+  assert(
+    pastedResult.type !== 'submit' ||
+      (!pastedResult.value.includes('\u001b[200~') &&
+        !pastedResult.value.includes('\u001b[201~')),
+    'bracketed paste markers never enter input state',
+  )
+  assert(
+    pasteOut.includes('\u001b[?2004l'),
+    'raw driver disables bracketed paste mode after submit',
+  )
+
+  const splitPasteInput = new FakeRawInput()
+  const splitPasteOut: string[] = []
+  const splitPasted = readTuiInput({
+    input: splitPasteInput as never,
+    writeOut: (text) => splitPasteOut.push(text),
+    columns: 50,
+    color: false,
+  })
+  splitPasteInput.emit('data', '\u001b[20')
+  splitPasteInput.emit('data', '0~one\r')
+  splitPasteInput.emit('data', '\n二🙂\rthree\u001b[2')
+  splitPasteInput.emit('data', '01~')
+  assert(
+    splitPasteOut.filter((chunk) => chunk.includes('╭')).length === 2,
+    'split marker paste remains one redraw transaction',
+  )
+  splitPasteInput.emit('keypress', '\r', {
+    name: 'return',
+    sequence: '\r',
+  })
+  const splitPasteResult = await splitPasted
+  assert(
+    splitPasteResult.type === 'submit' &&
+      splitPasteResult.value === 'one\n二🙂\nthree',
+    `split markers and CR-only newlines are normalized: ${
+      splitPasteResult.type === 'submit'
+        ? JSON.stringify(splitPasteResult.value)
+        : splitPasteResult.type
+    }`,
+  )
+
+  const abortPasteInput = new FakeRawInput()
+  const abortPasteOut: string[] = []
+  const abortController = new AbortController()
+  const abortedPaste = readTuiInput({
+    input: abortPasteInput as never,
+    writeOut: (text) => abortPasteOut.push(text),
+    columns: 50,
+    color: false,
+    signal: abortController.signal,
+  })
+  abortPasteInput.emit('data', '\u001b[200~unfinished\r\npaste')
+  abortController.abort()
+  const abortedPasteResult = await abortedPaste
+  assert(abortedPasteResult.type === 'aborted', 'paste can be aborted')
+  assert(
+    abortPasteOut.includes('\u001b[?2004l'),
+    'abort cleanup disables bracketed paste mode',
+  )
+  assert(
+    abortPasteInput.listenerCount('keypress') === 0,
+    'abort cleanup removes the keypress listener',
+  )
+
   const slashDriverInput = new FakeRawInput()
   const slashDriver = readTuiInput({
     input: slashDriverInput as never,

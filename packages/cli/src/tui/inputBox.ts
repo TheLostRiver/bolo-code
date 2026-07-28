@@ -829,6 +829,9 @@ type RawInput = NodeJS.ReadStream & {
   setRawMode?: (mode: boolean) => unknown
 }
 
+const BRACKETED_PASTE_ENABLE = '\u001b[?2004h'
+const BRACKETED_PASTE_DISABLE = '\u001b[?2004l'
+
 export type ReadTuiInputResult =
   | { type: 'submit'; value: string }
   | { type: 'exit' }
@@ -885,6 +888,7 @@ export async function readTuiInput(options: {
     slashCandidates: options.slashCandidates,
   })
   let rendered: RenderedTuiInputBox | null = null
+  let pasteBuffer: string | null = null
   let settled = false
 
   const clearRendered = () => {
@@ -926,12 +930,15 @@ export async function readTuiInput(options: {
   readline.emitKeypressEvents(input)
   input.setRawMode?.(true)
   input.resume()
+  writeOut(BRACKETED_PASTE_ENABLE)
   draw()
 
   return await new Promise<ReadTuiInputResult>((resolve) => {
     const cleanup = () => {
       input.removeListener('keypress', onKeypress)
       options.signal?.removeEventListener('abort', onAbort)
+      pasteBuffer = null
+      writeOut(BRACKETED_PASTE_DISABLE)
       clearRendered()
       if (!wasRaw) input.setRawMode?.(false)
       input.pause()
@@ -944,6 +951,22 @@ export async function readTuiInput(options: {
     }
     const onAbort = () => finish({ type: 'aborted' })
     const onKeypress = (sequence: string, key: readline.Key) => {
+      if (key.name === 'paste-start') {
+        pasteBuffer = ''
+        return
+      }
+      if (key.name === 'paste-end') {
+        if (pasteBuffer === null) return
+        const pastedText = pasteBuffer
+        pasteBuffer = null
+        state = insertText(state, pastedText)
+        draw()
+        return
+      }
+      if (pasteBuffer !== null) {
+        pasteBuffer += sequence || key.sequence || ''
+        return
+      }
       const result = applyTuiInputKey(state, {
         name: key.name,
         sequence: sequence || key.sequence,
