@@ -10,20 +10,21 @@ import {
   type RuntimeTextRenderOptions,
 } from '../../../core/src/runtimeTextView.ts'
 import type { RuntimeQueryView } from '../../../shared/src/runtimeQuery.ts'
+import {
+  applyRuntimePagerKey,
+  parseRuntimePagerKey,
+  type RuntimePagerDoneReason,
+  type RuntimePagerKey,
+  type RuntimePagerSuccess,
+} from '../../../shared/src/runtimePager.ts'
+import type {
+  BoloTerminalInput,
+  BoloTerminalOutput,
+} from './boloTerminalAdapter.ts'
+import { createRetainedTuiController } from './retainedTui.ts'
 
-export type RuntimePagerKey =
-  | 'next'
-  | 'previous'
-  | 'quit'
-  | 'ctrl-c'
-  | 'eof'
-  | 'none'
-
-export type RuntimePagerDoneReason =
-  | 'single-page'
-  | 'quit'
-  | 'interrupt'
-  | 'eof'
+export { applyRuntimePagerKey, parseRuntimePagerKey }
+export type { RuntimePagerDoneReason, RuntimePagerKey }
 
 export type RuntimePagerInput = {
   isTTY?: boolean
@@ -39,71 +40,12 @@ export type RuntimePagerInput = {
 }
 
 export type RuntimePagerResult =
-  | {
-      ok: true
-      reason: RuntimePagerDoneReason
-      page: number
-      pageCount: number
-    }
+  | RuntimePagerSuccess
   | {
       ok: false
       reason: 'unsupported'
       message: string
     }
-
-export function parseRuntimePagerKey(input: string): RuntimePagerKey {
-  if (input === '' || input === '\u0004') return 'eof'
-  if (input === '\u0003') return 'ctrl-c'
-  if (input === '\u001b' || input === 'q' || input === 'Q') {
-    return 'quit'
-  }
-  if (
-    input === '\u001b[B' ||
-    input === '\u001b[C' ||
-    input === '\u001b[6~' ||
-    input === 'n' ||
-    input === 'N' ||
-    input === 'j' ||
-    input === 'l' ||
-    input === ' '
-  ) {
-    return 'next'
-  }
-  if (
-    input === '\u001b[A' ||
-    input === '\u001b[D' ||
-    input === '\u001b[5~' ||
-    input === 'p' ||
-    input === 'P' ||
-    input === 'k' ||
-    input === 'h' ||
-    input === 'b' ||
-    input === 'B'
-  ) {
-    return 'previous'
-  }
-  return 'none'
-}
-
-export function applyRuntimePagerKey(
-  page: number,
-  pageCount: number,
-  key: RuntimePagerKey,
-): {
-  page: number
-  done?: 'quit' | 'interrupt' | 'eof'
-} {
-  const last = Math.max(0, Math.floor(pageCount) - 1)
-  const current = Math.max(0, Math.min(last, Math.floor(page)))
-  if (key === 'next') return { page: Math.min(last, current + 1) }
-  if (key === 'previous') return { page: Math.max(0, current - 1) }
-  if (key === 'quit') return { page: current, done: 'quit' }
-  if (key === 'ctrl-c') {
-    return { page: current, done: 'interrupt' }
-  }
-  if (key === 'eof') return { page: current, done: 'eof' }
-  return { page: current }
-}
 
 function adaptRuntimePagerInput(
   input: NodeJS.ReadStream,
@@ -301,5 +243,92 @@ export async function runRuntimePager(options: {
       current = render(next.page)
       paint()
     }
+  }
+}
+
+export async function runRetainedRuntimePager(options: {
+  view: RuntimeQueryView
+  columns?: number
+  rows?: number
+  pageSize?: number
+  color?: boolean
+  filter?: RuntimeTextRenderOptions['filter']
+  isTty?: boolean
+  input?: BoloTerminalInput
+  output?: BoloTerminalOutput
+  writeOut?: (text: string) => void
+  signal?: AbortSignal
+  onInterrupt?: () => void
+}): Promise<RuntimePagerResult> {
+  const writeOut =
+    options.writeOut ?? ((text: string) => process.stdout.write(text))
+  const output = options.output ?? process.stdout
+  const input = options.input ?? process.stdin
+  const isTty =
+    options.isTty ??
+    (input.isTTY === true && process.stdout.isTTY === true)
+  const columns =
+    options.columns ??
+    (typeof output.columns === 'number' ? output.columns : 80)
+  const rows =
+    options.rows ??
+    (typeof output.rows === 'number' ? output.rows : 24)
+  const pageSize =
+    options.pageSize ?? Math.max(1, Math.floor(rows) - 6)
+  const initial = renderRuntimeText(options.view, {
+    columns,
+    page: 0,
+    pageSize,
+    color: options.color,
+    filter: options.filter,
+  })
+
+  if (initial.pageCount <= 1) {
+    writeOut(`${initial.text}\n`)
+    return {
+      ok: true,
+      reason: 'single-page',
+      page: initial.page,
+      pageCount: initial.pageCount,
+    }
+  }
+  if (!isTty) {
+    return {
+      ok: false,
+      reason: 'unsupported',
+      message: 'runtime pager requires TTY for a multi-page view',
+    }
+  }
+  if (options.signal?.aborted) {
+    return {
+      ok: true,
+      reason: 'interrupt',
+      page: initial.page,
+      pageCount: initial.pageCount,
+    }
+  }
+
+  const controller = createRetainedTuiController({
+    writeOut,
+    input,
+    output,
+    fallbackColumns: columns,
+    fallbackRows: rows,
+    color: options.color,
+    rootVisible: false,
+  })
+  await controller.start()
+  try {
+    return await controller.runPagerOverlay({
+      view: options.view,
+      pageSize,
+      ...(options.filter ? { filter: options.filter } : {}),
+      ...(options.signal ? { signal: options.signal } : {}),
+      ...(options.onInterrupt
+        ? { onInterrupt: options.onInterrupt }
+        : {}),
+    })
+  } finally {
+    await controller.stop()
   }
 }

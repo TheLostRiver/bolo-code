@@ -278,6 +278,15 @@ export {
 } from './runtimeQuery.ts'
 
 export {
+  applyRuntimePagerKey,
+  parseRuntimePagerKey,
+  type RuntimePagerDoneReason,
+  type RuntimePagerKey,
+  type RuntimePagerSuccess,
+  type RuntimePagerTransition,
+} from './runtimePager.ts'
+
+export {
   ASK_MAX_QUESTIONS,
   ASK_MIN_OPTIONS,
   ASK_MAX_OPTIONS,

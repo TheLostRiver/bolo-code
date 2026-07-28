@@ -638,9 +638,7 @@ export async function resumeFromIdOrPath(
     ...(controller
       ? {
           runPermissionOverlay: controller.runPermissionOverlay,
-          pauseInput: controller.suspendForLegacyPanel,
-          resumeInput: controller.resumeFromLegacyPanel,
-          suspendTextPrompt: true,
+          runDiffOverlay: controller.runDiffOverlay,
         }
       : {}),
     signal: opts.signal,
@@ -747,10 +745,8 @@ export async function runOnePrompt(
   const isTty = options?.isTty ?? process.stdin.isTTY === true
   const columns = options?.columns ?? process.stdout.columns ?? 80
   const controller = getSessionTuiController(session)
-  const pauseInput =
-    options?.pauseInput ?? controller?.suspendForLegacyPanel
-  const resumeInput =
-    options?.resumeInput ?? controller?.resumeFromLegacyPanel
+  const pauseInput = options?.pauseInput
+  const resumeInput = options?.resumeInput
   const withContentLayout = (text: string): string =>
     isTty && !controller
       ? prefixTuiContentBlock(text, { columns })
@@ -834,28 +830,36 @@ export async function runOnePrompt(
           const { buildDiffViewModelFromLog } = await import(
             '../../core/src/diffViewModel.ts'
           )
-          const { runDiffPane } = await import('./tui/diffPane.ts')
           const vm = buildDiffViewModelFromLog(session.fileDiffLog, {
             lastTurn: result.interactiveDiff.mode === 'last',
             pathFilter: result.interactiveDiff.pathFilter,
           })
           if (vm.files.length) {
-            await pauseInput?.()
-            try {
-              const pane = await runDiffPane({
-                model: vm,
-                writeOut,
-                isTty: true,
-                signal: options?.signal,
-              })
-              if (pane.ok) {
-                return {
-                  terminalReason: 'slash',
-                  assistantText: '(diff panel closed)',
-                }
+            const pane = controller
+              ? await controller.runDiffOverlay({
+                  mode: 'browse',
+                  model: vm,
+                  ...(options?.signal ? { signal: options.signal } : {}),
+                })
+              : await (async () => {
+                  const { runDiffPane } = await import('./tui/diffPane.ts')
+                  await pauseInput?.()
+                  try {
+                    return await runDiffPane({
+                      model: vm,
+                      writeOut,
+                      isTty: true,
+                      signal: options?.signal,
+                    })
+                  } finally {
+                    await resumeInput?.()
+                  }
+                })()
+            if (pane.ok) {
+              return {
+                terminalReason: 'slash',
+                assistantText: '(diff panel closed)',
               }
-            } finally {
-              await resumeInput?.()
             }
           }
         } catch {
@@ -1135,12 +1139,12 @@ export async function runRepl(
   }
   const pauseInteractiveSurface: () => void | Promise<void> = dynamicTui
     ? controller
-      ? controller.suspendForLegacyPanel
+      ? () => undefined
       : () => surface?.suspend()
     : pauseRl
   const resumeInteractiveSurface: () => void | Promise<void> = dynamicTui
     ? controller
-      ? controller.resumeFromLegacyPanel
+      ? () => undefined
       : () => surface?.resume()
     : resumeRl
   let activeTurn: AbortController | null = null
@@ -1292,11 +1296,16 @@ export async function runRepl(
         ...(controller
           ? {
               runPermissionOverlay: controller.runPermissionOverlay,
+              runDiffOverlay: controller.runDiffOverlay,
             }
           : {}),
-        pauseInput: pauseInteractiveSurface,
-        resumeInput: resumeInteractiveSurface,
-        suspendTextPrompt: dynamicTui,
+        ...(!controller
+          ? {
+              pauseInput: pauseInteractiveSurface,
+              resumeInput: resumeInteractiveSurface,
+              suspendTextPrompt: dynamicTui,
+            }
+          : {}),
         signal: turnController.signal,
         onInterrupt: () => turnController.abort('interrupt'),
       })
@@ -1307,8 +1316,12 @@ export async function runRepl(
           isTty,
           columns: process.stdout.columns,
           color,
-          pauseInput: pauseInteractiveSurface,
-          resumeInput: resumeInteractiveSurface,
+          ...(!controller
+            ? {
+                pauseInput: pauseInteractiveSurface,
+                resumeInput: resumeInteractiveSurface,
+              }
+            : {}),
           signal: turnController.signal,
           ...(queued
             ? {

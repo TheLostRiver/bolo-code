@@ -16,6 +16,7 @@ import {
   type CliTuiSessionEvent,
   type CliTuiViewAction,
   type CliTuiViewState,
+  type RuntimePagerSuccess,
 } from '../../../shared/src/index.ts'
 import type { AskUserQuestionOutcome } from '../../../tools/src/index.ts'
 import {
@@ -40,7 +41,12 @@ import {
   RetainedComposerFooter,
   type RetainedComposerConfig,
 } from './retainedComposer.ts'
-import { RetainedOverlayHost } from './retainedOverlay.ts'
+import {
+  RetainedOverlayHost,
+  type RetainedDiffOverlayOptions,
+  type RetainedDiffOverlayResult,
+  type RetainedPagerOverlayOptions,
+} from './retainedOverlay.ts'
 import {
   RetainedTranscript,
 } from './retainedTranscript.ts'
@@ -89,6 +95,12 @@ export type CliTuiController = {
     initialIndex?: number
     signal?: AbortSignal
   }): Promise<ArrowPickResult>
+  runDiffOverlay(
+    options: RetainedDiffOverlayOptions,
+  ): Promise<RetainedDiffOverlayResult>
+  runPagerOverlay(
+    options: RetainedPagerOverlayOptions,
+  ): Promise<RuntimePagerSuccess>
   suspendForLegacyPanel(): Promise<void>
   resumeFromLegacyPanel(): Promise<void>
   isSuspended(): boolean
@@ -290,6 +302,8 @@ export function createRetainedTuiController(options: {
   explainError?: (message: string) => string
   now?: () => number
   activityIntervalMs?: number
+  /** Standalone overlays (for example runtime pager) do not render the REPL root. */
+  rootVisible?: boolean
 }): CliTuiController {
   const env = options.env ?? process.env
   const color = options.color ?? env.NO_COLOR === undefined
@@ -328,6 +342,7 @@ export function createRetainedTuiController(options: {
   })
   const activityView = new RetainedActivity(requestComponentRender)
   root = new RetainedRoot(env, composer, activityView, color)
+  root.setVisible(options.rootVisible !== false)
   tui = new TUI(
     adapter,
     true,
@@ -361,6 +376,8 @@ export function createRetainedTuiController(options: {
     requestRender: requestComponentRender,
     setInputEnabled: (active) => adapter.setInputEnabled(active),
     shouldKeepInput: () => composer.isReading(),
+    getColumns: () => adapter.columns,
+    getRows: () => adapter.rows,
   })
 
   const finishThinkingSegment = (record: boolean): void => {
@@ -512,9 +529,13 @@ export function createRetainedTuiController(options: {
       tui.start()
       overlayHandle = tui.showOverlay(overlay, {
         width: '100%',
-        maxHeight: '90%',
+        maxHeight: options.rootVisible === false ? '100%' : '90%',
         anchor: 'bottom-center',
-        margin: { left: 1, right: 1, bottom: 2 },
+        margin: {
+          left: 1,
+          right: 1,
+          bottom: options.rootVisible === false ? 0 : 2,
+        },
         visible: () => overlay.isActive(),
       })
       overlay.attach(overlayHandle)
@@ -555,6 +576,27 @@ export function createRetainedTuiController(options: {
         })
       }
       return overlay.runPicker(overlayOptions)
+    },
+    runDiffOverlay(overlayOptions) {
+      if (stopped) {
+        return Promise.resolve(
+          overlayOptions.mode === 'approve'
+            ? { ok: true, decision: 'deny' }
+            : { ok: true, reason: 'quit' },
+        )
+      }
+      return overlay.runDiff(overlayOptions)
+    },
+    runPagerOverlay(overlayOptions) {
+      if (stopped) {
+        return Promise.resolve({
+          ok: true,
+          reason: 'interrupt',
+          page: 0,
+          pageCount: 1,
+        })
+      }
+      return overlay.runPager(overlayOptions)
     },
     async suspendForLegacyPanel() {
       if (!started || stopped || suspended) return

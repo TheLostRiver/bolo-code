@@ -4,6 +4,7 @@
  */
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
+import { EventEmitter } from 'node:events'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 
@@ -29,6 +30,51 @@ import {
 } from '../packages/cli/src/parseArgs.ts'
 import { runRuntimeQueryCli } from '../packages/cli/src/runtimeCli.ts'
 import type { RuntimePagerKey } from '../packages/cli/src/tui/runtimePager.ts'
+import { HeadlessTerminalHarness } from './lib/headlessTerminalHarness.ts'
+
+class RuntimeRetainedInput extends EventEmitter {
+  readonly isTTY = true
+  isRaw = false
+  readonly rawTransitions: boolean[] = []
+
+  setRawMode(mode: boolean): this {
+    this.isRaw = mode
+    this.rawTransitions.push(mode)
+    return this
+  }
+
+  resume(): this {
+    return this
+  }
+
+  pause(): this {
+    return this
+  }
+
+  send(data: string): void {
+    this.emit('data', Buffer.from(data, 'utf8'))
+  }
+}
+
+class RuntimeRetainedOutput extends EventEmitter {
+  constructor(
+    public columns: number,
+    public rows: number,
+  ) {
+    super()
+  }
+}
+
+async function waitForRuntimePager(
+  predicate: () => boolean | Promise<boolean>,
+  label: string,
+): Promise<void> {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    if (await predicate()) return
+    await new Promise((resolve) => setTimeout(resolve, 5))
+  }
+  throw new Error(`timed out waiting for ${label}`)
+}
 
 const inMemory = await createSession({
   cwd: process.cwd(),
@@ -337,6 +383,68 @@ try {
     false,
     'NO_COLOR disables SGR while pager control sequences remain',
   )
+
+  const retainedTerminal = new HeadlessTerminalHarness({
+    columns: 48,
+    rows: 8,
+    scrollback: 200,
+  })
+  const retainedInput = new RuntimeRetainedInput()
+  const retainedOutput = new RuntimeRetainedOutput(48, 8)
+  const retainedOut: string[] = []
+  let retainedLegacyReads = 0
+  try {
+    const retainedQuery = runRuntimeQueryCli({
+      idOrPath: pagerTranscript,
+      cwd: root,
+      forceMock: true,
+      query: { action: 'list', entity: 'turn' },
+      isTty: true,
+      columns: 48,
+      rows: 8,
+      env: { NO_COLOR: '1', BOLO_TUI_ENGINE: 'retained' },
+      terminalInput: retainedInput,
+      terminalOutput: retainedOutput,
+      readKey: async () => {
+        retainedLegacyReads += 1
+        throw new Error('retained runtime pager must not use legacy readKey')
+      },
+      writeOut: (text: string) => {
+        retainedOut.push(text)
+        retainedTerminal.write(text)
+      },
+      writeErr: () => undefined,
+    })
+    await waitForRuntimePager(
+      () => retainedInput.isRaw,
+      'runtime CLI retained raw input',
+    )
+    await waitForRuntimePager(async () => {
+      await retainedTerminal.flush()
+      return retainedTerminal
+        .viewport()
+        .some((line) => /page 1\/4/iu.test(line.text))
+    }, 'runtime CLI retained page one')
+    retainedInput.send('\u001b[6~')
+    await waitForRuntimePager(async () => {
+      await retainedTerminal.flush()
+      return retainedTerminal
+        .viewport()
+        .some((line) => /page 2\/4/iu.test(line.text))
+    }, 'runtime CLI retained page two')
+    retainedInput.send('q')
+    assert.equal((await retainedQuery).exitCode, 0)
+    assert.equal(retainedLegacyReads, 0)
+    assert.equal(retainedInput.isRaw, false)
+    assert.deepEqual(retainedInput.rawTransitions, [true, false])
+    assert.equal(
+      retainedOut.join('').includes('\u001b[2J'),
+      false,
+      'explicit retained runtime query avoids the legacy full-screen clear',
+    )
+  } finally {
+    retainedTerminal.dispose()
+  }
 
   let inspectReads = 0
   const inspectOut: string[] = []

@@ -98,9 +98,7 @@ export async function runNewSessionCli(
     ...(controller
       ? {
           runPermissionOverlay: controller.runPermissionOverlay,
-          pauseInput: controller.suspendForLegacyPanel,
-          resumeInput: controller.resumeFromLegacyPanel,
-          suspendTextPrompt: true,
+          runDiffOverlay: controller.runDiffOverlay,
         }
       : {}),
     signal: opts.signal,
@@ -114,8 +112,6 @@ export async function runNewSessionCli(
     ...(controller
       ? {
           runQuestionOverlay: controller.runQuestionOverlay,
-          pauseInput: controller.suspendForLegacyPanel,
-          resumeInput: controller.resumeFromLegacyPanel,
         }
       : {}),
     signal: opts.signal,

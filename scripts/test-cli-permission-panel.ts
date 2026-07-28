@@ -161,6 +161,60 @@ async function main(): Promise<void> {
     'retained permission uses one overlay without suspending its root',
   )
 
+  const fileRequest = {
+    ...request,
+    toolName: 'Edit',
+    toolUseId: 'edit_1',
+    preview: {
+      tool: 'Edit',
+      files: [
+        {
+          path: 'src/example.ts',
+          op: 'update',
+          added: 1,
+          removed: 1,
+          structuredPatch: [
+            {
+              oldStart: 1,
+              oldLines: 1,
+              newStart: 1,
+              newLines: 1,
+              lines: ['-old', '+new'],
+            },
+          ],
+        },
+      ],
+    },
+  }
+  let retainedDiffCalls = 0
+  let retainedDiffPauses = 0
+  const retainedDiffAsk = createTtyAskPermission({
+    isTty: true,
+    runPermissionOverlay: async () => {
+      throw new Error('file preview must use the retained diff overlay')
+    },
+    runDiffOverlay: async (options) => {
+      retainedDiffCalls += 1
+      assert(options.mode === 'approve', 'file preview uses approval mode')
+      assert(
+        options.toolName === 'Edit' &&
+          options.model.files[0]?.path === 'src/example.ts',
+        'retained diff receives the audited file preview',
+      )
+      return { ok: true, decision: 'allow_always' }
+    },
+    pauseInput: () => retainedDiffPauses++,
+    resumeInput: () => retainedDiffPauses++,
+  })
+  assert(
+    (await retainedDiffAsk(fileRequest)) === 'allow_always',
+    'file permission returns the retained diff decision',
+  )
+  assert(
+    retainedDiffCalls === 1 && retainedDiffPauses === 0,
+    'retained file permission never suspends the root',
+  )
+
   let interrupted = 0
   const interruptedAsk = createTtyAskPermission({
     isTty: true,

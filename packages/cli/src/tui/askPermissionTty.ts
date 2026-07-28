@@ -4,8 +4,15 @@
  */
 
 import * as readline from 'node:readline'
-import { buildDiffViewModelFromPreview } from '../../../core/src/diffViewModel.ts'
-import { runDiffApprovePane } from './diffPane.ts'
+import {
+  buildDiffViewModelFromPreview,
+  type DiffViewModel,
+} from '../../../core/src/diffViewModel.ts'
+import {
+  runDiffApprovePane,
+  type DiffPaneApproveResult,
+  type DiffPaneBrowseResult,
+} from './diffPane.ts'
 import { runPermissionPanel } from './permissionPanel.ts'
 
 export type AskPermissionDecision = 'allow' | 'deny' | 'allow_always'
@@ -119,6 +126,13 @@ export type CreateTtyAskPermissionOptions = {
     signal?: AbortSignal
     onInterrupt?: () => void
   }) => Promise<AskPermissionDecision>
+  runDiffOverlay?: (options: {
+    mode: 'approve'
+    model: DiffViewModel
+    toolName: string
+    signal?: AbortSignal
+    onInterrupt?: () => void
+  }) => Promise<DiffPaneApproveResult | DiffPaneBrowseResult>
 }
 
 function resolveOnAbort<T>(
@@ -208,6 +222,18 @@ export function createTtyAskPermission(
           removed: req.preview.removed,
         })
         if (vm.files.length) {
+          if (opts.runDiffOverlay) {
+            const pane = await opts.runDiffOverlay({
+              mode: 'approve',
+              model: vm,
+              toolName: req.toolName,
+              ...(signal ? { signal } : {}),
+              ...(opts.onInterrupt
+                ? { onInterrupt: opts.onInterrupt }
+                : {}),
+            })
+            if (pane.ok && 'decision' in pane) return pane.decision
+          }
           await opts.pauseInput?.()
           try {
             const pane = await runDiffApprovePane({

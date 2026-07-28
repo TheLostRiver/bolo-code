@@ -8,8 +8,13 @@ import {
   createRetainedTuiController,
   type CliTuiController,
 } from '../packages/cli/src/index.ts'
+import { buildDiffViewModelFromPreview } from '../packages/core/src/index.ts'
 import { measureTerminalText } from '../packages/cli/src/tui/terminalText.ts'
 import type { AskQuestion } from '../packages/shared/src/index.ts'
+import type {
+  RuntimeListView,
+  RuntimeTurnListItem,
+} from '../packages/shared/src/runtimeQuery.ts'
 import { HeadlessTerminalHarness } from './lib/headlessTerminalHarness.ts'
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -88,6 +93,83 @@ const questions: AskQuestion[] = [
     options: [{ label: 'Search' }, { label: 'Cache' }],
   },
 ]
+
+function createDiffModel() {
+  return buildDiffViewModelFromPreview({
+    tool: 'Edit',
+    files: [
+      {
+        path: 'src/overlay.ts',
+        op: 'update',
+        added: 12,
+        removed: 1,
+        structuredPatch: [
+          {
+            oldStart: 1,
+            oldLines: 1,
+            newStart: 1,
+            newLines: 12,
+            lines: [
+              '-const mode = "legacy"',
+              '+const mode = "retained"',
+              ...Array.from(
+                { length: 11 },
+                (_, index) => `+const retainedLine${index + 1} = true`,
+              ),
+            ],
+          },
+        ],
+      },
+      {
+        path: 'src/pager.ts',
+        op: 'add',
+        added: 1,
+        removed: 0,
+        structuredPatch: [
+          {
+            oldStart: 0,
+            oldLines: 0,
+            newStart: 1,
+            newLines: 1,
+            lines: ['+export const pager = true'],
+          },
+        ],
+      },
+    ],
+  })
+}
+
+const FIXTURE_TIME = '2026-07-29T12:00:00.000Z'
+
+function createRuntimeListView(count: number): RuntimeListView {
+  const items: RuntimeTurnListItem[] = Array.from(
+    { length: count },
+    (_, index) => {
+      const turnId = `turn_${index + 1}`
+      return {
+        entity: 'turn',
+        entityId: turnId,
+        record: {
+          turnId,
+          state: 'completed',
+          updatedAt: FIXTURE_TIME,
+          terminalReason: 'completed',
+        },
+        availableActions: [],
+      }
+    },
+  )
+  return {
+    protocolVersion: 1,
+    kind: 'runtime.list',
+    generatedAt: FIXTURE_TIME,
+    sessionId: 'runtime_overlay_session',
+    phase: 'idle',
+    runner: { state: 'idle' },
+    entity: 'turn',
+    items,
+  }
+}
 
 async function createFixture(
   columns = 80,
@@ -374,6 +456,222 @@ async function main(): Promise<void> {
       'Esc cancels the effort picker without mutating settings',
     )
 
+    fixture.terminal.resize(80, 48)
+    fixture.output.resize(80, 48)
+    await settle(fixture)
+
+    const diffBrowse = fixture.controller.runDiffOverlay({
+      mode: 'browse',
+      model: createDiffModel(),
+    })
+    await settle(fixture)
+    assert(
+      fixture.controller.getState().overlay.mode === 'diff' &&
+        screen(fixture).includes('src/overlay.ts'),
+      'diff browser opens inside the shared OverlayHost',
+    )
+    fixture.input.send('\r')
+    await settle(fixture)
+    assert(
+      screen(fixture).includes('detail:') &&
+        screen(fixture).includes('src/overlay.ts'),
+      'Enter opens structured diff detail in place',
+    )
+    const detailBeforeScroll = screen(fixture)
+    for (let index = 0; index < 6; index += 1) {
+      fixture.input.send('\u001b[B')
+    }
+    await settle(fixture)
+    assert(
+      screen(fixture) !== detailBeforeScroll,
+      'long diff detail scrolls without a legacy painter',
+    )
+    fixture.input.send('\u001b[D')
+    await settle(fixture)
+    assert(
+      screen(fixture).includes('Enter open'),
+      'Left returns from detail to the diff file list',
+    )
+    const diffResizeEpoch = fixture.controller.getRenderEpoch()
+    fixture.terminal.resize(52, 36)
+    fixture.output.resize(52, 36)
+    await fixture.controller.waitForRender(diffResizeEpoch)
+    await fixture.terminal.flush()
+    assertFits(fixture, 52, 'resized diff overlay')
+    fixture.input.send('q')
+    const diffBrowseResult = await diffBrowse
+    assert(
+      diffBrowseResult.ok &&
+        'reason' in diffBrowseResult &&
+        diffBrowseResult.reason === 'quit',
+      'q exits retained diff browse mode',
+    )
+
+    const allow = fixture.controller.runDiffOverlay({
+      mode: 'approve',
+      model: createDiffModel(),
+      toolName: 'Edit',
+    })
+    fixture.input.send('y')
+    const allowResult = await allow
+    assert(
+      allowResult.ok &&
+        'decision' in allowResult &&
+        allowResult.decision === 'allow',
+      'y allows a retained file permission',
+    )
+
+    const always = fixture.controller.runDiffOverlay({
+      mode: 'approve',
+      model: createDiffModel(),
+      toolName: 'Edit',
+    })
+    fixture.input.send('a')
+    const alwaysResult = await always
+    assert(
+      alwaysResult.ok &&
+        'decision' in alwaysResult &&
+        alwaysResult.decision === 'allow_always',
+      'a always-allows a retained file permission',
+    )
+
+    const deny = fixture.controller.runDiffOverlay({
+      mode: 'approve',
+      model: createDiffModel(),
+      toolName: 'Edit',
+    })
+    fixture.input.send('n')
+    const denyResult = await deny
+    assert(
+      denyResult.ok &&
+        'decision' in denyResult &&
+        denyResult.decision === 'deny',
+      'n denies a retained file permission',
+    )
+
+    const escapedDiff = fixture.controller.runDiffOverlay({
+      mode: 'approve',
+      model: createDiffModel(),
+      toolName: 'Edit',
+    })
+    fixture.input.send('\u001b')
+    const escapedDiffResult = await escapedDiff
+    assert(
+      escapedDiffResult.ok &&
+        'decision' in escapedDiffResult &&
+        escapedDiffResult.decision === 'deny',
+      'Esc fails retained diff permission closed',
+    )
+
+    let diffInterrupts = 0
+    const interruptedDiff = fixture.controller.runDiffOverlay({
+      mode: 'approve',
+      model: createDiffModel(),
+      toolName: 'Edit',
+      onInterrupt: () => diffInterrupts++,
+    })
+    fixture.input.send('\u0003')
+    const interruptedDiffResult = await interruptedDiff
+    assert(
+      interruptedDiffResult.ok &&
+        'decision' in interruptedDiffResult &&
+        interruptedDiffResult.decision === 'deny' &&
+        diffInterrupts === 1,
+      'Ctrl+C denies diff permission and notifies the turn owner',
+    )
+
+    const diffAbort = new AbortController()
+    const abortedDiff = fixture.controller.runDiffOverlay({
+      mode: 'approve',
+      model: createDiffModel(),
+      toolName: 'Edit',
+      signal: diffAbort.signal,
+    })
+    diffAbort.abort()
+    const abortedDiffResult = await abortedDiff
+    assert(
+      abortedDiffResult.ok &&
+        'decision' in abortedDiffResult &&
+        abortedDiffResult.decision === 'deny',
+      'abort fails retained diff permission closed',
+    )
+
+    fixture.terminal.resize(80, 36)
+    fixture.output.resize(80, 36)
+    const pager = fixture.controller.runPagerOverlay({
+      view: createRuntimeListView(7),
+      pageSize: 2,
+    })
+    await settle(fixture)
+    assert(
+      fixture.controller.getState().overlay.mode === 'pager' &&
+        /page 1\/4/iu.test(screen(fixture)),
+      'runtime pager opens on page one inside OverlayHost',
+    )
+    fixture.input.send('\u001b[6~')
+    await settle(fixture)
+    assert(/page 2\/4/iu.test(screen(fixture)), 'PgDn advances the pager')
+    fixture.input.send('\u001b[5~')
+    await settle(fixture)
+    assert(/page 1\/4/iu.test(screen(fixture)), 'PgUp reverses the pager')
+    fixture.input.send('\u001b[B')
+    await settle(fixture)
+    assert(/page 2\/4/iu.test(screen(fixture)), 'Down advances the pager')
+    fixture.input.send('\u001b[A')
+    await settle(fixture)
+    assert(/page 1\/4/iu.test(screen(fixture)), 'Up reverses the pager')
+    const pagerResizeEpoch = fixture.controller.getRenderEpoch()
+    fixture.terminal.resize(44, 30)
+    fixture.output.resize(44, 30)
+    await fixture.controller.waitForRender(pagerResizeEpoch)
+    await fixture.terminal.flush()
+    assertFits(fixture, 44, 'resized pager overlay')
+    fixture.input.send('q')
+    const pagerResult = await pager
+    assert(
+      pagerResult.ok && pagerResult.reason === 'quit',
+      'q exits the retained pager',
+    )
+
+    let pagerInterrupts = 0
+    const interruptedPager = fixture.controller.runPagerOverlay({
+      view: createRuntimeListView(7),
+      pageSize: 2,
+      onInterrupt: () => pagerInterrupts++,
+    })
+    fixture.input.send('\u0003')
+    const interruptedPagerResult = await interruptedPager
+    assert(
+      interruptedPagerResult.ok &&
+        interruptedPagerResult.reason === 'interrupt' &&
+        pagerInterrupts === 1,
+      'Ctrl+C interrupts the retained pager exactly once',
+    )
+
+    const eofPager = fixture.controller.runPagerOverlay({
+      view: createRuntimeListView(7),
+      pageSize: 2,
+    })
+    fixture.input.send('\u0004')
+    const eofPagerResult = await eofPager
+    assert(
+      eofPagerResult.ok && eofPagerResult.reason === 'eof',
+      'Ctrl+D preserves the pager eof exit',
+    )
+
+    const pagerAbort = new AbortController()
+    const abortedPager = fixture.controller.runPagerOverlay({
+      view: createRuntimeListView(7),
+      pageSize: 2,
+      signal: pagerAbort.signal,
+    })
+    pagerAbort.abort()
+    const abortedPagerResult = await abortedPager
+    assert(
+      abortedPagerResult.ok && abortedPagerResult.reason === 'interrupt',
+      'abort closes the retained pager as an interrupt',
+    )
+
     const stats = fixture.controller.getTerminalStats()
     assert(stats.externalWrites === 0, 'overlay never uses the legacy writer')
     assert(
@@ -389,10 +687,17 @@ async function main(): Promise<void> {
       path.resolve('packages/cli/src/resumeCli.ts'),
       'utf8',
     )
+    const runtimeSource = await fs.readFile(
+      path.resolve('packages/cli/src/runtimeCli.ts'),
+      'utf8',
+    )
     assert(
       newSessionSource.includes(
         'runPermissionOverlay: controller.runPermissionOverlay',
-      ),
+      ) &&
+        newSessionSource.includes(
+          'runDiffOverlay: controller.runDiffOverlay',
+        ),
       'new-session retained wiring injects the permission OverlayHost',
     )
     assert(
@@ -402,6 +707,15 @@ async function main(): Promise<void> {
         ) ?? []
       ).length >= 2,
       'resume setup and each REPL turn inject the permission OverlayHost',
+    )
+    assert(
+      (
+        resumeSource.match(
+          /runDiffOverlay: controller\.runDiffOverlay/gu,
+        ) ?? []
+      ).length >= 2 &&
+        resumeSource.includes('await controller.runDiffOverlay({'),
+      'resume permission and /diff paths use the retained diff OverlayHost',
     )
     assert(
       newSessionSource.includes(
@@ -420,6 +734,21 @@ async function main(): Promise<void> {
         resumeSource.includes("mode: 'provider'") &&
         resumeSource.includes("mode: 'effort'"),
       'one retained picker helper serves both provider and effort modes',
+    )
+    assert(
+      !newSessionSource.includes('controller.suspendForLegacyPanel') &&
+        !newSessionSource.includes('controller.resumeFromLegacyPanel') &&
+        !resumeSource.includes('controller.suspendForLegacyPanel') &&
+        !resumeSource.includes('controller.resumeFromLegacyPanel'),
+      'retained new/resume paths no longer hand ownership to legacy panels',
+    )
+    assert(
+      runtimeSource.includes(
+        "resolveCliTuiEngine({ dynamicTui: true, env }) === 'retained'",
+      ) &&
+        runtimeSource.includes('await runRetainedRuntimePager({') &&
+        runtimeSource.includes('await runRuntimePager({'),
+      'runtime CLI selects retained pager only through the explicit engine gate',
     )
 
     console.log('PASS: CLI retained OverlayHost interaction lifecycle')

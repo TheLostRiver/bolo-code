@@ -9,8 +9,21 @@ import type {
   AskQuestion,
   AskUserQuestionSelection,
   CliTuiOverlayState,
+  RuntimePagerKey,
+  RuntimePagerSuccess,
+  RuntimeQueryView,
 } from '../../../shared/src/index.ts'
+import { applyRuntimePagerKey } from '../../../shared/src/index.ts'
 import type { AskUserQuestionOutcome } from '../../../tools/src/index.ts'
+import {
+  applyDiffViewKey,
+  formatDiffViewScreen,
+  type DiffViewModel,
+} from '../../../core/src/diffViewModel.ts'
+import {
+  renderRuntimeText,
+  type RuntimeTextRenderOptions,
+} from '../../../core/src/runtimeTextView.ts'
 import type {
   AskPermissionDecision,
   AskPermissionRequest,
@@ -31,6 +44,10 @@ import {
   formatQuestionPickerScreen,
   type QuestionPickerState,
 } from './questionPicker.ts'
+import type {
+  DiffPaneApproveResult,
+  DiffPaneBrowseResult,
+} from './diffPane.ts'
 import { wrapTerminalText } from './terminalText.ts'
 
 type OverlaySessionBase = {
@@ -63,16 +80,59 @@ type PickerSession = OverlaySessionBase & {
   resolve: (result: ArrowPickResult) => void
 }
 
+export type RetainedDiffOverlayOptions = OverlaySessionBase & {
+  model: DiffViewModel
+  mode: 'browse' | 'approve'
+  toolName?: string
+  onInterrupt?: () => void
+}
+
+export type RetainedDiffOverlayResult =
+  | DiffPaneBrowseResult
+  | DiffPaneApproveResult
+
+type DiffSession = OverlaySessionBase & {
+  mode: 'diff'
+  viewMode: 'browse' | 'approve'
+  model: DiffViewModel
+  toolName?: string
+  toast?: string
+  resolve: (result: RetainedDiffOverlayResult) => void
+  onInterrupt?: () => void
+}
+
+export type RetainedPagerOverlayOptions = OverlaySessionBase & {
+  view: RuntimeQueryView
+  pageSize?: number
+  filter?: RuntimeTextRenderOptions['filter']
+  onInterrupt?: () => void
+}
+
+type PagerSession = OverlaySessionBase & {
+  mode: 'pager'
+  view: RuntimeQueryView
+  page: number
+  pageCount: number
+  pageSize: number
+  filter?: RuntimeTextRenderOptions['filter']
+  resolve: (result: RuntimePagerSuccess) => void
+  onInterrupt?: () => void
+}
+
 type OverlaySession =
   | PermissionSession
   | QuestionSession
   | PickerSession
+  | DiffSession
+  | PagerSession
 
 function decodePanelKey(data: string): string {
   const key = parseKey(data)
   if (key === 'ctrl+c') return 'ctrl-c'
+  if (key === 'ctrl+d') return 'eof'
   if (key === 'escape' || key === 'esc') return 'esc'
   if (key === 'enter' || key === 'return') return 'enter'
+  if (key === 'backspace') return 'backspace'
   if (key === 'space') return ' '
   if (
     key === 'up' ||
@@ -110,6 +170,8 @@ export class RetainedOverlayHost implements Component, Focusable {
       requestRender: () => void
       setInputEnabled: (active: boolean) => void
       shouldKeepInput: () => boolean
+      getColumns: () => number
+      getRows: () => number
     },
   ) {}
 
@@ -262,6 +324,117 @@ export class RetainedOverlayHost implements Component, Focusable {
     })
   }
 
+  runDiff(
+    options: RetainedDiffOverlayOptions,
+  ): Promise<RetainedDiffOverlayResult> {
+    if (this.active) {
+      return Promise.reject(
+        new Error(`overlay already active: ${this.active.mode}`),
+      )
+    }
+    if (!options.model.files.length) {
+      return Promise.resolve({
+        ok: false,
+        reason: 'empty',
+        message: 'No file changes to show in panel.',
+      })
+    }
+    if (options.signal?.aborted) {
+      return Promise.resolve(
+        options.mode === 'approve'
+          ? { ok: true, decision: 'deny' }
+          : { ok: true, reason: 'quit' },
+      )
+    }
+
+    return new Promise<RetainedDiffOverlayResult>((resolve) => {
+      const session: DiffSession = {
+        mode: 'diff',
+        viewMode: options.mode,
+        model: options.model,
+        resolve,
+        ...(options.toolName ? { toolName: options.toolName } : {}),
+        ...(options.signal ? { signal: options.signal } : {}),
+        ...(options.onInterrupt
+          ? { onInterrupt: options.onInterrupt }
+          : {}),
+      }
+      if (options.signal) {
+        session.onAbort = () =>
+          this.finishDiff(
+            session.viewMode === 'approve'
+              ? { ok: true, decision: 'deny' }
+              : { ok: true, reason: 'quit' },
+          )
+        options.signal.addEventListener('abort', session.onAbort, {
+          once: true,
+        })
+      }
+      this.active = session
+      this.open({ mode: 'diff' })
+    })
+  }
+
+  runPager(
+    options: RetainedPagerOverlayOptions,
+  ): Promise<RuntimePagerSuccess> {
+    if (this.active) {
+      return Promise.reject(
+        new Error(`overlay already active: ${this.active.mode}`),
+      )
+    }
+    const pageSize =
+      options.pageSize ??
+      Math.max(1, Math.floor(this.options.getRows()) - 6)
+    const initial = renderRuntimeText(options.view, {
+      columns: this.options.getColumns(),
+      page: 0,
+      pageSize,
+      color: this.options.color,
+      filter: options.filter,
+    })
+    if (initial.pageCount <= 1) {
+      return Promise.resolve({
+        ok: true,
+        reason: 'single-page',
+        page: initial.page,
+        pageCount: initial.pageCount,
+      })
+    }
+    if (options.signal?.aborted) {
+      return Promise.resolve({
+        ok: true,
+        reason: 'interrupt',
+        page: initial.page,
+        pageCount: initial.pageCount,
+      })
+    }
+
+    return new Promise<RuntimePagerSuccess>((resolve) => {
+      const session: PagerSession = {
+        mode: 'pager',
+        view: options.view,
+        page: initial.page,
+        pageCount: initial.pageCount,
+        pageSize,
+        resolve,
+        ...(options.filter ? { filter: options.filter } : {}),
+        ...(options.signal ? { signal: options.signal } : {}),
+        ...(options.onInterrupt
+          ? { onInterrupt: options.onInterrupt }
+          : {}),
+      }
+      if (options.signal) {
+        session.onAbort = () => this.finishPager('interrupt')
+        options.signal.addEventListener('abort', session.onAbort, {
+          once: true,
+        })
+      }
+      this.active = session
+      this.open({ mode: 'pager' })
+    })
+  }
+
   cancel(): void {
     if (this.active?.mode === 'permission') {
       this.finishPermission('deny')
@@ -276,6 +449,14 @@ export class RetainedOverlayHost implements Component, Focusable {
         reason: 'cancel',
         message: 'cancelled',
       })
+    } else if (this.active?.mode === 'diff') {
+      this.finishDiff(
+        this.active.viewMode === 'approve'
+          ? { ok: true, decision: 'deny' }
+          : { ok: true, reason: 'quit' },
+      )
+    } else if (this.active?.mode === 'pager') {
+      this.finishPager('interrupt')
     }
   }
 
@@ -339,6 +520,46 @@ export class RetainedOverlayHost implements Component, Focusable {
       } else if (key !== 'none') {
         this.options.requestRender()
       }
+      return
+    }
+    if (active.mode === 'diff') {
+      if (key === 'ctrl-c') active.onInterrupt?.()
+      const next = applyDiffViewKey(active.model, key, {
+        mode: active.viewMode,
+      })
+      active.model = next.vm
+      active.toast = next.toast
+      if (active.viewMode === 'approve') {
+        if (
+          next.done === 'allow' ||
+          next.done === 'deny' ||
+          next.done === 'allow_always'
+        ) {
+          this.finishDiff({ ok: true, decision: next.done })
+          return
+        }
+      } else if (next.done === 'quit') {
+        this.finishDiff({ ok: true, reason: 'quit' })
+        return
+      }
+      if (key !== 'none') this.options.requestRender()
+      return
+    }
+    if (active.mode === 'pager') {
+      const pagerKey = toRuntimePagerKey(key)
+      if (pagerKey === 'none') return
+      const next = applyRuntimePagerKey(
+        active.page,
+        active.pageCount,
+        pagerKey,
+      )
+      active.page = next.page
+      if (next.done) {
+        if (next.done === 'interrupt') active.onInterrupt?.()
+        this.finishPager(next.done)
+      } else {
+        this.options.requestRender()
+      }
     }
   }
 
@@ -381,6 +602,27 @@ export class RetainedOverlayHost implements Component, Focusable {
         }),
         width,
       )
+    }
+    if (active.mode === 'diff') {
+      return formatDiffViewScreen(active.model, {
+        rows: Math.max(8, this.options.getRows() - 4),
+        cols: width,
+        toast: active.toast,
+        mode: active.viewMode,
+        toolName: active.toolName,
+      }).split('\n')
+    }
+    if (active.mode === 'pager') {
+      const rendered = renderRuntimeText(active.view, {
+        columns: width,
+        page: active.page,
+        pageSize: active.pageSize,
+        color: this.options.color,
+        filter: active.filter,
+      })
+      active.page = rendered.page
+      active.pageCount = rendered.pageCount
+      return rendered.text.split('\n')
     }
     return []
   }
@@ -497,4 +739,59 @@ export class RetainedOverlayHost implements Component, Focusable {
     this.close(active)
     active.resolve(result)
   }
+
+  private finishDiff(result: RetainedDiffOverlayResult): void {
+    const active = this.active
+    if (!active || active.mode !== 'diff') return
+    this.active = undefined
+    this.close(active)
+    active.resolve(result)
+  }
+
+  private finishPager(
+    reason: Exclude<RuntimePagerSuccess['reason'], 'single-page'>,
+  ): void {
+    const active = this.active
+    if (!active || active.mode !== 'pager') return
+    this.active = undefined
+    this.close(active)
+    active.resolve({
+      ok: true,
+      reason,
+      page: active.page,
+      pageCount: active.pageCount,
+    })
+  }
+}
+
+function toRuntimePagerKey(key: string): RuntimePagerKey {
+  if (key === 'ctrl-c') return 'ctrl-c'
+  if (key === 'eof') return 'eof'
+  if (key === 'esc' || key === 'q' || key === 'Q') return 'quit'
+  if (
+    key === 'down' ||
+    key === 'right' ||
+    key === 'pageDown' ||
+    key === 'n' ||
+    key === 'N' ||
+    key === 'j' ||
+    key === 'l' ||
+    key === ' '
+  ) {
+    return 'next'
+  }
+  if (
+    key === 'up' ||
+    key === 'left' ||
+    key === 'pageUp' ||
+    key === 'p' ||
+    key === 'P' ||
+    key === 'k' ||
+    key === 'h' ||
+    key === 'b' ||
+    key === 'B'
+  ) {
+    return 'previous'
+  }
+  return 'none'
 }
