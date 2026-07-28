@@ -16,7 +16,8 @@ import {
   resolveTuiFrameWidth,
 } from '../packages/cli/src/tui/frame.ts'
 import { measureTerminalText } from '../packages/cli/src/tui/terminalText.ts'
-import { createCliOnEvent } from '../packages/cli/src/resumeCli.ts'
+import { createSessionEventPrinter } from '../packages/cli/src/tui/formatSessionEvent.ts'
+import { createTurnActivityIndicator } from '../packages/cli/src/tui/turnActivity.ts'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(`FAIL: ${message}`)
@@ -237,24 +238,35 @@ async function main() {
     integrated.push(text)
     screen.write(text)
   }
-  const eventOutput = createCliOnEvent({
+  const integratedSurface = createTerminalSurface({
     writeOut: capture,
     writeErr: capture,
+  })
+  const integratedActivity = createTurnActivityIndicator({
+    writeOut: integratedSurface.writeOutput,
+    renderFrame: (line) => integratedSurface.setActivity(line),
+    clearFrame: () => integratedSurface.clearActivity(),
+    columns: () => 80,
+    color: false,
+  })
+  const eventPrinter = createSessionEventPrinter({
+    writeOut: integratedSurface.writeOutput,
+    writeErr: integratedSurface.writeError,
     timeline: true,
+    activity: integratedActivity,
     color: false,
     columns: 80,
   })
-  assert(eventOutput.surface, 'timeline owns a terminal surface')
-  eventOutput.surface.setDock(dock(80))
-  eventOutput.printer.beginTurn({
+  integratedSurface.setDock(dock(80))
+  eventPrinter.beginTurn({
     prompt: 'keep the composer',
     echoUser: true,
     activity: true,
   })
-  assert(eventOutput.surface.isDockVisible(), 'composer survives turn start')
-  eventOutput.printer.onEvent({ type: 'text', text: 'streamed answer' })
-  assert(eventOutput.surface.isDockVisible(), 'composer survives streamed text')
-  eventOutput.printer.endTurn({ terminalReason: 'completed' })
+  assert(integratedSurface.isDockVisible(), 'composer survives turn start')
+  eventPrinter.onEvent({ type: 'text', text: 'streamed answer' })
+  assert(integratedSurface.isDockVisible(), 'composer survives streamed text')
+  eventPrinter.endTurn({ terminalReason: 'completed' })
   const integratedText = integrated.join('')
   assert(integratedText.includes('keep the composer'), 'user echo is present')
   assert(integratedText.includes('streamed answer'), 'assistant text is present')
@@ -264,7 +276,7 @@ async function main() {
     'composer remains the bottom-most rendered region',
   )
   assert(!integratedText.includes('\u001b[2J'), 'printer integration avoids full clear')
-  eventOutput.surface.clearDock()
+  integratedSurface.clearDock()
 
   const idleInput = new FakeRawInput()
   const idleAbort = new AbortController()
@@ -307,13 +319,7 @@ async function main() {
     lastRowContaining(clearedIdleRows, 'streamed answer') >= 0,
     'idle editor cleanup preserves assistant history',
   )
-
-  const plain = createCliOnEvent({
-    writeOut: () => {},
-    writeErr: () => {},
-    timeline: false,
-  })
-  assert(plain.surface === undefined, 'plain/non-TTY output stays append-only')
+  integratedSurface.dispose()
 
   console.log('PASS: CLI terminal surface')
 }

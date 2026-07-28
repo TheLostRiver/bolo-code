@@ -20,10 +20,8 @@ import { renderWelcomeBanner } from './tui/banner.ts'
 import { formatSessionStatusLine } from './tui/statusLine.ts'
 import { renderInkLayout } from './tui/inkLayout.ts'
 import { shouldUseDynamicTui } from './tui/inputBox.ts'
-import { resolveCliTuiEngine } from './tui/tuiEngine.ts'
 import {
   attachSessionEventPrinter,
-  attachSessionTerminalSurface,
   attachSessionTuiController,
   configureSessionComposer,
   createCliOnEvent,
@@ -67,22 +65,17 @@ export async function runNewSessionCli(
   const isTty = opts.isTty ?? process.stdin.isTTY === true
   const dynamicTui =
     opts.print !== true && shouldUseDynamicTui({ isTty })
-  const engine = resolveCliTuiEngine({
-    dynamicTui,
-    env: process.env,
-  })
   const color =
     process.env.NO_COLOR === undefined &&
     process.env.BOLO_THEME?.trim().toLowerCase() !== 'plain'
 
   const thinkingGate: { session: BoloSession | null } = { session: null }
-  const { printer, onEvent, surface, controller } = createCliOnEvent({
+  const { printer, onEvent, controller } = createCliOnEvent({
     writeOut,
     writeErr,
     onSessionEvent: opts.onSessionEvent,
     showThinking: () => thinkingGate.session?.showThinking !== false,
     timeline: dynamicTui,
-    engine,
     terminalInput: process.stdin,
     terminalOutput: process.stdout,
     env: process.env,
@@ -129,7 +122,6 @@ export async function runNewSessionCli(
   if (opts.toolSpecs) applyToolSpecsToSession(session, opts.toolSpecs)
   session.askUserQuestion = askUserQuestion
   attachSessionEventPrinter(session, printer)
-  if (surface) attachSessionTerminalSurface(session, surface)
   if (controller) attachSessionTuiController(session, controller)
 
   // 配置解析失败必须先说——否则用户会把「配置没生效」误当成别的问题排查

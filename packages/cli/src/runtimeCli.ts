@@ -22,17 +22,12 @@ import {
   type RuntimeCommandResult,
 } from '../../shared/src/index.ts'
 import { resumeFromIdOrPath } from './resumeCli.ts'
-import {
-  runRetainedRuntimePager,
-  runRuntimePager,
-  type RuntimePagerKey,
-} from './tui/runtimePager.ts'
+import { runRetainedRuntimePager } from './tui/runtimePager.ts'
 import type {
   BoloTerminalInput,
   BoloTerminalOutput,
 } from './tui/boloTerminalAdapter.ts'
 import { resolveTuiTheme } from './tui/theme.ts'
-import { resolveCliTuiEngine } from './tui/tuiEngine.ts'
 
 export type RuntimeQueryCliOptions = {
   idOrPath: string
@@ -43,7 +38,6 @@ export type RuntimeQueryCliOptions = {
   columns?: number
   rows?: number
   env?: NodeJS.ProcessEnv
-  readKey?: () => Promise<RuntimePagerKey>
   /** 测试/宿主注入；真实 CLI 默认使用 process.stdin/stdout。 */
   terminalInput?: BoloTerminalInput
   terminalOutput?: BoloTerminalOutput
@@ -177,29 +171,17 @@ export async function runRuntimeQueryCli(
     try {
       const env = options.env ?? process.env
       const color = resolveTuiTheme({ env }).ansi
-      const pager =
-        resolveCliTuiEngine({ dynamicTui: true, env }) === 'retained'
-          ? await runRetainedRuntimePager({
-              view: result.view,
-              isTty: true,
-              columns: options.columns,
-              rows: options.rows,
-              color,
-              input: options.terminalInput,
-              output: options.terminalOutput,
-              writeOut,
-              signal: options.signal,
-            })
-          : await runRuntimePager({
-              view: result.view,
-              isTty: true,
-              columns: options.columns,
-              rows: options.rows,
-              color,
-              readKey: options.readKey,
-              writeOut,
-              signal: options.signal,
-            })
+      const pager = await runRetainedRuntimePager({
+        view: result.view,
+        isTty: true,
+        columns: options.columns,
+        rows: options.rows,
+        color,
+        input: options.terminalInput,
+        output: options.terminalOutput,
+        writeOut,
+        signal: options.signal,
+      })
       if (!pager.ok) {
         // isTty=true 时不应命中；保留 fail-safe 一次性输出。
         writeOut(`${formatRuntimeQueryView(result.view)}\n`)

@@ -37,16 +37,7 @@ import {
   createSessionEventPrinter,
   type SessionEventPrinter,
 } from './tui/formatSessionEvent.ts'
-import {
-  createTuiInputState,
-  readTuiInput,
-  renderTuiInputBox,
-  shouldUseDynamicTui,
-} from './tui/inputBox.ts'
-import {
-  createTurnActivityIndicator,
-  type TurnActivityIndicator,
-} from './tui/turnActivity.ts'
+import { shouldUseDynamicTui } from './tui/inputBox.ts'
 import { formatSessionStatusLine } from './tui/statusLine.ts'
 import {
   runArrowPicker,
@@ -55,17 +46,9 @@ import {
 } from './tui/arrowPicker.ts'
 import { getCliSlashCommandCandidates } from './slashCandidates.ts'
 import {
-  createTerminalSurface,
-  type TerminalSurface,
-} from './tui/terminalSurface.ts'
-import {
   createRetainedTuiController,
   type CliTuiController,
 } from './tui/retainedTui.ts'
-import {
-  resolveCliTuiEngine,
-  type CliTuiEngine,
-} from './tui/tuiEngine.ts'
 import type {
   BoloTerminalInput,
   BoloTerminalOutput,
@@ -432,7 +415,6 @@ export function lastAssistantText(
 
 /** 挂 session 上的 T4 打印机（CLI 内部） */
 const EVENT_PRINTER = Symbol.for('bolo.cli.eventPrinter')
-const TERMINAL_SURFACE = Symbol.for('bolo.cli.terminalSurface')
 const TUI_CONTROLLER = Symbol.for('bolo.cli.tuiController')
 
 export function getSessionEventPrinter(
@@ -450,23 +432,6 @@ export function attachSessionEventPrinter(
   ;(session as BoloSession & { [EVENT_PRINTER]?: SessionEventPrinter })[
     EVENT_PRINTER
   ] = printer
-}
-
-export function getSessionTerminalSurface(
-  session: BoloSession,
-): TerminalSurface | undefined {
-  return (
-    session as BoloSession & { [TERMINAL_SURFACE]?: TerminalSurface }
-  )[TERMINAL_SURFACE]
-}
-
-export function attachSessionTerminalSurface(
-  session: BoloSession,
-  surface: TerminalSurface,
-): void {
-  ;(
-    session as BoloSession & { [TERMINAL_SURFACE]?: TerminalSurface }
-  )[TERMINAL_SURFACE] = surface
 }
 
 export function getSessionTuiController(
@@ -521,8 +486,6 @@ export function createCliOnEvent(opts: {
   timeline?: boolean
   color?: boolean
   columns?: number
-  activity?: TurnActivityIndicator
-  engine?: CliTuiEngine
   terminalInput?: BoloTerminalInput
   terminalOutput?: BoloTerminalOutput
   env?: NodeJS.ProcessEnv
@@ -531,11 +494,10 @@ export function createCliOnEvent(opts: {
 }): {
   printer: SessionEventPrinter
   onEvent: (e: SessionEvent) => void
-  surface?: TerminalSurface
   controller?: CliTuiController
 } {
   const controller =
-    opts.timeline === true && opts.engine === 'retained'
+    opts.timeline === true
       ? createRetainedTuiController({
           writeOut: opts.writeOut,
           writeErr: opts.writeErr,
@@ -547,47 +509,19 @@ export function createCliOnEvent(opts: {
           ...(opts.explainError ? { explainError: opts.explainError } : {}),
         })
       : undefined
-  const surface =
-    opts.timeline === true && !controller
-      ? createTerminalSurface({
-          writeOut: opts.writeOut,
-          writeErr: opts.writeErr,
-        })
-      : undefined
-  const printerOut =
-    controller?.writeOutput ?? surface?.writeOutput ?? opts.writeOut
-  const printerErr =
-    controller?.writeError ?? surface?.writeError ?? opts.writeErr
-  const activity =
-    opts.timeline === true && !controller
-      ? (opts.activity ??
-        createTurnActivityIndicator({
-          writeOut: printerOut,
-          color: opts.color,
-          columns: () => process.stdout.columns ?? opts.columns,
-          ...(surface
-            ? {
-                renderFrame: (line: string) => surface.setActivity(line),
-                clearFrame: () => surface.clearActivity(),
-              }
-            : {}),
-        }))
-      : undefined
   const printer =
     controller?.printer ??
     createSessionEventPrinter({
-      writeOut: printerOut,
-      writeErr: printerErr,
+      writeOut: opts.writeOut,
+      writeErr: opts.writeErr,
       showThinking: opts.showThinking,
-      timeline: opts.timeline,
+      timeline: false,
       color: opts.color,
       columns: opts.columns,
-      activity,
       ...(opts.explainError ? { explainError: opts.explainError } : {}),
     })
   return {
     printer,
-    ...(surface ? { surface } : {}),
     ...(controller ? { controller } : {}),
     onEvent: (e) => {
       printer.onEvent(e)
@@ -608,24 +542,19 @@ export async function resumeFromIdOrPath(
   const isTty = opts.isTty ?? process.stdin.isTTY === true
   const dynamicTui =
     opts.print !== true && shouldUseDynamicTui({ isTty })
-  const engine = resolveCliTuiEngine({
-    dynamicTui,
-    env: process.env,
-  })
   const color =
     process.env.NO_COLOR === undefined &&
     process.env.BOLO_THEME?.trim().toLowerCase() !== 'plain'
 
   // 打印机创建早于 session；绑定后读 session.showThinking（/thinking）
   const thinkingGate: { session: BoloSession | null } = { session: null }
-  const { printer, onEvent, surface, controller } = createCliOnEvent({
+  const { printer, onEvent, controller } = createCliOnEvent({
     writeOut,
     writeErr,
     onSessionEvent: opts.onSessionEvent,
     onEvent: opts.onEvent,
     showThinking: () => thinkingGate.session?.showThinking !== false,
     timeline: dynamicTui,
-    engine,
     terminalInput: process.stdin,
     terminalOutput: process.stdout,
     env: process.env,
@@ -684,7 +613,6 @@ export async function resumeFromIdOrPath(
   if (opts.toolSpecs) applyToolSpecsToSession(session, opts.toolSpecs)
   session.askUserQuestion = askUserQuestion
   attachSessionEventPrinter(session, printer)
-  if (surface) attachSessionTerminalSurface(session, surface)
   if (controller) {
     controller.restoreMessages(session.messages)
     configureSessionComposer(controller, session)
@@ -1069,17 +997,12 @@ export async function runRepl(
   const writeOut = options?.writeOut ?? ((s) => process.stdout.write(s))
   const writeErr = options?.writeErr ?? ((s) => process.stderr.write(s))
   const isTty = options?.isTty ?? process.stdin.isTTY === true
-  const dynamicTui = shouldUseDynamicTui({ isTty })
-  const controller = dynamicTui
+  const controller = shouldUseDynamicTui({ isTty })
     ? getSessionTuiController(session)
     : undefined
-  const surface = dynamicTui && !controller
-    ? getSessionTerminalSurface(session)
-    : undefined
-  const runtimeOut =
-    controller?.writeOutput ?? surface?.writeOutput ?? writeOut
-  const runtimeErr =
-    controller?.writeError ?? surface?.writeError ?? writeErr
+  const dynamicTui = controller !== undefined
+  const runtimeOut = controller?.writeOutput ?? writeOut
+  const runtimeErr = controller?.writeError ?? writeErr
   const color =
     process.env.NO_COLOR === undefined &&
     process.env.BOLO_THEME?.trim().toLowerCase() !== 'plain'
@@ -1095,8 +1018,6 @@ export async function runRepl(
     writeOut(
       'Interactive mode (/exit to quit). Type /help for commands.\n',
     )
-  } else if (!controller) {
-    writeOut('\n')
   }
 
   let replClosed = false
@@ -1155,14 +1076,10 @@ export async function runRepl(
     }
   }
   const pauseInteractiveSurface: () => void | Promise<void> = dynamicTui
-    ? controller
-      ? () => undefined
-      : () => surface?.suspend()
+    ? () => undefined
     : pauseRl
   const resumeInteractiveSurface: () => void | Promise<void> = dynamicTui
-    ? controller
-      ? () => undefined
-      : () => surface?.resume()
+    ? () => undefined
     : resumeRl
   let activeTurn: AbortController | null = null
   const interrupt = async () => {
@@ -1231,43 +1148,6 @@ export async function runRepl(
         }
         if (history[history.length - 1] !== text) history.push(text)
         if (history.length > 100) history.shift()
-      } else if (dynamicTui) {
-        await pauseInteractiveSurface()
-        let input
-        try {
-          input = await readTuiInput({
-            writeOut: runtimeOut,
-            columns: process.stdout.columns,
-            color,
-            history,
-            slashCandidates: getCliSlashCommandCandidates(session),
-            signal: options?.signal,
-            status: {
-              permissionMode: session.permissionMode,
-              providerId: session.providerId,
-              providerKind: session.provider?.id,
-              model: session.model,
-              effortLevel: session.effortLevel,
-              ...(session.usage ? { usage: session.usage } : {}),
-            },
-          })
-        } finally {
-          await resumeInteractiveSurface()
-        }
-        if (input.type !== 'submit') {
-          replClosed = true
-          runtimeOut(input.type === 'exit' ? '^C\n' : '\n')
-          break
-        }
-        text = input.value.trim()
-        if (!text) continue
-        if (text === '/exit' || text === '/quit') {
-          replClosed = true
-          runtimeOut('Session closed.\n')
-          break
-        }
-        if (history[history.length - 1] !== text) history.push(text)
-        if (history.length > 100) history.shift()
       } else {
         const line = await question('bolo> ', options?.signal)
         if (line == null) break
@@ -1279,28 +1159,6 @@ export async function runRepl(
       activeTurn = turnController
       const onParentAbort = () => turnController.abort('parent')
       options?.signal?.addEventListener('abort', onParentAbort, { once: true })
-      if (surface) {
-        const runningComposer = renderTuiInputBox({
-          state: createTuiInputState(),
-          columns: process.stdout.columns,
-          color,
-          mode: 'running',
-          status: {
-            permissionMode: session.permissionMode,
-            providerId: session.providerId,
-            providerKind: session.provider?.id,
-            model: session.model,
-            effortLevel: session.effortLevel,
-            ...(session.usage ? { usage: session.usage } : {}),
-          },
-        })
-        surface.setDock({
-          lines: runningComposer.lines,
-          cursorRow: runningComposer.cursorRow,
-          cursorColumn: runningComposer.cursorColumn,
-          showCursor: false,
-        })
-      }
       session.askPermission = createTtyAskPermission({
         isTty,
         ...(dynamicTui
@@ -1352,7 +1210,6 @@ export async function runRepl(
         const msg = err instanceof Error ? err.message : String(err)
         runtimeErr(`error: ${msg}\n`)
       } finally {
-        surface?.clearDock()
         options?.signal?.removeEventListener('abort', onParentAbort)
         if (activeTurn === turnController) activeTurn = null
       }
@@ -1376,7 +1233,6 @@ export async function runRepl(
           else rl?.removeListener('SIGINT', onSigint)
         },
         () => options?.signal?.removeEventListener('abort', onExternalAbort),
-        () => surface?.dispose(),
         () => controller?.stop(),
         () => rl?.close(),
         async () => {

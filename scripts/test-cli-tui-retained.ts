@@ -276,8 +276,8 @@ async function main() {
     }
   }
 
-  // Factory routing is mutually exclusive: retained has a controller and no
-  // legacy TerminalSurface; legacy keeps the exact old surface.
+  // Production factory routing is binary: timeline creates exactly one
+  // retained controller; plain mode creates no dynamic owner.
   {
     const retainedTerminal = new HeadlessTerminalHarness({
       columns: 80,
@@ -288,31 +288,21 @@ async function main() {
       writeOut: retainedTerminal.write,
       writeErr: retainedTerminal.write,
       timeline: true,
-      engine: 'retained',
       terminalOutput: retainedOutput,
       color: false,
       columns: 80,
     })
     assert(retained.controller, 'retained factory returns one controller')
-    assert(!retained.surface, 'retained factory never creates TerminalSurface')
+    assert(
+      !Reflect.has(retained, 'surface'),
+      'retained factory exposes no legacy surface',
+    )
     await retained.controller.stop()
     retainedTerminal.dispose()
-
-    const legacy = createCliOnEvent({
-      writeOut: () => {},
-      writeErr: () => {},
-      timeline: true,
-      engine: 'legacy',
-      color: false,
-      columns: 80,
-    })
-    assert(legacy.surface, 'legacy factory keeps TerminalSurface')
-    assert(!legacy.controller, 'legacy factory never creates retained controller')
-    legacy.surface.dispose()
   }
 
-  // Non-TTY formatter bytes are an independent contract. Even an explicit
-  // retained request cannot route this path through Pi or cursor control.
+  // Non-TTY formatter bytes are an independent contract and cannot route
+  // through Pi or cursor control.
   {
     const out: string[] = []
     const err: string[] = []
@@ -320,7 +310,6 @@ async function main() {
       writeOut: (text) => out.push(text),
       writeErr: (text) => err.push(text),
       timeline: false,
-      engine: 'retained',
       color: false,
     })
     plain.printer.beginTurn({
@@ -332,7 +321,10 @@ async function main() {
     plain.onEvent({ type: 'text', text: 'answer' })
     plain.printer.endTurn({ terminalReason: 'completed' })
     assert(!plain.controller, 'plain path never creates retained controller')
-    assert(!plain.surface, 'plain path never creates a dynamic surface')
+    assert(
+      !Reflect.has(plain, 'surface'),
+      'plain path exposes no dynamic surface',
+    )
     assert(
       out.join('') === '\u001b[2mthinking \u001b[0mthink\nanswer\n',
       `plain output bytes changed: ${JSON.stringify(out.join(''))}`,
@@ -455,7 +447,7 @@ async function main() {
       const legacyWrites: string[] = []
       const legacyCreated = await runNewSessionCli({
         cwd,
-        prompt: 'explicit legacy rollback smoke',
+        prompt: 'ignored legacy env smoke',
         forceMock: true,
         isTty: true,
         readPermissionAnswer: async () => 'n',
@@ -463,12 +455,12 @@ async function main() {
         writeErr: (text) => legacyWrites.push(text),
       })
       assert(
-        getSessionTuiController(legacyCreated.session) === undefined,
-        'explicit legacy keeps the production rollback off retained',
+        getSessionTuiController(legacyCreated.session) !== undefined,
+        'legacy env no longer changes the production retained owner',
       )
       assert(
-        !legacyWrites.join('').includes('\u001b[?2026h'),
-        'explicit legacy does not start retained synchronized rendering',
+        legacyWrites.join('').includes('\u001b[?2026h'),
+        'legacy env still starts retained synchronized rendering',
       )
       delete process.env.BOLO_TUI_ENGINE
 

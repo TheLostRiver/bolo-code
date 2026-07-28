@@ -6,7 +6,6 @@
 import {
   applyTuiInputKey,
   attachSessionEventPrinter,
-  createCliOnEvent,
   createSessionEventPrinter,
   createTuiInputState,
   createTurnActivityIndicator,
@@ -847,7 +846,7 @@ async function main(): Promise<void> {
     writeOut: (text) => delayedOut.push(text),
     color: false,
   })
-  const delayedEvents = createCliOnEvent({
+  const delayedPrinter = createSessionEventPrinter({
     writeOut: (text) => delayedOut.push(text),
     writeErr: (text) => delayedOut.push(text),
     timeline: true,
@@ -858,10 +857,10 @@ async function main(): Promise<void> {
     cwd: process.cwd(),
     provider: delayedProvider,
     systemPrompt: false,
-    onEvent: delayedEvents.onEvent,
+    onEvent: delayedPrinter.onEvent,
     askPermission: async () => 'deny',
   })
-  attachSessionEventPrinter(delayedSession, delayedEvents.printer)
+  attachSessionEventPrinter(delayedSession, delayedPrinter)
   const pendingTurn = runOnePrompt(delayedSession, 'wait for first token', {
     writeOut: (text) => delayedOut.push(text),
     writeErr: (text) => delayedOut.push(text),

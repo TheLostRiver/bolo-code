@@ -29,7 +29,6 @@ import {
   parseArgs,
 } from '../packages/cli/src/parseArgs.ts'
 import { runRuntimeQueryCli } from '../packages/cli/src/runtimeCli.ts'
-import type { RuntimePagerKey } from '../packages/cli/src/tui/runtimePager.ts'
 import { HeadlessTerminalHarness } from './lib/headlessTerminalHarness.ts'
 
 class RuntimeRetainedInput extends EventEmitter {
@@ -329,7 +328,7 @@ try {
     })
   }
 
-  let nonTtyReads = 0
+  const nonTtyInput = new RuntimeRetainedInput()
   const nonTtyOut: string[] = []
   const nonTtyText = await runRuntimeQueryCli({
     idOrPath: pagerTranscript,
@@ -340,49 +339,19 @@ try {
     columns: 32,
     rows: 8,
     env: { NO_COLOR: '1' },
-    readKey: async () => {
-      nonTtyReads += 1
-      throw new Error('non-TTY runtime query must never read stdin')
-    },
+    terminalInput: nonTtyInput,
     writeOut: (text: string) => nonTtyOut.push(text),
     writeErr: () => undefined,
   })
   assert.equal(nonTtyText.exitCode, 0)
-  assert.equal(nonTtyReads, 0)
+  assert.deepEqual(
+    nonTtyInput.rawTransitions,
+    [],
+    'non-TTY runtime query never acquires terminal input',
+  )
   assert.match(nonTtyOut.join(''), /turn_pager_1/)
   assert.match(nonTtyOut.join(''), /turn_pager_7/)
   assert.equal(nonTtyOut.join('').includes('\u001b[2J'), false)
-
-  const ttyKeys: RuntimePagerKey[] = [
-    'next',
-    'previous',
-    'quit',
-  ]
-  let ttyKeyIndex = 0
-  const ttyOut: string[] = []
-  const ttyText = await runRuntimeQueryCli({
-    idOrPath: pagerTranscript,
-    cwd: root,
-    forceMock: true,
-    query: { action: 'list', entity: 'turn' },
-    isTty: true,
-    columns: 48,
-    rows: 8,
-    env: { NO_COLOR: '1', BOLO_TUI_ENGINE: 'legacy' },
-    readKey: async () => ttyKeys[ttyKeyIndex++] ?? 'eof',
-    writeOut: (text: string) => ttyOut.push(text),
-    writeErr: () => undefined,
-  })
-  assert.equal(ttyText.exitCode, 0)
-  assert.equal(ttyKeyIndex, ttyKeys.length)
-  assert.match(ttyOut.join(''), /page 1\/4/i)
-  assert.match(ttyOut.join(''), /page 2\/4/i)
-  assert.match(ttyOut.join(''), /\u001b\[2J/)
-  assert.equal(
-    /\u001b\[[0-9;]*m/.test(ttyOut.join('')),
-    false,
-    'NO_COLOR disables SGR while pager control sequences remain',
-  )
 
   const retainedTerminal = new HeadlessTerminalHarness({
     columns: 48,
@@ -392,7 +361,6 @@ try {
   const retainedInput = new RuntimeRetainedInput()
   const retainedOutput = new RuntimeRetainedOutput(48, 8)
   const retainedOut: string[] = []
-  let retainedLegacyReads = 0
   try {
     const retainedQuery = runRuntimeQueryCli({
       idOrPath: pagerTranscript,
@@ -405,10 +373,6 @@ try {
       env: { NO_COLOR: '1' },
       terminalInput: retainedInput,
       terminalOutput: retainedOutput,
-      readKey: async () => {
-        retainedLegacyReads += 1
-        throw new Error('retained runtime pager must not use legacy readKey')
-      },
       writeOut: (text: string) => {
         retainedOut.push(text)
         retainedTerminal.write(text)
@@ -434,7 +398,6 @@ try {
     }, 'runtime CLI retained page two')
     retainedInput.send('q')
     assert.equal((await retainedQuery).exitCode, 0)
-    assert.equal(retainedLegacyReads, 0)
     assert.equal(retainedInput.isRaw, false)
     assert.deepEqual(retainedInput.rawTransitions, [true, false])
     assert.equal(
@@ -442,56 +405,119 @@ try {
       false,
       'default retained runtime query avoids the legacy full-screen clear',
     )
+    const retainedSgr = [
+      ...new Set(
+        retainedOut.join('').match(/\u001b\[[0-9;]*m/g) ?? [],
+      ),
+    ]
+    assert.ok(
+      retainedSgr.every((sequence) => sequence === '\u001b[0m'),
+      `NO_COLOR allows only terminal reset SGR: ${JSON.stringify(retainedSgr)}`,
+    )
   } finally {
     retainedTerminal.dispose()
   }
 
-  let inspectReads = 0
+  const inspectInput = new RuntimeRetainedInput()
+  const inspectOutput = new RuntimeRetainedOutput(48, 8)
+  const inspectTerminal = new HeadlessTerminalHarness({
+    columns: 48,
+    rows: 8,
+    scrollback: 100,
+  })
   const inspectOut: string[] = []
-  const inspectedText = await runRuntimeQueryCli({
-    idOrPath: pagerTranscript,
-    cwd: root,
-    forceMock: true,
-    query: {
-      action: 'inspect',
-      entity: 'turn',
-      entityId: 'turn_pager_1',
-    },
-    isTty: true,
+  try {
+    const inspectedPending = runRuntimeQueryCli({
+      idOrPath: pagerTranscript,
+      cwd: root,
+      forceMock: true,
+      query: {
+        action: 'inspect',
+        entity: 'turn',
+        entityId: 'turn_pager_1',
+      },
+      isTty: true,
+      columns: 48,
+      rows: 8,
+      env: { NO_COLOR: '1' },
+      terminalInput: inspectInput,
+      terminalOutput: inspectOutput,
+      writeOut: (text: string) => {
+        inspectOut.push(text)
+        inspectTerminal.write(text)
+      },
+      writeErr: () => undefined,
+    })
+    await waitForRuntimePager(
+      () => inspectInput.isRaw,
+      'retained inspect pager raw input',
+    )
+    let inspectVisible = ''
+    await waitForRuntimePager(async () => {
+      await inspectTerminal.flush()
+      inspectVisible = inspectTerminal
+        .viewport()
+        .map((line) => line.text)
+        .join('\n')
+      return /turn_pager_1/u.test(inspectVisible)
+    }, 'retained inspect pager first frame')
+    assert.match(inspectVisible, /turn_pager_1/u)
+    assert.match(inspectVisible, /page 1\//iu)
+    inspectInput.send('q')
+    const inspectedText = await inspectedPending
+    assert.equal(inspectedText.exitCode, 0)
+    assert.deepEqual(inspectInput.rawTransitions, [true, false])
+  } finally {
+    inspectTerminal.dispose()
+  }
+
+  const colorInput = new RuntimeRetainedInput()
+  const colorOutput = new RuntimeRetainedOutput(48, 8)
+  const colorTerminal = new HeadlessTerminalHarness({
     columns: 48,
     rows: 8,
-    env: { NO_COLOR: '1', BOLO_TUI_ENGINE: 'legacy' },
-    readKey: async () => {
-      inspectReads += 1
-      return 'quit'
-    },
-    writeOut: (text: string) => inspectOut.push(text),
-    writeErr: () => undefined,
+    scrollback: 100,
   })
-  assert.equal(inspectedText.exitCode, 0)
-  assert.equal(inspectReads, 1)
-  assert.match(inspectOut.join(''), /turn_pager_1/)
-  assert.match(inspectOut.join(''), /page 1\//i)
-
   const colorOut: string[] = []
-  const colorText = await runRuntimeQueryCli({
-    idOrPath: pagerTranscript,
-    cwd: root,
-    forceMock: true,
-    query: { action: 'list', entity: 'turn' },
-    isTty: true,
-    columns: 48,
-    rows: 8,
-    env: { BOLO_TUI_ENGINE: 'legacy' },
-    readKey: async () => 'quit',
-    writeOut: (text: string) => colorOut.push(text),
-    writeErr: () => undefined,
-  })
-  assert.equal(colorText.exitCode, 0)
-  assert.match(colorOut.join(''), /\u001b\[[0-9;]*m/)
+  try {
+    const colorPending = runRuntimeQueryCli({
+      idOrPath: pagerTranscript,
+      cwd: root,
+      forceMock: true,
+      query: { action: 'list', entity: 'turn' },
+      isTty: true,
+      columns: 48,
+      rows: 8,
+      env: {},
+      terminalInput: colorInput,
+      terminalOutput: colorOutput,
+      writeOut: (text: string) => {
+        colorOut.push(text)
+        colorTerminal.write(text)
+      },
+      writeErr: () => undefined,
+    })
+    await waitForRuntimePager(
+      () => colorInput.isRaw,
+      'retained color pager raw input',
+    )
+    await waitForRuntimePager(async () => {
+      await colorTerminal.flush()
+      return colorTerminal
+        .viewport()
+        .some((line) => /page 1\/4/iu.test(line.text))
+    }, 'retained color pager first frame')
+    colorInput.send('q')
+    const colorText = await colorPending
+    assert.equal(colorText.exitCode, 0)
+    assert.match(colorOut.join(''), /\u001b\[[0-9;]*m/)
+  } finally {
+    colorTerminal.dispose()
+  }
 
-  let ctrlCReads = 0
-  const ctrlC = await runRuntimeQueryCli({
+  const ctrlCInput = new RuntimeRetainedInput()
+  const ctrlCOutput = new RuntimeRetainedOutput(48, 8)
+  const ctrlCPending = runRuntimeQueryCli({
     idOrPath: pagerTranscript,
     cwd: root,
     forceMock: true,
@@ -499,17 +525,23 @@ try {
     isTty: true,
     columns: 48,
     rows: 8,
-    env: { NO_COLOR: '1', BOLO_TUI_ENGINE: 'legacy' },
-    readKey: async () => {
-      ctrlCReads += 1
-      return 'ctrl-c'
-    },
+    env: { NO_COLOR: '1' },
+    terminalInput: ctrlCInput,
+    terminalOutput: ctrlCOutput,
     writeOut: () => undefined,
     writeErr: () => undefined,
   })
-  assert.equal(ctrlCReads, 1)
+  await waitForRuntimePager(
+    () => ctrlCInput.isRaw,
+    'retained interrupt pager raw input',
+  )
+  ctrlCInput.send('\u0003')
+  const ctrlC = await ctrlCPending
+  assert.deepEqual(ctrlCInput.rawTransitions, [true, false])
   assert.equal(ctrlC.exitCode, 130)
 
+  const failureInput = new RuntimeRetainedInput()
+  const failureOutput = new RuntimeRetainedOutput(48, 8)
   const pagerFailureErr: string[] = []
   const pagerFailure = await runRuntimeQueryCli({
     idOrPath: pagerTranscript,
@@ -519,18 +551,19 @@ try {
     isTty: true,
     columns: 48,
     rows: 8,
-    env: { NO_COLOR: '1', BOLO_TUI_ENGINE: 'legacy' },
-    readKey: async () => {
-      throw new Error('injected pager input failure')
+    env: { NO_COLOR: '1' },
+    terminalInput: failureInput,
+    terminalOutput: failureOutput,
+    writeOut: () => {
+      throw new Error('injected pager output failure')
     },
-    writeOut: () => undefined,
     writeErr: (text: string) => pagerFailureErr.push(text),
   })
   assert.equal(pagerFailure.exitCode, 1)
   assert.match(pagerFailureErr.join(''), /pager_failed/)
   assert.match(
     pagerFailureErr.join(''),
-    /injected pager input failure/,
+    /injected pager output failure/,
   )
 
   const out: string[] = []

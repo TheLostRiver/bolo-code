@@ -743,12 +743,10 @@ async function main(): Promise<void> {
       'retained new/resume paths no longer hand ownership to legacy panels',
     )
     assert(
-      runtimeSource.includes(
-        "resolveCliTuiEngine({ dynamicTui: true, env }) === 'retained'",
-      ) &&
-        runtimeSource.includes('await runRetainedRuntimePager({') &&
-        runtimeSource.includes('await runRuntimePager({'),
-      'runtime CLI selects retained pager only through the explicit engine gate',
+      runtimeSource.includes('await runRetainedRuntimePager({') &&
+        !runtimeSource.includes('resolveCliTuiEngine') &&
+        !runtimeSource.includes('await runRuntimePager({'),
+      'runtime CLI has one retained pager owner and no engine gate',
     )
 
     console.log('PASS: CLI retained OverlayHost interaction lifecycle')
