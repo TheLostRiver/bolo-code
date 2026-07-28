@@ -16,7 +16,7 @@ import {
   terminalGraphemeWidth,
   wrapTerminalText,
 } from './terminalText.ts'
-import { resolveTuiDockWidth, resolveTuiFrameWidth } from './frame.ts'
+import { resolveTuiDockWidth } from './frame.ts'
 
 export type TuiInputState = {
   value: string
@@ -809,7 +809,7 @@ export function renderUserMessage(
   prompt: string,
   options?: { columns?: number; color?: boolean },
 ): string {
-  const frameWidth = resolveTuiFrameWidth(options?.columns ?? 80)
+  const frameWidth = resolveTuiDockWidth(options?.columns ?? 80)
   const contentWidth = Math.max(1, frameWidth - 4)
   const lines = wrapTerminalText(prompt.trim(), contentWidth)
   const color = options?.color !== false

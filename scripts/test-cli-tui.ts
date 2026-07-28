@@ -577,13 +577,18 @@ async function main(): Promise<void> {
     columns: 220,
     color: false,
   })
+  const ultraWideUser = renderUserMessage('wide user history', {
+    columns: 220,
+    color: false,
+  })
   assert(
     visibleWidth(ultraWideWelcome.split('\n')[0] ?? '') ===
       resolveTuiFrameWidth(220) &&
       visibleWidth(ultraWideInput.lines[0] ?? '') ===
         resolveTuiDockWidth(220) &&
+      visibleWidth(ultraWideUser) === resolveTuiDockWidth(220) &&
       resolveTuiDockWidth(220) > resolveTuiFrameWidth(220),
-    'ultra-wide input fills the terminal independently of the content frame',
+    'ultra-wide user history and input share the dock width',
   )
 
   const mediumWelcome = renderInkLayout({

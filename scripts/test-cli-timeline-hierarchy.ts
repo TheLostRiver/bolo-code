@@ -10,6 +10,7 @@ import {
   renderTuiInputBox,
   renderUserMessage,
   resolveTuiContentGutter,
+  resolveTuiDockWidth,
   resolveTuiFrameWidth,
   stripTerminalAnsi,
 } from '../packages/cli/src/index.ts'
@@ -68,6 +69,39 @@ async function main() {
     measureTerminalText(userNoColor) === resolveTuiFrameWidth(48),
     'NO_COLOR keeps the same block geometry',
   )
+  const ultraWideUser = renderUserMessage(
+    '超宽用户消息🙂 should fill the same dock as the composer',
+    {
+      columns: 220,
+      color: true,
+    },
+  )
+  assert(
+    ultraWideUser
+      .split('\n')
+      .every(
+        (line) => measureTerminalText(line) === resolveTuiDockWidth(220),
+      ),
+    'ultra-wide user history fills the composer dock width',
+  )
+  assert(
+    resolveTuiDockWidth(220) > resolveTuiFrameWidth(220),
+    'user history is no longer capped by the content frame',
+  )
+  for (const columns of [24, 38]) {
+    const narrowUser = renderUserMessage(
+      '中文🙂 mixed-width content that must stay inside the terminal',
+      { columns, color: false },
+    )
+    assert(
+      narrowUser
+        .split('\n')
+        .every(
+          (line) => measureTerminalText(line) === resolveTuiDockWidth(columns),
+        ),
+      `${columns}-column user history keeps dock geometry`,
+    )
+  }
 
   const out: string[] = []
   const printer = createSessionEventPrinter({
