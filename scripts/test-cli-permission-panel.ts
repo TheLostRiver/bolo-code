@@ -136,6 +136,31 @@ async function main(): Promise<void> {
   assert(pauses === 1 && resumes === 1, 'panel owns input exactly once')
   assert(askWrites.join('').includes(process.cwd()), 'TTY ask exposes cwd')
 
+  let retainedOverlayCalls = 0
+  let retainedPauses = 0
+  const retainedAsk = createTtyAskPermission({
+    isTty: true,
+    readKey: async () => 'n',
+    runPermissionOverlay: async ({ request: overlayRequest }) => {
+      retainedOverlayCalls += 1
+      assert(
+        overlayRequest === request,
+        'retained permission receives the original audited request',
+      )
+      return 'allow'
+    },
+    pauseInput: () => retainedPauses++,
+    resumeInput: () => retainedPauses++,
+  })
+  assert(
+    (await retainedAsk(request)) === 'allow',
+    'retained ask returns the OverlayHost decision',
+  )
+  assert(
+    retainedOverlayCalls === 1 && retainedPauses === 0,
+    'retained permission uses one overlay without suspending its root',
+  )
+
   let interrupted = 0
   const interruptedAsk = createTtyAskPermission({
     isTty: true,

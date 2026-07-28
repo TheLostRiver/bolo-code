@@ -97,6 +97,7 @@ export async function runNewSessionCli(
     writeOut: controller?.writeOutput ?? writeOut,
     ...(controller
       ? {
+          runPermissionOverlay: controller.runPermissionOverlay,
           pauseInput: controller.suspendForLegacyPanel,
           resumeInput: controller.resumeFromLegacyPanel,
           suspendTextPrompt: true,

@@ -3,6 +3,7 @@ import {
   Container,
   TUI,
   type Component,
+  type OverlayHandle,
 } from '@earendil-works/pi-tui/dist/tui.js'
 import { Text } from '@earendil-works/pi-tui/dist/components/text.js'
 import { getBoloHomeDir } from '../../../config/src/paths.ts'
@@ -37,11 +38,16 @@ import {
   RetainedComposerFooter,
   type RetainedComposerConfig,
 } from './retainedComposer.ts'
+import { RetainedOverlayHost } from './retainedOverlay.ts'
 import {
   RetainedTranscript,
 } from './retainedTranscript.ts'
 import { resolveTuiContentGutter } from './contentLayout.ts'
 import { createTurnActivityIndicator } from './turnActivity.ts'
+import type {
+  AskPermissionDecision,
+  AskPermissionRequest,
+} from './askPermissionTty.ts'
 
 export type RetainedWelcomeOptions = Omit<
   InkLayoutOptions,
@@ -61,6 +67,11 @@ export type CliTuiController = {
   start(): Promise<void>
   stop(): Promise<void>
   flush(): Promise<void>
+  runPermissionOverlay(options: {
+    request: AskPermissionRequest
+    signal?: AbortSignal
+    onInterrupt?: () => void
+  }): Promise<AskPermissionDecision>
   suspendForLegacyPanel(): Promise<void>
   resumeFromLegacyPanel(): Promise<void>
   isSuspended(): boolean
@@ -280,6 +291,7 @@ export function createRetainedTuiController(options: {
   let turnActivityEnabled = true
   let root: RetainedRoot
   let tui: TUI
+  let overlayHandle: OverlayHandle | undefined
 
   const requestRender = (): void => {
     if (started && !stopped && !suspended) tui.requestRender()
@@ -326,6 +338,13 @@ export function createRetainedTuiController(options: {
     root.setState(state)
     requestRender()
   }
+  const overlay = new RetainedOverlayHost({
+    color,
+    setOverlayState: (next) => apply({ type: 'set_overlay', overlay: next }),
+    requestRender: requestComponentRender,
+    setInputEnabled: (active) => adapter.setInputEnabled(active),
+    shouldKeepInput: () => composer.isReading(),
+  })
 
   const finishThinkingSegment = (record: boolean): void => {
     const elapsedMs = activity.finishThinkingSegment()
@@ -474,12 +493,24 @@ export function createRetainedTuiController(options: {
       if (started || stopped) return
       started = true
       tui.start()
+      overlayHandle = tui.showOverlay(overlay, {
+        width: '100%',
+        maxHeight: '90%',
+        anchor: 'bottom-center',
+        margin: { left: 1, right: 1, bottom: 2 },
+        visible: () => overlay.isActive(),
+      })
+      overlay.attach(overlayHandle)
+      overlayHandle.setHidden(true)
       await flush()
     },
     async stop() {
       if (stopped) return
       stopped = true
       activity.finish()
+      overlay.cancel()
+      overlayHandle?.hide()
+      overlayHandle = undefined
       composer.cancelInput()
       adapter.setInputEnabled(false)
       if (suspended) {
@@ -490,6 +521,10 @@ export function createRetainedTuiController(options: {
       root.close()
     },
     flush,
+    runPermissionOverlay(overlayOptions) {
+      if (stopped) return Promise.resolve('deny')
+      return overlay.runPermission(overlayOptions)
+    },
     async suspendForLegacyPanel() {
       if (!started || stopped || suspended) return
       root.setVisible(false)

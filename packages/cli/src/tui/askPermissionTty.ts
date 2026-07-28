@@ -113,6 +113,12 @@ export type CreateTtyAskPermissionOptions = {
   onInterrupt?: () => void
   columns?: number
   color?: boolean
+  /** retained root 内的唯一 OverlayHost；提供时不暂停或转交 stdin。 */
+  runPermissionOverlay?: (options: {
+    request: AskPermissionRequest
+    signal?: AbortSignal
+    onInterrupt?: () => void
+  }) => Promise<AskPermissionDecision>
 }
 
 function resolveOnAbort<T>(
@@ -221,6 +227,14 @@ export function createTtyAskPermission(
       } catch {
         /* fall through to text prompt */
       }
+    }
+
+    if (opts.runPermissionOverlay && !opts.readAnswer) {
+      return await opts.runPermissionOverlay({
+        request: req,
+        ...(signal ? { signal } : {}),
+        ...(opts.onInterrupt ? { onInterrupt: opts.onInterrupt } : {}),
+      })
     }
 
     if (usePermissionPanel && !opts.readAnswer) {

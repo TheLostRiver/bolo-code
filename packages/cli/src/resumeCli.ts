@@ -635,6 +635,7 @@ export async function resumeFromIdOrPath(
     writeOut: controller?.writeOutput ?? writeOut,
     ...(controller
       ? {
+          runPermissionOverlay: controller.runPermissionOverlay,
           pauseInput: controller.suspendForLegacyPanel,
           resumeInput: controller.resumeFromLegacyPanel,
           suspendTextPrompt: true,
@@ -1262,6 +1263,11 @@ export async function runRepl(
             }),
         nonTtyDecision: 'deny',
         writeOut: runtimeOut,
+        ...(controller
+          ? {
+              runPermissionOverlay: controller.runPermissionOverlay,
+            }
+          : {}),
         pauseInput: pauseInteractiveSurface,
         resumeInput: resumeInteractiveSurface,
         suspendTextPrompt: dynamicTui,
