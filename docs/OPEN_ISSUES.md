@@ -1,7 +1,8 @@
 # 开放问题清单
 
 > 首次盘点锚点：`a17e840`（2026-07-27）；OI-14 补充锚点：
-> `c2e6a98`（2026-07-28）；OI-14A 关闭锚点：`f04f8de`（2026-07-28）。
+> `c2e6a98`（2026-07-28）；OI-14A 关闭锚点：`f04f8de`，OI-14B 关闭锚点：
+> `269b39c`（2026-07-28）。
 > 本文只列当前仓库中有代码、测试、实测或互相矛盾文档支撑的问题。
 > 历史 TODO、已关闭的候选和仅凭印象提出的功能不算开放问题。
 
@@ -16,12 +17,12 @@
 
 ## 1. Agent 可直接解决
 
-当前默认 agent 可闭环队列为 **OI-14B**。以下已关闭条目继续保留准入与关闭证据，
+当前默认 agent 可闭环队列为 **OI-14C**。以下已关闭条目继续保留准入与关闭证据，
 但 OI-09–OI-13 的局部关闭不再作为“整个 TUI renderer 已稳定”的证据。
 
 ### OI-14 · CLI TUI retained renderer 重构
 
-**状态：OPEN（当前：OI-14B）**
+**状态：OPEN（当前：OI-14C）**
 
 完整方案：[CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md) ·
 OI-14A 实测决定：[CLI_TUI_RENDERER_DECISION.md](./CLI_TUI_RENDERER_DECISION.md)
@@ -73,11 +74,27 @@ OI-14A 关闭证据：
   145.8 ms，无遥测/联网/常态 `~/.pi` 副作用。
 - 测试 `1ae9f53`、依赖与 Node 基线 `f04f8de` 均已独立提交并 push。
 
+OI-14B 关闭证据：
+
+- `packages/shared/src/cliTuiViewState.ts` 建立无 I/O 的有序 turn/block 状态、
+  deterministic turn/segment id、composer/overlay mode 与 `set_block_elapsed` action；
+  reducer 不 import Node I/O、Pi、terminal 或 legacy renderer。
+- `CliTuiSessionEvent` 编译期兼容 core `SessionEvent`、`QueryLoopEvent` 与
+  `ToolExecutionEvent`；assistant/reasoning 按 open segment 合并，tool 按 call id
+  原位更新，hosted search citation 按 URL 去重。
+- resume 通过同一 `begin_turn` / `session_event` / `end_turn` reducer replay；
+  显式空 tool output、缺失 result 与 `<tool_use_error>` 分别恢复为
+  complete、interrupted 与 error，不伪造 reasoning。
+- `test-cli-tui-view-state.ts` 覆盖整段、逐字符、固定随机 chunk 深相等，以及
+  segment/tool/search/error/abort/resume/composer/overlay；专项、typecheck 和两轮
+  125 脚本完整 `npm test` 均通过，dist build/install 与 Electron launch 全绿。
+- 代码 `269b39c` 已独立提交并 push；本切片没有接 terminal 或改变可见 legacy TUI。
+
 | 切片 | packages-first 交付 | 人类可见结果 | 自动关闭条件 | 状态 |
 |------|---------------------|--------------|--------------|------|
 | **OI-14A · 真实 VT 红灯与选型** | `@xterm/headless` physical terminal harness；Pi direct/fork 与 OpenTUI 备选的 Node/esbuild/Windows/体积/许可报告 | 暂无产品改动；先准确复现碎片、空洞、续行贴左和 cursor 漂移 | 长 URL + ANSI + 随机 chunk + running composer 在旧代码稳定红；选型表有实测数据 | **CLOSED · `1ae9f53` / `f04f8de`** |
-| **OI-14B · live view-state** | `packages/shared` action/reducer、stable block id、stream merge、segment/composer/overlay state | stream 更新同一消息，不再按 chunk 增高页面 | 纯 reducer、随机 chunk property、tool/reasoning/error/abort/resume 全绿 | **OPEN · NEXT** |
-| **OI-14C · retained 基座** | 单 terminal writer、根 component tree、theme/width/resize、welcome 与 feature flag | 所有区域使用同一 viewport 和 cursor owner | 24–220 列、resize、plain byte-stable、无超宽物理行 | OPEN |
+| **OI-14B · live view-state** | `packages/shared` action/reducer、stable block id、stream merge、segment/composer/overlay state | 暂无产品接线；为 retained transcript 原位更新提供唯一状态真源 | 纯 reducer、随机 chunk property、tool/reasoning/error/abort/resume 全绿 | **CLOSED · `269b39c`** |
+| **OI-14C · retained 基座** | 单 terminal writer、根 component tree、theme/width/resize、welcome 与 feature flag | 所有区域使用同一 viewport 和 cursor owner | 24–220 列、resize、plain byte-stable、无超宽物理行 | **OPEN · NEXT** |
 | **OI-14D · transcript/Markdown** | User/Assistant/Thought/Tool/Search/Error blocks；成熟 Markdown/wrap；父级 spacing | 正文不碎裂、不空洞，列表/URL/代码块续行一致，user/agent 有稳定间距 | 截图 fixture、CJK/emoji、ANSI/OSC 8、list/table/code、chunk invariant | OPEN |
 | **OI-14E · Composer/Activity/Footer** | 常驻 Editor、slash/hint/paste、分段 activity、usage/footer | 思考时输入框不消失；动画、Thought、model/token/快捷键稳定 | idle/running 同节点、burst backpressure、输入延迟与间距 VT | OPEN |
 | **OI-14F · overlays** | permission/question/provider/effort/diff/pager 迁入 OverlayHost | 权限显示完整 command/cwd/参数并用 once/always/deny 选择 | 默认 deny、focus/Esc/Ctrl+C 恢复、无第二 stdout owner | OPEN |
@@ -86,8 +103,8 @@ OI-14A 关闭证据：
 
 实施顺序与边界：
 
-1. OI-14A 只建立真实失败测试和依赖决策，不顺手改产品布局。
-2. OI-14B 先把状态移出 renderer；OI-14C 才允许接 terminal。
+1. OI-14A/B 已关闭：真实失败/选型与纯状态层分开提交，均未改可见产品布局。
+2. OI-14C 才允许接 terminal；在 OI-14G 前 retained 不成为默认路径。
 3. OI-14D 先关闭当前截图中的正文/间距故障，再迁 Composer 与 overlays。
 4. 迁移期 `BOLO_TUI_ENGINE=legacy` 只能作为短期回滚；非 TTY plain formatter 永久
    独立保留。一个会话不能同时启用两个 renderer。

@@ -163,7 +163,7 @@ git push --follow-tags
 | `tsx` | 跑 `scripts/*.ts` 测试 | 只在开发/测试期 |
 | `electron-builder` | Windows NSIS 安装包 | 构建工具 |
 | `@xterm/headless` | OI-14 真实 cell/auto-wrap/resize 测试 | 仅测试 |
-| `@earendil-works/pi-tui` | OI-14 retained renderer 基座 | OI-14A 已锁定但产品入口尚未 import；OI-14C 起由 esbuild 打入单文件 |
+| `@earendil-works/pi-tui` | OI-14 retained renderer 基座 | OI-14A 已锁定，OI-14B 纯状态层仍未 import；OI-14C 起由 esbuild 打入单文件 |
 
 Pi 版本、MIT 许可、传递依赖、Node/Windows/资产与体积数据见
 [CLI_TUI_RENDERER_DECISION.md](./CLI_TUI_RENDERER_DECISION.md)。OI-14C 首次把 Pi
@@ -218,7 +218,7 @@ Pi 版本、MIT 许可、传递依赖、Node/Windows/资产与体积数据见
 | **Windows 安装包（NSIS）** | ✅ 构建已验证 | Node 24 / npm 11.17.0 / electron-builder 26.15.3 已生成安装包与 blockmap；没有证书，用户仍会看到 SmartScreen 提示 → [DESKTOP_DESIGN §7c](./DESKTOP_DESIGN.md) |
 | **桌面窗口的视觉呈现** | ❌ 未验证 | 应用**能启动**且 renderer 挂载已由 `test-desktop-launch.ts` 实证；但布局观感、Windows 主题切换与 maximize 渲染、键盘走查、长会话滚动**没有肉眼验证过** |
 | **`AskUserQuestion` 的真 TTY 交互** | ❌ 未验证 | 控件逻辑测试注入 `readKey`，覆盖不到真实 raw-mode 与 REPL 抢 stdin |
-| **CLI TUI retained renderer** | ❌ 已确认缺陷 · OI-14B NEXT | OI-09–OI-13 的 slash/context/paste/Thought/权限/水晶局部契约仍有自动测试，但 legacy direct-write surface 仍会出现正文碎片、巨大空洞、物理续行贴左与 cursor/layout 漂移。OI-14A 已用真实 xterm 固化四项失败并选定 Pi direct bundle；这不是可见修复。下一步先建 live view-state，再迁 renderer；plain/`--print` 路径不受动态 cursor 问题影响 |
+| **CLI TUI retained renderer** | ❌ 已确认缺陷 · OI-14C NEXT | OI-09–OI-13 的 slash/context/paste/Thought/权限/水晶局部契约仍有自动测试，但 legacy direct-write surface 仍会出现正文碎片、巨大空洞、物理续行贴左与 cursor/layout 漂移。OI-14A 已固化四项失败并选定 Pi direct bundle，OI-14B `269b39c` 已完成纯 live view-state；两者都不是可见修复。下一步 OI-14C 首次接 terminal adapter/retained root；plain/`--print` 路径不受动态 cursor 问题影响 |
 | **`mcp-external` 搜索** | ⚠️ 仅验过 Exa | Exa 免密层已真连；其它 MCP 搜索服务仍取决于外部端点 |
 | **SearXNG 直连** | ✅ 实例/诊断/可选 setup 已验证 | `2026.7.26-b060c780d` Docker 实例：JSON API、生产 status/session/`WebSearch`、真实 URL 与源码/dist doctor 全链通过；OI-07A 已区分正常空结果、全故障和部分成功，OI-07B doctor 检查版本/能力并要求非空 smoke，OI-07C 的源码/dist managed setup/status/logs/stop 已实跑。Docker 仍须用户预装且不是默认依赖；默认引擎仍可能 429/CAPTCHA/timeout |
 | **中段 compact** | 🚫 显式不启用 | 契约就绪但产品代码零调用；两个参考实现都没真正跑过它 → §13.10.2 |
@@ -244,7 +244,7 @@ Pi 版本、MIT 许可、传递依赖、Node/Windows/资产与体积数据见
 ### 6.6 发布 checklist（逐项可执行）
 
 ```bash
-npm test                              # 当前 typecheck + 124 个串联门禁脚本，必须 EXIT=0；不等于 OI-14 已关闭
+npm test                              # 当前 typecheck + 125 个串联门禁脚本，必须 EXIT=0；不等于 OI-14 已关闭
 node -e "console.log(JSON.stringify(require('./package.json').dependencies))"
                                       # 必须输出 {}
 npm pack --dry-run                    # 清单只应有 6 项

@@ -11,7 +11,8 @@
 > **候选锚点：** Pi `c820aa26fe09` · `@earendil-works/pi-tui@0.82.1`
 
 本文件保存 OI-14A 的可复核数据与选型结论。它只决定 renderer 基座和支持边界，
-没有声称当前 legacy TUI 的可见故障已经修复。产品迁移从 OI-14B 继续。
+没有声称当前 legacy TUI 的可见故障已经修复。OI-14B 已完成纯 live view-state；
+产品 renderer 迁移从 OI-14C 继续。
 
 ## 1. Legacy 真实 VT 证据
 
@@ -128,9 +129,12 @@ Pi、Codex、OpenCode 与 oh-my-pi 承担 retained layout、渲染可靠性和�
 
 功能可靠性和视觉完成度是并行硬门槛，不互相抵扣。
 
-## 5. 下一刀
+## 5. 后续进度
 
-OI-14B 只在 `packages/shared` 建立无 I/O 的 `CliTuiViewState`、action/reducer、
-stable block id、stream merge、segment/composer/overlay state。随机 chunk、
-reasoning/tool/search/error/abort/resume 投影先在纯测试中闭环；OI-14C 才允许 terminal
-adapter 与 retained tree 接入产品。
+OI-14B `269b39c` 已在 `packages/shared` 建立无 I/O 的 `CliTuiViewState`、
+action/reducer、stable block id、stream merge、segment/composer/overlay state；
+随机 chunk、reasoning/tool/search/error/abort/resume 投影均已在纯测试中闭环。
+
+当前 OI-14C 才允许 terminal adapter 与 retained root 接入产品。它必须保留
+non-TTY/plain 字节契约和 legacy feature flag，不得提前把未完成的 transcript、
+Composer 或 overlays 切成默认路径。

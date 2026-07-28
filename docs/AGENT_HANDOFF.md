@@ -81,7 +81,7 @@ OI-14 的 TTY 目标数据流：
 
 ```text
 SessionEvent
-  → packages/shared CliTuiViewState 纯 reducer
+  → packages/shared CliTuiViewState 纯 reducer ✅ OI-14B
   → Bolo retained component tree
   → width-aware physical lines
   → 唯一 differential terminal writer
@@ -91,6 +91,8 @@ SessionEvent
 它们增加 spacer、prefix、Markdown 或 cursor 修补；新 TUI 能力只进入 retained 路径。
 OI-14A 已锁定 `@earendil-works/pi-tui@0.82.1`，首轮由 Bolo terminal adapter
 承接 Pi renderer/components；不要擅自切到 Pi `ProcessTerminal` 或引入动态 native 资产。
+OI-14B `269b39c` 已建立 `packages/shared/src/cliTuiViewState.ts`；OI-14C 必须直接消费
+该状态，不得在 renderer 中重建 stream/tool/search/resume 状态机。
 
 ### 2.3 配置合并
 
@@ -139,13 +141,14 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | Electron GUI | ~80–88% | runtime IPC/client、会话切换/恢复、composer controls、model/effort 与 control/tool progress 已真接并经 Electron 自动化；真人点击/视觉未验 |
 | 产品相对 HC 全家桶 | ~68–82% | Headless 日用高；CLI TUI 渲染可靠性已重新计入 |
 
-**已闭环：** Diff · Hooks · Compact（含 AR2 全段）· Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR-T1–T3+ Agent 能力面** · **AR3/OI-06 Desktop 产品接线** · **AR4 evidence gate** · **AR5 release hardening** · **OI-04 SearXNG 直连、OI-X1 真实实例 smoke、OI-07 上游诊断 / doctor / 可选 Docker setup、OI-08B CLI 零步骤首次启动、OI-14A 真实 VT 与 renderer 选型**。OI-09–OI-13 的局部 TUI 能力保留为完成历史，但不再代表 renderer 整体稳定。
+**已闭环：** Diff · Hooks · Compact（含 AR2 全段）· Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR-T1–T3+ Agent 能力面** · **AR3/OI-06 Desktop 产品接线** · **AR4 evidence gate** · **AR5 release hardening** · **OI-04 SearXNG 直连、OI-X1 真实实例 smoke、OI-07 上游诊断 / doctor / 可选 Docker setup、OI-08B CLI 零步骤首次启动、OI-14A 真实 VT/renderer 选型、OI-14B live view-state**。OI-09–OI-13 的局部 TUI 能力保留为完成历史，但不再代表 renderer 整体稳定。
 
-**当前主线：OI-14B。** OI-14A 已用 `@xterm/headless` 稳定捕获四项 legacy
-物理终端故障，并选定 Pi direct bundle、Node `>=22.19.0` 与 Bolo terminal adapter。
-当前先在 `packages/shared` 建立无 I/O 的 live view-state；后续固定顺序为 retained
-renderer → transcript/Markdown →
-Composer/activity/footer → overlays → 默认切换 → 删除 legacy。完整方案见
+**当前主线：OI-14C。** OI-14B `269b39c` 已建立无 I/O 的有序 live blocks、
+稳定 turn/segment/call-id、三条真实事件源投影、resume replay、composer/overlay mode
+与 per-segment elapsed action；125 脚本完整门禁、dist install 与 Electron launch
+全绿。当前建立 terminal adapter、retained 根树、theme/width/resize、welcome 与
+legacy feature flag；后续固定顺序为 transcript/Markdown → Composer/activity/footer
+→ overlays → 默认切换 → 删除 legacy。完整方案见
 [CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md)，选型数据见
 [CLI_TUI_RENDERER_DECISION.md](./CLI_TUI_RENDERER_DECISION.md)。
 
@@ -203,7 +206,8 @@ DR2A 单 session runner ✅
 → OI-07C 可选 Docker setup/status/logs/stop ✅
 → OI-13 CLI TUI 垂直节奏与水晶工作台 ✅
 → OI-14A 真实 VT 与 renderer 选型 ✅
-→ OI-14B live view-state ▶ NEXT
+→ OI-14B live view-state ✅
+→ OI-14C retained renderer 基座 ▶ NEXT
 ```
 
 每刀都必须先改 `packages/*` 契约和失败测试，再接 CLI/Desktop；定向测试、typecheck、完整 `npm test`、scoped `diff --check` 全绿后，代码与文档分批 commit/push。遇到需要数据库/daemon/RPC、用户脏文件冲突、数据丢失或副作用自动重放风险时停止扩张。
@@ -441,7 +445,7 @@ cd apps/desktop && npm install && set BOLO_DESKTOP_MOCK=1 && npm start
 | **OI-11** | terminal surface · timeline/status · segment activity · permission details/chooser · local panel VT · Responses abort diagnosis · Bolo crystal；代码 `e9a32cf`–`8088fbb`，121 项门禁，真人观感仍见 OI-H3 |
 | **OI-12** | argument hint · context view-model/dashboard · logical content gutter · dock-width 用户块 · bracketed paste transaction；代码 `1696127` / `7f76093` / `15b37ed` / `40a5d41` / `8d2a7a5`；物理 wrap 证明不足，转 OI-14 |
 | **OI-13** | silent Thought completion · 显式 surface/gap · 100-cell responsive crystal workbench；代码 `fe2d39a` / `bf25077` / `2b9d008` / `4c4fb08`；局部完成，不代表 renderer 整体稳定 |
-| **OI-14 · OPEN** | retained renderer 重构：A 真实 VT/选型 ✅（`1ae9f53` / `f04f8de`）→ B live view-state → C renderer → D Markdown/transcript → E Composer → F overlays → G 默认切换 → H 删除 legacy；当前 OI-14B |
+| **OI-14 · OPEN** | retained renderer 重构：A 真实 VT/选型 ✅（`1ae9f53` / `f04f8de`）→ B live view-state ✅（`269b39c`）→ C renderer → D Markdown/transcript → E Composer → F overlays → G 默认切换 → H 删除 legacy；当前 OI-14C |
 | **AR5C-early** | esbuild 单文件产物 · 发布元数据 · `getBundledSkillsDir()` 双布局 · pack→install→run E2E 进门禁 · [RELEASE.md](./RELEASE.md) |
 
 最新 commit 以 `git log` 为准。

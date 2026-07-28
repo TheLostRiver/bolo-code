@@ -47,14 +47,17 @@ CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Runtime DR0–DR4 · Autonom
 AR1 · **AR-T1–T3+ Agent 能力面** · AR2 Compact depth · AR3 Desktop 产品接线 ·
 AR4 evidence gate · AR5 release hardening · **OI-04 SearXNG 直连、OI-X1 真实实例
 smoke、OI-07 上游诊断 / `search doctor` / 可选 Docker setup、OI-08B CLI 零步骤
-首次启动**。OI-09–OI-13 的 slash/context/paste/Thought/权限/welcome 局部能力仍然
-有效，但不再作为整个 TUI renderer 稳定的证据。
+首次启动、OI-14A 真实 VT/选型、OI-14B live view-state**。OI-09–OI-13 的
+slash/context/paste/Thought/权限/welcome 局部能力仍然有效，但不再作为整个 TUI
+renderer 稳定的证据。
 
-**当前主线：OI-14B。** OI-14A 已用真正的 headless terminal 稳定捕获 legacy 的
-续行 gutter、dock column、chunk invariant 与 resize 四类故障，并选定精确版本的
-Pi TUI direct bundle；Bolo 最低 Node 同步提升到 `>=22.19.0`。下一刀先建立无 I/O 的
-live view-state，再按 retained renderer、Markdown/transcript、常驻 Composer、
-overlays、默认切换和删除 legacy 的顺序推进。选型数据见
+**当前主线：OI-14C。** OI-14A 已用真正的 headless terminal 固化 legacy 的续行
+gutter、dock column、chunk invariant 与 resize 四类故障，并选定精确版本的 Pi TUI
+direct bundle；OI-14B `269b39c` 已在 `packages/shared` 建立无 I/O 的 live
+view-state、稳定 block id、stream/tool/search 合并、resume 投影与
+composer/overlay/分段耗时状态。当前下一刀才接 Bolo terminal adapter、retained 根树、
+theme/width/resize、welcome 与 legacy feature flag；可见 legacy 故障尚未修复。方案与
+选型证据见 [docs/CLI_TUI_REFACTOR_PLAN.md](docs/CLI_TUI_REFACTOR_PLAN.md) 和
 [docs/CLI_TUI_RENDERER_DECISION.md](docs/CLI_TUI_RENDERER_DECISION.md)。
 
 普通 `bolo` 仍是唯一首次启动主路径：自动准备用户级 `~/.bolo`，不会仅因进入仓库

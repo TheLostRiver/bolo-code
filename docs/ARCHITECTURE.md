@@ -63,8 +63,8 @@ skills   mcp-host  plugins   tools    providers
 | `packages/mcp` | MCP client、tools/resources 映射 | UI |
 | `packages/plugins` | 插件清单、激活、贡献点合并 | 绕过 hook/permission |
 | `packages/providers` | 多模型 API 适配（OpenAI / Anthropic / 兼容端点） | 会话策略 |
-| `packages/shared` | 事件、消息、配置 schema、错误类型 | 副作用 |
-| `packages/cli` | CLI 入口 + 零依赖 TTY view/controller（输入、activity、picker、pager）；复用 core 事件与 runtime view | 复制 core runtime / 在 CLI 重建第二状态机 |
+| `packages/shared` | 事件、消息、配置 schema、错误类型；OI-14B `CliTuiViewState` 纯 reducer 与 SessionEvent/resume 投影 | 副作用、terminal/renderer I/O |
+| `packages/cli` | CLI 入口 + TTY controller/adapter（输入、activity、picker、pager）；复用 core 事件、runtime view 与 shared live view-state | 复制 core runtime / 在 renderer 重建第二状态机 |
 | `apps/desktop` | Electron GUI | 重业务逻辑（只编排 core） |
 
 ## 4. 核心数据流

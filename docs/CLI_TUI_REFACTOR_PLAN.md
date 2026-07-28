@@ -1,11 +1,13 @@
 # CLI TUI retained renderer 重构方案
 
-> **状态：** OI-14 `OPEN`（OI-14A 已关闭；当前 OI-14B）
+> **状态：** OI-14 `OPEN`（OI-14A/B 已关闭；当前 OI-14C）
 > **方案锚点：** Bolo `c2e6a98`；Pi `c820aa26fe09`；oh-my-pi
 > `d16c6168c86f`；Codex `f61b51ddd924`；OpenCode `66495a2a22cd`；
 > HelsincyCode `e6dd86ef990e`。
 > **OI-14A 交付：** `1ae9f53` · `f04f8de` ·
 > [CLI_TUI_RENDERER_DECISION.md](./CLI_TUI_RENDERER_DECISION.md)。
+> **OI-14B 交付：** `269b39c` ·
+> `packages/shared/src/cliTuiViewState.ts`。
 > **范围：** 本文定义 CLI TTY 路径的重构方案。非 TTY、`--print`、pipe、JSON 和
 > Desktop 的既有输出契约必须保持兼容。
 > **结论先行：** 停止继续扩展自研 `TerminalSurface + 字符串 prefix + tiny
@@ -189,6 +191,17 @@ retained renderer -> width-aware physical lines -> one differential terminal wri
 - renderer 只消费 view-state、theme 与当前 viewport。
 - `ProcessTerminal` 或等价 adapter 是动态 TUI 中唯一允许写 stdout/cursor control 的层。
 
+OI-14B 已按此边界完成：
+
+- `CliTuiViewState` 保存有序 user/assistant/reasoning/tool/search/error/warning/summary
+  block、turn 终态、composer/overlay mode 与 segment elapsed，不保存折行结果。
+- assistant/reasoning 只合并当前 open segment；tool 以 call id、hosted search 以
+  query cycle 原位更新，finalized block 不重新打开。
+- `SessionEvent`、`QueryLoopEvent`、`ToolExecutionEvent` 结构兼容投影与
+  `ChatMessage[]` resume 共用同一 reducer action 语义。
+- 整段、逐字符与固定随机 chunk 的最终 state 深相等；缺失 tool result、显式空输出、
+  persisted tool error、abort/error 均有不同终态。
+
 ### 5.2 组件所有权
 
 | 能力 | 唯一 owner |
@@ -270,7 +283,7 @@ retained renderer -> width-aware physical lines -> one differential terminal wri
 | 顺序 | 切片 | 交付 | 自动关闭条件 |
 |------|------|------|--------------|
 | **OI-14A ✅** | 真实终端红灯与依赖决策 | `@xterm/headless` 物理终端 harness；复现最新截图故障；Pi direct/fork 与 OpenTUI 备选 spike；许可证/Node/体积报告 | 四项 legacy 签名稳定；选型数据与 direct/Node 决定已固化 |
-| **OI-14B** | Live view-state | `packages/shared` 的 `CliTuiViewState`、action/reducer、stable block id、stream merge、segment 与 composer mode | reducer 无 I/O；随机 chunk property、resume projection、error/tool 边界全绿 |
+| **OI-14B ✅** | Live view-state | `packages/shared` 的 `CliTuiViewState`、action/reducer、stable block id、stream merge、segment 与 composer mode | reducer 无 I/O；随机 chunk property、resume projection、error/tool 边界全绿 |
 | **OI-14C** | Renderer 基座 | 单 terminal writer、根 component tree、theme/width/resize、welcome、legacy feature flag | 24/38/56/80/120/160/220 列无超宽物理行；resize 无残影；plain path byte-stable |
 | **OI-14D** | Transcript 与 Markdown | User/Assistant/Thought/Tool/Search/Error blocks；成熟 Markdown/wrap；父级 spacing | 截图复现转绿；列表 hanging indent、URL、CJK/emoji、ANSI/OSC 8、代码块、表格全绿 |
 | **OI-14E** | 常驻 Composer/Activity/Footer | Editor、slash menu/argument hint、paste、per-segment activity、usage/footer | idle/running 不卸载 editor；输入/最终回答间距稳定；burst stream 无闪烁或逐 token 全重绘 |
@@ -411,13 +424,15 @@ OI-14 只有同时满足以下条件才可 `CLOSED`：
 
 ## 13. 下一步
 
-当前下一刀是 **OI-14B**：
+当前下一刀是 **OI-14C**：
 
-1. 在 `packages/shared` 定义无 I/O 的 `CliTuiViewState`、action 与 reducer。
-2. 用 stable block id 合并 assistant/reasoning/tool/search 的 streaming 更新。
-3. 用整段、逐字符和固定随机 chunk 证明最终 state 不依赖 chunk 边界，并覆盖
-   error/abort/resume 与 composer/overlay mode。
-4. 本刀不接 terminal、不 import renderer；OI-14C 才建立 Bolo adapter 与 retained tree。
+1. 建立 Bolo terminal adapter，作为 retained 路径唯一的 stdout/cursor writer。
+2. 建立根 component tree、theme、viewport/width/resize 与 Bolo Crystal welcome；
+   renderer 只消费 OI-14B view-state，不重建业务状态。
+3. 用 opt-in `BOLO_TUI_ENGINE` feature flag 保留 legacy 回滚；OI-14G 前不切默认路径。
+4. 证明 24/38/56/80/120/160/220 列无超宽物理行、resize 无残影，且
+   non-TTY/`--print`/pipe/JSON byte-stable。
+5. 本刀不迁 transcript Markdown、Editor 或 overlays；分别留给 OI-14D/E/F。
 
 继续禁止对 `TerminalSurface`、`contentPrefixer`、tiny Markdown 或 composer spacer
 添加新的布局补丁。

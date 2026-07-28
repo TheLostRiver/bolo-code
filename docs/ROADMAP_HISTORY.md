@@ -522,3 +522,22 @@ C4: compact 成功且非 override system 时可选刷新短 skill catalog 段（
   `dependencies` 保持 `{}`。
 - 自动化不替代 OI-H3：真实 Windows Terminal 的字体、颜色、动画流畅度、光标、
   鼠标/剪贴板粘贴、resize、组合键和长回答滚动仍需真人走查。
+
+---
+
+## H14. OI-14 · CLI TUI retained renderer 重构
+
+| 切片 | 代码批 | 已关闭行为 |
+|------|--------|------------|
+| OI-14A · 真实 VT 与选型 | `1ae9f53` / `f04f8de` | `@xterm/headless` 固化四项 legacy 物理终端故障；选定 Pi TUI direct bundle、Node `>=22.19.0` 与 Bolo terminal adapter |
+| OI-14B · live view-state | `269b39c` | shared 有序 live blocks、稳定 turn/segment/call-id、stream/tool/search merge、resume replay、composer/overlay mode 与 per-segment elapsed |
+
+- OI-14B 的 `CliTuiSessionEvent` 编译期兼容 core `SessionEvent`、`QueryLoopEvent` 与
+  `ToolExecutionEvent`；resume 复用同一 reducer action，不另建历史状态机。
+- 整段、逐字符和固定随机 chunk 的最终 state 深相等；tool 显式空输出、缺失 result、
+  persisted error、abort 与 error 均保留不同事实状态。
+- 专项、typecheck 与两轮 125 脚本完整 `npm.cmd test` 全绿；dist build/install、
+  Desktop bundle 与 Electron launch 通过，根 `dependencies` 保持 `{}`。
+- A/B 都没有改变当前可见 legacy TTY；正文碎片、巨大空洞、物理续行贴左与
+  cursor/layout 漂移仍是已确认代码缺陷。当前下一刀为 OI-14C terminal adapter 与
+  retained root，OI-14G 前不切默认路径。

@@ -9,6 +9,10 @@
 > `TerminalSurface + contentPrefixer + tiny Markdown`。首轮复用 renderer/Markdown/
 > Editor 并保留 Bolo terminal adapter；Node、Windows、体积、资产和许可证据见
 > [CLI_TUI_RENDERER_DECISION.md](./CLI_TUI_RENDERER_DECISION.md)。
+> **状态层：** OI-14B `269b39c` 已在 `packages/shared` 建立无 I/O 的
+> `CliTuiViewState`、稳定 block id、stream/tool/search 合并、resume replay 与
+> composer/overlay/segment elapsed 状态；它尚未接入当前 legacy TTY。OI-14C 才建立
+> terminal adapter 与 retained root。
 > Diff 轨见 [ROADMAP.md](./ROADMAP.md) §3 ·
 > [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) 轨 B。
 
@@ -42,6 +46,7 @@
 
 | 文件 | 角色 |
 |------|------|
+| `packages/shared/src/cliTuiViewState.ts` | **OI-14B**：有序 live blocks、稳定 id、SessionEvent/resume 投影、composer/overlay/elapsed 纯状态真源 |
 | `tui/crystalLogo.ts` | 水晶常量、源稿归一化、整块 cell-width 居中与 ASCII 降级 |
 | `tui/inkLayout.ts` | 一次性水晶工作台；宽屏 split、中/紧凑单列，不伪装成输入框 |
 | `tui/frame.ts` | 100-cell welcome、160-cell content 与全宽 dock 三套明确宽度契约 |
@@ -75,9 +80,9 @@ running dock 和临时面板又分别拥有 cursor 生命周期，因此 provide
 重绘或 resize 后可能出现续行贴左、文本碎片和巨大纵向空洞。
 
 现有简化 `TestTerminalScreen` 没有 terminal width/auto-wrap/双宽 cell/resize，过去
-的 123 项门禁只证明局部字符串、reducer 和显式 cursor 序列，不能证明物理终端布局。
-OI-14A 已用 `@xterm/headless` 固化四项真实 legacy 红灯；OI-14B 先建立 live
-view-state，OI-14C 才接入 retained component tree。
+的局部门禁只能证明字符串、reducer 和显式 cursor 序列，不能证明物理终端布局。
+OI-14A 已用 `@xterm/headless` 固化四项真实 legacy 红灯；OI-14B 已建立纯 live
+view-state 并证明 chunk invariant，OI-14C 才接入 retained component tree。
 
 ---
 
@@ -338,8 +343,13 @@ npx tsx scripts/test-diff-view.ts
 argument hint、bracketed paste 生命周期/跨 chunk/CRLF/单次重绘、菜单窗口与非 TTY
 回落；`test:context-dashboard` 覆盖 view-model 的 24/38/80/160 列 TTY 投影；
 `test:slash-completion` 覆盖内置/Plugin/Skill projection、动态 effort、重名、
-hidden alias、exact/prefix 与空匹配。完整门禁当前包含 **124** 个串联
+hidden alias、exact/prefix 与空匹配。完整门禁当前包含 **125** 个串联
 `scripts/*.ts`。
+
+OI-14B 新增的 `test:cli-tui-view-state` 覆盖稳定 turn/segment/call-id、reasoning 与
+assistant 多段顺序、tool/search 原位更新、citation 去重、error/abort、resume、
+composer/overlay 与 per-segment elapsed；整段、逐字符和固定随机 chunk 的最终 state
+深相等。编译期护栏还证明三条真实事件源可直接投影。
 
 OI-14A 新增的 `test:cli-tui-vt` 使用 `@xterm/headless` 执行真实 cell
 auto-wrap/scrollback/resize，已覆盖 ANSI、长 URL、CJK/emoji、整段/逐字符/固定随机

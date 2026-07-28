@@ -28,20 +28,23 @@ agent 独立解决的问题。** 不要越过外部/人工阻塞项，也不要�
 | 4 | OI-X1 · 真实 SearXNG live smoke | ✅ 已收口（2026-07-27） |
 | 5 | OI-07 · 上游诊断、doctor 与可选 Docker setup | ✅ 已收口（`7754525` · `3e96573` · `ef03f3d` · `f623ad9`） |
 | 6 | OI-08B · CLI 零步骤首次启动 | ✅ 已收口（代码 `22c0d0c`） |
-| 7 | OI-14A · CLI TUI 真实 VT 红灯与 retained renderer 选型 | **OPEN · NEXT** |
-| 8 | OI-14B–H · view-state/renderer/Markdown/Composer/overlay/收口 | 按 A–H 顺序推进 |
-| 9 | OI-H1/H2/H3 · 真 TTY、真人点击与视觉走查 | 人工阻塞；已知 TUI 代码缺陷先走 OI-14 |
+| 7 | OI-14A · CLI TUI 真实 VT 红灯与 retained renderer 选型 | ✅ 已收口（`1ae9f53` · `f04f8de`） |
+| 8 | OI-14B · live view-state | ✅ 已收口（`269b39c`） |
+| 9 | OI-14C–H · renderer/Markdown/Composer/overlay/默认切换/删除 legacy | **OI-14C NEXT**，按 C–H 顺序推进 |
+| 10 | OI-H1/H2/H3 · 真 TTY、真人点击与视觉走查 | 人工阻塞；已知 TUI 代码缺陷先走 OI-14 |
 
 OI-04 已完成零依赖、显式配置、fail-closed 的 SearXNG JSON 搜索契约、fixture、
 CLI/Desktop warning 与文档收口；OI-X1 已补齐真实 Docker 实例和上游搜索证据；
 OI-07 已完成上游故障诊断、只读 doctor 与显式 Docker setup/status/logs/stop。
 OI-08B 已完成安装后直接 `bolo`、用户级 workspace session store、旧路径兼容与显式
 `bolo init`；普通启动不创建项目 `.bolo/`。Docker 不是默认依赖，公网 live 不进默认
-门禁。不要重复实现。
+门禁。OI-14A/B 已完成真实 VT/选型与纯 live view-state；当前从 OI-14C 接 terminal
+adapter 与 retained root，不要重复实现 A/B，也不要继续修补 legacy surface。
 
-**当前只取 OI-14。** A 先用 `@xterm/headless` 复现物理 auto-wrap/cursor 故障并完成
-Pi direct/fork 与 OpenTUI 备选 spike；B–H 的固定顺序、停止条件、回滚和验收见
-[CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md)。在 A 完成前，不要继续给
+**当前只取 OI-14C。** A/B 已完成真实 VT/renderer 选型与无 I/O live view-state；
+C 建立 Bolo terminal adapter、retained root、theme/viewport/resize、welcome 与
+opt-in legacy feature flag。C–H 的固定顺序、停止条件、回滚和验收见
+[CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md)。不要继续给
 `TerminalSurface`、`contentPrefixer`、tiny Markdown 或 composer spacer 打补丁。
 
 **一条已知的遗留（不阻塞，顺手可做）：** `AskUserQuestion` 的**真人在真终端按键**没验过——
