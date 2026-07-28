@@ -1,24 +1,8 @@
 /**
  * bolo CLI 入口
  */
-import {
-  listWorkspaceSessions,
-  migrateSessionToJsonl,
-} from '../../core/src/index.ts'
 import { formatHelp, isResumePicker, parseArgs } from './parseArgs.ts'
-import { runNewSessionCli } from './newSessionCli.ts'
 import { hasToolSpecs, validateToolSpecs } from './applyToolSpecs.ts'
-import {
-  formatSessionList,
-  resolveContinueSessionId,
-  ResumePickerError,
-  runResumeCli,
-} from './resumeCli.ts'
-import {
-  formatRuntimeCliFailure,
-  runRuntimeCommandCli,
-  runRuntimeQueryCli,
-} from './runtimeCli.ts'
 
 /**
  * 非 TTY 时尝试读 stdin。
@@ -91,6 +75,7 @@ async function main(): Promise<void> {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     if (wantsJson) {
+      const { formatRuntimeCliFailure } = await import('./runtimeCli.ts')
       process.stdout.write(
         `${formatRuntimeCliFailure({
           ok: false,
@@ -129,9 +114,15 @@ async function main(): Promise<void> {
 
   // ── runtime query/recovery command：不打印 banner/summary ──
   if (args.runtimeQuery || args.runtimeAction) {
+    const {
+      formatRuntimeCliFailure,
+      runRuntimeCommandCli,
+      runRuntimeQueryCli,
+    } = await import('./runtimeCli.ts')
     let idOrPath: string
     if (args.continue) {
       try {
+        const { resolveContinueSessionId } = await import('./resumeCli.ts')
         idOrPath = await resolveContinueSessionId({ cwd })
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
@@ -190,6 +181,11 @@ async function main(): Promise<void> {
   // ── --list / -l：非交互列项目会话 ──
   if (args.list) {
     try {
+      const [{ listWorkspaceSessions }, { formatSessionList }] =
+        await Promise.all([
+          import('../../core/src/index.ts'),
+          import('./resumeCli.ts'),
+        ])
       const items = await listWorkspaceSessions({ cwd, limit: 50 })
       if (!items.length) {
         process.stdout.write('(no sessions for this workspace)\n')
@@ -207,6 +203,8 @@ async function main(): Promise<void> {
   // ── --migrate-session / migrate-session：JSON → jsonl ──
   if (args.migrateSession) {
     try {
+      const { migrateSessionToJsonl } =
+        await import('../../core/src/index.ts')
       const r = await migrateSessionToJsonl(args.migrateSession, {
         cwd,
         force: args.force === true,
@@ -235,6 +233,11 @@ async function main(): Promise<void> {
 
   // ── --continue / -c：最新一条 ──
   if (args.continue) {
+    const {
+      resolveContinueSessionId,
+      ResumePickerError,
+      runResumeCli,
+    } = await import('./resumeCli.ts')
     let prompt = args.prompt
     if (!prompt) {
       prompt = await readStdinIfPiped()
@@ -262,6 +265,8 @@ async function main(): Promise<void> {
 
   // ── --resume 路径 ──
   if (args.resume) {
+    const { ResumePickerError, runResumeCli } =
+      await import('./resumeCli.ts')
     let prompt = args.prompt
     if (!prompt && !isResumePicker(args.resume)) {
       prompt = await readStdinIfPiped()
@@ -295,6 +300,7 @@ async function main(): Promise<void> {
   // 无参 + TTY → banner + REPL
   if (!prompt && !args.print && isTty) {
     try {
+      const { runNewSessionCli } = await import('./newSessionCli.ts')
       await runNewSessionCli({ cwd, toolSpecs })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -307,6 +313,7 @@ async function main(): Promise<void> {
   // 有 prompt / print：单轮新会话
   if (prompt?.trim()) {
     try {
+      const { runNewSessionCli } = await import('./newSessionCli.ts')
       await runNewSessionCli({
         cwd,
         prompt,

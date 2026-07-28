@@ -89,6 +89,7 @@ async function main() {
     'scripts/test-cli-tui-retained.ts',
     'scripts/test-cli-tui-transcript.ts',
     'scripts/test-cli-tui-composer.ts',
+    'scripts/test-cli-tui-budget.ts',
     'scripts/test-cli-tui-vt-legacy.ts',
     'scripts/test-desktop-launch.ts',
     'scripts/test-runtime-core-transport.ts',
