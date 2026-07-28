@@ -14,7 +14,8 @@
 没有声称当前 legacy TUI 的可见故障已经修复。OI-14B 已完成纯 live view-state；
 OI-14C `1798a7c` 已完成 opt-in retained 基座，OI-14D `8b060e5` 已迁 retained
 transcript/Markdown，OI-14E `d0fb822` 已迁 retained Composer/activity/footer；
-OI-14F `31384d4` 已迁 retained overlays；当前进入 OI-14G 默认切换与可靠性收口。
+OI-14F `31384d4` 已迁 retained overlays；OI-14G `6f4764f`–`accc22c` 已完成默认
+切换、可靠性、cleanup 与性能预算；当前进入 OI-14H 删除 legacy。
 
 ## 1. Legacy 真实 VT 证据
 
@@ -81,8 +82,12 @@ OI-14D 接入 Pi Markdown/marked 后为 1,611,976 bytes / 189 modules，较 C �
 93,789 bytes（约 6.2%）。OI-14E 接入 keys/StdinBuffer 与 retained Composer 后为
 1,641,896 bytes / 192 modules，较 D 增加 29,920 bytes（约 1.9%）。OI-14F 接入
 OverlayHost、全部交互面板与 shared pager 后为 1,686,424 bytes / 199 modules，
-较 E 增加 44,528 bytes（约 2.7%），仍低于预算；最终体积、冷启动与输入延迟须在
-OI-14G 对默认 retained 产物重测。
+较 E 增加 44,528 bytes（约 2.7%）。OI-14G 默认 retained 最终产物为
+1,727,232 bytes / 200 modules，相对 1,385,065B baseline 增加 342,167B；完整串
+cold p50 为 empty Node 79.9ms、Bolo `--help` 130.3ms，相对增量 50.4ms。500 blocks /
+10,000 行 discard-writer fixture 为 CPU 422ms、render heap +21.0MB、cleanup
+retained +1.5MB，均低于 +1.5MB bundle、+100ms cold、3s CPU、128MB heap 与 64MB
+cleanup 预算。
 
 Windows Node 24.15，去掉两次 warmup，`n=10`：
 
@@ -172,6 +177,13 @@ component tree；Composer identity/focus 与单一 stdin/writer owner 在面板�
 129 项完整门禁全绿。单文件为 1,686,424 bytes / 199 modules；`dependencies` 仍为
 `{}`，显式 retained runtime pager 不再发送 legacy `ESC[2J`。
 
-当前 OI-14G 负责默认切换、scroll/resize/backpressure/perf、长会话与 crash cleanup。
-`BOLO_TUI_ENGINE=retained` 目前仍是显式 opt-in；缺省、非法值、non-TTY 与 `--print`
-仍保持 legacy/plain 既有行为。F 的 overlays 证据不能冒充 G 已经完成。
+OI-14G `6f4764f`–`accc22c` 已让双 TTY/raw-mode 缺省使用 retained，显式
+`BOLO_TUI_ENGINE=legacy` 只作短期回滚；非法非空值 fail-safe 到 legacy，non-TTY、
+pipe、JSON 与 `--print` 永远保持 plain。真实 xterm 已覆盖 500 blocks/10,000 行、
+scrollback、24–220 列反复 resize、paste/overlay 往返与单 owner；final flush、
+异常 acquisition/cleanup、Abort/SIGINT/raw Ctrl+C、dist/install、Desktop/Electron
+与 133 项完整门禁全绿。单文件、cold、CPU/heap 与 cleanup 数据见 §2.3。
+
+当前 OI-14H 负责删除 legacy surface/prefixer/tiny Markdown/兼容桥并建立最终静态
+owner guard；non-TTY plain formatter 不在删除范围。真人 Windows Terminal 仍需
+检查字体、颜色、动画与按键/鼠标手感。

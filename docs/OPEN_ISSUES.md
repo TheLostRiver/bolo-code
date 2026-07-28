@@ -4,7 +4,7 @@
 > `c2e6a98`（2026-07-28）；OI-14A 关闭锚点：`f04f8de`，OI-14B 关闭锚点：
 > `269b39c`；OI-14C 关闭锚点：`1798a7c`，OI-14D 关闭锚点：
 > `8b060e5`，OI-14E 关闭锚点：`d0fb822`（2026-07-28），OI-14F 关闭锚点：
-> `31384d4`（2026-07-29）。
+> `31384d4`，OI-14G 关闭锚点：`accc22c`（2026-07-29）。
 > 本文只列当前仓库中有代码、测试、实测或互相矛盾文档支撑的问题。
 > 历史 TODO、已关闭的候选和仅凭印象提出的功能不算开放问题。
 
@@ -19,12 +19,12 @@
 
 ## 1. Agent 可直接解决
 
-当前默认 agent 可闭环队列为 **OI-14G**。以下已关闭条目继续保留准入与关闭证据，
+当前默认 agent 可闭环队列为 **OI-14H**。以下已关闭条目继续保留准入与关闭证据，
 但 OI-09–OI-13 的局部关闭不再作为“整个 TUI renderer 已稳定”的证据。
 
 ### OI-14 · CLI TUI retained renderer 重构
 
-**状态：OPEN（当前：OI-14G）**
+**状态：OPEN（当前：OI-14H）**
 
 完整方案：[CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md) ·
 OI-14A 实测决定：[CLI_TUI_RENDERER_DECISION.md](./CLI_TUI_RENDERER_DECISION.md)
@@ -173,6 +173,23 @@ OI-14F 关闭证据：
 - retained 当前仍只由 `BOLO_TUI_ENGINE=retained` 显式 opt-in。OI-14F 没有切换默认，
   不能借 overlays 关闭证据冒充 OI-14G 的长会话、可靠性或性能验收。
 
+OI-14G 关闭证据：
+
+- `6f4764f` 将双 TTY/raw-mode 缺省切到 retained；显式 legacy 保留短期回滚，非法
+  非空值 fail-safe 到 legacy，non-TTY、pipe、JSON 与 `--print` 永远保持 plain。
+- `4eedb0e`、`7567572`、`a9328ec` 用真实 xterm 覆盖 500 blocks/10,000 行、
+  scrollback、24–220 列反复 resize、stream/tool/search、running paste 与 overlay
+  往返；最终 input p95 `0.1ms`、resize p95 `50.8ms`。
+- `21525c4` 固化 turn final/error/permission immediate flush；`ed7c804` 与
+  `6125f3e` 覆盖部分启动、stdin/renderer/provider/tool failure、Abort/SIGINT/raw
+  Ctrl+C 和进程退出 cleanup，所有步骤均尝试且保留主体/首个原始错误。
+- `accc22c` 新增 `test-cli-tui-budget.ts` 并把默认门禁顺序固定为 dist build →
+  budget → clean install；单文件 1,727,232 bytes / 200 modules，cold 相对 empty
+  Node `+50.4ms`、CPU `422ms`、render heap `+21.0MB`、cleanup retained `+1.5MB`。
+- 133 脚本完整 `npm test`、7-file clean install、Desktop bundle、Electron launch、
+  renderer mount、session switch 与 model/effort mutation 全绿；根 `dependencies`
+  仍为 `{}`。真人 Windows Terminal 观感仍未验，不以自动门禁冒充。
+
 | 切片 | packages-first 交付 | 人类可见结果 | 自动关闭条件 | 状态 |
 |------|---------------------|--------------|--------------|------|
 | **OI-14A · 真实 VT 红灯与选型** | `@xterm/headless` physical terminal harness；Pi direct/fork 与 OpenTUI 备选的 Node/esbuild/Windows/体积/许可报告 | 暂无产品改动；先准确复现碎片、空洞、续行贴左和 cursor 漂移 | 长 URL + ANSI + 随机 chunk + running composer 在旧代码稳定红；选型表有实测数据 | **CLOSED · `1ae9f53` / `f04f8de`** |
@@ -181,20 +198,20 @@ OI-14F 关闭证据：
 | **OI-14D · transcript/Markdown** | User/Assistant/Thought/Tool/Search/Error/Warning/Summary blocks；成熟 Markdown/wrap；父级 spacing | retained 正文不碎裂、不空洞，列表/URL/代码块续行一致，user/agent 有稳定间距 | 真实 VT、CJK/emoji、ANSI/OSC 8、list/table/code、chunk/resize/resume invariant | **CLOSED · `8b060e5`** |
 | **OI-14E · Composer/Activity/Footer** | 常驻 Bolo Composer、slash/hint/paste、分段 activity、usage/footer | 思考时输入框不消失；动画、Thought、model/token/快捷键稳定 | idle/running 同节点、burst backpressure、输入延迟与间距 VT | **CLOSED · `d0fb822`** |
 | **OI-14F · overlays** | permission/question/provider/effort/diff/pager 迁入 OverlayHost | 权限显示完整 command/cwd/参数并用 once/always/deny 选择 | 默认 deny、focus/Esc/Ctrl+C 恢复、无第二 stdout owner | **CLOSED · `31384d4`** |
-| **OI-14G · 默认切换** | retained 默认、scroll/resize/backpressure/perf、dist/pack/install | 长回答、resize、paste 与滚动不再破坏屏幕 | 完整门禁、性能预算、单文件产物与邻接轨全绿 | **OPEN · NEXT** |
-| **OI-14H · 删除与文档** | 删除旧 surface/prefixer/tiny Markdown/兼容桥；NOTICE 与文档收口 | 不再存在两套 TTY renderer | 静态 stdout owner guard + 真人 Windows Terminal 核心场景 | OPEN |
+| **OI-14G · 默认切换** | retained 默认、scroll/resize/backpressure/perf、dist/pack/install | 长回答、resize、paste 与滚动不再破坏屏幕 | 完整门禁、性能预算、单文件产物与邻接轨全绿 | **CLOSED · `6f4764f`–`accc22c`** |
+| **OI-14H · 删除与文档** | 删除旧 surface/prefixer/tiny Markdown/兼容桥；NOTICE 与文档收口 | 不再存在两套 TTY renderer | 静态 stdout owner guard + 真人 Windows Terminal 核心场景 | **OPEN · NEXT** |
 
 实施顺序与边界：
 
-1. OI-14A/B/C/D/E/F 已关闭：真实失败/选型、纯状态层、opt-in renderer 基座、
-   transcript/Markdown、Composer/activity/footer 与 overlays 分开提交。
-2. OI-14F 已迁全部交互面板，但在 OI-14G 完成前 retained 不成为默认路径。
-3. 当前 OI-14G 负责默认切换、scroll/resize/backpressure/perf、长会话与 crash cleanup。
-4. 迁移期 `BOLO_TUI_ENGINE=legacy` 只能作为短期回滚；非 TTY plain formatter 永久
+1. OI-14A–G 已关闭：真实失败/选型、纯状态层、retained 基座、transcript/Markdown、
+   Composer/activity/footer、overlays、默认切换与可靠性/性能分开提交。
+2. 当前 OI-14H 负责删除 legacy surface/prefixer/tiny Markdown/兼容桥并建立静态
+   stdout/stdin owner guard。
+3. 迁移期 `BOLO_TUI_ENGINE=legacy` 只能作为短期回滚；非 TTY plain formatter 永久
    独立保留。一个会话不能同时启用两个 renderer。
-5. 每个代码切片独立中文提交并 push；文档水位另提。OI-14H 前不得删除 fallback。
-6. OI-H3 只保留自动化无法判断的字体、颜色和真人按键手感；已知物理布局故障由
-   OI-14 自动门禁关闭。
+4. 每个代码切片独立中文提交并 push；文档水位另提。H 完成后才删除 engine 回滚入口。
+5. OI-H3 只保留自动化无法判断的字体、颜色、动画和真人按键/鼠标手感；已知物理布局、
+   cursor、resize 与 cleanup 故障已由 OI-14G 自动门禁关闭。
 
 ### OI-13 · CLI TUI 垂直节奏与水晶工作台
 
@@ -722,18 +739,18 @@ Ctrl-C/Esc 以及 REPL 是否抢占 stdin。需要人在真实终端按键确认
 
 ### OI-H3 · CLI TUI 真实 Windows Terminal 走查
 
-**状态：BLOCKED: HUMAN（等待 OI-14 自动缺陷先关闭）**
+**状态：BLOCKED: HUMAN（自动缺陷已关闭，等待真人走查）**
 
 OI-09–OI-13 已自动覆盖 slash reducer/menu/argument hint、context view-model、
 bracketed paste 状态机、silent Thought/分段计时、权限详情与非 TTY 回落等业务契约。
 这些测试仍然有效，但旧 `TestTerminalScreen` 没有物理 auto-wrap、双宽 cell 或
 resize，不能证明正文/surface 稳定。
 
-2026-07-28 的后续截图已确认正文碎片、巨大空洞、物理续行贴左和 user/agent 间距
-仍是已知代码缺陷，现转入 OI-14，不属于人工 blocker。OI-14 自动门禁全绿后，本条
-只检查真实 Windows Terminal 字体/颜色、动画主观流畅度、鼠标/剪贴板手感、
-Ctrl+J/历史/删除组合键、权限面板真人切换，以及实际 terminal host 的 resize/滚动
-体验；不得用本条掩盖可由 headless terminal 复现的问题。
+2026-07-28 截图暴露的正文碎片、巨大空洞、物理续行贴左、user/agent 间距、
+cursor/resize 与 cleanup 代码缺陷已由 OI-14G 的真实 xterm、故障注入和子进程门禁
+关闭。本条只检查真实 Windows Terminal 字体/颜色、动画主观流畅度、
+鼠标/剪贴板手感、Ctrl+J/历史/删除组合键、权限面板真人切换，以及实际 terminal
+host 的 resize/滚动体验；不得用本条掩盖任何可由 headless terminal 复现的问题。
 
 ## 4. 已核实但不列为开放问题
 

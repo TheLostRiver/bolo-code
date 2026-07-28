@@ -30,7 +30,7 @@ agent 独立解决的问题。** 不要越过外部/人工阻塞项，也不要�
 | 6 | OI-08B · CLI 零步骤首次启动 | ✅ 已收口（代码 `22c0d0c`） |
 | 7 | OI-14A · CLI TUI 真实 VT 红灯与 retained renderer 选型 | ✅ 已收口（`1ae9f53` · `f04f8de`） |
 | 8 | OI-14B · live view-state | ✅ 已收口（`269b39c`） |
-| 9 | OI-14C–H · renderer/Markdown/Composer/overlay/默认切换/删除 legacy | **OI-14C NEXT**，按 C–H 顺序推进 |
+| 9 | OI-14H · 删除 legacy/静态 owner guard/最终验收 | **NEXT**；A–G 已关闭 |
 | 10 | OI-H1/H2/H3 · 真 TTY、真人点击与视觉走查 | 人工阻塞；已知 TUI 代码缺陷先走 OI-14 |
 
 OI-04 已完成零依赖、显式配置、fail-closed 的 SearXNG JSON 搜索契约、fixture、
@@ -38,14 +38,16 @@ CLI/Desktop warning 与文档收口；OI-X1 已补齐真实 Docker 实例和上�
 OI-07 已完成上游故障诊断、只读 doctor 与显式 Docker setup/status/logs/stop。
 OI-08B 已完成安装后直接 `bolo`、用户级 workspace session store、旧路径兼容与显式
 `bolo init`；普通启动不创建项目 `.bolo/`。Docker 不是默认依赖，公网 live 不进默认
-门禁。OI-14A/B 已完成真实 VT/选型与纯 live view-state；当前从 OI-14C 接 terminal
-adapter 与 retained root，不要重复实现 A/B，也不要继续修补 legacy surface。
+门禁。OI-14A–G 已完成真实 VT/选型、live view-state、retained root、Markdown、
+Composer/activity/footer、OverlayHost、默认切换与可靠性/性能；当前只推进 OI-14H，
+不要重复实现 A–G，也不要继续修补 legacy surface。
 
-**当前只取 OI-14C。** A/B 已完成真实 VT/renderer 选型与无 I/O live view-state；
-C 建立 Bolo terminal adapter、retained root、theme/viewport/resize、welcome 与
-opt-in legacy feature flag。C–H 的固定顺序、停止条件、回滚和验收见
-[CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md)。不要继续给
-`TerminalSurface`、`contentPrefixer`、tiny Markdown 或 composer spacer 打补丁。
+**当前只取 OI-14H。** 先以静态红灯锁定唯一 terminal adapter/stdin/writer owner，
+再删除生产 compatibility bridge、legacy panel/surface/raw driver、跨 chunk prefixer、
+tiny Markdown 与 engine 回滚入口；non-TTY/plain/pipe/JSON/`--print` 永久保留。
+删除顺序、停止条件和真人 Windows Terminal 验收见
+[CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md)。不要继续给 legacy surface
+打补丁，也不要把自动化可复现缺陷转回 OI-H3。
 
 **一条已知的遗留（不阻塞，顺手可做）：** `AskUserQuestion` 的**真人在真终端按键**没验过——
 控件测试注入 `readKey`，覆盖不到真实 raw-mode 与 REPL 抢 stdin 的问题。

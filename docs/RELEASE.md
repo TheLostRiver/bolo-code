@@ -43,7 +43,7 @@ esbuild 是**构建期**工具。产物里不含它，用户也装不到它。
 ## 2. 构建
 
 ```bash
-npm run build          # → dist/bolo.mjs (1,686,424 bytes, 199 模块)
+npm run build          # → dist/bolo.mjs (1,727,232 bytes, 200 模块)
 ```
 
 `scripts/build-dist.ts` 做三件事：
@@ -77,8 +77,9 @@ npm run build          # → dist/bolo.mjs (1,686,424 bytes, 199 模块)
 ## 3. 发布前门禁
 
 ```bash
-npm test               # 完整门禁，尾部含下面两个
+npm test                    # 完整门禁，尾部依次含下面三个
 npm run test:dist-build     # 产物契约
+npm run test:cli-tui-budget # rebuild + bundle/cold/CPU/heap/cleanup 预算
 npm run test:dist-install   # 真实 pack → 安装 → 运行
 ```
 
@@ -165,7 +166,7 @@ Markdown。这仍然不要求用户安装 `node_modules`，但它们是随产物
 | `tsx` | 跑 `scripts/*.ts` 测试 | 只在开发/测试期 |
 | `electron-builder` | Windows NSIS 安装包 | 构建工具 |
 | `@xterm/headless` | OI-14 真实 cell/auto-wrap/resize 测试 | 仅测试 |
-| `@earendil-works/pi-tui@0.82.1` | OI-14 retained renderer/Markdown/输入与 overlay 基础设施 | OI-14C–F 按具体构建子模块内嵌进单文件；不含 Editor、ProcessTerminal 或 native terminal loader |
+| `@earendil-works/pi-tui@0.82.1` | OI-14 retained renderer/Markdown/输入与 overlay 基础设施 | OI-14C–G 按具体构建子模块内嵌进单文件；不含 Editor、ProcessTerminal 或 native terminal loader |
 
 Pi 版本、MIT 许可、传递依赖、Node/Windows/资产与体积数据见
 [CLI_TUI_RENDERER_DECISION.md](./CLI_TUI_RENDERER_DECISION.md)。当前 bundle 实际
@@ -185,15 +186,18 @@ John Gruber Markdown BSD 条款均已随包声明；许可真源见
 
 | 指标 | 实测 | 预算（超出即需解释） |
 |---|---|---|
-| CLI 产物体积 | 1,686,424 bytes / 199 模块（OI-14F；较 E +44,528 bytes，约 2.7%） | < 3 MB |
-| 桌面主进程产物 | ~1.09 MB / 127 模块 | < 3 MB |
+| CLI 产物体积 | 1,727,232 bytes / 200 模块（OI-14G；较 1,385,065B 基线 +342,167B） | 基线 +1,500,000 bytes |
+| CLI `--help` cold-start | empty Node 79.9ms · Bolo 130.3ms · 增量 50.4ms | 增量 ≤ 100ms |
+| retained 500 blocks / 10,000 行 | CPU 422ms · render heap +21.0MB · cleanup retained +1.5MB | CPU ≤ 3s · heap ≤ 128MB · cleanup ≤ 64MB |
+| 桌面主进程产物 | ~1.17 MB | < 3 MB |
 | compact 管道（20 轮 / 100 消息） | 2–3 ms · heap +0.1 MB | < 8 s · < 320 MB（灾难阈） |
 | compact 压缩比 | ×12.9（20 轮）· ×51.9（80 轮） | ≥ ×3 |
 | 规模伸缩 | 4× 输入 → 1.2× 耗时 | < 20×（超出即疑似二次行为） |
 
-回归由 `test-compact-benchmark.ts` 与 `test-dist-build.ts` 在门禁里守。
-**时延/内存只设灾难阈**：单机噪声大，卡太紧只会制造假红灯，
-而假红灯会训练所有人无视红灯。
+compact 回归由 `test-compact-benchmark.ts` 守；CLI 体积与产物契约由
+`test-dist-build.ts` 守；OI-14G 的 cold/CPU/heap/cleanup 由
+`test-cli-tui-budget.ts` 独立守，并在默认串中固定运行于 dist build 与 clean install
+之间。预算保留足够机器噪声余量，但超阈值必须先解释或修复，不能直接放宽。
 
 ### 6.3 安全自查
 
@@ -222,7 +226,7 @@ John Gruber Markdown BSD 条款均已随包声明；许可真源见
 | **Windows 安装包（NSIS）** | ✅ 构建已验证 | Node 24 / npm 11.17.0 / electron-builder 26.15.3 已生成安装包与 blockmap；没有证书，用户仍会看到 SmartScreen 提示 → [DESKTOP_DESIGN §7c](./DESKTOP_DESIGN.md) |
 | **桌面窗口的视觉呈现** | ❌ 未验证 | 应用**能启动**且 renderer 挂载已由 `test-desktop-launch.ts` 实证；但布局观感、Windows 主题切换与 maximize 渲染、键盘走查、长会话滚动**没有肉眼验证过** |
 | **`AskUserQuestion` 的真 TTY 交互** | ❌ 未验证 | 控件逻辑测试注入 `readKey`，覆盖不到真实 raw-mode 与 REPL 抢 stdin |
-| **CLI TUI retained renderer** | ⚠️ 开发预览 · OI-14G NEXT | OI-14D–F 已让 opt-in transcript/Markdown、常驻 Composer/activity/footer 与单一 OverlayHost 在 24–220 列、chunk/resize/paste/new/resume、ANSI/OSC 8、CJK/emoji、list/table/code、permission/question/picker/diff/pager 下转绿；retained 面板不再转交 stdin/writer，显式 retained pager 不再整屏 clear。默认仍为 legacy，其 direct-write surface 仍可能出现正文碎片、空洞、物理续行贴左与 cursor/layout 漂移；OI-14G 负责默认切换、长会话、backpressure/perf 与 crash cleanup，plain/`--print` 路径不受动态 cursor 问题影响 |
+| **CLI TUI retained renderer** | ✅ 默认已切换 · ⚠️ 真人观感未验证 | OI-14D–G 已让 retained transcript/Markdown、常驻 Composer/activity/footer 与单一 OverlayHost 在 24–220 列、500 blocks/10,000 行、chunk/resize/paste/new/resume、ANSI/OSC 8、CJK/emoji、list/table/code、permission/question/picker/diff/pager 下转绿；final flush、故障注入、Abort/SIGINT/raw Ctrl+C、进程退出 cleanup 与性能预算均有门禁。双 TTY/raw-mode 默认 retained；显式 `BOLO_TUI_ENGINE=legacy` 仅作 OI-14H 前的短期回滚，plain/`--print` 路径独立保留。Windows Terminal 的字体、颜色、动画和真人按键/鼠标手感仍未肉眼验证 |
 | **`mcp-external` 搜索** | ⚠️ 仅验过 Exa | Exa 免密层已真连；其它 MCP 搜索服务仍取决于外部端点 |
 | **SearXNG 直连** | ✅ 实例/诊断/可选 setup 已验证 | `2026.7.26-b060c780d` Docker 实例：JSON API、生产 status/session/`WebSearch`、真实 URL 与源码/dist doctor 全链通过；OI-07A 已区分正常空结果、全故障和部分成功，OI-07B doctor 检查版本/能力并要求非空 smoke，OI-07C 的源码/dist managed setup/status/logs/stop 已实跑。Docker 仍须用户预装且不是默认依赖；默认引擎仍可能 429/CAPTCHA/timeout |
 | **中段 compact** | 🚫 显式不启用 | 契约就绪但产品代码零调用；两个参考实现都没真正跑过它 → §13.10.2 |
@@ -248,7 +252,8 @@ John Gruber Markdown BSD 条款均已随包声明；许可真源见
 ### 6.6 发布 checklist（逐项可执行）
 
 ```bash
-npm test                              # 当前 typecheck + 127 个串联门禁脚本，必须 EXIT=0；不等于 OI-14 已关闭
+npm test                              # 当前 typecheck + 133 个串联门禁脚本，必须 EXIT=0
+npm run test:cli-tui-budget           # 独立重建并复测 OI-14G 发布预算
 node -e "console.log(JSON.stringify(require('./package.json').dependencies))"
                                       # 必须输出 {}
 npm pack --dry-run                    # 清单只应有 7 项并包含 THIRD_PARTY_NOTICES.md
@@ -256,7 +261,7 @@ git status --porcelain                # 必须干净
 git rev-parse HEAD origin/main | uniq | wc -l   # 必须是 1
 ```
 
-- [ ] 上述五条全过
+- [ ] 上述六条全过
 - [ ] §6.4 已知限制**原样**出现在 release notes 里，未被删减
 - [ ] 版本号已 bump，且 CHANGELOG 记录了本次的**行为变更**（不只是功能）
 - [ ] 若本次动过 compact / transcript / 权限中任一处：确认 §6.3 表里对应的

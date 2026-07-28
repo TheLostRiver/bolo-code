@@ -531,13 +531,25 @@ C4: compact 成功且非 override system 时可选刷新短 skill catalog 段（
 |------|--------|------------|
 | OI-14A · 真实 VT 与选型 | `1ae9f53` / `f04f8de` | `@xterm/headless` 固化四项 legacy 物理终端故障；选定 Pi TUI direct bundle、Node `>=22.19.0` 与 Bolo terminal adapter |
 | OI-14B · live view-state | `269b39c` | shared 有序 live blocks、稳定 turn/segment/call-id、stream/tool/search merge、resume replay、composer/overlay mode 与 per-segment elapsed |
+| OI-14C · retained 基座 | `1798a7c` | 唯一 adapter/writer、稳定 root、width/resize/welcome、engine 锁定与 plain byte-stable |
+| OI-14D · transcript/Markdown | `8b060e5` | stable block component、Pi Markdown、物理 gutter/spacing、chunk/resize/resume invariant |
+| OI-14E · Composer/activity/footer | `d0fb822` | 常驻输入节点、slash/hint/history/undo、paste、分段 Thought/activity、usage footer 与单 stdin owner |
+| OI-14F · OverlayHost | `31384d4` | permission/question/provider/effort/diff/pager 进入唯一 root，保留 Composer identity/focus 与 writer owner |
+| OI-14G · 默认切换/可靠性/性能 | `6f4764f` · `4eedb0e` · `7567572` · `a9328ec` · `21525c4` · `ed7c804` · `6125f3e` · `accc22c` | retained 缺省、10k 行长会话/resize/paste/overlay、final flush、异常 cleanup、预算与 cold-start |
 
 - OI-14B 的 `CliTuiSessionEvent` 编译期兼容 core `SessionEvent`、`QueryLoopEvent` 与
   `ToolExecutionEvent`；resume 复用同一 reducer action，不另建历史状态机。
 - 整段、逐字符和固定随机 chunk 的最终 state 深相等；tool 显式空输出、缺失 result、
   persisted error、abort 与 error 均保留不同事实状态。
-- 专项、typecheck 与两轮 125 脚本完整 `npm.cmd test` 全绿；dist build/install、
-  Desktop bundle 与 Electron launch 通过，根 `dependencies` 保持 `{}`。
-- A/B 都没有改变当前可见 legacy TTY；正文碎片、巨大空洞、物理续行贴左与
-  cursor/layout 漂移仍是已确认代码缺陷。当前下一刀为 OI-14C terminal adapter 与
-  retained root，OI-14G 前不切默认路径。
+- A/B 当时没有改变可见 legacy TTY；C–F 依次迁入 retained root、正文/Markdown、
+  Composer/activity/footer 与 overlays，并在各自阶段保持显式 opt-in。
+- G 最终让双 TTY/raw-mode 缺省 retained，显式 legacy 只作短期回滚；non-TTY、
+  pipe、JSON 与 `--print` 始终保留独立 plain formatter。
+- 真实 xterm 覆盖 500 blocks/10,000 行、24–220 列 resize、scrollback、
+  paste/overlay 与单 owner；final flush、部分启动、provider/tool failure、
+  Abort/SIGINT/raw Ctrl+C 和进程退出 cleanup 均有故障注入/子进程证据。
+- 133 脚本完整 `npm.cmd test`、7-file clean install、Desktop/Electron 全绿；单文件
+  1,727,232 bytes / 200 modules，cold `+50.4ms`、CPU `422ms`、render heap
+  `+21.0MB`、cleanup retained `+1.5MB`，根 `dependencies` 保持 `{}`。
+- OI-14H 继续删除 legacy surface/prefixer/tiny Markdown/兼容桥并建立静态 owner
+  guard；真人 Windows Terminal 的字体、颜色、动画和按键/鼠标手感仍单列。

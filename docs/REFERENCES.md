@@ -47,7 +47,8 @@ Node 提升到上游支持线 `>=22.19.0`，首轮保留 Bolo terminal adapter�
 - 在 Pi retained renderer 基础上加入 native scrollback、render backpressure、
   terminal capability、tmux/Ghostty、scroll view 与更广 VirtualTerminal 回归。
 - TUI package 声明 Bun，并依赖 native/utils/cache；首次迁移不直接接入。
-- 用作 OI-14G 的可靠性清单，不把整套产品依赖带入 Bolo。
+- 已用作 OI-14G 的可靠性清单；OI-14H 删除 legacy 后继续用来审计 terminal
+  capability/backpressure 回归，不把整套产品依赖带入 Bolo。
 
 ### 推理 / thinking（对 Bolo Effort 轨）
 

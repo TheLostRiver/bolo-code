@@ -1,6 +1,6 @@
 # CLI TUI retained renderer 重构方案
 
-> **状态：** OI-14 `OPEN`（OI-14A/B/C/D/E/F 已关闭；当前 OI-14G）
+> **状态：** OI-14 `OPEN`（OI-14A–G 已关闭；当前 OI-14H）
 > **方案锚点：** Bolo `c2e6a98`；Pi `c820aa26fe09`；oh-my-pi
 > `d16c6168c86f`；Codex `f61b51ddd924`；OpenCode `66495a2a22cd`；
 > HelsincyCode `e6dd86ef990e`。
@@ -11,6 +11,8 @@
 > **OI-14C 交付：** `1798a7c` · retained renderer 基座。
 > **OI-14D 交付：** `8b060e5` · retained transcript/Markdown。
 > **OI-14E 交付：** `d0fb822` · retained Composer/activity/footer。
+> **OI-14F 交付：** `31384d4` · retained OverlayHost/交互面板。
+> **OI-14G 交付：** `6f4764f`–`accc22c` · 默认切换、可靠性、cleanup 与性能预算。
 > **范围：** 本文定义 CLI TTY 路径的重构方案。非 TTY、`--print`、pipe、JSON 和
 > Desktop 的既有输出契约必须保持兼容。
 > **结论先行：** 停止继续扩展自研 `TerminalSurface + 字符串 prefix + tiny
@@ -295,7 +297,7 @@ OI-14F 后 `suspendForLegacyPanel()` 只保留为历史兼容 API/测试，生�
 | **OI-14D ✅** | Transcript 与 Markdown | User/Assistant/Thought/Tool/Search/Error/Warning/Summary blocks；成熟 Markdown/wrap；父级 spacing | 真实 VT、列表 hanging indent、URL、CJK/emoji、ANSI/OSC 8、代码块、表格、chunk/resize/resume 全绿 |
 | **OI-14E ✅** | 常驻 Composer/Activity/Footer | Bolo retained Composer、slash menu/argument hint、paste、per-segment activity、usage/footer | idle/running 不卸载 Composer；输入/最终回答间距稳定；burst stream 无闪烁或逐 token 全重绘 |
 | **OI-14F ✅** | Overlay 与交互面板 | permission/question/provider/effort/diff/pager 迁入 OverlayHost | 面板显示完整操作详情；默认 deny；Esc/Ctrl+C/focus 恢复；无第二 stdout owner |
-| **OI-14G** | 默认切换与可靠性 | retained 成为默认；scroll/resize/backpressure/perf；dist/pack/install/Windows 邻接轨 | 完整门禁、单文件 dist、冷启动/输入延迟预算、长会话和 crash cleanup 全绿 |
+| **OI-14G ✅** | 默认切换与可靠性 | retained 成为默认；scroll/resize/backpressure/perf；dist/pack/install/Windows 邻接轨 | 完整门禁、单文件 dist、冷启动/输入延迟预算、长会话和 crash cleanup 全绿 |
 | **OI-14H** | 删除 legacy 与文档收口 | 删除旧 surface/prefixer/tiny Markdown/兼容桥；更新 README/TUI/ROADMAP/handoff/release/NOTICE | 静态 guard 禁止活跃 TUI 绕过 terminal adapter；真人 Windows Terminal 核心场景通过 |
 
 ### 8.1 切片停止条件
@@ -352,13 +354,17 @@ Phase A 先记录 baseline，Phase G 固定门槛：
 - resize 重排 p95 不超过 200ms。
 - cold start 相对 baseline 增量目标不超过 100ms。
 - 单文件未压缩产物增量目标不超过 1.5MB。
+- 同一 500-block/10,000-line retained discard-writer fixture 的 CPU 不超过 3s。
+- render heap 增量不超过 128MB；stop、丢弃引用并 GC 后 retained 增量不超过 64MB。
 
-质量优先于体积。超过软预算可以接受，但必须有测量、原因和用户收益，不能用猜测或
-“零依赖”口号决定。
+OI-14G 完整串实测：输入 p95 `0.1ms`、resize p95 `50.8ms`、cold 相对 empty Node
+`+50.4ms`、单文件 1,727,232 bytes / 200 modules（相对 1,385,065B 基线
+`+342,167B`）、CPU `422ms`、render heap `+21.0MB`、cleanup retained `+1.5MB`。
+这些阈值已由 `test-cli-tui-budget.ts` 固化；超出时必须解释或修复，不能直接放宽。
 
 ### 9.4 真人 Windows Terminal
 
-自动门禁全绿后，OI-14H 前必须真人检查：
+自动门禁全绿后，OI-14H 收口时必须真人检查：
 
 1. 80/120/220 列启动与 Bolo Crystal。
 2. 长 URL、Markdown 列表、代码块、中英混排与 emoji。
@@ -431,25 +437,23 @@ OI-14 只有同时满足以下条件才可 `CLOSED`：
 
 ## 13. 下一步
 
-当前下一刀是 **OI-14G**：
+当前下一刀是 **OI-14H**：
 
-1. 先为 engine 缺省选择写红灯：双 TTY/raw-mode 默认 retained，显式
-   `BOLO_TUI_ENGINE=legacy` 继续作为短期回滚；非法值 fail-safe，non-TTY、pipe、
-   JSON 与 `--print` 永久保持 plain/追加式路径。
-2. 用真实 xterm 建立长会话与 viewport 压力矩阵：大量 transcript block、长
-   Markdown/URL/CJK、连续 tool/search、用户滚动 scrollback、24–220 列反复 resize、
-   running paste 与 overlay 往返都不得碎屏、丢历史或漂移 cursor。
-3. 建立流式 backpressure/coalescing 与性能基线；测量后再优化，保证 final/error/
-   permission 立即 flush，限制逐 token render，记录冷启动、输入延迟、长会话更新
-   延迟、CPU/heap 与 bundle 增量。
-4. 覆盖 SIGINT、provider/tool 异常、stdin error、renderer throw、提前 abort 与
-   process exit 的 cleanup；raw mode、mode 2004、resize/data listener、cursor 与
-   terminal writer 必须恢复且不吞原始错误。
-5. 让 new/resume、runtime pager、dist build、pack→clean install→run、Desktop bundle
-   与 Electron launch 在默认 retained 下全绿；静态 guard 继续禁止第二 stdin/stdout
-   owner 和生产 compatibility bridge 调用。
-6. OI-14G 只切默认并关闭可靠性/性能风险，不删除 legacy surface、prefixer、tiny
-   Markdown 或兼容 API；这些删除与 NOTICE/最终文档收口仍留给 OI-14H。
+1. 先写静态红灯，枚举 retained 生产路径、legacy 入口和允许保留的 plain formatter；
+   禁止活跃 TUI 绕过 `BoloTerminalAdapter`，禁止新组件直写 stdout 或取得第二 stdin。
+2. 按依赖顺序删除生产 compatibility bridge、legacy panel/raw driver、`TerminalSurface`
+   与 composer spacer，再删除跨 chunk prefixer 和 tiny Markdown；每刀都先证明引用面
+   与回落边界，不能用大范围机械删除掩盖错误。
+3. 保留 `formatSessionEvent.ts` 的 non-TTY/plain formatter、pipe/JSON/`--print`、
+   readline/raw-mode 不可用回落，以及 shared permission/diff/pager view-model；
+   删除 legacy dynamic TTY 不等于删除自动化输出。
+4. 删除 `BOLO_TUI_ENGINE=legacy` 与非法值回滚契约后，engine resolver 只允许 retained
+   dynamic TTY 或 plain；同步清理帮助、环境变量和测试 fixture 中的短期兼容入口。
+5. 复跑真实 xterm、133 脚本、预算、dist/pack/install、Desktop/Electron、NOTICE 与
+   静态 owner guard；根 `dependencies` 保持 `{}`，单文件与用户数据兼容不变。
+6. 完成 §9.4 的真人 Windows Terminal 核心场景，记录字体、颜色、动画和按键/鼠标手感；
+   自动缺陷不得重新降级为人工 blocker。同步 README/TUI/ROADMAP/handoff/release 后
+   才能关闭 OI-14。
 
 继续禁止对 `TerminalSurface`、`contentPrefixer`、tiny Markdown 或 composer spacer
 添加新的布局补丁。

@@ -219,26 +219,26 @@ prepare/compact 的完整诊断。
 `BOLO_MASCOT=0` 可隐藏水晶；`BOLO_ASCII=1` 使用 ASCII 水晶；`NO_COLOR` 只去颜色并
 保留欢迎页结构，显式 `BOLO_THEME=plain` / `BOLO_PLAIN=1` 才简化欢迎页。
 
-OI-14F 的 retained renderer 目前仍只供开发验证：transcript/Markdown、常驻
-Composer、Thinking/Running activity、model/effort/usage footer 与唯一 OverlayHost
-已进入同一 component tree；slash/hint/history/undo、多行 paste、首 token 前输入框、
-每段 `Thought for`、new/resume、permission/question/provider/effort/diff/pager
-均有真实 VT 门禁。面板期间 Composer 不卸载，输入状态、focus、raw stdin 与 writer
-不转交给兼容面板；显式 retained runtime pager 也不发送 legacy `ESC[2J`。需要测试时
-可在双 TTY/raw-mode 终端显式设置 `BOLO_TUI_ENGINE=retained`；缺省、`legacy`、非法值、
-pipe、`--print` 与 JSON 都保持 legacy。OI-14G 才切默认并完成长会话、可靠性与性能收口。
+OI-14G 起，双 TTY/raw-mode 会话默认使用 retained renderer：transcript/Markdown、
+常驻 Composer、Thinking/Running activity、model/effort/usage footer 与唯一
+OverlayHost 位于同一 component tree；slash/hint/history/undo、多行 paste、首 token
+前输入框、每段 `Thought for`、new/resume、permission/question/provider/effort/diff/
+pager 均有真实 VT 门禁。面板期间 Composer 不卸载，输入状态、focus、raw stdin 与
+writer 不转交给兼容面板；runtime pager 也不发送 legacy `ESC[2J`。普通用户无需设置
+engine。若特定终端宿主出现兼容问题，可暂时设置 `BOLO_TUI_ENGINE=legacy` 回滚；
+非法非空 engine 值同样 fail-safe 到 legacy。该回滚会在 OI-14H 删除。
 
 REPL 中，模型或工具正在运行时按 `Ctrl-C` 会针对 coordinator 当前 active turn 请求 interrupt 并返回提示符；空闲提示符下按 `Ctrl-C` 才退出。若取消发生在权限问答或 diff 审批面板，core 默认按拒绝处理。
 
 动态 TUI 只在 stdin/stdout 双 TTY 且 stdin 支持 raw mode 时启用。pipe、`-p`、
 `--print`、JSON 或不支持 raw mode 的宿主会自动回落追加式输出，不发送动态 activity/
 清行/光标移动。`NO_COLOR` 关闭颜色但不关闭输入；需要彻底回落时设
-`BOLO_TUI_INPUT=0` 或 `BOLO_TUI_LAYOUT=0`。`BOLO_TUI_ENGINE=retained` 不会绕过
-这些 TTY 能力检查。
+`BOLO_TUI_INPUT=0` 或 `BOLO_TUI_LAYOUT=0`。engine 选择不会绕过这些 TTY 能力
+检查：pipe、`--print`、JSON 与非 raw-mode 宿主始终走独立 plain/追加式路径。
 
 `bolo runtime list|inspect` 必须显式给 `--resume <id|path>` 或 `--continue`，不会进入 picker、创建新会话或调用 provider。每个 item 的 `availableActions` 由当前 snapshot 纯推导，并携带执行所需 expected state；空数组表示当前不应尝试动作。
 
-文本模式只有在 **stdin 与 stdout 都是 TTY** 且结果超过一页时才启用 pager。`n/j/↓/→` 下一页，`p/k/↑/←` 上一页，`q/Esc` 正常退出；`Ctrl-C` 返回 130，EOF 正常退出。默认 legacy pager 与显式 retained OverlayHost pager 复用同一分页 reducer；后者不做 legacy 整屏 clear。空结果/单页、pipe 或 `--json` 都不会读取 stdin；pipe/JSON 一次性输出完整结果，不带 ANSI、clear-screen、banner 或 summary。`NO_COLOR` 会禁用 renderer 颜色，但不改变分页和退出语义。
+文本模式只有在 **stdin 与 stdout 都是 TTY** 且结果超过一页时才启用 pager。`n/j/↓/→` 下一页，`p/k/↑/←` 上一页，`q/Esc` 正常退出；`Ctrl-C` 返回 130，EOF 正常退出。默认 retained OverlayHost pager 与显式 legacy raw driver 复用同一分页 reducer；retained 路径不做 legacy 整屏 clear。空结果/单页、pipe 或 `--json` 都不会读取 stdin；pipe/JSON 一次性输出完整结果，不带 ANSI、clear-screen、banner 或 summary。`NO_COLOR` 会禁用 renderer 颜色，但不改变分页和退出语义。
 
 `--json` 成功时 stdout 只有一个原始 `runtime.list|runtime.inspect` view payload；load/not-found 等查询失败只有一个 `{ "ok": false, "code": "...", "detail": "..." }` payload。JSON 参数错误同样只向 stdout 写一个 failure payload、stderr 为空并 exit 2；成功 exit 0，查询/加载失败 exit 1。非 JSON 参数错误仍向 stderr 输出诊断/help 并 exit 2。
 
@@ -394,6 +394,7 @@ PowerShell/Bash 外壳补全。
 | `BOLO_ARROW_PICKER=0` | 禁用箭头 picker |
 | `BOLO_TUI_INPUT=0` | 关闭真实输入框、activity 与结构化时间线，回落 readline |
 | `BOLO_TUI_LAYOUT=0` | 关闭 TUI layout/dynamic path |
+| `BOLO_TUI_ENGINE=legacy` | 短期回滚到旧 dynamic TTY renderer；OI-14H 将删除 |
 | `NO_COLOR` | 保留输入能力，只关闭颜色 |
 | `BOLO_ASCII=1` | 欢迎页使用 ASCII 水晶和 ASCII 分隔符 |
 | `BOLO_THEME=plain` / `BOLO_PLAIN=1` | 保留输入能力，关闭颜色并简化欢迎区 |

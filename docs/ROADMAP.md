@@ -22,7 +22,7 @@
 | **文件 Diff · 日用契约** | **~95%+** | **D0–D7 已收口**；见 [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) |
 | **文件 Diff · 交互 UI** | **~90–95%** | **U0–U4 已落地**；U5 真·Ink/IDE 可选（AR4 证据门控） |
 | **斜杠** | **~88–93%** | OI-10 命令级发现/补全 + OI-12A 精确命令 argument hint；`/effort ` 动态读取当前 provider/model 合法档位 |
-| **CLI TUI** | **~74–84%** | OI-14A–F 已完成真实 VT/选型、live view-state、opt-in retained transcript/Markdown、常驻 Composer/activity/footer 与单一 OverlayHost；当前进入 OI-14G 默认切换与可靠性收口 |
+| **CLI TUI** | **~84–91%** | OI-14A–G 已完成真实 VT/选型、live view-state、retained transcript/Markdown、常驻 Composer/activity/footer、OverlayHost、默认切换与可靠性/性能收口；当前进入 OI-14H 删除 legacy，真人 Windows Terminal 仍未验 |
 | **Electron GUI** | **~80–88%** | 壳 + 流式 + 权限 + 多 provider（CX7）+ runtime v1 + **会话切换/恢复 + composer controls + model/effort 设置 + control/tool progress 投影** + AskUserQuestion；真人点击/视觉仍未验 |
 | **Hooks · 日用契约** | **~96–98%** | **H0–H5 已落地**（SessionEnd · exit 语义 · updatedInput · `/hooks recent`） |
 | **Compact · 日用管道** | **~96–98%** | **C0–C5 + AR2 全段已落地**（hybrid 计数 · 中段截断 · 防重摘要 · range/watermark 契约 · 切分不拆对穷举验证 · 写失败完整回退 · durable 条目不丢 · **估算按字符类别分档**（CJK 1.3 / 散文 4.5 / 其余 3.5；实测推翻了「密文 = token 密」的旧前提，最差高估 109% → 19.5%）· 管道基准）；中段压缩与远端压缩均**显式关闭**（§13.10.2 · [ADR](./ADR_COMPACT_REMOTE.md)） |
@@ -31,17 +31,18 @@
 | **Provider UX · 便利层** | **~95–98%** | **CX0–CX8 已落地**（ultrathink 默认 off）· [PROVIDER_UX.md](./PROVIDER_UX.md) |
 | **产品整体（相对 HC）** | **~68–82%** | Headless 日用高；CLI TUI 渲染可靠性按 OI-14 重新计入 |
 
-**已闭环主线：** headless 日用 → Diff（D0–D7 / U0–U4）· Hooks（H0–H5）· Compact（C0–C5）· Provider（P0–P4.1）· Effort（E0–E9）· Provider UX（CX0–CX8）· 可靠性（R0–R4）· **Durable Runtime（DR0–DR4）** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR3 Desktop 产品接线** · **OI-07 SearXNG 上游诊断、`search doctor` 与可选 Docker setup** · **OI-08B CLI 零步骤首次启动** · **OI-14A 真实 VT/renderer 选型** · **OI-14B live view-state** · **OI-14C retained renderer 基座** · **OI-14D transcript/Markdown** · **OI-14E Composer/activity/footer** · **OI-14F OverlayHost/交互面板**。OI-09–OI-13 的 slash/context/paste/Thought/权限/welcome 等局部切片保留为完成历史，但后续真实截图已证伪“整个 TUI renderer 稳定”的口径，系统性主线继续推进 **OI-14G-H**。切片明细 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
+**已闭环主线：** headless 日用 → Diff（D0–D7 / U0–U4）· Hooks（H0–H5）· Compact（C0–C5）· Provider（P0–P4.1）· Effort（E0–E9）· Provider UX（CX0–CX8）· 可靠性（R0–R4）· **Durable Runtime（DR0–DR4）** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR3 Desktop 产品接线** · **OI-07 SearXNG 上游诊断、`search doctor` 与可选 Docker setup** · **OI-08B CLI 零步骤首次启动** · **OI-14A 真实 VT/renderer 选型** · **OI-14B live view-state** · **OI-14C retained renderer 基座** · **OI-14D transcript/Markdown** · **OI-14E Composer/activity/footer** · **OI-14F OverlayHost/交互面板** · **OI-14G 默认切换/可靠性/性能**。OI-09–OI-13 的 slash/context/paste/Thought/权限/welcome 等局部切片保留为完成历史，但后续真实截图已证伪“整个 TUI renderer 稳定”的口径；系统性主线只剩 **OI-14H** 删除 legacy 与最终验收。切片明细 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
 
-**当前默认 agent 队列：OI-14G。** OI-14F `31384d4` 已建立唯一
-`RetainedOverlayHost`，permission、AskUserQuestion、provider/effort、`/diff`/
-文件审批与 runtime pager 复用既有业务 reducer 并进入同一 retained component tree。
-面板期间 Composer 不卸载，value/cursor/history/undo/focus 保留；raw stdin 与
-terminal writer 仍由同一 adapter 持有。显式 retained runtime pager 也不再走
-legacy `ESC[2J`。真实 xterm、new/resume、abort/resize、dist/install、
-Electron launch 与 129 脚本完整门禁全绿；单文件为 1,686,424 bytes / 199 modules。
-`BOLO_TUI_ENGINE=retained` 仍只是显式 opt-in，默认仍为 legacy；下一刀 OI-14G
-切换默认并收口 scroll/resize/backpressure/perf、长会话与 crash cleanup。完整方案见
+**当前默认 agent 队列：OI-14H。** OI-14G 已让双 TTY/raw-mode 缺省选择 retained，
+显式 `BOLO_TUI_ENGINE=legacy` 仅作短期回滚；non-TTY、pipe、JSON 与 `--print`
+永久保持 plain。真实 xterm 已覆盖 500 blocks / 10,000 行、scrollback、24–220 列
+反复 resize、stream/tool/search、paste/overlay 往返与单 stdin/writer；turn final
+flush、部分启动、stdin/renderer/provider/tool failure、Abort/SIGINT/raw Ctrl+C 和
+进程退出 cleanup 均已关闭。完整 133 脚本、dist build、7-file clean install 与
+Desktop/Electron launch 全绿；单文件为 1,727,232 bytes / 200 modules，完整串预算
+复测为 cold `+50.4ms`、CPU `422ms`、render heap `+21.0MB`、cleanup `+1.5MB`。
+下一刀 OI-14H 删除 legacy surface/prefixer/tiny Markdown/兼容桥并建立静态 owner
+guard；non-TTY plain formatter 不删除。完整方案见
 [CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md)，选型决定见
 [CLI_TUI_RENDERER_DECISION.md](./CLI_TUI_RENDERER_DECISION.md)。
 
@@ -49,7 +50,7 @@ Electron launch 与 129 脚本完整门禁全绿；单文件为 1,686,424 bytes 
 
 | 待办 | 卡在哪 |
 |------|--------|
-| CLI TUI 真实 Windows Terminal 观感/按键 | 已知物理布局/cursor/resize 缺陷先由 OI-14 自动解决；OI-H3 之后只保留字体、颜色、动画主观流畅度与真人按键/鼠标手感 |
+| CLI TUI 真实 Windows Terminal 观感/按键 | OI-14G 已自动关闭物理布局/cursor/resize/cleanup 缺陷；OI-H3 仍需真人检查字体、颜色、动画主观流畅度与按键/鼠标手感 |
 | 桌面窗口视觉 · AskUserQuestion 真人按键/点击 | 只能人工验，自动化覆盖不到 |
 | LSP | 暂缓，触发条件已写死 → [ADR_AR4_EVIDENCE_GATE.md](./ADR_AR4_EVIDENCE_GATE.md) §6 |
 
@@ -58,7 +59,7 @@ Electron launch 与 129 脚本完整门禁全绿；单文件为 1,686,424 bytes 
 
 **已插队并收口：** **AR-T · Agent 能力面**（§14）。准入证据：基础设施深度（DR0–DR4 + AR1）已远超能力广度——彼时 agent 无法跨步骤记住计划，也无法启动任何活过一次工具调用的进程。AR2 压缩深化顺延，A0a/A0b 成果不受影响。
 
-**agent 可闭环开放项：OI-14G–OI-14H。** OI-13A–OI-13D（含 B2 回归）的局部
+**agent 可闭环开放项：OI-14H。** OI-13A–OI-13D（含 B2 回归）的局部
 提交仍保留，但其简化 VT 不能覆盖 terminal auto-wrap，不能再把后续截图中的已知代码
 缺陷放入 `BLOCKED: HUMAN`。CLI init 不再是默认安装步骤，SearXNG Docker 管理也只是
 显式可选能力。
@@ -129,7 +130,7 @@ Electron launch 与 129 脚本完整门禁全绿；单文件为 1,686,424 bytes 
 | **OI-11 · CLI TUI 持久终端表面与可审计权限交互** | ✅ 常驻全宽 composer、时间线层级/usage、分段 Thinking、权限详情选择、viewport 稳定、Responses abort 诊断与水晶欢迎页均已进入默认门禁；真人项见 OI-H3 |
 | **OI-12 · CLI TUI 信息架构与多行输入稳定性** | ✅ argument hint、context dashboard、统一内容 gutter、全宽用户块与 paste transaction 已进入默认门禁；真人项见 OI-H3 |
 | **OI-13 · CLI TUI 垂直节奏与水晶工作台** | ✅ 局部切片完成；后续物理 wrap/cursor/layout 证据转入 OI-14，不再以本项门禁证明整个 renderer |
-| **OI-14 · CLI TUI retained renderer 重构** | ▶ A–E 已关闭：真实 VT/选型、live view-state、retained transcript/Markdown 与常驻 Composer/activity/footer；当前 F 迁 overlays，G–H 待推进 |
+| **OI-14 · CLI TUI retained renderer 重构** | ▶ A–G 已关闭：真实 VT/选型、live view-state、retained renderer/Markdown/Composer/OverlayHost、默认切换与可靠性/性能；当前 H 删除 legacy 并完成真人核心场景验收 |
 | **AR-T3+ 能力面续刀**（WebSearch · plan 工具流 · AskUserQuestion） | ✅ 三项均已落地（AskUserQuestion 的真 TTY 交互未验，见 §14.5） |
 | **AR2 Compact depth（A0a/A0b/A1/A2/B1/B2/C 全段）** | ✅ |
 | AR3 Desktop shell | ✅ runtime 生产桥/会话切换恢复/视图模型/composer/model-effort/control-tool progress/NSIS 已收口；真人点击/视觉仍未验 |
@@ -142,17 +143,18 @@ Electron launch 与 129 脚本完整门禁全绿；单文件为 1,686,424 bytes 
 
 状态真源见 **§0**；里程碑逐项明细已并入 §0 与 [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
 
-**一句话：** Headless 核心主路径已收口；OI-14A–F 已完成真实终端证据、retained
-选型、纯 live view-state、opt-in transcript/Markdown、常驻 Composer/activity/footer
-与单一 OverlayHost，默认 agent 队列为 OI-14G；外部资源和真人验收继续单列。
+**一句话：** Headless 核心主路径已收口；OI-14A–G 已完成真实终端证据、retained
+选型、纯 live view-state、transcript/Markdown、常驻 Composer/activity/footer、
+OverlayHost、默认切换与可靠性/性能，默认 agent 队列为 OI-14H；外部资源和真人验收
+继续单列。
 
-**最近闭环：** OI-14F。`31384d4` 把 permission/question/provider/effort/diff/pager
-迁入唯一 retained OverlayHost，保留同一 Composer 与 stdin/writer owner，并让显式
-retained runtime pager 不再整屏 clear。真实 xterm、new/resume、abort/resize、
-dist/install、Desktop/Electron 与 129 项完整门禁全绿，单文件产物为
-1,686,424 bytes / 199 modules。**当前实施：** OI-14G 切换默认并收口
-scroll/resize/backpressure/perf、长会话与 crash cleanup；默认当前仍为 legacy，
-真人 Windows Terminal 验收仍单列，default/可靠性缺陷不冒充人工项。
+**最近闭环：** OI-14G。双 TTY/raw-mode 现在缺省使用 retained，显式 legacy 只作
+短期回滚，plain/pipe/JSON/`--print` 不变。500-block/10k-line scroll/resize、
+paste/overlay、backpressure/final flush 与 crash cleanup 均由真实 xterm/子进程关闭；
+133 项完整门禁、dist/install、Desktop/Electron 全绿，单文件产物为
+1,727,232 bytes / 200 modules，cold 相对增量 `50.4ms`。**当前实施：** OI-14H
+删除旧 surface/prefixer/tiny Markdown/兼容桥并建立静态 owner guard；真人 Windows
+Terminal 验收仍单列，不用自动门禁冒充主观观感。
 中段压缩与远端压缩按证据门控**显式关闭**
 （后者见 [ADR_COMPACT_REMOTE.md](./ADR_COMPACT_REMOTE.md)）。
 
@@ -434,7 +436,7 @@ AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 regis
 | 26 | **OI-11 · CLI TUI 持久终端表面与可审计权限交互** | A terminal surface/composer · B timeline/status · C segment activity · D permission chooser/details · E viewport VT · F abort diagnosis · G crystal identity · H docs | turn 中输入区常驻全宽 · gutter/用户块/token/model/keys · 每段 Thought · command 可见三态权限 · 历史不被 clear · timeout 可行动 · Bolo 水晶欢迎页 | OI-11 专项 + 既有 TUI/provider/permission 回归 + typecheck + 121 项完整门禁 + dist smoke | ✅ A–H 已闭环；代码 `e9a32cf` / `59acdf6` / `b0feb0c` / `4fc3791` / `da0533c` / `b0fbb86` / `8088fbb`，真人观感移交 OI-H3 |
 | 27 | **OI-12 · CLI TUI 信息架构与多行输入稳定性** | A argument hint · B context view-model/dashboard · C shared gutter · D dock-width user block · E paste transaction · F docs | `/effort ` 可见合法档位 · `/context` 图形概览/明细分层 · 正文不贴墙 · 用户块全宽 · 多行 paste 不误提交/滚屏 | OI-12 专项 + slash/TUI/compact/usage 回归 + typecheck + 123 项完整门禁 + dist smoke | ✅ A `1696127` · B `15b37ed` · C `40a5d41` · D `8d2a7a5` · E `7f76093` · F 本文档批；真人字体/鼠标粘贴/resize/按键仍归 OI-H3 |
 | 28 | **OI-13 · CLI TUI 垂直节奏与水晶工作台** | A silent Thought completion · B running surface breathing row · B2 idle/running shared gap · C responsive crystal workbench · D docs | 直接正文前仍有本段 `Thought for` · activity/final answer 与 composer 间有稳定完整空行 · 欢迎页最大 100 cells、宽屏双列/中紧凑单列并保留水晶 | thinking/surface/owner-handoff VT/crystal/TUI 专项 + typecheck + 完整门禁 + dist smoke | ✅ A `fe2d39a` · B `bf25077` · B2 `2b9d008` · C `4c4fb08` · D 文档批 |
-| 29 | **OI-14 · CLI TUI retained renderer 重构** | A 真实 VT/选型 ✅ · B live view-state ✅ · C retained 基座 ✅ · D transcript/Markdown ✅ · E Composer/activity/footer ✅ · F overlays ✅ · G 默认切换 · H 删除旧实现/文档 | 正文不再碎裂或产生巨大空洞；物理续行 gutter 一致；user/agent/composer 有稳定间距；stream/resize/paste/permission 不破坏屏幕 | `@xterm/headless` auto-wrap/resize + chunk property + Markdown/Unicode/ANSI/OSC 8 + editor/overlay + perf + dist/pack/install + 真人 Windows Terminal | **▶ OI-14G NEXT**；A `1ae9f53` / `f04f8de`，B `269b39c`，C `1798a7c`，D `8b060e5`，E `d0fb822`，F `31384d4`；完整方案 [CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md) |
+| 29 | **OI-14 · CLI TUI retained renderer 重构** | A 真实 VT/选型 ✅ · B live view-state ✅ · C retained 基座 ✅ · D transcript/Markdown ✅ · E Composer/activity/footer ✅ · F overlays ✅ · G 默认切换/可靠性/性能 ✅ · H 删除旧实现/文档 | 正文不再碎裂或产生巨大空洞；物理续行 gutter 一致；user/agent/composer 有稳定间距；stream/resize/paste/permission 不破坏屏幕 | `@xterm/headless` auto-wrap/resize + chunk property + Markdown/Unicode/ANSI/OSC 8 + editor/overlay + perf + dist/pack/install + 真人 Windows Terminal | **▶ OI-14H NEXT**；A `1ae9f53` / `f04f8de`，B `269b39c`，C `1798a7c`，D `8b060e5`，E `d0fb822`，F `31384d4`，G `6f4764f`–`accc22c`；完整方案 [CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md) |
 
 固定 checkpoint：
 
@@ -577,7 +579,7 @@ MCP 工具失败只吐 `fetch failed`（补 `describeMcpCallError`：指名 serv
 
 | 面 | 落点 |
 |----|------|
-| 构建 | `scripts/build-dist.ts`：esbuild bundle → `dist/bolo.mjs`（1,686,424 bytes / 199 模块，OI-14F）+ 拷 `bundled-skills` |
+| 构建 | `scripts/build-dist.ts`：esbuild bundle → `dist/bolo.mjs`（1,727,232 bytes / 200 模块，OI-14G）+ 拷 `bundled-skills` |
 | 发布元数据 | `private:false` · `name`/`version`/`files`/`keywords`/`homepage`/`bugs` · `bin → ./dist/bolo.mjs` · `prepack` |
 | 资产路径 | `getBundledSkillsDir()` 改为**双布局存在性探测**（开发 / 发布产物） |
 | 门禁 | `scripts/test-dist-build.ts`（产物契约）· `scripts/test-dist-install.ts`（真实 pack→install→run） |
