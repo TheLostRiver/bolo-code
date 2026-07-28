@@ -219,11 +219,14 @@ prepare/compact 的完整诊断。
 `BOLO_MASCOT=0` 可隐藏水晶；`BOLO_ASCII=1` 使用 ASCII 水晶；`NO_COLOR` 只去颜色并
 保留欢迎页结构，显式 `BOLO_THEME=plain` / `BOLO_PLAIN=1` 才简化欢迎页。
 
-OI-14D 的 retained renderer 目前只供开发验证：transcript 与 Markdown 已可测试，
-但 **Composer/activity/footer 与交互面板仍走兼容桥，不适合替代默认日用界面**。
-需要测试时可在双 TTY/raw-mode 终端显式设置 `BOLO_TUI_ENGINE=retained`；缺省、
-`legacy`、非法值、pipe、`--print` 与 JSON 都保持 legacy。默认切换要等
-OI-14E–OI-14G 各切片关闭。
+OI-14E 的 retained renderer 目前仍只供开发验证：transcript/Markdown、常驻
+Composer、Thinking/Running activity 与 model/effort/usage footer 已进入同一
+component tree；slash/hint/history/undo、多行 paste、首 token 前输入框、每段
+`Thought for` 和 new/resume 输入生命周期已有真实 VT 门禁。但
+permission/question/provider/effort/diff/pager 仍由 controller 暂停 retained root
+后交给兼容面板，不适合替代默认日用界面。需要测试时可在双 TTY/raw-mode 终端显式
+设置 `BOLO_TUI_ENGINE=retained`；缺省、`legacy`、非法值、pipe、`--print` 与 JSON
+都保持 legacy。OI-14F 迁 overlays，OI-14G 才切默认。
 
 REPL 中，模型或工具正在运行时按 `Ctrl-C` 会针对 coordinator 当前 active turn 请求 interrupt 并返回提示符；空闲提示符下按 `Ctrl-C` 才退出。若取消发生在权限问答或 diff 审批面板，core 默认按拒绝处理。
 

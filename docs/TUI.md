@@ -7,14 +7,16 @@
 > 物理续行贴左和 cursor/layout 漂移。系统性修复已重开为 **OI-14**。
 > **框架选择：** OI-14A 已选定精确版本的 Pi TUI direct bundle，不再继续扩展自研
 > `TerminalSurface + contentPrefixer + tiny Markdown`。分切片复用 renderer/Markdown/
-> Editor 并保留 Bolo terminal adapter；Node、Windows、体积、资产和许可证据见
+> keys/StdinBuffer 并保留 Bolo terminal adapter 与输入业务层；Node、Windows、
+> 体积、资产和许可证据见
 > [CLI_TUI_RENDERER_DECISION.md](./CLI_TUI_RENDERER_DECISION.md)。
 > **状态层：** OI-14B `269b39c` 已在 `packages/shared` 建立无 I/O 的
 > `CliTuiViewState`、稳定 block id、stream/tool/search 合并、resume replay 与
 > composer/overlay/segment elapsed 状态。OI-14C `1798a7c` 已建立 Bolo terminal
 > adapter、稳定 retained root、theme/width/resize 与水晶 welcome；OI-14D
-> `8b060e5` 已按 stable block id 迁入 retained transcript 与 Pi Markdown。默认仍为
-> legacy；当前 OI-14E 迁 Composer/activity/footer，OI-14F 再迁交互面板。
+> `8b060e5` 已按 stable block id 迁入 retained transcript 与 Pi Markdown；OI-14E
+> `d0fb822` 已迁常驻 Bolo Composer、分段 activity 与 footer。默认仍为 legacy；
+> 当前 OI-14F 迁交互面板。
 > Diff 轨见 [ROADMAP.md](./ROADMAP.md) §3 ·
 > [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) 轨 B。
 
@@ -32,7 +34,7 @@
 | `BOLO_PLAIN=1` / `BOLO_THEME=plain` | 关闭颜色并简化欢迎区；真实输入能力仍可用 |
 | `BOLO_TUI_INPUT=0` | 关闭动态输入/时间线，回落 readline |
 | `BOLO_TUI_LAYOUT=0` / `TERM=dumb` | 关闭 layout 与动态路径，回落 readline |
-| `BOLO_TUI_ENGINE=retained` | **OI-14D 开发预览**：双 TTY/raw-mode 下启用 retained transcript/Markdown；Composer/activity/footer 与面板仍走兼容桥；缺省、`legacy`、非法值与 non-TTY 均保持 legacy |
+| `BOLO_TUI_ENGINE=retained` | **OI-14E 开发预览**：双 TTY/raw-mode 下启用 retained transcript/Markdown、常驻 Composer、activity 与 footer；permission/question/provider/effort/diff/pager 暂走兼容桥；缺省、`legacy`、非法值与 non-TTY 均保持 legacy |
 | `>=96` 列 | 最大 100-cell 工作台：完整水晶在左，Ready/workspace/model/session 在右 |
 | `56–95` 列 | 单列工作台：中型水晶、居中状态、左对齐 metadata |
 | `38–55` 列 | 单列工作台：6 行紧凑水晶；动态文本按 cell 宽度裁切 |
@@ -51,9 +53,11 @@
 |------|------|
 | `packages/shared/src/cliTuiViewState.ts` | **OI-14B**：有序 live blocks、稳定 id、SessionEvent/resume 投影、composer/overlay/elapsed 纯状态真源 |
 | `tui/tuiEngine.ts` | **OI-14C**：session 创建时锁定 legacy/retained；缺省、非法值与 plain 路径 fail-safe 到 legacy |
-| `tui/boloTerminalAdapter.ts` | **OI-14C**：retained 唯一原始 writer、resize 生命周期、同步 render epoch、scrollback 保留与 legacy panel 独占桥 |
-| `tui/retainedTui.ts` | **OI-14C/D**：稳定 Pi root/controller、theme/viewport/welcome、view-state 接线、精确 stream fallback 与完成态 Thought elapsed |
+| `tui/boloTerminalAdapter.ts` | **OI-14C/E**：retained 唯一原始 writer、resize/render epoch/scrollback；唯一 stdin owner、Pi `StdinBuffer`、raw/mode-2004 生命周期与 legacy panel 独占桥 |
+| `tui/retainedTui.ts` | **OI-14C–E**：稳定 Pi root/controller、theme/viewport/welcome、view-state、transcript/activity/composer/footer 根布局与精确 stream fallback |
 | `tui/retainedTranscript.ts` | **OI-14D**：按 stable block id 缓存 User/Assistant/Thought/Tool/Search/Error/Warning/Summary 组件；Pi Markdown、整宽用户块、物理 gutter 与父级 section gap |
+| `tui/retainedComposer.ts` | **OI-14E**：稳定 Bolo Composer/Footer；复用输入 reducer、slash/hint/history，补 undo、Pi keys 与 `CURSOR_MARKER` |
+| `tui/retainedActivity.ts` | **OI-14E**：把既有分段 activity 的当前帧投影为 retained child，不直接写 stdout |
 | `tui/crystalLogo.ts` | 水晶常量、源稿归一化、整块 cell-width 居中与 ASCII 降级 |
 | `tui/inkLayout.ts` | 一次性水晶工作台；宽屏 split、中/紧凑单列，不伪装成输入框 |
 | `tui/frame.ts` | 100-cell welcome、160-cell content 与全宽 dock 三套明确宽度契约 |
@@ -91,8 +95,9 @@ running dock 和临时面板又分别拥有 cursor 生命周期，因此 provide
 OI-14A 已用 `@xterm/headless` 固化四项真实 legacy 红灯；OI-14B 已建立纯 live
 view-state 并证明 chunk invariant；OI-14C 已用显式 opt-in 接入 retained component
 tree，证明 root/width/resize/single-writer 生命周期；OI-14D 已让 retained 正文、
-Markdown、物理 gutter 与 section gap 转绿。输入区、running activity/footer 和
-overlays 尚未迁移，默认仍是 legacy，不能用 D 的正文证据宣称整个 TUI 已稳定。
+Markdown、物理 gutter 与 section gap 转绿；OI-14E 已让常驻输入区、running
+activity/footer、paste/raw-mode/new/resume 输入接线转绿。overlays 尚未迁移，
+默认仍是 legacy，不能用 E 的 opt-in 证据宣称整个默认 TUI 已稳定。
 
 ---
 
@@ -115,7 +120,7 @@ OI-14 迁移时不得回退 slash、context、paste、Thought、权限与非 TTY
 `resolveTuiDockWidth()` 跟随终端可用宽度。默认 legacy Agent 与 TTY slash 正文仍在
 各自 renderer 内使用逻辑行 gutter：24–31 列为 0、32–47 列为 2、48 列以上为 4，
 terminal auto-wrap 的物理续行仍可能绕过它。OI-14D retained transcript 已先从
-viewport 扣除 gutter，再给 Markdown 生成的每条物理行加回同一 gutter；OI-14E 将让
+viewport 扣除 gutter，再给 Markdown 生成的每条物理行加回同一 gutter；OI-14E 已让
 transcript、用户块、activity、composer 与 footer 由同一个常驻 layout tree 计算。
 `NO_COLOR` 只移除颜色；`BOLO_ASCII=1` 保留结构并切成 ASCII 字符；
 `BOLO_THEME=plain` / `BOLO_PLAIN=1` 才简化为纯文本；`BOLO_MASCOT=0` 只隐藏水晶。
@@ -155,9 +160,12 @@ dock，结束后恢复，不与空闲 listener 竞争。composer 上方一行 sp
 首帧与输入重绘由 `readTuiInput` 拥有。该行始终与 composer 一起参与 cursor offset、
 局部 erase 和 repaint，因此 running → clearDock → idle 交接也不会让最终回答贴框。
 
-上段是 OI-11/OI-13 建立的局部契约；真实截图已经证明它在超长物理行和 streaming
-重绘下不能保证整个屏幕。OI-14E 将把 Composer 改为同一 retained tree 中的常驻
-节点，idle/running/permission 只切 mode，不再销毁 editor 或转移 cursor owner。
+上段是默认 legacy 的 OI-11/OI-13 局部契约；真实截图已经证明它在超长物理行和
+streaming 重绘下不能保证整个屏幕。OI-14E retained 路径改为同一
+`RetainedComposer` 节点：idle/running 只切 mode，value/cursor/history/undo/menu
+保留在 component-local 状态，Pi `CURSOR_MARKER` 定位硬件光标。permission/picker
+暂由根 controller suspend 后交给 legacy panel，恢复时同一 pending value/focus
+不丢；这条桥由 OI-14F 删除。
 
 raw driver 进入时启用 terminal mode 2004，退出、提交和 abort 时恢复。收到
 `paste-start` 后跨 data chunk 聚合正文，到 `paste-end` 才规范化 CRLF/CR 并调用一次
@@ -180,12 +188,13 @@ raw driver 进入时启用 terminal mode 2004，退出、提交和 abort 时恢�
 
 activity 使用确定性 `✦ → ✧ → ✶ → ✧` 状态帧，每 250ms 更新 glyph 与本段耗时；model、
 tool、search、retry 切换会重置段起点，同一 reasoning chunk 不会误重置。每帧把
-`\r + 完整状态行 + erase-to-end` 合成一次 writer 调用，不再先清空整行再绘制，
-因此不会周期性出现空白帧。每帧仍读取当前终端列宽，完整文案放不下时依次退化为
-紧凑/最小文案，避免自动换行残影。`NO_COLOR` 只移除 SGR，不移除必要的
-cursor-control。永久 Thought 的资格由 activity 是否交回已结束 thinking segment
-elapsed 决定，不再依赖是否展示过 reasoning 文本；消费后清空段状态，所以正文的
-后续 chunk 或 `endTurn` 不会重复打印。
+当前完整状态交给同一 `turnActivity` 状态机：legacy 才使用
+`\r + 完整状态行 + erase-to-end`，retained 则只更新 `RetainedActivity` child，
+由根 renderer 合并帧，因此都不会先清空整行再绘制或产生第二 writer。每帧仍读取
+当前终端列宽，完整文案放不下时依次退化为紧凑/最小文案，避免自动换行残影。
+`NO_COLOR` 只移除 SGR。永久 Thought 的资格由 activity 是否交回已结束 thinking
+segment elapsed 决定，不再依赖是否展示过 reasoning 文本；消费后清空段状态，所以
+正文的后续 chunk 或 `endTurn` 不会重复打印。
 
 ### 3.4 Context 仪表盘
 
@@ -353,7 +362,7 @@ npx tsx scripts/test-diff-view.ts
 argument hint、bracketed paste 生命周期/跨 chunk/CRLF/单次重绘、菜单窗口与非 TTY
 回落；`test:context-dashboard` 覆盖 view-model 的 24/38/80/160 列 TTY 投影；
 `test:slash-completion` 覆盖内置/Plugin/Skill projection、动态 effort、重名、
-hidden alias、exact/prefix 与空匹配。完整门禁当前包含 **127** 个串联
+hidden alias、exact/prefix 与空匹配。完整门禁当前包含 **128** 个串联
 `scripts/*.ts`。
 
 OI-14B 新增的 `test:cli-tui-view-state` 覆盖稳定 turn/segment/call-id、reasoning 与
@@ -374,13 +383,21 @@ fixed-random chunk、24/31/32/47/48/80/120/160/220 列、resize、resume、burst
 Markdown 与 `marked@18.0.5` 已进入单文件；Editor、ProcessTerminal、terminal/native
 modifier 路径继续由产物门禁禁止。
 
+OI-14E 新增的 `test:cli-tui-composer` 覆盖同一 Composer 的 idle/running identity、
+首 token 前可见与完成恢复、slash/argument hint/history/undo、silent/visible
+Thought、动画、model/effort/usage footer、硬件光标、24–220 列、resize、跨 chunk
+paste、输入 p95、500-char burst、预先 abort、raw-mode 异常回滚与单 writer。
+`test:cli-tui-retained` 另用真实 new/resume REPL 证明 stdin/mode-2004 获取释放、
+Composer 配置和 ordinary input 不经过 legacy writer。dist 门禁要求 Pi
+`keys.js`/`stdin-buffer.js`，并禁止 Editor、ProcessTerminal、terminal/native loader。
+
 OI-14A 新增的 `test:cli-tui-vt` 使用 `@xterm/headless` 执行真实 cell
 auto-wrap/scrollback/resize，已覆盖 ANSI、长 URL、CJK/emoji、整段/逐字符/固定随机
 chunk、running composer 与 56 -> 38 resize，并稳定捕获四项 legacy 失败签名。
 OI-14C 已让 retained welcome/root 的宽度、resize 与 scrollback 基座转绿；OI-14D
 已让 Markdown list/code/table、OSC 8、transcript physical gutter/spacing 及
-chunk/resize/resume 同值转绿；Editor/activity/footer 与 overlay 矩阵随 OI-14E-G
-逐步转绿；见
+chunk/resize/resume 同值转绿；OI-14E 已让 Composer/activity/footer 与输入生命周期
+转绿，overlay/default/legacy 删除矩阵继续随 OI-14F-H 推进；见
 [CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md) §9 和
 [CLI_TUI_RENDERER_DECISION.md](./CLI_TUI_RENDERER_DECISION.md)。
 

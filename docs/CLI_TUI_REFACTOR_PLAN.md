@@ -1,6 +1,6 @@
 # CLI TUI retained renderer 重构方案
 
-> **状态：** OI-14 `OPEN`（OI-14A/B/C/D 已关闭；当前 OI-14E）
+> **状态：** OI-14 `OPEN`（OI-14A/B/C/D/E 已关闭；当前 OI-14F）
 > **方案锚点：** Bolo `c2e6a98`；Pi `c820aa26fe09`；oh-my-pi
 > `d16c6168c86f`；Codex `f61b51ddd924`；OpenCode `66495a2a22cd`；
 > HelsincyCode `e6dd86ef990e`。
@@ -10,6 +10,7 @@
 > `packages/shared/src/cliTuiViewState.ts`。
 > **OI-14C 交付：** `1798a7c` · retained renderer 基座。
 > **OI-14D 交付：** `8b060e5` · retained transcript/Markdown。
+> **OI-14E 交付：** `d0fb822` · retained Composer/activity/footer。
 > **范围：** 本文定义 CLI TTY 路径的重构方案。非 TTY、`--print`、pipe、JSON 和
 > Desktop 的既有输出契约必须保持兼容。
 > **结论先行：** 停止继续扩展自研 `TerminalSurface + 字符串 prefix + tiny
@@ -117,8 +118,11 @@ code point 都当一列，所以即使字符串测试与简化 VT 行数全绿�
 ### 4.1 主路线
 
 采用精确版本 `@earendil-works/pi-tui@0.82.1` 的公共 API，复用其 renderer、
-Markdown、width、Editor 和基础组件；Bolo 自己实现
-SessionEvent adapter 与领域组件。
+Markdown、width、focus、keys、`StdinBuffer`、光标协议和基础组件；Bolo 自己实现
+SessionEvent adapter 与领域组件。OI-14E 实测没有直接采用 Pi Editor：其
+autocomplete/render 状态私有，无法无损保持 Bolo 全宽框、argument ghost hint、
+slash menu 与独立 footer；稳定 `RetainedComposer` 继续复用 Bolo 输入
+reducer/renderer。
 
 不采用 Pi coding-agent，不复制其 provider/session/tool 业务，也不引入 Pi 的产品
 目录、配置或品牌。构造 TUI 时必须显式传入 Bolo 的日志目录，禁止回落到 `~/.pi`。
@@ -160,7 +164,7 @@ packages/shared: reduceCliTuiState(state, action)
     |
     +-- transcript blocks: raw source + stable id + status
     +-- active segment: thinking/tool/search/retry + segment timer
-    +-- composer: value/cursor/menu/mode
+    +-- composer: mode（value/cursor/history/undo/menu 由 CLI-local 常驻组件拥有）
     +-- overlay: permission/question/picker/diff
     +-- terminal: width/height/focus/scroll position
     |
@@ -191,7 +195,8 @@ retained renderer -> width-aware physical lines -> one differential terminal wri
 - transcript block 保存 raw Markdown/source 和业务状态，不保存已经折好的终端行。
 - timer 产生 action；Thought 记录每个 segment 的独立耗时，不使用整轮累计时间。
 - renderer 只消费 view-state、theme 与当前 viewport。
-- `ProcessTerminal` 或等价 adapter 是动态 TUI 中唯一允许写 stdout/cursor control 的层。
+- Bolo terminal adapter 是动态 TUI 中唯一允许写 stdout/cursor control 的层；
+  `ProcessTerminal` 不进入产物。
 
 OI-14B 已按此边界完成：
 
@@ -212,7 +217,7 @@ OI-14B 已按此边界完成：
 | paragraph/list/code/link wrap | Markdown/Text component |
 | gutter、padding、block gap | 父级 layout component |
 | cursor、erase、diff、resize | 根 renderer |
-| editor value/cursor/undo/history/menu | 常驻 Composer/Editor |
+| editor value/cursor/undo/history/menu | CLI-local 常驻 `RetainedComposer` |
 | thinking/tool elapsed | activity controller -> state action |
 | permission 选择与详情 | OverlayHost + permission view-model |
 | 非 TTY 文本 | plain formatter |
@@ -264,8 +269,8 @@ OI-14B 已按此边界完成：
 | `terminalMarkdown.ts` | 由成熟 block Markdown component 替代 |
 | `terminalText.ts` | 仅保留确有 Bolo 专用的 plain/字段 helper；通用 width/wrap 不维护重复实现 |
 | `composerSpacing.ts` | 删除；gap 由 transcript/composer parent layout 拥有 |
-| `inputBox.ts` | 保留 Bolo slash/status view-model；编辑、wrap、cursor 迁到常驻 Editor |
-| `turnActivity.ts` | 保留分段计时语义；输出改为 state action |
+| `inputBox.ts` | 保留 Bolo input/slash/status reducer 与纯 renderer；由常驻 `RetainedComposer` 包装，legacy raw driver 留到 H 删除 |
+| `turnActivity.ts` | 保留分段计时语义；retained 通过 child state 消费 frame，不直接写 stdout |
 | `permissionPanel.ts` | 保留安全摘要/decision view-model；renderer 迁到 overlay component |
 | `localPanel.ts` | picker/permission/diff 全部组件化后删除 |
 | `contextDashboard.ts` | 保留 view-model；改为 width-aware component |
@@ -288,7 +293,7 @@ OI-14B 已按此边界完成：
 | **OI-14B ✅** | Live view-state | `packages/shared` 的 `CliTuiViewState`、action/reducer、stable block id、stream merge、segment 与 composer mode | reducer 无 I/O；随机 chunk property、resume projection、error/tool 边界全绿 |
 | **OI-14C ✅** | Renderer 基座 | 单 terminal writer、根 component tree、theme/width/resize、welcome、legacy feature flag | 24/38/56/80/120/160/220 列无超宽物理行；resize 无残影；plain path byte-stable |
 | **OI-14D ✅** | Transcript 与 Markdown | User/Assistant/Thought/Tool/Search/Error/Warning/Summary blocks；成熟 Markdown/wrap；父级 spacing | 真实 VT、列表 hanging indent、URL、CJK/emoji、ANSI/OSC 8、代码块、表格、chunk/resize/resume 全绿 |
-| **OI-14E** | 常驻 Composer/Activity/Footer | Editor、slash menu/argument hint、paste、per-segment activity、usage/footer | idle/running 不卸载 editor；输入/最终回答间距稳定；burst stream 无闪烁或逐 token 全重绘 |
+| **OI-14E ✅** | 常驻 Composer/Activity/Footer | Bolo retained Composer、slash menu/argument hint、paste、per-segment activity、usage/footer | idle/running 不卸载 Composer；输入/最终回答间距稳定；burst stream 无闪烁或逐 token 全重绘 |
 | **OI-14F** | Overlay 与交互面板 | permission/question/provider/effort/diff/pager 迁入 OverlayHost | 面板显示完整操作详情；默认 deny；Esc/Ctrl+C/focus 恢复；无第二 stdout owner |
 | **OI-14G** | 默认切换与可靠性 | retained 成为默认；scroll/resize/backpressure/perf；dist/pack/install/Windows 邻接轨 | 完整门禁、单文件 dist、冷启动/输入延迟预算、长会话和 crash cleanup 全绿 |
 | **OI-14H** | 删除 legacy 与文档收口 | 删除旧 surface/prefixer/tiny Markdown/兼容桥；更新 README/TUI/ROADMAP/handoff/release/NOTICE | 静态 guard 禁止活跃 TUI 绕过 terminal adapter；真人 Windows Terminal 核心场景通过 |
@@ -426,20 +431,20 @@ OI-14 只有同时满足以下条件才可 `CLOSED`：
 
 ## 13. 下一步
 
-当前下一刀是 **OI-14E**：
+当前下一刀是 **OI-14F**：
 
-1. 在 retained root 内建立常驻 Composer/Editor 节点；idle/running 只切 mode，不卸载
-   节点，不丢 value/cursor/history/undo。
-2. 把现有 slash catalog/argument hint、bracketed paste transaction 与提交意图接入
-   Composer；输入能力继续复用既有业务契约，不重写 command/skill/plugin 状态。
-3. 把 Thinking/Running activity 与 per-segment elapsed 迁入 retained tree；D 已保存
-   完成态 `Thought for`，E 负责 running 动画和状态切换，不再另开 stdout writer。
-4. 让根布局统一拥有 transcript/activity/composer/footer 的 gap；footer 按宽度展示
-   model/mode、快捷键和 `↓input ↑output` usage，任何动态值不能推动固定区域跳动。
-5. 用真实 VT 覆盖 idle/running 同一组件身份、首 token 前输入框常驻、字符 burst
-   backpressure、paste、slash menu、24–220 列、resize 与输入 p95 预算。
-6. 保持 `BOLO_TUI_ENGINE=retained` 显式 opt-in、legacy/plain byte contract 和当前
-   async overlay bridge；permission/question/provider/effort/diff/pager 留给 OI-14F。
+1. 在 retained root 建立唯一 `OverlayHost`，把 permission/question/provider/effort/
+   diff/pager 按共享 view-model 逐类迁入，普通组件不得直接写 stdout 或读取 stdin。
+2. permission 必须展示 tool、command/cwd 与关键参数，保留 once/always/deny，
+   默认 deny；question/picker/diff/pager 保留各自既有业务结果，不复制状态机。
+3. overlay 打开时 Composer 节点和 value/cursor/history/undo 继续存在，只切
+   overlay/focus mode；Esc/Ctrl+C/abort/submit 后焦点确定恢复到同一 Composer。
+4. 用真实 VT 覆盖 overlay 嵌套拒绝、resize、长 command/diff、suspend 中断、错误
+   cleanup、new/resume 与无第二 stdin/stdout owner。
+5. 删除已迁面板对 `suspendForLegacyPanel()` 的调用；未迁调用必须有静态白名单，
+   OI-14F 结束时兼容 bridge 不再服务交互 REPL。
+6. 保持 `BOLO_TUI_ENGINE=retained` 显式 opt-in、legacy/plain byte contract；
+   retained 默认切换仍留给 OI-14G。
 
 继续禁止对 `TerminalSurface`、`contentPrefixer`、tiny Markdown 或 composer spacer
 添加新的布局补丁。
