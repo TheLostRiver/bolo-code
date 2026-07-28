@@ -1,8 +1,10 @@
 /**
  * OI-11A: persistent terminal surface and full-width composer.
  */
+import { EventEmitter } from 'node:events'
 import {
   createTuiInputState,
+  readTuiInput,
   renderTuiInputBox,
 } from '../packages/cli/src/tui/inputBox.ts'
 import {
@@ -18,6 +20,104 @@ import { createCliOnEvent } from '../packages/cli/src/resumeCli.ts'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(`FAIL: ${message}`)
+}
+
+class FakeRawInput extends EventEmitter {
+  isTTY = true
+  isRaw = false
+
+  setRawMode(mode: boolean): void {
+    this.isRaw = mode
+  }
+
+  resume(): this {
+    return this
+  }
+
+  pause(): this {
+    return this
+  }
+
+  setEncoding(): this {
+    return this
+  }
+}
+
+class TestTerminalScreen {
+  private rows: string[][] = [[]]
+  private row = 0
+  private column = 0
+  private saved = { row: 0, column: 0 }
+
+  write(text: string): void {
+    let index = 0
+    while (index < text.length) {
+      if (text.startsWith('\u001b7', index)) {
+        this.saved = { row: this.row, column: this.column }
+        index += 2
+        continue
+      }
+      if (text.startsWith('\u001b8', index)) {
+        this.row = this.saved.row
+        this.column = this.saved.column
+        this.ensureRow()
+        index += 2
+        continue
+      }
+      if (text[index] === '\u001b' && text[index + 1] === '[') {
+        const sequence = text.slice(index).match(/^\u001b\[([?0-9;]*)([A-Za-z])/)
+        if (sequence) {
+          const amount = Math.max(1, Number(sequence[1]) || 1)
+          if (sequence[2] === 'A') {
+            this.row = Math.max(0, this.row - amount)
+          } else if (sequence[2] === 'B') {
+            this.row += amount
+          } else if (sequence[2] === 'C') {
+            this.column += amount
+          } else if (sequence[2] === 'K' && sequence[1] === '2') {
+            this.rows[this.row] = []
+          }
+          this.ensureRow()
+          index += sequence[0].length
+          continue
+        }
+      }
+
+      const codePoint = text.codePointAt(index)
+      if (codePoint === undefined) break
+      const character = String.fromCodePoint(codePoint)
+      index += character.length
+      if (character === '\r') {
+        this.column = 0
+        continue
+      }
+      if (character === '\n') {
+        this.row += 1
+        this.column = 0
+        this.ensureRow()
+        continue
+      }
+      if (codePoint < 0x20) continue
+      this.ensureRow()
+      this.rows[this.row]![this.column] = character
+      this.column += 1
+    }
+  }
+
+  lines(): string[] {
+    return this.rows.map((row) => row.join('').trimEnd())
+  }
+
+  private ensureRow(): void {
+    while (this.rows.length <= this.row) this.rows.push([])
+  }
+}
+
+function lastRowContaining(lines: readonly string[], needle: string): number {
+  for (let index = lines.length - 1; index >= 0; index--) {
+    if (lines[index]?.includes(needle)) return index
+  }
+  return -1
 }
 
 function dock(columns: number): TerminalDock {
@@ -132,9 +232,14 @@ async function main() {
   // Printer integration: user echo, activity, and streamed text all append
   // above the same persistent composer.
   const integrated: string[] = []
+  const screen = new TestTerminalScreen()
+  const capture = (text: string) => {
+    integrated.push(text)
+    screen.write(text)
+  }
   const eventOutput = createCliOnEvent({
-    writeOut: (text) => integrated.push(text),
-    writeErr: (text) => integrated.push(text),
+    writeOut: capture,
+    writeErr: capture,
     timeline: true,
     color: false,
     columns: 80,
@@ -160,6 +265,48 @@ async function main() {
   )
   assert(!integratedText.includes('\u001b[2J'), 'printer integration avoids full clear')
   eventOutput.surface.clearDock()
+
+  const idleInput = new FakeRawInput()
+  const idleAbort = new AbortController()
+  const pendingIdleInput = readTuiInput({
+    input: idleInput as never,
+    writeOut: capture,
+    columns: 80,
+    color: false,
+    signal: idleAbort.signal,
+  })
+  const idleRows = screen.lines()
+  const answerRow = lastRowContaining(idleRows, 'streamed answer')
+  const composerRow = lastRowContaining(idleRows, 'Message')
+  assert(answerRow >= 0, 'VT screen retains the final assistant row')
+  assert(composerRow >= 0, 'VT screen paints the idle composer')
+  assert(
+    composerRow - answerRow >= 2,
+    `idle composer keeps a full blank row after the final assistant row: answer=${answerRow}, composer=${composerRow}`,
+  )
+  idleInput.emit('keypress', 'x', { name: 'x', sequence: 'x' })
+  const redrawnIdleRows = screen.lines()
+  const redrawnAnswerRow = lastRowContaining(redrawnIdleRows, 'streamed answer')
+  const redrawnComposerRow = lastRowContaining(redrawnIdleRows, 'Message')
+  assert(
+    redrawnComposerRow - redrawnAnswerRow === 2,
+    `idle redraw keeps exactly one gap row without accumulating space: answer=${redrawnAnswerRow}, composer=${redrawnComposerRow}`,
+  )
+  assert(
+    redrawnIdleRows.filter((line) => line.includes('Message')).length === 1,
+    'idle redraw leaves exactly one composer top border',
+  )
+  idleAbort.abort()
+  await pendingIdleInput
+  const clearedIdleRows = screen.lines()
+  assert(
+    lastRowContaining(clearedIdleRows, 'Message') === -1,
+    'idle editor cleanup erases the composer and its gap region',
+  )
+  assert(
+    lastRowContaining(clearedIdleRows, 'streamed answer') >= 0,
+    'idle editor cleanup preserves assistant history',
+  )
 
   const plain = createCliOnEvent({
     writeOut: () => {},

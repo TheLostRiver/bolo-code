@@ -1,4 +1,5 @@
 import { stripTerminalAnsi } from './terminalText.ts'
+import { addTuiComposerTopGap } from './composerSpacing.ts'
 
 export type TerminalDock = {
   lines: string[]
@@ -53,12 +54,11 @@ export function createTerminalSurface(options: {
 
   const composite = (): { lines: string[]; cursorRow: number } => {
     if (!dock) return { lines: [], cursorRow: 0 }
-    const prefix = activity ? [activity, ''] : ['']
+    const spacedDock = addTuiComposerTopGap(dock)
+    const prefix = activity ? [activity] : []
     return {
-      lines: [...prefix, ...dock.lines],
-      cursorRow:
-        prefix.length +
-        Math.max(0, Math.min(dock.cursorRow, dock.lines.length - 1)),
+      lines: [...prefix, ...spacedDock.lines],
+      cursorRow: prefix.length + spacedDock.cursorRow,
     }
   }
 

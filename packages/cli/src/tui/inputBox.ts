@@ -16,6 +16,7 @@ import {
   terminalGraphemeWidth,
   wrapTerminalText,
 } from './terminalText.ts'
+import { addTuiComposerTopGap } from './composerSpacing.ts'
 import { resolveTuiDockWidth } from './frame.ts'
 
 export type TuiInputState = {
@@ -910,12 +911,19 @@ export async function readTuiInput(options: {
 
   const draw = () => {
     clearRendered()
-    rendered = renderTuiInputBox({
+    const inputBox = renderTuiInputBox({
       state,
       columns: options.columns ?? process.stdout.columns ?? 80,
       status: options.status,
       color: options.color,
     })
+    const spaced = addTuiComposerTopGap(inputBox)
+    rendered = {
+      ...inputBox,
+      text: spaced.lines.join('\n'),
+      lines: spaced.lines,
+      cursorRow: spaced.cursorRow,
+    }
     writeOut('\u001b[?25l')
     writeOut(rendered.text)
     const rowsUp = rendered.lines.length - 1 - rendered.cursorRow
