@@ -29,7 +29,7 @@
 | Headless 核心 | ~82–90% | queryLoop · 权限 · tools · STE；partial stream fail-closed |
 | **Agent 能力面（工具集）** | **~82–88%** | 15 个常驻/可选工具 + **Web search**（hosted、MCP、SearXNG 均已活体验证） |
 | 会话 / CLI | ~92–97% | **零步骤首次启动** · 用户级 workspace JSONL · 旧项目会话兼容 · durable runtime · query/action CLI · TTY pager · pipe/JSON automation |
-| **CLI TUI** | **~55–65%** | slash/context/paste/Thought/权限/水晶等能力已存在；OI-14 已确认当前 direct-write surface 在物理 wrap、Markdown、resize/cursor 下不可靠，真实终端会出现正文碎片、巨大空洞与续行贴左；retained renderer 重构进行中 |
+| **CLI TUI** | **~58–68%** | slash/context/paste/Thought/权限/水晶等能力已存在；OI-14C 已建立 opt-in retained renderer 基座，OI-14D 将迁正文与 Markdown；默认 legacy 仍会在物理 wrap、resize/cursor 下出现正文碎片、巨大空洞与续行贴左 |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
 | Subagent | ~89–95% | `config.agents` + `agents/*.md` · durable task/result · overflow FIFO/cancel · safe delivery · worktree 保全 |
 | 文件 Diff 日用 | ~95%+ | D0–D7 · U0–U4 |
@@ -47,17 +47,19 @@ CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Runtime DR0–DR4 · Autonom
 AR1 · **AR-T1–T3+ Agent 能力面** · AR2 Compact depth · AR3 Desktop 产品接线 ·
 AR4 evidence gate · AR5 release hardening · **OI-04 SearXNG 直连、OI-X1 真实实例
 smoke、OI-07 上游诊断 / `search doctor` / 可选 Docker setup、OI-08B CLI 零步骤
-首次启动、OI-14A 真实 VT/选型、OI-14B live view-state**。OI-09–OI-13 的
+首次启动、OI-14A 真实 VT/选型、OI-14B live view-state、OI-14C retained renderer
+基座**。OI-09–OI-13 的
 slash/context/paste/Thought/权限/welcome 局部能力仍然有效，但不再作为整个 TUI
 renderer 稳定的证据。
 
-**当前主线：OI-14C。** OI-14A 已用真正的 headless terminal 固化 legacy 的续行
-gutter、dock column、chunk invariant 与 resize 四类故障，并选定精确版本的 Pi TUI
-direct bundle；OI-14B `269b39c` 已在 `packages/shared` 建立无 I/O 的 live
-view-state、稳定 block id、stream/tool/search 合并、resume 投影与
-composer/overlay/分段耗时状态。当前下一刀才接 Bolo terminal adapter、retained 根树、
-theme/width/resize、welcome 与 legacy feature flag；可见 legacy 故障尚未修复。方案与
-选型证据见 [docs/CLI_TUI_REFACTOR_PLAN.md](docs/CLI_TUI_REFACTOR_PLAN.md) 和
+**当前主线：OI-14D。** OI-14C `1798a7c` 已建立 Bolo terminal adapter、稳定
+retained 根树、theme/width/resize、水晶 welcome 与 session 级 engine 选择；它直接
+消费 OI-14B `CliTuiViewState`，通过 24/38/56/80/120/160/220 列真实 VT、resize、
+single-writer、new/resume、plain byte snapshot、dist install 与 126 项完整门禁。
+`BOLO_TUI_ENGINE=retained` 仍只是显式开发预览，缺省、非法值、non-TTY 与
+`--print` 都保持 legacy。下一刀 OI-14D 迁移 transcript/Markdown；默认可见 legacy
+故障尚未修复。方案与选型证据见
+[docs/CLI_TUI_REFACTOR_PLAN.md](docs/CLI_TUI_REFACTOR_PLAN.md) 和
 [docs/CLI_TUI_RENDERER_DECISION.md](docs/CLI_TUI_RENDERER_DECISION.md)。
 
 普通 `bolo` 仍是唯一首次启动主路径：自动准备用户级 `~/.bolo`，不会仅因进入仓库

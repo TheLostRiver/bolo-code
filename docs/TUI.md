@@ -11,8 +11,10 @@
 > [CLI_TUI_RENDERER_DECISION.md](./CLI_TUI_RENDERER_DECISION.md)。
 > **状态层：** OI-14B `269b39c` 已在 `packages/shared` 建立无 I/O 的
 > `CliTuiViewState`、稳定 block id、stream/tool/search 合并、resume replay 与
-> composer/overlay/segment elapsed 状态；它尚未接入当前 legacy TTY。OI-14C 才建立
-> terminal adapter 与 retained root。
+> composer/overlay/segment elapsed 状态。OI-14C `1798a7c` 已建立 Bolo terminal
+> adapter、稳定 retained root、theme/width/resize 与水晶 welcome，并在
+> `BOLO_TUI_ENGINE=retained` 时接入该状态；默认仍为 legacy。OI-14D 才迁移
+> transcript/Markdown，因此当前可见正文缺陷尚未关闭。
 > Diff 轨见 [ROADMAP.md](./ROADMAP.md) §3 ·
 > [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) 轨 B。
 
@@ -30,6 +32,7 @@
 | `BOLO_PLAIN=1` / `BOLO_THEME=plain` | 关闭颜色并简化欢迎区；真实输入能力仍可用 |
 | `BOLO_TUI_INPUT=0` | 关闭动态输入/时间线，回落 readline |
 | `BOLO_TUI_LAYOUT=0` / `TERM=dumb` | 关闭 layout 与动态路径，回落 readline |
+| `BOLO_TUI_ENGINE=retained` | **OI-14C 开发预览**：双 TTY/raw-mode 下启用 retained 基座；缺省、`legacy`、非法值与 non-TTY 均保持 legacy |
 | `>=96` 列 | 最大 100-cell 工作台：完整水晶在左，Ready/workspace/model/session 在右 |
 | `56–95` 列 | 单列工作台：中型水晶、居中状态、左对齐 metadata |
 | `38–55` 列 | 单列工作台：6 行紧凑水晶；动态文本按 cell 宽度裁切 |
@@ -47,6 +50,9 @@
 | 文件 | 角色 |
 |------|------|
 | `packages/shared/src/cliTuiViewState.ts` | **OI-14B**：有序 live blocks、稳定 id、SessionEvent/resume 投影、composer/overlay/elapsed 纯状态真源 |
+| `tui/tuiEngine.ts` | **OI-14C**：session 创建时锁定 legacy/retained；缺省、非法值与 plain 路径 fail-safe 到 legacy |
+| `tui/boloTerminalAdapter.ts` | **OI-14C**：retained 唯一原始 writer、resize 生命周期、同步 render epoch、scrollback 保留与 legacy panel 独占桥 |
+| `tui/retainedTui.ts` | **OI-14C**：稳定 Pi root/controller、theme/viewport/welcome 与 OI-14B view-state 投影 |
 | `tui/crystalLogo.ts` | 水晶常量、源稿归一化、整块 cell-width 居中与 ASCII 降级 |
 | `tui/inkLayout.ts` | 一次性水晶工作台；宽屏 split、中/紧凑单列，不伪装成输入框 |
 | `tui/frame.ts` | 100-cell welcome、160-cell content 与全宽 dock 三套明确宽度契约 |
@@ -73,7 +79,7 @@
 
 ### 2.1 已知架构限制
 
-当前 TTY 路径仍是 event formatter 直接写 stdout。`contentLayout.ts` 只在字符串中的
+默认 legacy TTY 路径仍是 event formatter 直接写 stdout。`contentLayout.ts` 只在字符串中的
 逻辑行首加 gutter，`TerminalSurface` 只记录 renderer 提供的逻辑行数；超长 URL、
 ANSI 或 Markdown 由终端自动折出的额外物理行不进 erase/restore 账本。idle editor、
 running dock 和临时面板又分别拥有 cursor 生命周期，因此 provider streaming、dock
@@ -82,7 +88,9 @@ running dock 和临时面板又分别拥有 cursor 生命周期，因此 provide
 现有简化 `TestTerminalScreen` 没有 terminal width/auto-wrap/双宽 cell/resize，过去
 的局部门禁只能证明字符串、reducer 和显式 cursor 序列，不能证明物理终端布局。
 OI-14A 已用 `@xterm/headless` 固化四项真实 legacy 红灯；OI-14B 已建立纯 live
-view-state 并证明 chunk invariant，OI-14C 才接入 retained component tree。
+view-state 并证明 chunk invariant；OI-14C 已用显式 opt-in 接入 retained component
+tree，证明 root/width/resize/single-writer 生命周期。它尚未迁移正文、输入区或
+overlays，不能用来宣称默认 legacy 的可见问题已经修复。
 
 ---
 
@@ -343,7 +351,7 @@ npx tsx scripts/test-diff-view.ts
 argument hint、bracketed paste 生命周期/跨 chunk/CRLF/单次重绘、菜单窗口与非 TTY
 回落；`test:context-dashboard` 覆盖 view-model 的 24/38/80/160 列 TTY 投影；
 `test:slash-completion` 覆盖内置/Plugin/Skill projection、动态 effort、重名、
-hidden alias、exact/prefix 与空匹配。完整门禁当前包含 **125** 个串联
+hidden alias、exact/prefix 与空匹配。完整门禁当前包含 **126** 个串联
 `scripts/*.ts`。
 
 OI-14B 新增的 `test:cli-tui-view-state` 覆盖稳定 turn/segment/call-id、reasoning 与
@@ -351,11 +359,18 @@ assistant 多段顺序、tool/search 原位更新、citation 去重、error/abor
 composer/overlay 与 per-segment elapsed；整段、逐字符和固定随机 chunk 的最终 state
 深相等。编译期护栏还证明三条真实事件源可直接投影。
 
+OI-14C 新增的 `test:cli-tui-retained` 覆盖 engine fail-safe、稳定 root identity、
+唯一 writer、同步 render epoch、legacy panel suspend/resume、scrollback 保留、
+24/38/56/80/120/160/220 列物理宽度、resize、plain byte snapshot 与 new/resume
+lifecycle。Pi 只通过精确构建子模块进入单文件，Editor、Markdown 与 native loader
+仍未进入本刀。
+
 OI-14A 新增的 `test:cli-tui-vt` 使用 `@xterm/headless` 执行真实 cell
 auto-wrap/scrollback/resize，已覆盖 ANSI、长 URL、CJK/emoji、整段/逐字符/固定随机
 chunk、running composer 与 56 -> 38 resize，并稳定捕获四项 legacy 失败签名。
-24/38/56/80/120/160/220 列、Markdown list/code/table、OSC 8、overlay 与完整
-scrollback 矩阵随 OI-14C-G 逐步转绿；见
+OI-14C 已让 retained welcome/root 的 24/38/56/80/120/160/220 列、resize 与
+scrollback 基座转绿；Markdown list/code/table、OSC 8、transcript spacing、editor
+与 overlay 矩阵随 OI-14D-G 逐步转绿；见
 [CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md) §9 和
 [CLI_TUI_RENDERER_DECISION.md](./CLI_TUI_RENDERER_DECISION.md)。
 

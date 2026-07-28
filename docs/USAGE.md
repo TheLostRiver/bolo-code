@@ -219,12 +219,18 @@ prepare/compact 的完整诊断。
 `BOLO_MASCOT=0` 可隐藏水晶；`BOLO_ASCII=1` 使用 ASCII 水晶；`NO_COLOR` 只去颜色并
 保留欢迎页结构，显式 `BOLO_THEME=plain` / `BOLO_PLAIN=1` 才简化欢迎页。
 
+OI-14C 的 retained renderer 基座目前只供开发验证，**尚未迁移 transcript、Markdown、
+Composer 与交互面板，不适合替代默认日用界面**。需要测试时可在双 TTY/raw-mode
+终端显式设置 `BOLO_TUI_ENGINE=retained`；缺省、`legacy`、非法值、pipe、
+`--print` 与 JSON 都保持 legacy。默认切换要等 OI-14D–OI-14G 各切片关闭。
+
 REPL 中，模型或工具正在运行时按 `Ctrl-C` 会针对 coordinator 当前 active turn 请求 interrupt 并返回提示符；空闲提示符下按 `Ctrl-C` 才退出。若取消发生在权限问答或 diff 审批面板，core 默认按拒绝处理。
 
 动态 TUI 只在 stdin/stdout 双 TTY 且 stdin 支持 raw mode 时启用。pipe、`-p`、
 `--print`、JSON 或不支持 raw mode 的宿主会自动回落追加式输出，不发送动态 activity/
 清行/光标移动。`NO_COLOR` 关闭颜色但不关闭输入；需要彻底回落时设
-`BOLO_TUI_INPUT=0` 或 `BOLO_TUI_LAYOUT=0`。
+`BOLO_TUI_INPUT=0` 或 `BOLO_TUI_LAYOUT=0`。`BOLO_TUI_ENGINE=retained` 不会绕过
+这些 TTY 能力检查。
 
 `bolo runtime list|inspect` 必须显式给 `--resume <id|path>` 或 `--continue`，不会进入 picker、创建新会话或调用 provider。每个 item 的 `availableActions` 由当前 snapshot 纯推导，并携带执行所需 expected state；空数组表示当前不应尝试动作。
 

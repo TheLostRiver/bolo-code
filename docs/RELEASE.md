@@ -16,8 +16,8 @@ npx bolo-code              →   bolo
 
 | 性质 | 值 |
 |------|-----|
-| 运行时依赖 | **0**（`dependencies` 恒为 `{}`） |
-| tarball 内容 | `dist/`（含 `bundled-skills/`）+ `README.md` + `LICENSE` + `package.json`，共 6 项 |
+| 独立运行时依赖 | **0**（`dependencies` 恒为 `{}`；Pi TUI 与宽度库已内嵌进单文件） |
+| tarball 内容 | `dist/`（含 `bundled-skills/`）+ `README.md` + `LICENSE` + `THIRD_PARTY_NOTICES.md` + `package.json`，共 7 项 |
 | Node 要求 | ≥ 22.19.0 |
 | bin | `./dist/bolo.mjs`（产物自带 shebang，没有 wrapper 层） |
 | 首次启动 | 安装后直接 `bolo`；自动准备用户状态，不创建项目 `.bolo/` |
@@ -43,7 +43,7 @@ esbuild 是**构建期**工具。产物里不含它，用户也装不到它。
 ## 2. 构建
 
 ```bash
-npm run build          # → dist/bolo.mjs (~1.35 MB, 71 模块)
+npm run build          # → dist/bolo.mjs (1,518,187 bytes, 185 模块)
 ```
 
 `scripts/build-dist.ts` 做三件事：
@@ -125,7 +125,7 @@ git push --follow-tags
 **发布前自查：**
 
 - [ ] `npm test` 全绿
-- [ ] `npm pack --dry-run` 看清单只有那 6 项
+- [ ] `npm pack --dry-run` 看清单只有那 7 项，且包含 `THIRD_PARTY_NOTICES.md`
 - [ ] tarball 里没有密钥、`.bolo-tmp`、`.planning`、`.claude`
 - [ ] `dependencies` 仍为 `{}`
 
@@ -150,29 +150,33 @@ git push --follow-tags
 
 ### 6.1 SBOM（软件物料清单）
 
-**运行时依赖：零。** `dependencies: {}` 是红线，且由
-`test-desktop-bundle.ts` 与 `test-dist-install.ts` 在门禁里断言。
-发布的 tarball 里除了自己的代码，没有第三方运行时代码。
+**独立运行时安装树：零。** `dependencies: {}` 是红线，且由
+`test-desktop-bundle.ts` 与 `test-dist-install.ts` 在门禁里断言。OI-14C 起，
+esbuild 单文件内嵌 Pi TUI 与其实际使用的宽度库；这仍然不要求用户安装
+`node_modules`，但它们是随产物分发的第三方代码，完整 MIT 文本必须随 tarball
+进入 `THIRD_PARTY_NOTICES.md`。
 
-构建期依赖共 **6** 个；当前都不形成用户侧独立安装树：
+根构建期依赖共 **6** 个；都不形成用户侧独立安装树：
 
-| 包 | 用途 | 为什么不进产物 |
+| 包 | 用途 | 与发布产物的关系 |
 |---|---|---|
 | `esbuild` | 打 CLI 与桌面主进程单文件 | 打包器本身不随产物分发 |
 | `typescript` | `npm run typecheck` | 仅类型检查，不产出 JS |
 | `tsx` | 跑 `scripts/*.ts` 测试 | 只在开发/测试期 |
 | `electron-builder` | Windows NSIS 安装包 | 构建工具 |
 | `@xterm/headless` | OI-14 真实 cell/auto-wrap/resize 测试 | 仅测试 |
-| `@earendil-works/pi-tui` | OI-14 retained renderer 基座 | OI-14A 已锁定，OI-14B 纯状态层仍未 import；OI-14C 起由 esbuild 打入单文件 |
+| `@earendil-works/pi-tui@0.82.1` | OI-14 retained renderer 基座 | OI-14C 起按具体构建子模块内嵌进单文件 |
 
 Pi 版本、MIT 许可、传递依赖、Node/Windows/资产与体积数据见
-[CLI_TUI_RENDERER_DECISION.md](./CLI_TUI_RENDERER_DECISION.md)。OI-14C 首次把 Pi
-代码打入 `dist` 时必须同时加入发布用第三方许可证/NOTICE。
+[CLI_TUI_RENDERER_DECISION.md](./CLI_TUI_RENDERER_DECISION.md)。当前 bundle 实际
+包含 Pi TUI 与 `get-east-asian-width@1.6.0`；`marked@18.0.5` 虽在上游依赖树中，
+但没有进入 OI-14C 的精确子模块产物。许可真源见
+[THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)。
 
 > 核对命令（任何人可跑）：
 > ```bash
 > node -e "console.log(JSON.stringify(require('./package.json').dependencies))"   # 必须是 {}
-> npm pack --dry-run                                                              # 清单只应有 6 项
+> npm pack --dry-run                                                              # 清单只应有 7 项并包含 NOTICE
 > ```
 
 ### 6.2 性能预算
@@ -181,7 +185,7 @@ Pi 版本、MIT 许可、传递依赖、Node/Windows/资产与体积数据见
 
 | 指标 | 实测 | 预算（超出即需解释） |
 |---|---|---|
-| CLI 产物体积 | ~1.17 MB / 145 模块 | < 3 MB |
+| CLI 产物体积 | 1,518,187 bytes / 185 模块（OI-14C） | < 3 MB |
 | 桌面主进程产物 | ~1.09 MB / 127 模块 | < 3 MB |
 | compact 管道（20 轮 / 100 消息） | 2–3 ms · heap +0.1 MB | < 8 s · < 320 MB（灾难阈） |
 | compact 压缩比 | ×12.9（20 轮）· ×51.9（80 轮） | ≥ ×3 |
@@ -218,7 +222,7 @@ Pi 版本、MIT 许可、传递依赖、Node/Windows/资产与体积数据见
 | **Windows 安装包（NSIS）** | ✅ 构建已验证 | Node 24 / npm 11.17.0 / electron-builder 26.15.3 已生成安装包与 blockmap；没有证书，用户仍会看到 SmartScreen 提示 → [DESKTOP_DESIGN §7c](./DESKTOP_DESIGN.md) |
 | **桌面窗口的视觉呈现** | ❌ 未验证 | 应用**能启动**且 renderer 挂载已由 `test-desktop-launch.ts` 实证；但布局观感、Windows 主题切换与 maximize 渲染、键盘走查、长会话滚动**没有肉眼验证过** |
 | **`AskUserQuestion` 的真 TTY 交互** | ❌ 未验证 | 控件逻辑测试注入 `readKey`，覆盖不到真实 raw-mode 与 REPL 抢 stdin |
-| **CLI TUI retained renderer** | ❌ 已确认缺陷 · OI-14C NEXT | OI-09–OI-13 的 slash/context/paste/Thought/权限/水晶局部契约仍有自动测试，但 legacy direct-write surface 仍会出现正文碎片、巨大空洞、物理续行贴左与 cursor/layout 漂移。OI-14A 已固化四项失败并选定 Pi direct bundle，OI-14B `269b39c` 已完成纯 live view-state；两者都不是可见修复。下一步 OI-14C 首次接 terminal adapter/retained root；plain/`--print` 路径不受动态 cursor 问题影响 |
+| **CLI TUI retained renderer** | ❌ 已确认缺陷 · OI-14D NEXT | OI-14C `1798a7c` 已完成 opt-in terminal adapter/retained root、24–220 列、resize、single-writer 与 new/resume 基座，但没有迁 transcript/Markdown/Composer/overlays。默认仍为 legacy，其 direct-write surface 仍会出现正文碎片、巨大空洞、物理续行贴左与 cursor/layout 漂移；下一步 OI-14D 迁正文与 Markdown。plain/`--print` 路径不受动态 cursor 问题影响 |
 | **`mcp-external` 搜索** | ⚠️ 仅验过 Exa | Exa 免密层已真连；其它 MCP 搜索服务仍取决于外部端点 |
 | **SearXNG 直连** | ✅ 实例/诊断/可选 setup 已验证 | `2026.7.26-b060c780d` Docker 实例：JSON API、生产 status/session/`WebSearch`、真实 URL 与源码/dist doctor 全链通过；OI-07A 已区分正常空结果、全故障和部分成功，OI-07B doctor 检查版本/能力并要求非空 smoke，OI-07C 的源码/dist managed setup/status/logs/stop 已实跑。Docker 仍须用户预装且不是默认依赖；默认引擎仍可能 429/CAPTCHA/timeout |
 | **中段 compact** | 🚫 显式不启用 | 契约就绪但产品代码零调用；两个参考实现都没真正跑过它 → §13.10.2 |
@@ -244,10 +248,10 @@ Pi 版本、MIT 许可、传递依赖、Node/Windows/资产与体积数据见
 ### 6.6 发布 checklist（逐项可执行）
 
 ```bash
-npm test                              # 当前 typecheck + 125 个串联门禁脚本，必须 EXIT=0；不等于 OI-14 已关闭
+npm test                              # 当前 typecheck + 126 个串联门禁脚本，必须 EXIT=0；不等于 OI-14 已关闭
 node -e "console.log(JSON.stringify(require('./package.json').dependencies))"
                                       # 必须输出 {}
-npm pack --dry-run                    # 清单只应有 6 项
+npm pack --dry-run                    # 清单只应有 7 项并包含 THIRD_PARTY_NOTICES.md
 git status --porcelain                # 必须干净
 git rev-parse HEAD origin/main | uniq | wc -l   # 必须是 1
 ```

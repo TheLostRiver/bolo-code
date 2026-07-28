@@ -2,7 +2,7 @@
 
 > 首次盘点锚点：`a17e840`（2026-07-27）；OI-14 补充锚点：
 > `c2e6a98`（2026-07-28）；OI-14A 关闭锚点：`f04f8de`，OI-14B 关闭锚点：
-> `269b39c`（2026-07-28）。
+> `269b39c`；OI-14C 关闭锚点：`1798a7c`（2026-07-28）。
 > 本文只列当前仓库中有代码、测试、实测或互相矛盾文档支撑的问题。
 > 历史 TODO、已关闭的候选和仅凭印象提出的功能不算开放问题。
 
@@ -17,12 +17,12 @@
 
 ## 1. Agent 可直接解决
 
-当前默认 agent 可闭环队列为 **OI-14C**。以下已关闭条目继续保留准入与关闭证据，
+当前默认 agent 可闭环队列为 **OI-14D**。以下已关闭条目继续保留准入与关闭证据，
 但 OI-09–OI-13 的局部关闭不再作为“整个 TUI renderer 已稳定”的证据。
 
 ### OI-14 · CLI TUI retained renderer 重构
 
-**状态：OPEN（当前：OI-14C）**
+**状态：OPEN（当前：OI-14D）**
 
 完整方案：[CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md) ·
 OI-14A 实测决定：[CLI_TUI_RENDERER_DECISION.md](./CLI_TUI_RENDERER_DECISION.md)
@@ -90,12 +90,27 @@ OI-14B 关闭证据：
   125 脚本完整 `npm test` 均通过，dist build/install 与 Electron launch 全绿。
 - 代码 `269b39c` 已独立提交并 push；本切片没有接 terminal 或改变可见 legacy TUI。
 
+OI-14C 关闭证据：
+
+- `1798a7c` 建立 Bolo terminal adapter、稳定 retained root、theme/viewport/resize、
+  水晶 welcome 与 session 级 `BOLO_TUI_ENGINE` 路由；renderer 直接消费 OI-14B
+  `CliTuiViewState`，没有重建 event/tool/search/resume 状态机。
+- retained 会话只有 adapter 写原始 stdout/cursor；Pi `CSI 3J` 被过滤，resize 保留
+  scrollback；permission/question/slash/idle input 通过可 await suspend/resume 暂时
+  交还 writer，结束后恢复同一 root。
+- 24/38/56/80/120/160/220 列、resize、root identity、single-writer、plain byte
+  snapshot、new/resume、dist clean install、Desktop bundle/Electron launch 与 126
+  脚本完整门禁全绿；`dependencies` 仍为 `{}`，最终 bundle 1,518,187 bytes。
+- retained 在 OI-14G 前仍只通过 `BOLO_TUI_ENGINE=retained` 显式启用；缺省、非法值、
+  non-TTY 与 `--print` 均保持 legacy。本切片没有迁 transcript Markdown、Composer
+  或 overlays，因此没有声称默认可见缺陷已修复。
+
 | 切片 | packages-first 交付 | 人类可见结果 | 自动关闭条件 | 状态 |
 |------|---------------------|--------------|--------------|------|
 | **OI-14A · 真实 VT 红灯与选型** | `@xterm/headless` physical terminal harness；Pi direct/fork 与 OpenTUI 备选的 Node/esbuild/Windows/体积/许可报告 | 暂无产品改动；先准确复现碎片、空洞、续行贴左和 cursor 漂移 | 长 URL + ANSI + 随机 chunk + running composer 在旧代码稳定红；选型表有实测数据 | **CLOSED · `1ae9f53` / `f04f8de`** |
 | **OI-14B · live view-state** | `packages/shared` action/reducer、stable block id、stream merge、segment/composer/overlay state | 暂无产品接线；为 retained transcript 原位更新提供唯一状态真源 | 纯 reducer、随机 chunk property、tool/reasoning/error/abort/resume 全绿 | **CLOSED · `269b39c`** |
-| **OI-14C · retained 基座** | 单 terminal writer、根 component tree、theme/width/resize、welcome 与 feature flag | 所有区域使用同一 viewport 和 cursor owner | 24–220 列、resize、plain byte-stable、无超宽物理行 | **OPEN · NEXT** |
-| **OI-14D · transcript/Markdown** | User/Assistant/Thought/Tool/Search/Error blocks；成熟 Markdown/wrap；父级 spacing | 正文不碎裂、不空洞，列表/URL/代码块续行一致，user/agent 有稳定间距 | 截图 fixture、CJK/emoji、ANSI/OSC 8、list/table/code、chunk invariant | OPEN |
+| **OI-14C · retained 基座** | 单 terminal writer、根 component tree、theme/width/resize、welcome 与 feature flag | 所有区域使用同一 viewport 和 cursor owner | 24–220 列、resize、plain byte-stable、无超宽物理行 | **CLOSED · `1798a7c`** |
+| **OI-14D · transcript/Markdown** | User/Assistant/Thought/Tool/Search/Error blocks；成熟 Markdown/wrap；父级 spacing | 正文不碎裂、不空洞，列表/URL/代码块续行一致，user/agent 有稳定间距 | 截图 fixture、CJK/emoji、ANSI/OSC 8、list/table/code、chunk invariant | **OPEN · NEXT** |
 | **OI-14E · Composer/Activity/Footer** | 常驻 Editor、slash/hint/paste、分段 activity、usage/footer | 思考时输入框不消失；动画、Thought、model/token/快捷键稳定 | idle/running 同节点、burst backpressure、输入延迟与间距 VT | OPEN |
 | **OI-14F · overlays** | permission/question/provider/effort/diff/pager 迁入 OverlayHost | 权限显示完整 command/cwd/参数并用 once/always/deny 选择 | 默认 deny、focus/Esc/Ctrl+C 恢复、无第二 stdout owner | OPEN |
 | **OI-14G · 默认切换** | retained 默认、scroll/resize/backpressure/perf、dist/pack/install | 长回答、resize、paste 与滚动不再破坏屏幕 | 完整门禁、性能预算、单文件产物与邻接轨全绿 | OPEN |
@@ -103,8 +118,8 @@ OI-14B 关闭证据：
 
 实施顺序与边界：
 
-1. OI-14A/B 已关闭：真实失败/选型与纯状态层分开提交，均未改可见产品布局。
-2. OI-14C 才允许接 terminal；在 OI-14G 前 retained 不成为默认路径。
+1. OI-14A/B/C 已关闭：真实失败/选型、纯状态层与 opt-in renderer 基座分开提交。
+2. OI-14C 已接 terminal，但在 OI-14G 前 retained 不成为默认路径。
 3. OI-14D 先关闭当前截图中的正文/间距故障，再迁 Composer 与 overlays。
 4. 迁移期 `BOLO_TUI_ENGINE=legacy` 只能作为短期回滚；非 TTY plain formatter 永久
    独立保留。一个会话不能同时启用两个 renderer。
