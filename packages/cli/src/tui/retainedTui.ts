@@ -10,6 +10,7 @@ import {
   createCliTuiViewState,
   projectCliTuiSessionEvent,
   reduceCliTuiViewState,
+  selectCliTuiActiveBlock,
   type ChatMessage,
   type CliTuiSessionEvent,
   type CliTuiViewAction,
@@ -29,6 +30,7 @@ import {
   renderInkLayout,
   type InkLayoutOptions,
 } from './inkLayout.ts'
+import { RetainedTranscript } from './retainedTranscript.ts'
 
 export type RetainedWelcomeOptions = Omit<
   InkLayoutOptions,
@@ -94,6 +96,7 @@ class WelcomeComponent implements Component {
 class RetainedRoot extends Container {
   private readonly welcome: WelcomeComponent
   private readonly status = new Text('', 1, 0)
+  private readonly transcript: RetainedTranscript
   private readonly compatibilityOutput = new Text('', 1, 0)
   private state = createCliTuiViewState()
   private outputText = ''
@@ -105,8 +108,10 @@ class RetainedRoot extends Container {
   constructor(env: NodeJS.ProcessEnv) {
     super()
     this.welcome = new WelcomeComponent(env)
+    this.transcript = new RetainedTranscript({ env })
     this.addChild(this.welcome)
     this.addChild(this.status)
+    this.addChild(this.transcript)
     this.addChild(this.compatibilityOutput)
     this.refreshStatus()
     this.markDirty()
@@ -124,6 +129,7 @@ class RetainedRoot extends Container {
 
   setState(state: CliTuiViewState): void {
     this.state = state
+    this.transcript.setState(state)
     this.refreshStatus()
     this.markDirty()
   }
@@ -217,6 +223,7 @@ export function createRetainedTuiController(options: {
   fallbackRows?: number
   showThinking?: boolean | (() => boolean)
   explainError?: (message: string) => string
+  now?: () => number
 }): CliTuiController {
   const env = options.env ?? process.env
   const adapter: BoloTerminalAdapter = createBoloTerminalAdapter({
@@ -238,6 +245,9 @@ export function createRetainedTuiController(options: {
   let started = false
   let stopped = false
   let suspended = false
+  let streamedAssistantText = false
+  const reasoningStartedAt = new Map<string, number>()
+  const now = options.now ?? Date.now
 
   const requestRender = (): void => {
     if (started && !stopped && !suspended) tui.requestRender()
@@ -249,8 +259,24 @@ export function createRetainedTuiController(options: {
     requestRender()
   }
 
+  const activeReasoningBlock = () => {
+    const block = selectCliTuiActiveBlock(state)
+    return block?.kind === 'reasoning' ? block : undefined
+  }
+
+  const stampClosedReasoning = (
+    blockId: string,
+    startedAt: number,
+  ): void => {
+    const elapsedMs = Math.max(0, now() - startedAt)
+    reasoningStartedAt.delete(blockId)
+    apply({ type: 'set_block_elapsed', blockId, elapsedMs })
+  }
+
   const printer: SessionEventPrinter = {
     beginTurn(turnOptions) {
+      streamedAssistantText = false
+      reasoningStartedAt.clear()
       apply({
         type: 'begin_turn',
         ...(turnOptions?.prompt !== undefined
@@ -277,6 +303,7 @@ export function createRetainedTuiController(options: {
               message: options.explainError(event.message),
             }
           : event
+      const previousReasoning = activeReasoningBlock()
       const next = reduceCliTuiViewState(
         state,
         projectCliTuiSessionEvent(
@@ -285,21 +312,50 @@ export function createRetainedTuiController(options: {
       ) as CliTuiViewState | undefined
       if (!next) return
       state = next
+      const currentReasoning = activeReasoningBlock()
+      if (
+        currentReasoning &&
+        !reasoningStartedAt.has(currentReasoning.id)
+      ) {
+        reasoningStartedAt.set(currentReasoning.id, now())
+      }
+      if (
+        previousReasoning &&
+        currentReasoning?.id !== previousReasoning.id
+      ) {
+        const startedAt = reasoningStartedAt.get(previousReasoning.id)
+        if (startedAt !== undefined) {
+          stampClosedReasoning(previousReasoning.id, startedAt)
+        }
+      }
+      if (
+        event.type === 'text' &&
+        typeof event.text === 'string' &&
+        event.text.length > 0 &&
+        state.activeTurnId !== null
+      ) {
+        streamedAssistantText = true
+      }
       root.setState(state)
       requestRender()
     },
     endTurn(endOptions) {
+      const reasoning = activeReasoningBlock()
+      const startedAt = reasoning
+        ? reasoningStartedAt.get(reasoning.id)
+        : undefined
       apply({
         type: 'end_turn',
         terminal: {
           reason: endOptions?.terminalReason ?? 'completed',
         },
       })
+      if (reasoning && startedAt !== undefined) {
+        stampClosedReasoning(reasoning.id, startedAt)
+      }
     },
     didStreamText() {
-      // OI-14D will render streaming transcript blocks. Until then the
-      // caller must still emit the completed assistant fallback.
-      return false
+      return streamedAssistantText
     },
   }
 

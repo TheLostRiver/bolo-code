@@ -87,6 +87,7 @@ async function main() {
     'scripts/test-ptl-retry.ts',
     'scripts/test-cli-tui-view-state.ts',
     'scripts/test-cli-tui-retained.ts',
+    'scripts/test-cli-tui-transcript.ts',
     'scripts/test-cli-tui-vt-legacy.ts',
     'scripts/test-desktop-launch.ts',
     'scripts/test-runtime-core-transport.ts',
@@ -179,15 +180,23 @@ async function main() {
     bundle.includes('@earendil-works/pi-tui/dist/tui.js'),
     'single-file bundle embeds the retained renderer',
   )
+  assert(
+    bundle.includes('@earendil-works/pi-tui/dist/components/markdown.js'),
+    'single-file bundle embeds the retained transcript Markdown component',
+  )
+  assert(
+    bundle.includes('node_modules/marked/lib/marked.esm.js') &&
+      bundle.includes('trimPartialClosingFences'),
+    'single-file bundle embeds marked and Pi streaming Markdown behavior',
+  )
   for (const forbidden of [
     '@earendil-works/pi-tui/dist/components/editor.js',
-    '@earendil-works/pi-tui/dist/components/markdown.js',
     '@earendil-works/pi-tui/dist/native-modifiers.js',
     '@earendil-works/pi-tui/dist/terminal.js',
   ]) {
     assert(
       !bundle.includes(forbidden),
-      `retained base must not bundle unused Pi module: ${forbidden}`,
+      `retained transcript must not bundle unused Pi module: ${forbidden}`,
     )
   }
 
