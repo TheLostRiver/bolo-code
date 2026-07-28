@@ -237,15 +237,14 @@ export function createSessionEventPrinter(opts: {
 
   const finishReasoningSegment = () => {
     const elapsedMs = opts.activity?.finishThinkingSegment()
-    if (!reasoningPrefixDone) return
-    if (openReasoningLine) emitOut('\n')
+    if (reasoningPrefixDone && openReasoningLine) emitOut('\n')
     openReasoningLine = false
+    reasoningPrefixDone = false
     if (timeline && elapsedMs != null) {
       emitOut(
         `${dim}Thought for ${formatThoughtDuration(elapsedMs)}${reset}\n`,
       )
     }
-    reasoningPrefixDone = false
   }
 
   const ensureLineBreak = () => {

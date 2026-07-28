@@ -136,6 +136,41 @@ async function main(): Promise<void> {
     'completion rows stay attached to their reasoning segments',
   )
 
+  nowMs = 0
+  const silentTimeline: string[] = []
+  const silentActivity = createTurnActivityIndicator({
+    writeOut: (text) => silentTimeline.push(text),
+    color: false,
+    now: () => nowMs,
+    intervalMs: 60_000,
+    renderFrame: () => true,
+    clearFrame: () => true,
+  })
+  const silentPrinter = createSessionEventPrinter({
+    writeOut: (text) => silentTimeline.push(text),
+    writeErr: (text) => silentTimeline.push(text),
+    color: false,
+    timeline: true,
+    activity: silentActivity,
+  })
+  silentPrinter.beginTurn({ prompt: 'silent thought segment', activity: true })
+  nowMs = 4_200
+  silentPrinter.onEvent({ type: 'text', text: 'direct answer' })
+  silentPrinter.endTurn({ terminalReason: 'completed' })
+
+  const silentRendered = silentTimeline.join('')
+  const silentCompletions =
+    silentRendered.match(/Thought for 4\.2s/g) ?? []
+  assert(
+    silentCompletions.length === 1,
+    'silent thinking leaves exactly one durable completion row',
+  )
+  assert(
+    silentRendered.indexOf('Thought for 4.2s') <
+      silentRendered.indexOf('● Bolo'),
+    'silent thought completion stays before the direct answer',
+  )
+
   console.log('PASS: CLI thinking segments')
 }
 
