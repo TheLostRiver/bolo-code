@@ -117,10 +117,19 @@ async function main() {
     `dependencies must stay empty, found: ${Object.keys(deps).join(', ')}`,
   )
   const devDeps = (pkg.devDependencies ?? {}) as Record<string, string>
+  const engines = (pkg.engines ?? {}) as Record<string, string>
   assert('esbuild' in devDeps, 'esbuild is a devDependency')
+  assert(
+    engines.node === '>=22.19.0',
+    `Node support must match the retained renderer baseline, got ${String(engines.node)}`,
+  )
   assert(
     devDeps['@xterm/headless'] === '5.5.0',
     '@xterm/headless stays an exact test-only devDependency',
+  )
+  assert(
+    devDeps['@earendil-works/pi-tui'] === '0.82.1',
+    '@earendil-works/pi-tui stays an exact build-time dependency',
   )
 
   // ── 4) bin 指向产物，不再 spawn tsx ──

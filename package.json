@@ -6,7 +6,7 @@
   "type": "module",
   "packageManager": "npm@11.17.0",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.19.0"
   },
   "bin": {
     "bolo": "./dist/bolo.mjs"
@@ -148,6 +148,7 @@
   },
   "dependencies": {},
   "devDependencies": {
+    "@earendil-works/pi-tui": "0.82.1",
     "@xterm/headless": "5.5.0",
     "electron-builder": "^26.15.3",
     "esbuild": "^0.28.1",
