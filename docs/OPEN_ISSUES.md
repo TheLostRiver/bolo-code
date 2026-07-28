@@ -3,7 +3,8 @@
 > 首次盘点锚点：`a17e840`（2026-07-27）；OI-14 补充锚点：
 > `c2e6a98`（2026-07-28）；OI-14A 关闭锚点：`f04f8de`，OI-14B 关闭锚点：
 > `269b39c`；OI-14C 关闭锚点：`1798a7c`，OI-14D 关闭锚点：
-> `8b060e5`，OI-14E 关闭锚点：`d0fb822`（2026-07-28）。
+> `8b060e5`，OI-14E 关闭锚点：`d0fb822`（2026-07-28），OI-14F 关闭锚点：
+> `31384d4`（2026-07-29）。
 > 本文只列当前仓库中有代码、测试、实测或互相矛盾文档支撑的问题。
 > 历史 TODO、已关闭的候选和仅凭印象提出的功能不算开放问题。
 
@@ -18,12 +19,12 @@
 
 ## 1. Agent 可直接解决
 
-当前默认 agent 可闭环队列为 **OI-14F**。以下已关闭条目继续保留准入与关闭证据，
+当前默认 agent 可闭环队列为 **OI-14G**。以下已关闭条目继续保留准入与关闭证据，
 但 OI-09–OI-13 的局部关闭不再作为“整个 TUI renderer 已稳定”的证据。
 
 ### OI-14 · CLI TUI retained renderer 重构
 
-**状态：OPEN（当前：OI-14F）**
+**状态：OPEN（当前：OI-14G）**
 
 完整方案：[CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md) ·
 OI-14A 实测决定：[CLI_TUI_RENDERER_DECISION.md](./CLI_TUI_RENDERER_DECISION.md)
@@ -152,6 +153,26 @@ OI-14E 关闭证据：
   effort/diff/pager 继续走可 await suspend bridge，默认切换与 legacy 删除不借 E
   冒充关闭。
 
+OI-14F 关闭证据：
+
+- `31384d4` 建立唯一 `RetainedOverlayHost`；permission、AskUserQuestion、
+  provider/effort、diff browse/approve 与 runtime pager 都复用既有 reducer 和 typed
+  result，没有复制权限、问答、picker、diff 或分页业务状态机。
+- overlay 打开时同一 Composer 继续挂载；value/cursor/history/undo/focus 在提交、
+  Esc、Ctrl+C 与 abort 后恢复。retained 交互全程由同一 adapter 持有 raw stdin 与
+  terminal writer，没有 external/concurrent writer。
+- 文件审批与 `/diff` 已进入 controller overlay；resume 补齐 CLI asker 绑定。显式
+  retained runtime pager 复用 shared pager reducer，在小终端支持 PgUp/PgDn、方向键、
+  Ctrl+C/Ctrl+D/abort，且不发送 legacy `ESC[2J`。
+- `suspendForLegacyPanel()` 只剩兼容 API/历史测试，生产 retained 交互调用点为零；
+  删除 API 与 legacy surface 留给 OI-14H。
+- 真实 xterm、new/resume、abort/resize、dist build/install、Desktop bundle 与
+  Electron launch 连同 129 脚本完整门禁全绿。bundle 为
+  1,686,424 bytes / 199 modules，较 E 增加 44,528 bytes（约 2.7%）；
+  `dependencies` 仍为 `{}`。
+- retained 当前仍只由 `BOLO_TUI_ENGINE=retained` 显式 opt-in。OI-14F 没有切换默认，
+  不能借 overlays 关闭证据冒充 OI-14G 的长会话、可靠性或性能验收。
+
 | 切片 | packages-first 交付 | 人类可见结果 | 自动关闭条件 | 状态 |
 |------|---------------------|--------------|--------------|------|
 | **OI-14A · 真实 VT 红灯与选型** | `@xterm/headless` physical terminal harness；Pi direct/fork 与 OpenTUI 备选的 Node/esbuild/Windows/体积/许可报告 | 暂无产品改动；先准确复现碎片、空洞、续行贴左和 cursor 漂移 | 长 URL + ANSI + 随机 chunk + running composer 在旧代码稳定红；选型表有实测数据 | **CLOSED · `1ae9f53` / `f04f8de`** |
@@ -159,16 +180,16 @@ OI-14E 关闭证据：
 | **OI-14C · retained 基座** | 单 terminal writer、根 component tree、theme/width/resize、welcome 与 feature flag | 所有区域使用同一 viewport 和 cursor owner | 24–220 列、resize、plain byte-stable、无超宽物理行 | **CLOSED · `1798a7c`** |
 | **OI-14D · transcript/Markdown** | User/Assistant/Thought/Tool/Search/Error/Warning/Summary blocks；成熟 Markdown/wrap；父级 spacing | retained 正文不碎裂、不空洞，列表/URL/代码块续行一致，user/agent 有稳定间距 | 真实 VT、CJK/emoji、ANSI/OSC 8、list/table/code、chunk/resize/resume invariant | **CLOSED · `8b060e5`** |
 | **OI-14E · Composer/Activity/Footer** | 常驻 Bolo Composer、slash/hint/paste、分段 activity、usage/footer | 思考时输入框不消失；动画、Thought、model/token/快捷键稳定 | idle/running 同节点、burst backpressure、输入延迟与间距 VT | **CLOSED · `d0fb822`** |
-| **OI-14F · overlays** | permission/question/provider/effort/diff/pager 迁入 OverlayHost | 权限显示完整 command/cwd/参数并用 once/always/deny 选择 | 默认 deny、focus/Esc/Ctrl+C 恢复、无第二 stdout owner | **OPEN · NEXT** |
-| **OI-14G · 默认切换** | retained 默认、scroll/resize/backpressure/perf、dist/pack/install | 长回答、resize、paste 与滚动不再破坏屏幕 | 完整门禁、性能预算、单文件产物与邻接轨全绿 | OPEN |
+| **OI-14F · overlays** | permission/question/provider/effort/diff/pager 迁入 OverlayHost | 权限显示完整 command/cwd/参数并用 once/always/deny 选择 | 默认 deny、focus/Esc/Ctrl+C 恢复、无第二 stdout owner | **CLOSED · `31384d4`** |
+| **OI-14G · 默认切换** | retained 默认、scroll/resize/backpressure/perf、dist/pack/install | 长回答、resize、paste 与滚动不再破坏屏幕 | 完整门禁、性能预算、单文件产物与邻接轨全绿 | **OPEN · NEXT** |
 | **OI-14H · 删除与文档** | 删除旧 surface/prefixer/tiny Markdown/兼容桥；NOTICE 与文档收口 | 不再存在两套 TTY renderer | 静态 stdout owner guard + 真人 Windows Terminal 核心场景 | OPEN |
 
 实施顺序与边界：
 
-1. OI-14A/B/C/D/E 已关闭：真实失败/选型、纯状态层、opt-in renderer 基座、
-   transcript/Markdown 与 Composer/activity/footer 分开提交。
-2. OI-14C 已接 terminal，但在 OI-14G 前 retained 不成为默认路径。
-3. OI-14E 已迁常驻 Composer/activity/footer；当前 OI-14F 迁 overlays。
+1. OI-14A/B/C/D/E/F 已关闭：真实失败/选型、纯状态层、opt-in renderer 基座、
+   transcript/Markdown、Composer/activity/footer 与 overlays 分开提交。
+2. OI-14F 已迁全部交互面板，但在 OI-14G 完成前 retained 不成为默认路径。
+3. 当前 OI-14G 负责默认切换、scroll/resize/backpressure/perf、长会话与 crash cleanup。
 4. 迁移期 `BOLO_TUI_ENGINE=legacy` 只能作为短期回滚；非 TTY plain formatter 永久
    独立保留。一个会话不能同时启用两个 renderer。
 5. 每个代码切片独立中文提交并 push；文档水位另提。OI-14H 前不得删除 fallback。

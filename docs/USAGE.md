@@ -219,14 +219,14 @@ prepare/compact 的完整诊断。
 `BOLO_MASCOT=0` 可隐藏水晶；`BOLO_ASCII=1` 使用 ASCII 水晶；`NO_COLOR` 只去颜色并
 保留欢迎页结构，显式 `BOLO_THEME=plain` / `BOLO_PLAIN=1` 才简化欢迎页。
 
-OI-14E 的 retained renderer 目前仍只供开发验证：transcript/Markdown、常驻
-Composer、Thinking/Running activity 与 model/effort/usage footer 已进入同一
-component tree；slash/hint/history/undo、多行 paste、首 token 前输入框、每段
-`Thought for` 和 new/resume 输入生命周期已有真实 VT 门禁。但
-permission/question/provider/effort/diff/pager 仍由 controller 暂停 retained root
-后交给兼容面板，不适合替代默认日用界面。需要测试时可在双 TTY/raw-mode 终端显式
-设置 `BOLO_TUI_ENGINE=retained`；缺省、`legacy`、非法值、pipe、`--print` 与 JSON
-都保持 legacy。OI-14F 迁 overlays，OI-14G 才切默认。
+OI-14F 的 retained renderer 目前仍只供开发验证：transcript/Markdown、常驻
+Composer、Thinking/Running activity、model/effort/usage footer 与唯一 OverlayHost
+已进入同一 component tree；slash/hint/history/undo、多行 paste、首 token 前输入框、
+每段 `Thought for`、new/resume、permission/question/provider/effort/diff/pager
+均有真实 VT 门禁。面板期间 Composer 不卸载，输入状态、focus、raw stdin 与 writer
+不转交给兼容面板；显式 retained runtime pager 也不发送 legacy `ESC[2J`。需要测试时
+可在双 TTY/raw-mode 终端显式设置 `BOLO_TUI_ENGINE=retained`；缺省、`legacy`、非法值、
+pipe、`--print` 与 JSON 都保持 legacy。OI-14G 才切默认并完成长会话、可靠性与性能收口。
 
 REPL 中，模型或工具正在运行时按 `Ctrl-C` 会针对 coordinator 当前 active turn 请求 interrupt 并返回提示符；空闲提示符下按 `Ctrl-C` 才退出。若取消发生在权限问答或 diff 审批面板，core 默认按拒绝处理。
 
@@ -238,7 +238,7 @@ REPL 中，模型或工具正在运行时按 `Ctrl-C` 会针对 coordinator 当�
 
 `bolo runtime list|inspect` 必须显式给 `--resume <id|path>` 或 `--continue`，不会进入 picker、创建新会话或调用 provider。每个 item 的 `availableActions` 由当前 snapshot 纯推导，并携带执行所需 expected state；空数组表示当前不应尝试动作。
 
-文本模式只有在 **stdin 与 stdout 都是 TTY** 且结果超过一页时才启用 pager。`n/j/↓/→` 下一页，`p/k/↑/←` 上一页，`q/Esc` 正常退出；`Ctrl-C` 返回 130，EOF 正常退出。空结果/单页、pipe 或 `--json` 都不会读取 stdin；pipe/JSON 一次性输出完整结果，不带 ANSI、clear-screen、banner 或 summary。`NO_COLOR` 会禁用 renderer 颜色，但不改变分页和退出语义。
+文本模式只有在 **stdin 与 stdout 都是 TTY** 且结果超过一页时才启用 pager。`n/j/↓/→` 下一页，`p/k/↑/←` 上一页，`q/Esc` 正常退出；`Ctrl-C` 返回 130，EOF 正常退出。默认 legacy pager 与显式 retained OverlayHost pager 复用同一分页 reducer；后者不做 legacy 整屏 clear。空结果/单页、pipe 或 `--json` 都不会读取 stdin；pipe/JSON 一次性输出完整结果，不带 ANSI、clear-screen、banner 或 summary。`NO_COLOR` 会禁用 renderer 颜色，但不改变分页和退出语义。
 
 `--json` 成功时 stdout 只有一个原始 `runtime.list|runtime.inspect` view payload；load/not-found 等查询失败只有一个 `{ "ok": false, "code": "...", "detail": "..." }` payload。JSON 参数错误同样只向 stdout 写一个 failure payload、stderr 为空并 exit 2；成功 exit 0，查询/加载失败 exit 1。非 JSON 参数错误仍向 stderr 输出诊断/help 并 exit 2。
 

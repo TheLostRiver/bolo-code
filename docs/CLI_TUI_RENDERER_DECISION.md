@@ -14,7 +14,7 @@
 没有声称当前 legacy TUI 的可见故障已经修复。OI-14B 已完成纯 live view-state；
 OI-14C `1798a7c` 已完成 opt-in retained 基座，OI-14D `8b060e5` 已迁 retained
 transcript/Markdown，OI-14E `d0fb822` 已迁 retained Composer/activity/footer；
-当前从 OI-14F 继续迁 overlays。
+OI-14F `31384d4` 已迁 retained overlays；当前进入 OI-14G 默认切换与可靠性收口。
 
 ## 1. Legacy 真实 VT 证据
 
@@ -79,8 +79,10 @@ baseline 的 13%，低于 OI-14 的 +1.5 MB 软预算。OI-14C 的真实 Bolo �
 1,518,187 bytes / 185 modules，比 baseline 增加 133,122 bytes（约 9.6%）。
 OI-14D 接入 Pi Markdown/marked 后为 1,611,976 bytes / 189 modules，较 C 增加
 93,789 bytes（约 6.2%）。OI-14E 接入 keys/StdinBuffer 与 retained Composer 后为
-1,641,896 bytes / 192 modules，较 D 增加 29,920 bytes（约 1.9%），仍低于预算；
-最终体积、冷启动与输入延迟须在 OI-14G 对完整迁移后的产物重测。
+1,641,896 bytes / 192 modules，较 D 增加 29,920 bytes（约 1.9%）。OI-14F 接入
+OverlayHost、全部交互面板与 shared pager 后为 1,686,424 bytes / 199 modules，
+较 E 增加 44,528 bytes（约 2.7%），仍低于预算；最终体积、冷启动与输入延迟须在
+OI-14G 对默认 retained 产物重测。
 
 Windows Node 24.15，去掉两次 warmup，`n=10`：
 
@@ -163,6 +165,13 @@ REPL、abort/raw rollback、burst/resize/paste、dist install、Desktop/Electron
 128 项完整门禁全绿。单文件为 1,641,896 bytes / 192 modules；bundle 只含已审计的
 keys/stdin-buffer，不含 Editor、ProcessTerminal、terminal/native loader。
 
-当前 OI-14F 迁移 overlays。`BOLO_TUI_ENGINE=retained` 在 OI-14G 前仍是显式
-opt-in；缺省、非法值、non-TTY 与 `--print` 保持 legacy。E 没有迁移 overlays，
-不能视为默认可见故障已经全部修复。
+OI-14F `31384d4` 已建立唯一 `RetainedOverlayHost`，把 permission、
+AskUserQuestion、provider/effort、diff browse/approve 与 runtime pager 迁入同一
+component tree；Composer identity/focus 与单一 stdin/writer owner 在面板往返中
+保持。真实 xterm、new/resume、abort/resize、dist install、Desktop/Electron 与
+129 项完整门禁全绿。单文件为 1,686,424 bytes / 199 modules；`dependencies` 仍为
+`{}`，显式 retained runtime pager 不再发送 legacy `ESC[2J`。
+
+当前 OI-14G 负责默认切换、scroll/resize/backpressure/perf、长会话与 crash cleanup。
+`BOLO_TUI_ENGINE=retained` 目前仍是显式 opt-in；缺省、非法值、non-TTY 与 `--print`
+仍保持 legacy/plain 既有行为。F 的 overlays 证据不能冒充 G 已经完成。

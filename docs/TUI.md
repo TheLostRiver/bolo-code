@@ -15,8 +15,9 @@
 > composer/overlay/segment elapsed 状态。OI-14C `1798a7c` 已建立 Bolo terminal
 > adapter、稳定 retained root、theme/width/resize 与水晶 welcome；OI-14D
 > `8b060e5` 已按 stable block id 迁入 retained transcript 与 Pi Markdown；OI-14E
-> `d0fb822` 已迁常驻 Bolo Composer、分段 activity 与 footer。默认仍为 legacy；
-> 当前 OI-14F 迁交互面板。
+> `d0fb822` 已迁常驻 Bolo Composer、分段 activity 与 footer；OI-14F `31384d4`
+> 已迁 permission/question/provider/effort/diff/pager 到唯一 OverlayHost。默认仍为
+> legacy；当前 OI-14G 负责默认切换与可靠性/性能收口。
 > Diff 轨见 [ROADMAP.md](./ROADMAP.md) §3 ·
 > [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) 轨 B。
 
@@ -34,7 +35,7 @@
 | `BOLO_PLAIN=1` / `BOLO_THEME=plain` | 关闭颜色并简化欢迎区；真实输入能力仍可用 |
 | `BOLO_TUI_INPUT=0` | 关闭动态输入/时间线，回落 readline |
 | `BOLO_TUI_LAYOUT=0` / `TERM=dumb` | 关闭 layout 与动态路径，回落 readline |
-| `BOLO_TUI_ENGINE=retained` | **OI-14E 开发预览**：双 TTY/raw-mode 下启用 retained transcript/Markdown、常驻 Composer、activity 与 footer；permission/question/provider/effort/diff/pager 暂走兼容桥；缺省、`legacy`、非法值与 non-TTY 均保持 legacy |
+| `BOLO_TUI_ENGINE=retained` | **OI-14F 开发预览**：双 TTY/raw-mode 下启用 retained transcript/Markdown、常驻 Composer/activity/footer 与单一 OverlayHost；permission/question/provider/effort/diff/pager 不转交 stdin/writer；缺省、`legacy`、非法值与 non-TTY 均保持 legacy |
 | `>=96` 列 | 最大 100-cell 工作台：完整水晶在左，Ready/workspace/model/session 在右 |
 | `56–95` 列 | 单列工作台：中型水晶、居中状态、左对齐 metadata |
 | `38–55` 列 | 单列工作台：6 行紧凑水晶；动态文本按 cell 宽度裁切 |
@@ -52,12 +53,14 @@
 | 文件 | 角色 |
 |------|------|
 | `packages/shared/src/cliTuiViewState.ts` | **OI-14B**：有序 live blocks、稳定 id、SessionEvent/resume 投影、composer/overlay/elapsed 纯状态真源 |
+| `packages/shared/src/runtimePager.ts` | **OI-14F**：legacy 与 retained 共用的 pager key/state/result 纯 reducer |
 | `tui/tuiEngine.ts` | **OI-14C**：session 创建时锁定 legacy/retained；缺省、非法值与 plain 路径 fail-safe 到 legacy |
-| `tui/boloTerminalAdapter.ts` | **OI-14C/E**：retained 唯一原始 writer、resize/render epoch/scrollback；唯一 stdin owner、Pi `StdinBuffer`、raw/mode-2004 生命周期与 legacy panel 独占桥 |
-| `tui/retainedTui.ts` | **OI-14C–E**：稳定 Pi root/controller、theme/viewport/welcome、view-state、transcript/activity/composer/footer 根布局与精确 stream fallback |
+| `tui/boloTerminalAdapter.ts` | **OI-14C–F**：retained 唯一原始 writer、resize/render epoch/scrollback；唯一 stdin owner、Pi `StdinBuffer` 与 raw/mode-2004 生命周期 |
+| `tui/retainedTui.ts` | **OI-14C–F**：稳定 Pi root/controller、theme/viewport/welcome、view-state、transcript/activity/composer/footer/overlay 根布局与精确 stream fallback |
 | `tui/retainedTranscript.ts` | **OI-14D**：按 stable block id 缓存 User/Assistant/Thought/Tool/Search/Error/Warning/Summary 组件；Pi Markdown、整宽用户块、物理 gutter 与父级 section gap |
 | `tui/retainedComposer.ts` | **OI-14E**：稳定 Bolo Composer/Footer；复用输入 reducer、slash/hint/history，补 undo、Pi keys 与 `CURSOR_MARKER` |
 | `tui/retainedActivity.ts` | **OI-14E**：把既有分段 activity 的当前帧投影为 retained child，不直接写 stdout |
+| `tui/retainedOverlay.ts` | **OI-14F**：唯一 OverlayHost；承载 permission/question/picker/diff/pager，保留 Composer identity/focus 与单一 stdin/writer owner |
 | `tui/crystalLogo.ts` | 水晶常量、源稿归一化、整块 cell-width 居中与 ASCII 降级 |
 | `tui/inkLayout.ts` | 一次性水晶工作台；宽屏 split、中/紧凑单列，不伪装成输入框 |
 | `tui/frame.ts` | 100-cell welcome、160-cell content 与全宽 dock 三套明确宽度契约 |
@@ -66,7 +69,7 @@
 | `tui/inputBox.ts` | 输入/slash reducer、argument hint、CJK-safe renderer、bracketed-paste raw driver、running dock |
 | `tui/composerSpacing.ts` | **legacy**：idle/running top-gap 补丁；OI-14 将由父级 layout gap 替代 |
 | `tui/terminalSurface.ts` | **legacy**：按逻辑行记账的 append/dock surface；不拥有 terminal auto-wrap |
-| `tui/localPanel.ts` | **legacy**：局部 erase/repaint；OI-14 将迁入 OverlayHost |
+| `tui/localPanel.ts` | **legacy**：默认 legacy 路径的局部 erase/repaint；retained 面板已迁，OI-14H 删除兼容实现 |
 | `tui/terminalText.ts` | 当前字段级 ANSI/CJK/emoji helper；通用 wrap 将迁入成熟 renderer |
 | `tui/turnActivity.ts` | reasoning/tool/search/retry 分段生命周期、动画与独立计时 |
 | `tui/terminalMarkdown.ts` | **legacy**：只处理 inline emphasis/code；OI-14 将由 block Markdown 替代 |
@@ -77,7 +80,7 @@
 | `tui/diffPane.ts` | U1 browse · U2 approve 面板；局部重绘 |
 | `tui/permissionPanel.ts` · `askPermissionTty.ts` | command/cwd/关键参数摘要与 once/always/deny 选择 |
 | `packages/core/src/runtimeTextView.ts` | AR1C：纯 runtime text page renderer；CLI 与 slash 共用 |
-| `tui/runtimePager.ts` | AR1C：页状态 reducer · raw key reader · TTY pager driver |
+| `tui/runtimePager.ts` | AR1C/OI-14F：默认 legacy raw key/TTY driver；复用 shared pager reducer，显式 retained 由 OverlayHost 驱动 |
 | `slashCandidates.ts` | core 候选与 CLI-local `/exit`/`/quit` 的无副作用合并层 |
 | `runtimeCli.ts` | AR1：顶层 runtime query/action consumer 与 automation 输出 |
 | `newSessionCli.ts` · `resumeCli.ts` · `main.ts` | 入口 |
@@ -96,8 +99,9 @@ OI-14A 已用 `@xterm/headless` 固化四项真实 legacy 红灯；OI-14B 已建
 view-state 并证明 chunk invariant；OI-14C 已用显式 opt-in 接入 retained component
 tree，证明 root/width/resize/single-writer 生命周期；OI-14D 已让 retained 正文、
 Markdown、物理 gutter 与 section gap 转绿；OI-14E 已让常驻输入区、running
-activity/footer、paste/raw-mode/new/resume 输入接线转绿。overlays 尚未迁移，
-默认仍是 legacy，不能用 E 的 opt-in 证据宣称整个默认 TUI 已稳定。
+activity/footer、paste/raw-mode/new/resume 输入接线转绿；OI-14F 已让 OverlayHost、
+全部交互面板与单一 owner 接线转绿。默认仍是 legacy，不能用 F 的 opt-in 证据宣称
+整个默认 TUI 已稳定；默认切换、长会话、可靠性与性能仍属于 OI-14G。
 
 ---
 
@@ -163,9 +167,11 @@ dock，结束后恢复，不与空闲 listener 竞争。composer 上方一行 sp
 上段是默认 legacy 的 OI-11/OI-13 局部契约；真实截图已经证明它在超长物理行和
 streaming 重绘下不能保证整个屏幕。OI-14E retained 路径改为同一
 `RetainedComposer` 节点：idle/running 只切 mode，value/cursor/history/undo/menu
-保留在 component-local 状态，Pi `CURSOR_MARKER` 定位硬件光标。permission/picker
-暂由根 controller suspend 后交给 legacy panel，恢复时同一 pending value/focus
-不丢；这条桥由 OI-14F 删除。
+保留在 component-local 状态，Pi `CURSOR_MARKER` 定位硬件光标。OI-14F 再把
+permission/question/provider/effort/diff/pager 放进同一 root 的 OverlayHost；
+overlay 期间 Composer 不卸载，输入与 writer owner 不转交。兼容
+`suspendForLegacyPanel()` API 只剩历史测试，生产 retained 交互调用点为零，API
+本身留待 OI-14H 删除。
 
 raw driver 进入时启用 terminal mode 2004，退出、提交和 abort 时恢复。收到
 `paste-start` 后跨 data chunk 聚合正文，到 `paste-end` 才规范化 CRLF/CR 并调用一次
@@ -245,7 +251,11 @@ segment elapsed 决定，不再依赖是否展示过 reasoning 文本；消费�
 | 中断 | `Ctrl-C`；exit 130 |
 | reader/driver 错误 | `pager_failed`；exit 1 |
 
-0/1 页直接输出，不等待键盘。pager 在 data、end、error、abort/Ctrl-C 的全部终态移除 listener，并把 stdin raw mode 恢复到进入前状态。
+0/1 页直接输出，不等待键盘。多页 pager 复用
+`packages/shared/src/runtimePager.ts` 的同一 reducer：默认 legacy 仍使用既有 raw
+driver；显式 `BOLO_TUI_ENGINE=retained` 使用 standalone OverlayHost，不发送 legacy
+`ESC[2J`。两条路径在 data、end、error、abort/Ctrl-C 的全部终态都移除 listener，
+并把 stdin raw mode 恢复到进入前状态。
 
 pipe 与 `--json` 永不启用 pager、永不读取 stdin，也不输出 ANSI、clear-screen、banner 或 summary。JSON query success 保留原始 `runtime.list|runtime.inspect` view；failure 固定为 `{ok:false,code,detail}`。JSON usage failure 只向 stdout 输出一个 payload、stderr 为空并 exit 2。
 
@@ -362,7 +372,7 @@ npx tsx scripts/test-diff-view.ts
 argument hint、bracketed paste 生命周期/跨 chunk/CRLF/单次重绘、菜单窗口与非 TTY
 回落；`test:context-dashboard` 覆盖 view-model 的 24/38/80/160 列 TTY 投影；
 `test:slash-completion` 覆盖内置/Plugin/Skill projection、动态 effort、重名、
-hidden alias、exact/prefix 与空匹配。完整门禁当前包含 **128** 个串联
+hidden alias、exact/prefix 与空匹配。完整门禁当前包含 **129** 个串联
 `scripts/*.ts`。
 
 OI-14B 新增的 `test:cli-tui-view-state` 覆盖稳定 turn/segment/call-id、reasoning 与
@@ -391,13 +401,21 @@ paste、输入 p95、500-char burst、预先 abort、raw-mode 异常回滚与单
 Composer 配置和 ordinary input 不经过 legacy writer。dist 门禁要求 Pi
 `keys.js`/`stdin-buffer.js`，并禁止 Editor、ProcessTerminal、terminal/native loader。
 
+OI-14F 新增的 `test:cli-tui-overlays` 用真实 xterm 覆盖 permission 的 command/cwd/
+关键参数与 once/always/deny、AskUserQuestion 单选/多选/自由文本、provider/effort
+picker、diff browse/approve、runtime pager、窄终端/resize、Esc/Ctrl+C/Ctrl+D/abort、
+嵌套拒绝、Composer value/cursor/history/undo/focus 恢复和零 external/concurrent
+writer。permission/local-panel/runtime CLI 邻接轨另证明 retained 生产路径不调用
+compatibility suspend bridge，默认 legacy 与 plain/pipe/JSON/`--print` 行为不变。
+
 OI-14A 新增的 `test:cli-tui-vt` 使用 `@xterm/headless` 执行真实 cell
 auto-wrap/scrollback/resize，已覆盖 ANSI、长 URL、CJK/emoji、整段/逐字符/固定随机
 chunk、running composer 与 56 -> 38 resize，并稳定捕获四项 legacy 失败签名。
 OI-14C 已让 retained welcome/root 的宽度、resize 与 scrollback 基座转绿；OI-14D
 已让 Markdown list/code/table、OSC 8、transcript physical gutter/spacing 及
 chunk/resize/resume 同值转绿；OI-14E 已让 Composer/activity/footer 与输入生命周期
-转绿，overlay/default/legacy 删除矩阵继续随 OI-14F-H 推进；见
+转绿；OI-14F 已让 OverlayHost 与全部交互面板转绿，default/legacy 删除矩阵继续随
+OI-14G-H 推进；见
 [CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md) §9 和
 [CLI_TUI_RENDERER_DECISION.md](./CLI_TUI_RENDERER_DECISION.md)。
 

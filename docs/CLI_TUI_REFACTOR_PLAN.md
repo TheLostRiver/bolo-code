@@ -1,6 +1,6 @@
 # CLI TUI retained renderer 重构方案
 
-> **状态：** OI-14 `OPEN`（OI-14A/B/C/D/E 已关闭；当前 OI-14F）
+> **状态：** OI-14 `OPEN`（OI-14A/B/C/D/E/F 已关闭；当前 OI-14G）
 > **方案锚点：** Bolo `c2e6a98`；Pi `c820aa26fe09`；oh-my-pi
 > `d16c6168c86f`；Codex `f61b51ddd924`；OpenCode `66495a2a22cd`；
 > HelsincyCode `e6dd86ef990e`。
@@ -277,8 +277,8 @@ OI-14B 已按此边界完成：
 | `crystalLogo.ts` / welcome | 保留 Bolo 资产；包成普通 responsive component |
 | `resumeCli.ts` | 每个交互会话只创建一个 `CliTuiController`，不再每轮重建 surface/editor |
 
-迁移期允许一个明确的 `suspendForLegacyPanel()` 适配边界，但它只能由根 controller
-调用，且必须有删除 issue；新功能不得继续接入 legacy panel。
+OI-14F 后 `suspendForLegacyPanel()` 只保留为历史兼容 API/测试，生产 retained
+交互调用点为零；新功能不得接入该 bridge，OI-14H 负责删除 API 与 legacy panel。
 
 ---
 
@@ -294,7 +294,7 @@ OI-14B 已按此边界完成：
 | **OI-14C ✅** | Renderer 基座 | 单 terminal writer、根 component tree、theme/width/resize、welcome、legacy feature flag | 24/38/56/80/120/160/220 列无超宽物理行；resize 无残影；plain path byte-stable |
 | **OI-14D ✅** | Transcript 与 Markdown | User/Assistant/Thought/Tool/Search/Error/Warning/Summary blocks；成熟 Markdown/wrap；父级 spacing | 真实 VT、列表 hanging indent、URL、CJK/emoji、ANSI/OSC 8、代码块、表格、chunk/resize/resume 全绿 |
 | **OI-14E ✅** | 常驻 Composer/Activity/Footer | Bolo retained Composer、slash menu/argument hint、paste、per-segment activity、usage/footer | idle/running 不卸载 Composer；输入/最终回答间距稳定；burst stream 无闪烁或逐 token 全重绘 |
-| **OI-14F** | Overlay 与交互面板 | permission/question/provider/effort/diff/pager 迁入 OverlayHost | 面板显示完整操作详情；默认 deny；Esc/Ctrl+C/focus 恢复；无第二 stdout owner |
+| **OI-14F ✅** | Overlay 与交互面板 | permission/question/provider/effort/diff/pager 迁入 OverlayHost | 面板显示完整操作详情；默认 deny；Esc/Ctrl+C/focus 恢复；无第二 stdout owner |
 | **OI-14G** | 默认切换与可靠性 | retained 成为默认；scroll/resize/backpressure/perf；dist/pack/install/Windows 邻接轨 | 完整门禁、单文件 dist、冷启动/输入延迟预算、长会话和 crash cleanup 全绿 |
 | **OI-14H** | 删除 legacy 与文档收口 | 删除旧 surface/prefixer/tiny Markdown/兼容桥；更新 README/TUI/ROADMAP/handoff/release/NOTICE | 静态 guard 禁止活跃 TUI 绕过 terminal adapter；真人 Windows Terminal 核心场景通过 |
 
@@ -431,20 +431,25 @@ OI-14 只有同时满足以下条件才可 `CLOSED`：
 
 ## 13. 下一步
 
-当前下一刀是 **OI-14F**：
+当前下一刀是 **OI-14G**：
 
-1. 在 retained root 建立唯一 `OverlayHost`，把 permission/question/provider/effort/
-   diff/pager 按共享 view-model 逐类迁入，普通组件不得直接写 stdout 或读取 stdin。
-2. permission 必须展示 tool、command/cwd 与关键参数，保留 once/always/deny，
-   默认 deny；question/picker/diff/pager 保留各自既有业务结果，不复制状态机。
-3. overlay 打开时 Composer 节点和 value/cursor/history/undo 继续存在，只切
-   overlay/focus mode；Esc/Ctrl+C/abort/submit 后焦点确定恢复到同一 Composer。
-4. 用真实 VT 覆盖 overlay 嵌套拒绝、resize、长 command/diff、suspend 中断、错误
-   cleanup、new/resume 与无第二 stdin/stdout owner。
-5. 删除已迁面板对 `suspendForLegacyPanel()` 的调用；未迁调用必须有静态白名单，
-   OI-14F 结束时兼容 bridge 不再服务交互 REPL。
-6. 保持 `BOLO_TUI_ENGINE=retained` 显式 opt-in、legacy/plain byte contract；
-   retained 默认切换仍留给 OI-14G。
+1. 先为 engine 缺省选择写红灯：双 TTY/raw-mode 默认 retained，显式
+   `BOLO_TUI_ENGINE=legacy` 继续作为短期回滚；非法值 fail-safe，non-TTY、pipe、
+   JSON 与 `--print` 永久保持 plain/追加式路径。
+2. 用真实 xterm 建立长会话与 viewport 压力矩阵：大量 transcript block、长
+   Markdown/URL/CJK、连续 tool/search、用户滚动 scrollback、24–220 列反复 resize、
+   running paste 与 overlay 往返都不得碎屏、丢历史或漂移 cursor。
+3. 建立流式 backpressure/coalescing 与性能基线；测量后再优化，保证 final/error/
+   permission 立即 flush，限制逐 token render，记录冷启动、输入延迟、长会话更新
+   延迟、CPU/heap 与 bundle 增量。
+4. 覆盖 SIGINT、provider/tool 异常、stdin error、renderer throw、提前 abort 与
+   process exit 的 cleanup；raw mode、mode 2004、resize/data listener、cursor 与
+   terminal writer 必须恢复且不吞原始错误。
+5. 让 new/resume、runtime pager、dist build、pack→clean install→run、Desktop bundle
+   与 Electron launch 在默认 retained 下全绿；静态 guard 继续禁止第二 stdin/stdout
+   owner 和生产 compatibility bridge 调用。
+6. OI-14G 只切默认并关闭可靠性/性能风险，不删除 legacy surface、prefixer、tiny
+   Markdown 或兼容 API；这些删除与 NOTICE/最终文档收口仍留给 OI-14H。
 
 继续禁止对 `TerminalSurface`、`contentPrefixer`、tiny Markdown 或 composer spacer
 添加新的布局补丁。

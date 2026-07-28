@@ -29,7 +29,7 @@
 | Headless 核心 | ~82–90% | queryLoop · 权限 · tools · STE；partial stream fail-closed |
 | **Agent 能力面（工具集）** | **~82–88%** | 15 个常驻/可选工具 + **Web search**（hosted、MCP、SearXNG 均已活体验证） |
 | 会话 / CLI | ~92–97% | **零步骤首次启动** · 用户级 workspace JSONL · 旧项目会话兼容 · durable runtime · query/action CLI · TTY pager · pipe/JSON automation |
-| **CLI TUI** | **~68–78%** | OI-14A–E 已在 opt-in retained renderer 建立稳定 transcript/Markdown、常驻 Composer、分段 activity 与 footer；下一步 OI-14F 迁 overlays，默认 legacy 仍会在物理 wrap、resize/cursor 下出现已知故障 |
+| **CLI TUI** | **~74–84%** | OI-14A–F 已在 opt-in retained renderer 建立稳定 transcript/Markdown、常驻 Composer/activity/footer 与单一 OverlayHost；下一步 OI-14G 切默认并做可靠性/性能收口，默认 legacy 仍保留已知物理布局故障 |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
 | Subagent | ~89–95% | `config.agents` + `agents/*.md` · durable task/result · overflow FIFO/cancel · safe delivery · worktree 保全 |
 | 文件 Diff 日用 | ~95%+ | D0–D7 · U0–U4 |
@@ -48,19 +48,20 @@ AR1 · **AR-T1–T3+ Agent 能力面** · AR2 Compact depth · AR3 Desktop 产�
 AR4 evidence gate · AR5 release hardening · **OI-04 SearXNG 直连、OI-X1 真实实例
 smoke、OI-07 上游诊断 / `search doctor` / 可选 Docker setup、OI-08B CLI 零步骤
 首次启动、OI-14A 真实 VT/选型、OI-14B live view-state、OI-14C retained renderer
-基座、OI-14D transcript/Markdown、OI-14E Composer/activity/footer**。OI-09–OI-13 的
+基座、OI-14D transcript/Markdown、OI-14E Composer/activity/footer、OI-14F
+OverlayHost/交互面板**。OI-09–OI-13 的
 slash/context/paste/Thought/权限/welcome 局部能力仍然有效，但不再作为整个 TUI
 renderer 稳定的证据。
 
-**当前主线：OI-14F。** OI-14E `d0fb822` 已在 retained root 内接入稳定
-`RetainedComposer`、Thinking/Running activity 与独立 footer；idle/running 只切
-mode，slash/argument hint/history/undo、跨 chunk paste、硬件光标、每段
-`Thought for`、model/effort/usage 与固定 gap 共用原业务契约。24–220 列、
-new/resume 真实 REPL、abort/raw-mode rollback、burst/resize/paste、单 writer、
-单文件 dist/install、Electron launch 与 128 项完整门禁全绿；产物为
-1,641,896 bytes / 192 modules。`BOLO_TUI_ENGINE=retained` 仍只是显式开发预览，
-缺省、非法值、non-TTY 与 `--print` 都保持 legacy。下一刀 OI-14F 把
-permission/question/provider/effort/diff/pager 迁入 OverlayHost；默认切换仍留给 G。
+**当前主线：OI-14G。** OI-14F `31384d4` 已建立唯一 `RetainedOverlayHost`，
+permission、AskUserQuestion、provider/effort、`/diff`/文件审批与 runtime pager
+复用既有业务 reducer 并进入同一 retained component tree。面板期间 Composer
+不卸载，value/cursor/history/undo/focus 保留；raw stdin 与 terminal writer 仍由
+同一 adapter 持有。显式 retained runtime 多页视图也不再走 legacy `ESC[2J` pager。
+真实 xterm、new/resume、abort/resize、单 writer、dist/install、Electron launch 与
+129 项完整门禁全绿；产物为 1,686,424 bytes / 199 modules。`BOLO_TUI_ENGINE=retained`
+仍只是显式开发预览，缺省、非法值、non-TTY 与 `--print` 都保持 legacy。下一刀
+OI-14G 才切默认并收口 scroll/resize/backpressure/perf 与 crash cleanup。
 方案与选型证据见
 [docs/CLI_TUI_REFACTOR_PLAN.md](docs/CLI_TUI_REFACTOR_PLAN.md) 和
 [docs/CLI_TUI_RENDERER_DECISION.md](docs/CLI_TUI_RENDERER_DECISION.md)。
@@ -69,9 +70,9 @@ permission/question/provider/effort/diff/pager 迁入 OverlayHost；默认切换
 就在 cwd 创建 `.bolo/`；项目模板只由显式 `bolo init [--project]` 创建。SearXNG
 doctor 与显式 Docker 管理也已落地，Docker 不是默认依赖。
 
-**人工项：** retained 正文和常驻输入区的碎片、空洞、续行贴左、消失、动画与
-cursor/raw-mode 代码缺陷已由 OI-14D/E 自动门禁关闭；overlay/default/legacy 删除继续
-由 OI-14F–H 自动关闭。之后才由真人
+**人工项：** retained 正文、常驻输入区和 overlays 的碎片、空洞、续行贴左、消失、
+动画、cursor/raw-mode 与 owner 交接代码缺陷已由 OI-14D–F 自动门禁关闭；
+default/可靠性/legacy 删除继续由 OI-14G–H 自动关闭。之后才由真人
 检查 Windows Terminal 的字体、颜色、动画和按键/鼠标手感；Desktop 点击与视觉也仍
 需真人。SearXNG 已完成真实实例 live smoke。
 
@@ -204,9 +205,10 @@ pipe、`-p`/`--print` 和 JSON 路径保持追加式输出，不发送动态光�
 与常驻 composer 组合时可能出现物理折行和 cursor 布局错误。自动化或脚本场景继续用
 非 TTY/`--print` plain 路径；重构计划与回滚边界见
 [docs/CLI_TUI_REFACTOR_PLAN.md](docs/CLI_TUI_REFACTOR_PLAN.md)。
-显式 `BOLO_TUI_ENGINE=retained` 现在已使用 OI-14D/E 的 transcript/Markdown、
-常驻 Composer、activity 与 footer；permission/question/provider/effort/diff/pager
-仍通过兼容 suspend bridge 临时接管，待 OI-14F 迁入同一组件树，因此尚未切为默认。
+显式 `BOLO_TUI_ENGINE=retained` 现在已使用 OI-14D–F 的 transcript/Markdown、
+常驻 Composer/activity/footer 与单一 OverlayHost；permission/question/provider/
+effort/diff/pager 不再暂停 root 或转交 stdin/writer。它仍未切为默认，OI-14G 会先
+完成长会话、scroll/resize/backpressure/perf 与崩溃清理门禁。
 
 `runtime list|inspect` 的文本输出在 **stdin/stdout 都是 TTY** 且内容超过一页时自动分页：`n/j/↓/→` 下一页，`p/k/↑/←` 上一页，`q/Esc` 退出，`Ctrl-C` 返回 130。0/1 页不读键盘；pipe 与 `--json` 永不进入 pager、不会输出 ANSI/banner，也不会因为大列表挂起。
 
