@@ -29,7 +29,7 @@
 | Headless 核心 | ~82–90% | queryLoop · 权限 · tools · STE；partial stream fail-closed |
 | **Agent 能力面（工具集）** | **~82–88%** | 15 个常驻/可选工具 + **Web search**（hosted、MCP、SearXNG 均已活体验证） |
 | 会话 / CLI | ~92–97% | **零步骤首次启动** · 用户级 workspace JSONL · 旧项目会话兼容 · durable runtime · query/action CLI · TTY pager · pipe/JSON automation |
-| **CLI TUI** | **~58–68%** | slash/context/paste/Thought/权限/水晶等能力已存在；OI-14C 已建立 opt-in retained renderer 基座，OI-14D 将迁正文与 Markdown；默认 legacy 仍会在物理 wrap、resize/cursor 下出现正文碎片、巨大空洞与续行贴左 |
+| **CLI TUI** | **~64–74%** | slash/context/paste/Thought/权限/水晶等能力已存在；OI-14D 已在 opt-in retained renderer 迁入稳定 transcript 与成熟 Markdown，下一步 OI-14E 迁 Composer/activity/footer；默认 legacy 仍会在物理 wrap、resize/cursor 下出现已知故障 |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
 | Subagent | ~89–95% | `config.agents` + `agents/*.md` · durable task/result · overflow FIFO/cancel · safe delivery · worktree 保全 |
 | 文件 Diff 日用 | ~95%+ | D0–D7 · U0–U4 |
@@ -48,17 +48,18 @@ AR1 · **AR-T1–T3+ Agent 能力面** · AR2 Compact depth · AR3 Desktop 产�
 AR4 evidence gate · AR5 release hardening · **OI-04 SearXNG 直连、OI-X1 真实实例
 smoke、OI-07 上游诊断 / `search doctor` / 可选 Docker setup、OI-08B CLI 零步骤
 首次启动、OI-14A 真实 VT/选型、OI-14B live view-state、OI-14C retained renderer
-基座**。OI-09–OI-13 的
+基座、OI-14D transcript/Markdown**。OI-09–OI-13 的
 slash/context/paste/Thought/权限/welcome 局部能力仍然有效，但不再作为整个 TUI
 renderer 稳定的证据。
 
-**当前主线：OI-14D。** OI-14C `1798a7c` 已建立 Bolo terminal adapter、稳定
-retained 根树、theme/width/resize、水晶 welcome 与 session 级 engine 选择；它直接
-消费 OI-14B `CliTuiViewState`，通过 24/38/56/80/120/160/220 列真实 VT、resize、
-single-writer、new/resume、plain byte snapshot、dist install 与 126 项完整门禁。
-`BOLO_TUI_ENGINE=retained` 仍只是显式开发预览，缺省、非法值、non-TTY 与
-`--print` 都保持 legacy。下一刀 OI-14D 迁移 transcript/Markdown；默认可见 legacy
-故障尚未修复。方案与选型证据见
+**当前主线：OI-14E。** OI-14D `8b060e5` 已让 retained root 按 OI-14B stable block
+id 原位渲染 User/Assistant/Thought/Tool/Search/Error/Warning/Summary，并接入 Pi
+Markdown；父级统一拥有每条物理行的 gutter 与 section gap。整段、逐字符、固定随机
+chunk、24–220 列、resize、resume、ANSI/OSC 8/CJK/emoji/list/table/code、单文件
+dist/install、Electron launch 与 127 项完整门禁全绿；产物为 1,611,976 bytes /
+189 modules。`BOLO_TUI_ENGINE=retained` 仍只是显式开发预览，缺省、非法值、
+non-TTY 与 `--print` 都保持 legacy。下一刀 OI-14E 迁常驻 Composer/activity/footer；
+默认 legacy 与未迁交互区的可见故障尚未关闭。方案与选型证据见
 [docs/CLI_TUI_REFACTOR_PLAN.md](docs/CLI_TUI_REFACTOR_PLAN.md) 和
 [docs/CLI_TUI_RENDERER_DECISION.md](docs/CLI_TUI_RENDERER_DECISION.md)。
 
@@ -66,9 +67,10 @@ single-writer、new/resume、plain byte snapshot、dist install 与 126 项完�
 就在 cwd 创建 `.bolo/`；项目模板只由显式 `bolo init [--project]` 创建。SearXNG
 doctor 与显式 Docker 管理也已落地，Docker 不是默认依赖。
 
-**人工项：** 已知正文碎片、巨大空洞、续行贴左、cursor/resize 等代码缺陷先由
-OI-14 自动门禁关闭。之后才由真人检查 Windows Terminal 的字体、颜色、动画和按键/
-鼠标手感；Desktop 点击与视觉也仍需真人。SearXNG 已完成真实实例 live smoke。
+**人工项：** retained 正文的碎片、空洞与续行贴左已由 OI-14D 自动门禁关闭；
+Composer/cursor/resize/overlay 等代码缺陷继续由 OI-14E–G 自动关闭。之后才由真人
+检查 Windows Terminal 的字体、颜色、动画和按键/鼠标手感；Desktop 点击与视觉也仍
+需真人。SearXNG 已完成真实实例 live smoke。
 
 进度真源：[docs/ROADMAP.md](docs/ROADMAP.md)
 
@@ -199,6 +201,9 @@ pipe、`-p`/`--print` 和 JSON 路径保持追加式输出，不发送动态光�
 与常驻 composer 组合时可能出现物理折行和 cursor 布局错误。自动化或脚本场景继续用
 非 TTY/`--print` plain 路径；重构计划与回滚边界见
 [docs/CLI_TUI_REFACTOR_PLAN.md](docs/CLI_TUI_REFACTOR_PLAN.md)。
+显式 `BOLO_TUI_ENGINE=retained` 现在已使用 OI-14D transcript/Markdown，但
+Composer/activity/footer 与 overlays 要到 OI-14E/F 才迁入同一组件树，因此尚未切为
+默认。
 
 `runtime list|inspect` 的文本输出在 **stdin/stdout 都是 TTY** 且内容超过一页时自动分页：`n/j/↓/→` 下一页，`p/k/↑/←` 上一页，`q/Esc` 退出，`Ctrl-C` 返回 130。0/1 页不读键盘；pipe 与 `--json` 永不进入 pager、不会输出 ANSI/banner，也不会因为大列表挂起。
 

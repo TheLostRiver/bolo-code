@@ -12,7 +12,8 @@
 
 本文件保存 OI-14A 的可复核数据与选型结论。它只决定 renderer 基座和支持边界，
 没有声称当前 legacy TUI 的可见故障已经修复。OI-14B 已完成纯 live view-state；
-OI-14C `1798a7c` 已完成 opt-in retained 基座，产品正文迁移从 OI-14D 继续。
+OI-14C `1798a7c` 已完成 opt-in retained 基座，OI-14D `8b060e5` 已迁 retained
+transcript/Markdown；当前从 OI-14E 继续迁 Composer/activity/footer。
 
 ## 1. Legacy 真实 VT 证据
 
@@ -74,8 +75,10 @@ Node 20 复测使用 Electron 33.4.11 内置的真实 Node `v20.18.3` / V8
 
 当前 Bolo baseline `dist/bolo.mjs` 为 1,385,065 bytes。候选独立 bundle 约为
 baseline 的 13%，低于 OI-14 的 +1.5 MB 软预算。OI-14C 的真实 Bolo 产物为
-1,518,187 bytes / 185 modules，比 baseline 增加 133,122 bytes（约 9.6%）；最终
-体积、冷启动与输入延迟仍须在 OI-14G 对完整迁移后的产物重测。
+1,518,187 bytes / 185 modules，比 baseline 增加 133,122 bytes（约 9.6%）。
+OI-14D 接入 Pi Markdown/marked 后为 1,611,976 bytes / 189 modules，较 C 增加
+93,789 bytes（约 6.2%），仍低于预算；最终体积、冷启动与输入延迟须在 OI-14G
+对完整迁移后的产物重测。
 
 Windows Node 24.15，去掉两次 warmup，`n=10`：
 
@@ -104,16 +107,17 @@ candidate 相对空 Node 的 p50 增量约 88 ms，低于 +100 ms 软目标。
    用户没有独立运行时安装树。
 2. **Bolo 最低 Node 提升到 `>=22.19.0`。** Node 20 在当前日期已 EOL，上游也不
    支持；不把“实测碰巧能跑”写成产品承诺，也不为旧 Node 维护窄 fork。
-3. **首轮保留 Bolo terminal adapter。** OI-14C 只使用 Pi renderer 与基础组件；
-   Markdown、Editor 分别留给 OI-14D/E，不直接采用 `ProcessTerminal`。只有真实
-   按键回归证明 adapter 无法满足 modifier 时，才另立有 MIT attribution 的 native
-   资产切片。
+3. **首轮保留 Bolo terminal adapter。** OI-14C 使用 Pi renderer 与基础组件，
+   OI-14D 接入 Markdown，Editor 留给 OI-14E；不直接采用 `ProcessTerminal`。只有
+   真实按键回归证明 adapter 无法满足 modifier 时，才另立有 MIT attribution 的
+   native 资产切片。
 4. **不启动 OpenTUI spike。** Pi 路线已经通过 Node、esbuild、Windows、体积、
    副作用与许可门槛，备选准入条件没有发生。
 5. **归属随首次产品 bundle 落地。** OI-14C 首次把 Pi 与
    `get-east-asian-width@1.6.0` 打入 `dist`；发布包现携带
-   `THIRD_PARTY_NOTICES.md` 的完整 MIT 文本。`marked@18.0.5` 没有进入本刀的精确
-   子模块 bundle。OI-14H 仍须复核最终 tarball 清单和版权文本。
+   `THIRD_PARTY_NOTICES.md` 的完整 MIT 文本。OI-14D 首次把 `marked@18.0.5`
+   打入精确子模块 bundle，NOTICE 同步加入 MarkedJS MIT 与 John Gruber Markdown
+   BSD 条款。OI-14H 仍须复核最终 tarball 清单和版权文本。
 
 ## 4. 功能与视觉双基准
 
@@ -144,6 +148,11 @@ suspend/resume。24/38/56/80/120/160/220 列、resize、scrollback、single-writ
 new/resume、plain byte snapshot、dist clean install 与 126 项完整门禁全绿；
 `dependencies` 仍为 `{}`。
 
-当前 OI-14D 迁移 transcript 与 Markdown。`BOLO_TUI_ENGINE=retained` 在 OI-14G
-前仍是显式 opt-in；缺省、非法值、non-TTY 与 `--print` 保持 legacy。OI-14C 没有
-迁移正文、Composer 或 overlays，不能视为默认可见故障已经修复。
+OI-14D `8b060e5` 已按 stable block id 接入 User/Assistant/Thought/Tool/Search/
+Error/Warning/Summary 与 Pi Markdown；whole/character/fixed-random chunk、
+24–220 列、resize、resume、ANSI/OSC 8、CJK/emoji、list/table/code、dist install、
+Desktop bundle/Electron launch 与 127 项完整门禁全绿。
+
+当前 OI-14E 迁移 Composer/activity/footer。`BOLO_TUI_ENGINE=retained` 在 OI-14G
+前仍是显式 opt-in；缺省、非法值、non-TTY 与 `--print` 保持 legacy。D 没有迁移
+Composer 或 overlays，不能视为默认可见故障已经全部修复。

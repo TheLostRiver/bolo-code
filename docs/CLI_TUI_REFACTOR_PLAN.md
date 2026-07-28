@@ -1,6 +1,6 @@
 # CLI TUI retained renderer 重构方案
 
-> **状态：** OI-14 `OPEN`（OI-14A/B/C 已关闭；当前 OI-14D）
+> **状态：** OI-14 `OPEN`（OI-14A/B/C/D 已关闭；当前 OI-14E）
 > **方案锚点：** Bolo `c2e6a98`；Pi `c820aa26fe09`；oh-my-pi
 > `d16c6168c86f`；Codex `f61b51ddd924`；OpenCode `66495a2a22cd`；
 > HelsincyCode `e6dd86ef990e`。
@@ -8,6 +8,8 @@
 > [CLI_TUI_RENDERER_DECISION.md](./CLI_TUI_RENDERER_DECISION.md)。
 > **OI-14B 交付：** `269b39c` ·
 > `packages/shared/src/cliTuiViewState.ts`。
+> **OI-14C 交付：** `1798a7c` · retained renderer 基座。
+> **OI-14D 交付：** `8b060e5` · retained transcript/Markdown。
 > **范围：** 本文定义 CLI TTY 路径的重构方案。非 TTY、`--print`、pipe、JSON 和
 > Desktop 的既有输出契约必须保持兼容。
 > **结论先行：** 停止继续扩展自研 `TerminalSurface + 字符串 prefix + tiny
@@ -285,7 +287,7 @@ OI-14B 已按此边界完成：
 | **OI-14A ✅** | 真实终端红灯与依赖决策 | `@xterm/headless` 物理终端 harness；复现最新截图故障；Pi direct/fork 与 OpenTUI 备选 spike；许可证/Node/体积报告 | 四项 legacy 签名稳定；选型数据与 direct/Node 决定已固化 |
 | **OI-14B ✅** | Live view-state | `packages/shared` 的 `CliTuiViewState`、action/reducer、stable block id、stream merge、segment 与 composer mode | reducer 无 I/O；随机 chunk property、resume projection、error/tool 边界全绿 |
 | **OI-14C ✅** | Renderer 基座 | 单 terminal writer、根 component tree、theme/width/resize、welcome、legacy feature flag | 24/38/56/80/120/160/220 列无超宽物理行；resize 无残影；plain path byte-stable |
-| **OI-14D** | Transcript 与 Markdown | User/Assistant/Thought/Tool/Search/Error blocks；成熟 Markdown/wrap；父级 spacing | 截图复现转绿；列表 hanging indent、URL、CJK/emoji、ANSI/OSC 8、代码块、表格全绿 |
+| **OI-14D ✅** | Transcript 与 Markdown | User/Assistant/Thought/Tool/Search/Error/Warning/Summary blocks；成熟 Markdown/wrap；父级 spacing | 真实 VT、列表 hanging indent、URL、CJK/emoji、ANSI/OSC 8、代码块、表格、chunk/resize/resume 全绿 |
 | **OI-14E** | 常驻 Composer/Activity/Footer | Editor、slash menu/argument hint、paste、per-segment activity、usage/footer | idle/running 不卸载 editor；输入/最终回答间距稳定；burst stream 无闪烁或逐 token 全重绘 |
 | **OI-14F** | Overlay 与交互面板 | permission/question/provider/effort/diff/pager 迁入 OverlayHost | 面板显示完整操作详情；默认 deny；Esc/Ctrl+C/focus 恢复；无第二 stdout owner |
 | **OI-14G** | 默认切换与可靠性 | retained 成为默认；scroll/resize/backpressure/perf；dist/pack/install/Windows 邻接轨 | 完整门禁、单文件 dist、冷启动/输入延迟预算、长会话和 crash cleanup 全绿 |
@@ -424,19 +426,20 @@ OI-14 只有同时满足以下条件才可 `CLOSED`：
 
 ## 13. 下一步
 
-当前下一刀是 **OI-14D**：
+当前下一刀是 **OI-14E**：
 
-1. 在 retained root 内建立 User/Assistant/Thought/Tool/Search/Error block 组件，
-   继续以 OI-14B stable block id 和原始 source text 为真源。
-2. 接入成熟 Markdown/wrap，覆盖 paragraph、列表与嵌套 hanging indent、blockquote、
-   code fence、table、长 URL/token、CJK/emoji、ANSI 与 OSC 8。
-3. 让 transcript 父级统一拥有 user/agent/Thought/tool 之间的 gutter 与 section gap；
-   禁止子组件通过字符串前缀或 terminal auto-wrap 修几何。
-4. 把整段、逐字符、固定随机 chunk 与 resize 后的最终 physical lines 做成同值不变量，
-   并让最新截图中的碎片、空洞、续行贴左和贴框故障逐项转绿。
-5. 保持 `BOLO_TUI_ENGINE=retained` 显式 opt-in，以及 legacy、non-TTY、`--print`、
-   pipe、JSON 的既有契约。
-6. 本刀不迁 Editor/activity/footer 或 overlays；分别留给 OI-14E/F。
+1. 在 retained root 内建立常驻 Composer/Editor 节点；idle/running 只切 mode，不卸载
+   节点，不丢 value/cursor/history/undo。
+2. 把现有 slash catalog/argument hint、bracketed paste transaction 与提交意图接入
+   Composer；输入能力继续复用既有业务契约，不重写 command/skill/plugin 状态。
+3. 把 Thinking/Running activity 与 per-segment elapsed 迁入 retained tree；D 已保存
+   完成态 `Thought for`，E 负责 running 动画和状态切换，不再另开 stdout writer。
+4. 让根布局统一拥有 transcript/activity/composer/footer 的 gap；footer 按宽度展示
+   model/mode、快捷键和 `↓input ↑output` usage，任何动态值不能推动固定区域跳动。
+5. 用真实 VT 覆盖 idle/running 同一组件身份、首 token 前输入框常驻、字符 burst
+   backpressure、paste、slash menu、24–220 列、resize 与输入 p95 预算。
+6. 保持 `BOLO_TUI_ENGINE=retained` 显式 opt-in、legacy/plain byte contract 和当前
+   async overlay bridge；permission/question/provider/effort/diff/pager 留给 OI-14F。
 
 继续禁止对 `TerminalSurface`、`contentPrefixer`、tiny Markdown 或 composer spacer
 添加新的布局补丁。
