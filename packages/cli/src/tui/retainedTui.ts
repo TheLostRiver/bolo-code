@@ -19,6 +19,7 @@ import {
   type RuntimePagerSuccess,
 } from '../../../shared/src/index.ts'
 import type { AskUserQuestionOutcome } from '../../../tools/src/index.ts'
+import { runCleanupSteps } from '../cleanup.ts'
 import {
   type CliSessionEvent,
   type SessionEventPrinter,
@@ -552,18 +553,26 @@ export function createRetainedTuiController(options: {
     async stop() {
       if (stopped) return
       stopped = true
-      activity.finish()
-      overlay.cancel()
-      overlayHandle?.hide()
+      const activeOverlayHandle = overlayHandle
+      const shouldResumeAdapter = suspended
+      const shouldStopTui = started
       overlayHandle = undefined
-      composer.cancelInput()
-      adapter.setInputEnabled(false)
-      if (suspended) {
-        suspended = false
-        adapter.setExternalOwner(false)
-      }
-      if (started) tui.stop()
-      root.close()
+      suspended = false
+      started = false
+      runCleanupSteps([
+        () => activity.finish(),
+        () => overlay.cancel(),
+        () => activeOverlayHandle?.hide(),
+        () => composer.cancelInput(),
+        () => adapter.setInputEnabled(false),
+        () => {
+          if (shouldResumeAdapter) adapter.setExternalOwner(false)
+        },
+        () => {
+          if (shouldStopTui) tui.stop()
+        },
+        () => root.close(),
+      ])
     },
     flush,
     runPermissionOverlay(overlayOptions) {

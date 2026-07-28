@@ -1,5 +1,6 @@
 import type { Terminal } from '@earendil-works/pi-tui/dist/terminal.js'
 import { StdinBuffer } from '@earendil-works/pi-tui/dist/stdin-buffer.js'
+import { runCleanupSteps } from '../cleanup.ts'
 
 export type BoloTerminalInput = {
   isTTY?: boolean
@@ -129,15 +130,21 @@ export function createBoloTerminalAdapter(options: {
     if (!inputActive) return
     inputActive = false
     const input = options.input
-    if (input && inputDataHandler) {
-      input.removeListener('data', inputDataHandler)
-    }
+    const dataHandler = inputDataHandler
+    const buffer = inputBuffer
     inputDataHandler = undefined
-    inputBuffer?.destroy()
     inputBuffer = undefined
-    emitRetained(BRACKETED_PASTE_DISABLE)
-    if (input && !inputWasRaw) input.setRawMode?.(false)
-    input?.pause()
+    runCleanupSteps([
+      () => {
+        if (input && dataHandler) input.removeListener('data', dataHandler)
+      },
+      () => buffer?.destroy(),
+      () => emitRetained(BRACKETED_PASTE_DISABLE),
+      () => {
+        if (input && !inputWasRaw) input.setRawMode?.(false)
+      },
+      () => input?.pause(),
+    ])
   }
 
   const acquireInput = () => {
@@ -224,19 +231,30 @@ export function createBoloTerminalAdapter(options: {
 
   const stop = () => {
     inputRequested = false
-    releaseInput()
-    if (started && resizeHandler) {
-      options.output.removeListener?.('resize', resizeHandler)
-    }
-    started = false
-    resizeHandler = undefined
-    inputHandler = undefined
-    externalOwner = false
-    for (const waiter of [...waiters]) {
-      clearTimeout(waiter.timer)
-      waiters.delete(waiter)
-      waiter.reject(new Error('retained terminal stopped before render completed'))
-    }
+    const activeResizeHandler = resizeHandler
+    const pendingWaiters = [...waiters]
+    const stoppedError = new Error(
+      'retained terminal stopped before render completed',
+    )
+    runCleanupSteps([
+      releaseInput,
+      () => {
+        if (started && activeResizeHandler) {
+          options.output.removeListener?.('resize', activeResizeHandler)
+        }
+      },
+      () => {
+        started = false
+        resizeHandler = undefined
+        inputHandler = undefined
+        externalOwner = false
+      },
+      ...pendingWaiters.map((waiter) => () => {
+        clearTimeout(waiter.timer)
+        waiters.delete(waiter)
+        waiter.reject(stoppedError)
+      }),
+    ])
   }
 
   const adapter: BoloTerminalAdapter = {
