@@ -16,6 +16,7 @@ import {
   readTuiInput,
   resolveTuiDockWidth,
   resolveTuiFrameWidth,
+  resolveTuiWelcomeWidth,
   renderInkLayout,
   renderTuiInputBox,
   renderUserMessage,
@@ -530,7 +531,7 @@ async function main(): Promise<void> {
     'raw driver exposes slash discovery and completion',
   )
 
-  // 欢迎首页：宽屏必须有 Bolo 水晶身份和清晰元数据，不能沿用左右等分卡。
+  // 欢迎首页：宽屏将 Bolo 水晶与运行状态组成工作台，窄屏再回落单列。
   const welcome = renderInkLayout({
     columns: 120,
     plain: false,
@@ -556,14 +557,21 @@ async function main(): Promise<void> {
   assert(!welcome.includes('____'), 'giant ASCII logo is removed')
   const welcomeLines = welcome.split('\n')
   assert(
-    welcomeLines.every((line) => visibleWidth(line) === 118),
-    `wide welcome uses the available frame width: ${welcomeLines
+    welcomeLines.every(
+      (line) => visibleWidth(line) === resolveTuiWelcomeWidth(120),
+    ),
+    `wide welcome uses the bounded welcome width: ${welcomeLines
       .map(visibleWidth)
       .join(',')}`,
   )
   assert(
-    !welcomeLines.some((line) => line.split('│').length >= 4),
-    'wide welcome avoids the legacy two-column card',
+    welcomeLines[0]?.startsWith('\u001b') ||
+      welcomeLines[0]?.startsWith('╭'),
+    'wide welcome starts with a titled workbench border',
+  )
+  assert(
+    welcomeLines.some((line) => line.split('│').length >= 4),
+    'wide welcome separates the crystal from runtime status',
   )
 
   const ultraWideWelcome = renderInkLayout({
@@ -583,12 +591,12 @@ async function main(): Promise<void> {
   })
   assert(
     visibleWidth(ultraWideWelcome.split('\n')[0] ?? '') ===
-      resolveTuiFrameWidth(220) &&
+      resolveTuiWelcomeWidth(220) &&
       visibleWidth(ultraWideInput.lines[0] ?? '') ===
         resolveTuiDockWidth(220) &&
       visibleWidth(ultraWideUser) === resolveTuiDockWidth(220) &&
-      resolveTuiDockWidth(220) > resolveTuiFrameWidth(220),
-    'ultra-wide user history and input share the dock width',
+      resolveTuiDockWidth(220) > resolveTuiWelcomeWidth(220),
+    'ultra-wide welcome stays bounded while user history and input share the dock width',
   )
 
   const mediumWelcome = renderInkLayout({
@@ -614,6 +622,12 @@ async function main(): Promise<void> {
       .every((line) => visibleWidth(line) <= 74),
     'medium welcome stays inside terminal width',
   )
+  assert(
+    !mediumWelcome
+      .split('\n')
+      .some((line) => line.split('│').length >= 4),
+    'medium welcome uses one responsive column',
+  )
 
   const compactWelcome = renderInkLayout({
     columns: 46,
@@ -632,6 +646,12 @@ async function main(): Promise<void> {
       .split('\n')
       .every((line) => visibleWidth(line) <= 44),
     'compact welcome clips every row safely',
+  )
+  assert(
+    !compactWelcome
+      .split('\n')
+      .some((line) => line.split('│').length >= 4),
+    'compact welcome uses one responsive column',
   )
 
   // 首 provider 事件前必须立即可见；elapsed 是活动态的一部分。

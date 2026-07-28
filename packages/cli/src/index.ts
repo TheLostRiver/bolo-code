@@ -68,7 +68,9 @@ export {
 export {
   resolveTuiDockWidth,
   resolveTuiFrameWidth,
+  resolveTuiWelcomeWidth,
   TUI_FRAME_MAX_COLUMNS,
+  TUI_WELCOME_MAX_COLUMNS,
 } from './tui/frame.ts'
 export {
   createTuiContentPrefixer,

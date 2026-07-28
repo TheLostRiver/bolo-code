@@ -13,7 +13,7 @@ import {
   centerTuiArt,
   shouldUseAsciiCrystal,
 } from './crystalLogo.ts'
-import { resolveTuiFrameWidth } from './frame.ts'
+import { resolveTuiWelcomeWidth } from './frame.ts'
 import type { StatusLineSession } from './statusLine.ts'
 import {
   resolveTuiTheme,
@@ -91,28 +91,119 @@ function surfaceRow(
   return paint(body, options.tone ?? 'normal', palette)
 }
 
-function divider(width: number, palette: Palette, ascii: boolean): string {
-  const line = ascii
-    ? '-'.repeat(width)
-    : `╶${'─'.repeat(Math.max(0, width - 2))}╴`
-  return paint(line, 'border', palette)
+type PanelCell = {
+  text: string
+  tone?: Tone
+  align?: Align
 }
 
-function metadataRow(
+type PanelBorder = {
+  horizontal: string
+  vertical: string
+  topLeft: string
+  topRight: string
+  bottomLeft: string
+  bottomRight: string
+  bottomTee: string
+}
+
+function resolvePanelBorder(ascii: boolean): PanelBorder {
+  if (ascii) {
+    return {
+      horizontal: '-',
+      vertical: '|',
+      topLeft: '+',
+      topRight: '+',
+      bottomLeft: '+',
+      bottomRight: '+',
+      bottomTee: '+',
+    }
+  }
+  return {
+    horizontal: '─',
+    vertical: '│',
+    topLeft: '╭',
+    topRight: '╮',
+    bottomLeft: '╰',
+    bottomRight: '╯',
+    bottomTee: '┴',
+  }
+}
+
+function renderTopBorder(
+  width: number,
+  title: string,
+  palette: Palette,
+  border: PanelBorder,
+): string {
+  const innerWidth = Math.max(0, width - 2)
+  const prefixWidth = innerWidth >= measureTerminalText(title) + 4 ? 2 : 0
+  const clippedTitle = clipTerminalText(
+    title,
+    Math.max(0, innerWidth - prefixWidth),
+  )
+  const suffixWidth = Math.max(
+    0,
+    innerWidth - prefixWidth - measureTerminalText(clippedTitle),
+  )
+  return (
+    paint(
+      `${border.topLeft}${border.horizontal.repeat(prefixWidth)}`,
+      'border',
+      palette,
+    ) +
+    paint(clippedTitle, 'title', palette) +
+    paint(
+      `${border.horizontal.repeat(suffixWidth)}${border.topRight}`,
+      'border',
+      palette,
+    )
+  )
+}
+
+function renderBottomBorder(
+  width: number,
+  palette: Palette,
+  border: PanelBorder,
+  split?: { left: number; right: number },
+): string {
+  const body = split
+    ? `${border.horizontal.repeat(split.left)}${border.bottomTee}${border.horizontal.repeat(split.right)}`
+    : border.horizontal.repeat(Math.max(0, width - 2))
+  return paint(
+    `${border.bottomLeft}${body}${border.bottomRight}`,
+    'border',
+    palette,
+  )
+}
+
+function renderPanelCell(
+  cell: PanelCell,
+  width: number,
+  palette: Palette,
+): string {
+  const padding = width >= 2 ? 1 : 0
+  const contentWidth = Math.max(0, width - padding * 2)
+  const body = surfaceRow(cell.text, contentWidth, palette, {
+    tone: cell.tone,
+    align: cell.align,
+  })
+  return `${' '.repeat(padding)}${body}${' '.repeat(padding)}`
+}
+
+function metadataCell(
   label: string,
   value: string,
   width: number,
   palette: Palette,
-): string {
-  const prefix = `  ${label.toUpperCase().padEnd(11)}`
+): PanelCell {
+  const prefix = ` ${label.toUpperCase().padEnd(10)}`
   const prefixWidth = measureTerminalText(prefix)
   const available = Math.max(0, width - prefixWidth)
   const clipped = clipTerminalText(value, available)
-  return (
-    paint(prefix, 'accent', palette) +
-    clipped +
-    ' '.repeat(Math.max(0, available - measureTerminalText(clipped)))
-  )
+  return {
+    text: paint(prefix, 'accent', palette) + clipped,
+  }
 }
 
 function cleanPreview(preview: string[] | undefined): string {
@@ -125,12 +216,16 @@ function cleanPreview(preview: string[] | undefined): string {
   )
 }
 
-function sessionSummary(session: StatusLineSession | undefined): string {
-  if (!session) return 'ready for a new task'
+function sessionSummary(
+  session: StatusLineSession | undefined,
+  ascii = false,
+): string {
+  if (!session) return 'new session'
   const mode = session.permissionMode?.trim() || 'default'
   const effort = session.effortLevel?.trim() || 'auto'
   const count = Math.max(0, session.messages.length)
-  return `${mode} mode · effort ${effort} · ${count} ${
+  const separator = ascii ? ' | ' : ' · '
+  return `${mode} mode${separator}effort ${effort}${separator}${count} ${
     count === 1 ? 'message' : 'messages'
   }`
 }
@@ -149,7 +244,90 @@ function selectCrystalLines(
   return BOLO_CRYSTAL_COMPACT_LINES
 }
 
-function renderIdentity(
+function projectSeparators(text: string, ascii: boolean): string {
+  return ascii ? text.replace(/·/gu, '|') : text
+}
+
+function createStatusCells(
+  opts: InkLayoutOptions,
+  width: number,
+  palette: Palette,
+  options: {
+    compact: boolean
+    relaxed: boolean
+    ascii: boolean
+    centered: boolean
+  },
+): PanelCell[] {
+  const id = opts.sessionId?.trim() || 'new'
+  const hint =
+    opts.hint ??
+    (options.compact
+      ? '/help · /provider'
+      : '/help commands · /provider model · /permissions access')
+  const cells: PanelCell[] = [
+    {
+      text: opts.headline?.trim() || 'Ready',
+      tone: 'title',
+      align: options.centered ? 'center' : 'left',
+    },
+  ]
+  if (!options.compact) {
+    cells.push({
+      text: sessionSummary(opts.session, options.ascii),
+      tone: 'dim',
+      align: options.centered ? 'center' : 'left',
+    })
+  }
+  if (options.relaxed) cells.push({ text: '' })
+  cells.push(
+    metadataCell(
+      'workspace',
+      opts.cwd ?? 'unavailable',
+      width,
+      palette,
+    ),
+    metadataCell(
+      'model',
+      opts.model ?? 'not configured',
+      width,
+      palette,
+    ),
+    metadataCell(
+      'session',
+      id,
+      width,
+      palette,
+    ),
+  )
+  const preview = cleanPreview(opts.messagePreview)
+  if (preview) {
+    cells.push(metadataCell('recent', preview, width, palette))
+  }
+  if (options.relaxed) cells.push({ text: '' })
+  cells.push({
+    text: projectSeparators(hint, options.ascii),
+    tone: 'dim',
+    align: options.centered ? 'center' : 'left',
+  })
+  return cells
+}
+
+function centerPanelCells(
+  cells: PanelCell[],
+  height: number,
+): PanelCell[] {
+  const missing = Math.max(0, height - cells.length)
+  const top = Math.floor(missing / 2)
+  const bottom = missing - top
+  return [
+    ...Array.from({ length: top }, () => ({ text: '' })),
+    ...cells,
+    ...Array.from({ length: bottom }, () => ({ text: '' })),
+  ]
+}
+
+function renderSinglePanel(
   opts: InkLayoutOptions,
   width: number,
   palette: Palette,
@@ -157,73 +335,95 @@ function renderIdentity(
     size: LayoutSize
     mascot: boolean
     ascii: boolean
-    showHeadline: boolean
+    border: PanelBorder
+    title: string
   },
-): string[] {
-  const lines: string[] = []
+): string {
+  const innerWidth = Math.max(1, width - 2)
+  const contentWidth = Math.max(1, innerWidth - 2)
+  const cells: PanelCell[] = []
   if (options.mascot) {
-    lines.push(
+    cells.push(
       ...centerTuiArt(
         selectCrystalLines(options.size, options.ascii),
-        width,
-      ).map((line) => paint(line, 'accent', palette)),
+        contentWidth,
+      ).map((text) => ({ text, tone: 'accent' as const })),
     )
   }
-  lines.push(
-    surfaceRow(
-      `BOLO CODE${options.ascii ? ' | ' : ' · '}v${
-        opts.version ?? '0.0.1'
-      }`,
-      width,
-      palette,
-      { tone: 'title', align: 'center' },
-    ),
+  cells.push(
+    ...createStatusCells(opts, contentWidth, palette, {
+      compact: options.size === 'compact',
+      relaxed: false,
+      ascii: options.ascii,
+      centered: true,
+    }),
   )
-  if (options.showHeadline) {
-    lines.push(
-      surfaceRow(
-        opts.headline?.trim() || 'Ready',
-        width,
-        palette,
-        { tone: 'dim', align: 'center' },
-      ),
-    )
-  }
-  return lines
+  const vertical = paint(options.border.vertical, 'border', palette)
+  return [
+    renderTopBorder(width, options.title, palette, options.border),
+    ...cells.map(
+      (cell) =>
+        `${vertical}${renderPanelCell(cell, innerWidth, palette)}${vertical}`,
+    ),
+    renderBottomBorder(width, palette, options.border),
+  ].join('\n')
 }
 
-function renderSessionRows(
+function renderSplitPanel(
   opts: InkLayoutOptions,
   width: number,
   palette: Palette,
-  options: { compact: boolean; ascii: boolean },
-): string[] {
-  const separator = options.ascii ? ' | ' : ' · '
-  const id = opts.sessionId?.trim() || 'new'
-  const rows = [
-    metadataRow('workspace', opts.cwd ?? 'unavailable', width, palette),
-    metadataRow(
-      'model',
-      opts.model ?? 'not configured',
-      width,
-      palette,
-    ),
-    metadataRow(
-      'session',
-      options.compact
-        ? id
-        : `${id}${separator}${sessionSummary(opts.session)}`,
-      width,
-      palette,
-    ),
-  ]
-
-  if (options.compact && opts.session) {
-    rows.push(metadataRow('state', sessionSummary(opts.session), width, palette))
-  }
-  const preview = cleanPreview(opts.messagePreview)
-  if (preview) rows.push(metadataRow('recent', preview, width, palette))
-  return rows
+  options: {
+    ascii: boolean
+    border: PanelBorder
+    title: string
+  },
+): string {
+  const contentWidth = Math.max(2, width - 3)
+  const preferredLeft = Math.min(
+    40,
+    Math.max(32, Math.floor(contentWidth * 0.38)),
+  )
+  const leftWidth = Math.min(
+    preferredLeft,
+    Math.max(1, contentWidth - 36),
+  )
+  const rightWidth = Math.max(1, contentWidth - leftWidth)
+  const leftContentWidth = Math.max(1, leftWidth - 2)
+  const rightContentWidth = Math.max(1, rightWidth - 2)
+  const leftCells: PanelCell[] = centerTuiArt(
+    selectCrystalLines('wide', options.ascii),
+    leftContentWidth,
+  ).map((text) => ({ text, tone: 'accent' }))
+  const rightCells = createStatusCells(opts, rightContentWidth, palette, {
+    compact: false,
+    relaxed: true,
+    ascii: options.ascii,
+    centered: false,
+  })
+  const height = Math.max(leftCells.length, rightCells.length)
+  const left = centerPanelCells(leftCells, height)
+  const right = centerPanelCells(rightCells, height)
+  const vertical = paint(options.border.vertical, 'border', palette)
+  const rows = Array.from({ length: height }, (_, index) => {
+    const leftCell = left[index] ?? { text: '' }
+    const rightCell = right[index] ?? { text: '' }
+    return (
+      vertical +
+      renderPanelCell(leftCell, leftWidth, palette) +
+      vertical +
+      renderPanelCell(rightCell, rightWidth, palette) +
+      vertical
+    )
+  })
+  return [
+    renderTopBorder(width, options.title, palette, options.border),
+    ...rows,
+    renderBottomBorder(width, palette, options.border, {
+      left: leftWidth,
+      right: rightWidth,
+    }),
+  ].join('\n')
 }
 
 function renderStructuredLayout(
@@ -236,34 +436,22 @@ function renderStructuredLayout(
     ascii: boolean
   },
 ): string {
-  const compact = options.size === 'compact'
-  const hint =
-    opts.hint ??
-    (compact
-      ? '/help · /provider'
-      : '/help commands · /provider model · /permissions access')
-  const projectedHint = options.ascii
-    ? hint.replace(/·/gu, '|')
-    : hint
-  const output = renderIdentity(opts, width, palette, {
-    ...options,
-    showHeadline: !compact,
-  })
-  output.push(
-    divider(width, palette, options.ascii),
-    ...renderSessionRows(opts, width, palette, {
-      compact,
+  const border = resolvePanelBorder(options.ascii)
+  const title = ` BOLO CODE${options.ascii ? ' | ' : ' · '}v${
+    opts.version ?? '0.0.1'
+  } `
+  if (options.size === 'wide' && options.mascot) {
+    return renderSplitPanel(opts, width, palette, {
       ascii: options.ascii,
-    }),
-    divider(width, palette, options.ascii),
-    surfaceRow(
-      `  ${projectedHint}`,
-      width,
-      palette,
-      { tone: 'dim' },
-    ),
-  )
-  return output.join('\n')
+      border,
+      title,
+    })
+  }
+  return renderSinglePanel(opts, width, palette, {
+    ...options,
+    border,
+    title,
+  })
 }
 
 function renderPlainLayout(
@@ -306,7 +494,7 @@ export function renderInkLayout(opts: InkLayoutOptions = {}): string {
     ansi: theme.ansi,
     dimTheme: theme.id === 'dim',
   })
-  const width = resolveTuiFrameWidth(columns)
+  const width = resolveTuiWelcomeWidth(columns)
   const size: LayoutSize =
     columns >= WIDE_LAYOUT_COLUMNS
       ? 'wide'
