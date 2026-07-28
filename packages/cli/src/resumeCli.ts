@@ -60,7 +60,10 @@ import {
   resolveCliTuiEngine,
   type CliTuiEngine,
 } from './tui/tuiEngine.ts'
-import type { BoloTerminalOutput } from './tui/boloTerminalAdapter.ts'
+import type {
+  BoloTerminalInput,
+  BoloTerminalOutput,
+} from './tui/boloTerminalAdapter.ts'
 import { renderContextDashboard } from './tui/contextDashboard.ts'
 import {
   prefixTuiContentBlock,
@@ -477,6 +480,25 @@ export function attachSessionTuiController(
   )[TUI_CONTROLLER] = controller
 }
 
+export function configureSessionComposer(
+  controller: CliTuiController,
+  session: BoloSession,
+  history: readonly string[] = [],
+): void {
+  controller.configureComposer({
+    history,
+    slashCandidates: getCliSlashCommandCandidates(session),
+    status: {
+      permissionMode: session.permissionMode,
+      providerId: session.providerId,
+      providerKind: session.provider?.id,
+      model: session.model,
+      effortLevel: session.effortLevel,
+      ...(session.usage ? { usage: session.usage } : {}),
+    },
+  })
+}
+
 /**
  * 组装 CLI onEvent：T4 打印机 + 可选测试钩子
  */
@@ -495,6 +517,7 @@ export function createCliOnEvent(opts: {
   columns?: number
   activity?: TurnActivityIndicator
   engine?: CliTuiEngine
+  terminalInput?: BoloTerminalInput
   terminalOutput?: BoloTerminalOutput
   env?: NodeJS.ProcessEnv
   /** 把 provider 原始错误变成「怎么了 + 下一步」（晚绑定到活跃 session） */
@@ -510,6 +533,7 @@ export function createCliOnEvent(opts: {
       ? createRetainedTuiController({
           writeOut: opts.writeOut,
           writeErr: opts.writeErr,
+          ...(opts.terminalInput ? { input: opts.terminalInput } : {}),
           output: opts.terminalOutput ?? { columns: opts.columns },
           env: opts.env,
           fallbackColumns: opts.columns,
@@ -596,6 +620,7 @@ export async function resumeFromIdOrPath(
     showThinking: () => thinkingGate.session?.showThinking !== false,
     timeline: dynamicTui,
     engine,
+    terminalInput: process.stdin,
     terminalOutput: process.stdout,
     env: process.env,
     color,
@@ -646,6 +671,7 @@ export async function resumeFromIdOrPath(
   if (surface) attachSessionTerminalSurface(session, surface)
   if (controller) {
     controller.restoreMessages(session.messages)
+    configureSessionComposer(controller, session)
     attachSessionTuiController(session, controller)
   }
 
@@ -1130,6 +1156,7 @@ export async function runRepl(
 
   try {
     while (!replClosed) {
+      if (controller) configureSessionComposer(controller, session, history)
       const queued = await takeNextQueuedReplPrompt(session)
       let text: string
       if (queued) {
@@ -1137,6 +1164,24 @@ export async function runRepl(
         if (!dynamicTui) {
           writeOut(`[queued ${queued.controlId}] ${text}\n`)
         }
+      } else if (controller) {
+        const input = await controller.readInput({
+          ...(options?.signal ? { signal: options.signal } : {}),
+        })
+        if (input.type !== 'submit') {
+          replClosed = true
+          runtimeOut(input.type === 'exit' ? '^C\n' : '\n')
+          break
+        }
+        text = input.value.trim()
+        if (!text) continue
+        if (text === '/exit' || text === '/quit') {
+          replClosed = true
+          runtimeOut('Session closed.\n')
+          break
+        }
+        if (history[history.length - 1] !== text) history.push(text)
+        if (history.length > 100) history.shift()
       } else if (dynamicTui) {
         await pauseInteractiveSurface()
         let input

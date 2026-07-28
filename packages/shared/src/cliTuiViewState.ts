@@ -315,6 +315,7 @@ export type CliTuiViewAction =
   | { type: 'set_composer_mode'; mode: CliTuiComposerMode }
   | { type: 'set_overlay'; overlay: CliTuiOverlayState }
   | { type: 'set_block_elapsed'; blockId: string; elapsedMs: number }
+  | { type: 'finish_thinking_segment'; elapsedMs: number }
 
 export function createCliTuiViewState(): CliTuiViewState {
   return {
@@ -882,6 +883,39 @@ function updateBlockElapsed(
   return state
 }
 
+function finishThinkingSegment(
+  state: CliTuiViewState,
+  elapsedMs: number,
+): CliTuiViewState {
+  if (!Number.isFinite(elapsedMs)) return state
+  const normalized = Math.max(0, Math.round(elapsedMs))
+  return mapActiveTurn(state, (turn) => {
+    const lastIndex = turn.blocks.length - 1
+    const last = turn.blocks[lastIndex]
+    if (last?.kind === 'reasoning') {
+      if (last.elapsedMs !== undefined && last.status === 'complete') {
+        return turn
+      }
+      return replaceBlock(turn, lastIndex, {
+        ...last,
+        status: 'complete',
+        elapsedMs: normalized,
+      })
+    }
+
+    const closed = closeStreamingBlocks(turn)
+    const block: CliTuiReasoningBlock = {
+      id: nextSequentialBlockId(closed),
+      turnId: closed.id,
+      kind: 'reasoning',
+      status: 'complete',
+      text: '',
+      elapsedMs: normalized,
+    }
+    return { ...closed, blocks: [...closed.blocks, block] }
+  })
+}
+
 export function reduceCliTuiViewState(
   state: CliTuiViewState,
   action: CliTuiViewAction,
@@ -903,6 +937,8 @@ export function reduceCliTuiViewState(
       return { ...state, overlay: action.overlay }
     case 'set_block_elapsed':
       return updateBlockElapsed(state, action.blockId, action.elapsedMs)
+    case 'finish_thinking_segment':
+      return finishThinkingSegment(state, action.elapsedMs)
   }
 }
 

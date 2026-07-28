@@ -88,6 +88,7 @@ async function main() {
     'scripts/test-cli-tui-view-state.ts',
     'scripts/test-cli-tui-retained.ts',
     'scripts/test-cli-tui-transcript.ts',
+    'scripts/test-cli-tui-composer.ts',
     'scripts/test-cli-tui-vt-legacy.ts',
     'scripts/test-desktop-launch.ts',
     'scripts/test-runtime-core-transport.ts',
@@ -184,6 +185,15 @@ async function main() {
     bundle.includes('@earendil-works/pi-tui/dist/components/markdown.js'),
     'single-file bundle embeds the retained transcript Markdown component',
   )
+  for (const required of [
+    '@earendil-works/pi-tui/dist/stdin-buffer.js',
+    '@earendil-works/pi-tui/dist/keys.js',
+  ]) {
+    assert(
+      bundle.includes(required),
+      `retained Composer must bundle its audited Pi input module: ${required}`,
+    )
+  }
   assert(
     bundle.includes('node_modules/marked/lib/marked.esm.js') &&
       bundle.includes('trimPartialClosingFences'),
@@ -196,7 +206,7 @@ async function main() {
   ]) {
     assert(
       !bundle.includes(forbidden),
-      `retained transcript must not bundle unused Pi module: ${forbidden}`,
+      `retained TUI must not bundle unused Pi module: ${forbidden}`,
     )
   }
 

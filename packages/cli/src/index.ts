@@ -87,6 +87,7 @@ export {
 } from './tui/terminalSurface.ts'
 export {
   createBoloTerminalAdapter,
+  type BoloTerminalInput,
   type BoloTerminalAdapter,
   type BoloTerminalOutput,
   type BoloTerminalStats,
@@ -137,15 +138,19 @@ export {
 export {
   applyTuiInputKey,
   canUseTuiInput,
+  configureTuiInputState,
   createTuiInputState,
   formatTuiTokenCount,
+  insertTuiInputText,
   readTuiInput,
   renderTuiInputBox,
+  renderTuiInputFooter,
   renderUserMessage,
   shouldUseDynamicTui,
   type ApplyTuiInputKeyResult,
   type ReadTuiInputResult,
   type RenderedTuiInputBox,
+  type RenderedTuiInputFooter,
   type TuiInputAction,
   type TuiInputKey,
   type TuiInputState,

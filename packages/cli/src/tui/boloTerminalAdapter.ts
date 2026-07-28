@@ -1,4 +1,21 @@
 import type { Terminal } from '@earendil-works/pi-tui/dist/terminal.js'
+import { StdinBuffer } from '@earendil-works/pi-tui/dist/stdin-buffer.js'
+
+export type BoloTerminalInput = {
+  isTTY?: boolean
+  isRaw?: boolean
+  setRawMode?: (mode: boolean) => unknown
+  on: (
+    event: 'data',
+    listener: (data: string | Buffer) => void,
+  ) => unknown
+  removeListener: (
+    event: 'data',
+    listener: (data: string | Buffer) => void,
+  ) => unknown
+  resume: () => unknown
+  pause: () => unknown
+}
 
 export type BoloTerminalOutput = {
   columns?: number
@@ -10,6 +27,8 @@ export type BoloTerminalOutput = {
 export type BoloTerminalStats = {
   writes: number
   externalWrites: number
+  inputEvents: number
+  pasteTransactions: number
   filteredScrollbackClears: number
   concurrentWriteViolations: number
 }
@@ -18,6 +37,8 @@ export type BoloTerminalAdapter = Terminal & {
   readonly renderEpoch: number
   getStats(): BoloTerminalStats
   setExternalOwner(active: boolean): void
+  setInputEnabled(active: boolean): void
+  isInputEnabled(): boolean
   writeExternal(data: string): void
   waitForRender(afterEpoch: number, timeoutMs?: number): Promise<void>
 }
@@ -31,6 +52,10 @@ type RenderWaiter = {
 
 const CLEAR_SCROLLBACK = '\u001b[3J'
 const SYNC_END = '\u001b[?2026l'
+const BRACKETED_PASTE_ENABLE = '\u001b[?2004h'
+const BRACKETED_PASTE_DISABLE = '\u001b[?2004l'
+const BRACKETED_PASTE_START = '\u001b[200~'
+const BRACKETED_PASTE_END = '\u001b[201~'
 
 function positiveDimension(value: number | undefined, fallback: number): number {
   if (!Number.isFinite(value) || value == null || value <= 0) return fallback
@@ -43,18 +68,27 @@ function safeTitle(title: string): string {
 
 export function createBoloTerminalAdapter(options: {
   writeOut: (data: string) => void
+  input?: BoloTerminalInput
   output: BoloTerminalOutput
   fallbackColumns?: number
   fallbackRows?: number
 }): BoloTerminalAdapter {
   let resizeHandler: (() => void) | undefined
+  let inputHandler: ((data: string) => void) | undefined
+  let inputDataHandler: ((data: string | Buffer) => void) | undefined
+  let inputBuffer: StdinBuffer | undefined
   let started = false
   let externalOwner = false
+  let inputRequested = false
+  let inputActive = false
+  let inputWasRaw = false
   let renderEpoch = 0
   const waiters = new Set<RenderWaiter>()
   const stats: BoloTerminalStats = {
     writes: 0,
     externalWrites: 0,
+    inputEvents: 0,
+    pasteTransactions: 0,
     filteredScrollbackClears: 0,
     concurrentWriteViolations: 0,
   }
@@ -91,12 +125,112 @@ export function createBoloTerminalAdapter(options: {
     }
   }
 
+  const releaseInput = () => {
+    if (!inputActive) return
+    inputActive = false
+    const input = options.input
+    if (input && inputDataHandler) {
+      input.removeListener('data', inputDataHandler)
+    }
+    inputDataHandler = undefined
+    inputBuffer?.destroy()
+    inputBuffer = undefined
+    emitRetained(BRACKETED_PASTE_DISABLE)
+    if (input && !inputWasRaw) input.setRawMode?.(false)
+    input?.pause()
+  }
+
+  const acquireInput = () => {
+    if (
+      inputActive ||
+      !inputRequested ||
+      !started ||
+      externalOwner ||
+      !inputHandler
+    ) {
+      return
+    }
+    const input = options.input
+    if (
+      !input ||
+      input.isTTY !== true ||
+      typeof input.setRawMode !== 'function'
+    ) {
+      throw new Error('retained Composer input requires a raw-mode TTY')
+    }
+
+    const buffer = new StdinBuffer()
+    buffer.on('data', (data) => {
+      if (!inputActive || externalOwner || !inputHandler) return
+      stats.inputEvents += 1
+      inputHandler(data)
+    })
+    buffer.on('paste', (data) => {
+      if (!inputActive || externalOwner || !inputHandler) return
+      stats.pasteTransactions += 1
+      inputHandler(`${BRACKETED_PASTE_START}${data}${BRACKETED_PASTE_END}`)
+    })
+    const dataHandler = (data: string | Buffer) => buffer.process(data)
+    const wasRaw = input.isRaw === true
+    let listenerAttached = false
+    let rawModeAttempted = false
+    let pasteEnabled = false
+    try {
+      input.on('data', dataHandler)
+      listenerAttached = true
+      rawModeAttempted = true
+      input.setRawMode(true)
+      inputBuffer = buffer
+      inputDataHandler = dataHandler
+      inputWasRaw = wasRaw
+      inputActive = true
+      emitRetained(BRACKETED_PASTE_ENABLE)
+      pasteEnabled = true
+      input.resume()
+    } catch (error) {
+      inputActive = false
+      if (listenerAttached) {
+        try {
+          input.removeListener('data', dataHandler)
+        } catch {
+          /* preserve the acquisition error */
+        }
+      }
+      buffer.destroy()
+      inputBuffer = undefined
+      inputDataHandler = undefined
+      if (pasteEnabled) {
+        try {
+          emitRetained(BRACKETED_PASTE_DISABLE)
+        } catch {
+          /* preserve the acquisition error */
+        }
+      }
+      if (rawModeAttempted && !wasRaw) {
+        try {
+          input.setRawMode(false)
+        } catch {
+          /* preserve the acquisition error */
+        }
+      }
+      try {
+        input.pause()
+      } catch {
+        /* preserve the acquisition error */
+      }
+      throw error
+    }
+  }
+
   const stop = () => {
+    inputRequested = false
+    releaseInput()
     if (started && resizeHandler) {
       options.output.removeListener?.('resize', resizeHandler)
     }
     started = false
     resizeHandler = undefined
+    inputHandler = undefined
     externalOwner = false
     for (const waiter of [...waiters]) {
       clearTimeout(waiter.timer)
@@ -106,13 +240,15 @@ export function createBoloTerminalAdapter(options: {
   }
 
   const adapter: BoloTerminalAdapter = {
-    start(_onInput, onResize) {
+    start(onInput, onResize) {
       if (started) return
       started = true
+      inputHandler = onInput
       resizeHandler = () => {
         if (!externalOwner) onResize()
       }
       options.output.on?.('resize', resizeHandler)
+      acquireInput()
     },
     stop,
     async drainInput() {},
@@ -161,7 +297,17 @@ export function createBoloTerminalAdapter(options: {
       return { ...stats }
     },
     setExternalOwner(active) {
+      if (active) releaseInput()
       externalOwner = active
+      if (!active) acquireInput()
+    },
+    setInputEnabled(active) {
+      inputRequested = active
+      if (active) acquireInput()
+      else releaseInput()
+    },
+    isInputEnabled() {
+      return inputActive
     },
     writeExternal(data) {
       if (!data) return

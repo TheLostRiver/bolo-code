@@ -11,6 +11,7 @@ import {
   runNewSessionCli,
   runResumeCli,
 } from '../packages/cli/src/index.ts'
+import { getSessionTuiController } from '../packages/cli/src/resumeCli.ts'
 import { measureTerminalText } from '../packages/cli/src/tui/terminalText.ts'
 import { HeadlessTerminalHarness } from './lib/headlessTerminalHarness.ts'
 
@@ -379,9 +380,13 @@ async function main() {
         configurable: true,
         value: true,
       })
+      const rawTransitions: boolean[] = []
       Object.defineProperty(process.stdin, 'setRawMode', {
         configurable: true,
-        value: () => process.stdin,
+        value: (mode: boolean) => {
+          rawTransitions.push(mode)
+          return process.stdin
+        },
       })
       Object.defineProperty(process.stdout, 'isTTY', {
         configurable: true,
@@ -437,6 +442,114 @@ async function main() {
       assert(
         !resumeBytes.includes('\u001b[3J'),
         'resume lifecycle preserved scrollback',
+      )
+
+      const runInteractiveExit = async (
+        run: (
+          write: (text: string) => void,
+          signal: AbortSignal,
+        ) => Promise<{
+          session: Parameters<typeof getSessionTuiController>[0]
+        }>,
+      ) => {
+        const writes: string[] = []
+        let inputSent = false
+        let timedOut = false
+        const abort = new AbortController()
+        const write = (text: string): void => {
+          writes.push(text)
+          if (inputSent || !text.includes('\u001b[?2004h')) return
+          inputSent = true
+          const keys = [...'/exit', '\r', '\r']
+          const sendNext = (): void => {
+            const key = keys.shift()
+            if (key === undefined) return
+            process.stdin.emit('data', Buffer.from(key, 'utf8'))
+            if (keys.length) setImmediate(sendNext)
+          }
+          setImmediate(sendNext)
+        }
+        const timer = setTimeout(() => {
+          timedOut = true
+          abort.abort()
+        }, 5_000)
+        try {
+          const result = await run(write, abort.signal)
+          return { result, writes, inputSent, timedOut }
+        } finally {
+          clearTimeout(timer)
+        }
+      }
+
+      const listenersBeforeInteractive = process.stdin.listenerCount('data')
+      const newInteractive = await runInteractiveExit((write, signal) =>
+        runNewSessionCli({
+          cwd,
+          forceMock: true,
+          isTty: true,
+          signal,
+          readPermissionAnswer: async () => 'n',
+          writeOut: write,
+          writeErr: write,
+        }),
+      )
+      const newController = getSessionTuiController(
+        newInteractive.result.session,
+      )
+      assert(
+        newInteractive.inputSent && !newInteractive.timedOut,
+        `interactive new session consumed /exit through retained stdin; ` +
+          `value=${JSON.stringify(newController?.composer.getState().value)}`,
+      )
+      assert(
+        newController?.composer
+          .getState()
+          .slashCandidates.some((candidate) => candidate.name === 'doctor'),
+        'interactive new session configured the Composer slash catalog',
+      )
+      assert(
+        newController?.composer.getStatus()?.model ===
+          newInteractive.result.session.model,
+        'interactive new session configured Composer model/status before input',
+      )
+      assert(
+        newController?.getTerminalStats().externalWrites === 0,
+        'interactive new-session input never crossed the legacy writer bridge',
+      )
+
+      const resumeInteractive = await runInteractiveExit((write, signal) =>
+        runResumeCli({
+          idOrPath: created.session.id,
+          cwd,
+          forceMock: true,
+          reassembleSystem: false,
+          systemPrompt: false,
+          isTty: true,
+          signal,
+          readPermissionAnswer: async () => 'n',
+          writeOut: write,
+          writeErr: write,
+        }),
+      )
+      const resumeController = getSessionTuiController(
+        resumeInteractive.result.session,
+      )
+      assert(
+        resumeInteractive.inputSent && !resumeInteractive.timedOut,
+        `interactive resume consumed /exit through retained stdin; ` +
+          `value=${JSON.stringify(resumeController?.composer.getState().value)}`,
+      )
+      assert(
+        resumeController?.getTerminalStats().externalWrites === 0,
+        'interactive resume input never crossed the legacy writer bridge',
+      )
+      assert(
+        rawTransitions.slice(-4).join(',') === 'true,false,true,false',
+        'new and resume REPL each acquire and release raw mode exactly once',
+      )
+      assert(
+        process.stdin.listenerCount('data') === listenersBeforeInteractive,
+        'new and resume REPL release their production stdin listener',
       )
     } finally {
       restoreEnv('BOLO_CONFIG_DIR', previous.configDir)

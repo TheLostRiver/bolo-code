@@ -93,6 +93,28 @@ export function createTuiInputState(options?: {
   return refreshSlashMenu(state)
 }
 
+export function configureTuiInputState(
+  state: TuiInputState,
+  options: {
+    history?: readonly string[]
+    slashCandidates?: readonly SlashCommandCandidate[]
+  },
+): TuiInputState {
+  return refreshSlashMenu({
+    ...state,
+    ...(options.history
+      ? {
+          history: [...options.history],
+          historyIndex: null,
+          historyDraft: state.value,
+        }
+      : {}),
+    ...(options.slashCandidates
+      ? { slashCandidates: [...options.slashCandidates] }
+      : {}),
+  })
+}
+
 function isSlashCompletionContext(state: TuiInputState): boolean {
   const chars = splitTerminalGraphemes(state.value)
   return (
@@ -191,6 +213,13 @@ function insertText(state: TuiInputState, raw: string): TuiInputState {
   const inserted = splitTerminalGraphemes(text)
   before.splice(state.cursor, 0, ...inserted)
   return withValue(state, before, state.cursor + inserted.length)
+}
+
+export function insertTuiInputText(
+  state: TuiInputState,
+  raw: string,
+): TuiInputState {
+  return insertText(state, raw)
 }
 
 function recallHistory(
@@ -713,6 +742,61 @@ function renderSlashMenuRows(options: {
   return rows
 }
 
+function insertZeroWidthMarker(
+  text: string,
+  cell: number,
+  marker: string,
+): string {
+  if (!marker) return text
+  const target = Math.max(0, Math.floor(cell))
+  const output: string[] = []
+  let width = 0
+  let inserted = false
+  for (const grapheme of splitTerminalGraphemes(text)) {
+    if (!inserted && width >= target) {
+      output.push(marker)
+      inserted = true
+    }
+    output.push(grapheme)
+    width += terminalGraphemeWidth(grapheme)
+  }
+  if (!inserted) output.push(marker)
+  return output.join('')
+}
+
+export type RenderedTuiInputFooter = {
+  text: string
+  lines: string[]
+}
+
+export function renderTuiInputFooter(options: {
+  state: TuiInputState
+  columns?: number
+  status?: TuiInputStatus
+  color?: boolean
+  mode?: 'idle' | 'running'
+}): RenderedTuiInputFooter {
+  const columns = Math.max(24, Math.floor(options.columns ?? 80))
+  const frameWidth = resolveTuiDockWidth(columns)
+  const color = options.color !== false
+  const lines: string[] = []
+  const status = renderStatusFooter({
+    status: options.status,
+    width: frameWidth,
+    color,
+  })
+  if (stripTerminalAnsi(status).trim()) lines.push(status)
+  lines.push(
+    renderShortcutFooter({
+      menuOpen: options.state.slashMenu !== null,
+      mode: options.mode,
+      width: frameWidth,
+      color,
+    }),
+  )
+  return { text: lines.join('\n'), lines }
+}
+
 export function renderTuiInputBox(options: {
   state: TuiInputState
   columns?: number
@@ -722,6 +806,8 @@ export function renderTuiInputBox(options: {
   maxMenuRows?: number
   title?: string
   mode?: 'idle' | 'running'
+  includeFooter?: boolean
+  cursorMarker?: string
 }): RenderedTuiInputBox {
   const columns = Math.max(24, Math.floor(options.columns ?? 80))
   const frameWidth = resolveTuiDockWidth(columns)
@@ -755,10 +841,18 @@ export function renderTuiInputBox(options: {
   for (let index = 0; index < visible.length; index++) {
     const marker = start + index === 0 ? '❯ ' : '  '
     const inputLine = visible[index]!
+    const inputText =
+      options.cursorMarker && start + index === wrapped.cursorLine
+        ? insertZeroWidthMarker(
+            inputLine.text,
+            wrapped.cursorWidth,
+            options.cursorMarker,
+          )
+        : inputLine.text
     const ghost = inputLine.ghostText
       ? `${dim}${inputLine.ghostText}${reset}`
       : ''
-    const body = `${inputLine.text}${ghost}${' '.repeat(
+    const body = `${inputText}${ghost}${' '.repeat(
       Math.max(0, contentWidth - inputLine.width),
     )}`
     lines.push(
@@ -781,20 +875,17 @@ export function renderTuiInputBox(options: {
   }
   lines.push(`${border}${borderLine('╰', '╯', frameWidth)}${reset}`)
 
-  const status = renderStatusFooter({
-    status: options.status,
-    width: frameWidth,
-    color,
-  })
-  if (stripTerminalAnsi(status).trim()) lines.push(status)
-  lines.push(
-    renderShortcutFooter({
-      menuOpen: options.state.slashMenu !== null,
-      mode: options.mode,
-      width: frameWidth,
-      color,
-    }),
-  )
+  if (options.includeFooter !== false) {
+    lines.push(
+      ...renderTuiInputFooter({
+        state: options.state,
+        columns,
+        status: options.status,
+        color,
+        mode: options.mode,
+      }).lines,
+    )
+  }
 
   const cursorRow = 1 + wrapped.cursorLine - start
   const cursorColumn = 1 + 1 + 2 + wrapped.cursorWidth

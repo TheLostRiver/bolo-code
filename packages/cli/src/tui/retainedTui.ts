@@ -10,7 +10,6 @@ import {
   createCliTuiViewState,
   projectCliTuiSessionEvent,
   reduceCliTuiViewState,
-  selectCliTuiActiveBlock,
   type ChatMessage,
   type CliTuiSessionEvent,
   type CliTuiViewAction,
@@ -22,15 +21,27 @@ import {
 } from './formatSessionEvent.ts'
 import {
   createBoloTerminalAdapter,
+  type BoloTerminalInput,
   type BoloTerminalAdapter,
   type BoloTerminalOutput,
   type BoloTerminalStats,
 } from './boloTerminalAdapter.ts'
+import type { ReadTuiInputResult } from './inputBox.ts'
 import {
   renderInkLayout,
   type InkLayoutOptions,
 } from './inkLayout.ts'
-import { RetainedTranscript } from './retainedTranscript.ts'
+import { RetainedActivity } from './retainedActivity.ts'
+import {
+  RetainedComposer,
+  RetainedComposerFooter,
+  type RetainedComposerConfig,
+} from './retainedComposer.ts'
+import {
+  RetainedTranscript,
+} from './retainedTranscript.ts'
+import { resolveTuiContentGutter } from './contentLayout.ts'
+import { createTurnActivityIndicator } from './turnActivity.ts'
 
 export type RetainedWelcomeOptions = Omit<
   InkLayoutOptions,
@@ -39,9 +50,12 @@ export type RetainedWelcomeOptions = Omit<
 
 export type CliTuiController = {
   readonly root: Component
+  readonly composer: RetainedComposer
   readonly printer: SessionEventPrinter
   configureWelcome(options: RetainedWelcomeOptions): void
   setWelcomeVisible(visible: boolean): void
+  configureComposer(options: RetainedComposerConfig): void
+  readInput(options?: { signal?: AbortSignal }): Promise<ReadTuiInputResult>
   restoreMessages(messages: readonly ChatMessage[]): void
   getState(): CliTuiViewState
   start(): Promise<void>
@@ -95,25 +109,38 @@ class WelcomeComponent implements Component {
 
 class RetainedRoot extends Container {
   private readonly welcome: WelcomeComponent
-  private readonly status = new Text('', 1, 0)
   private readonly transcript: RetainedTranscript
+  private readonly activity: RetainedActivity
+  private readonly composer: RetainedComposer
+  private readonly footer: RetainedComposerFooter
   private readonly compatibilityOutput = new Text('', 1, 0)
-  private state = createCliTuiViewState()
   private outputText = ''
   private visible = true
   private revision = 0
   private renderedRevision = -1
   private readonly waiters = new Set<RevisionWaiter>()
 
-  constructor(env: NodeJS.ProcessEnv) {
+  constructor(
+    env: NodeJS.ProcessEnv,
+    composer: RetainedComposer,
+    activity: RetainedActivity,
+    color: boolean,
+  ) {
     super()
     this.welcome = new WelcomeComponent(env)
     this.transcript = new RetainedTranscript({ env })
+    this.activity = activity
+    this.composer = composer
+    this.footer = new RetainedComposerFooter(
+      composer,
+      color,
+    )
     this.addChild(this.welcome)
-    this.addChild(this.status)
     this.addChild(this.transcript)
     this.addChild(this.compatibilityOutput)
-    this.refreshStatus()
+    this.addChild(this.activity)
+    this.addChild(this.composer)
+    this.addChild(this.footer)
     this.markDirty()
   }
 
@@ -128,9 +155,8 @@ class RetainedRoot extends Container {
   }
 
   setState(state: CliTuiViewState): void {
-    this.state = state
     this.transcript.setState(state)
-    this.refreshStatus()
+    this.composer.setMode(state.composer.mode)
     this.markDirty()
   }
 
@@ -144,6 +170,10 @@ class RetainedRoot extends Container {
     if (!text) return
     this.outputText = `${this.outputText}${text}`.slice(-65_536)
     this.compatibilityOutput.setText(this.outputText.trimEnd())
+    this.markDirty()
+  }
+
+  childChanged(): void {
     this.markDirty()
   }
 
@@ -180,7 +210,22 @@ class RetainedRoot extends Container {
   }
 
   override render(width: number): string[] {
-    const lines = this.visible ? super.render(width) : []
+    const lines: string[] = []
+    if (this.visible) {
+      const append = (section: string[], gap: number): void => {
+        if (!section.length) return
+        if (lines.length && gap > 0) {
+          lines.push(...Array.from({ length: gap }, () => ''))
+        }
+        lines.push(...section)
+      }
+      append(this.welcome.render(width), 0)
+      append(this.transcript.render(width), 1)
+      append(this.compatibilityOutput.render(width), 1)
+      append(this.activity.render(width), 1)
+      append(this.composer.render(width), 1)
+      append(this.footer.render(width), 0)
+    }
     this.renderedRevision = this.revision
     for (const waiter of [...this.waiters]) {
       if (this.renderedRevision < waiter.revision) continue
@@ -189,16 +234,6 @@ class RetainedRoot extends Container {
       waiter.resolve()
     }
     return lines
-  }
-
-  private refreshStatus(): void {
-    const turnLabel =
-      this.state.turns.length === 1
-        ? '1 turn'
-        : `${this.state.turns.length} turns`
-    this.status.setText(
-      `Bolo · ${this.state.phase} · ${turnLabel}`,
-    )
   }
 
   private markDirty(): void {
@@ -217,41 +252,74 @@ function shouldShowThinking(
 export function createRetainedTuiController(options: {
   writeOut: (text: string) => void
   writeErr?: (text: string) => void
+  input?: BoloTerminalInput
   output: BoloTerminalOutput
   env?: NodeJS.ProcessEnv
   fallbackColumns?: number
   fallbackRows?: number
+  color?: boolean
   showThinking?: boolean | (() => boolean)
   explainError?: (message: string) => string
   now?: () => number
+  activityIntervalMs?: number
 }): CliTuiController {
   const env = options.env ?? process.env
+  const color = options.color ?? env.NO_COLOR === undefined
   const adapter: BoloTerminalAdapter = createBoloTerminalAdapter({
     writeOut: options.writeOut,
+    input: options.input,
     output: options.output,
     fallbackColumns: options.fallbackColumns,
     fallbackRows: options.fallbackRows,
   })
-  const root = new RetainedRoot(env)
-  const tui = new TUI(
-    adapter,
-    false,
-    path.join(getBoloHomeDir(), 'logs', 'tui'),
-  )
-  tui.setClearOnShrink(false)
-  tui.addChild(root)
-
   let state = createCliTuiViewState()
   let started = false
   let stopped = false
   let suspended = false
   let streamedAssistantText = false
-  const reasoningStartedAt = new Map<string, number>()
-  const now = options.now ?? Date.now
+  let turnActivityEnabled = true
+  let root: RetainedRoot
+  let tui: TUI
 
   const requestRender = (): void => {
     if (started && !stopped && !suspended) tui.requestRender()
   }
+  const requestComponentRender = (): void => {
+    root.childChanged()
+    requestRender()
+  }
+  const composer = new RetainedComposer({
+    color,
+    requestRender: requestComponentRender,
+    onInputSettled: () => adapter.setInputEnabled(false),
+    clearScreen: () => {
+      adapter.clearScreen()
+      if (started && !stopped && !suspended) tui.requestRender(true)
+    },
+  })
+  const activityView = new RetainedActivity(requestComponentRender)
+  root = new RetainedRoot(env, composer, activityView, color)
+  tui = new TUI(
+    adapter,
+    true,
+    path.join(getBoloHomeDir(), 'logs', 'tui'),
+  )
+  tui.setClearOnShrink(false)
+  tui.addChild(root)
+  tui.setFocus(composer)
+  const now = options.now ?? Date.now
+  const activity = createTurnActivityIndicator({
+    writeOut: () => {
+      throw new Error('retained activity attempted a direct terminal write')
+    },
+    color,
+    columns: () =>
+      Math.max(1, adapter.columns - resolveTuiContentGutter(adapter.columns)),
+    now,
+    intervalMs: options.activityIntervalMs,
+    renderFrame: (line) => activityView.setLine(line),
+    clearFrame: () => activityView.clear(),
+  })
 
   const apply = (action: CliTuiViewAction): void => {
     state = reduceCliTuiViewState(state, action)
@@ -259,24 +327,35 @@ export function createRetainedTuiController(options: {
     requestRender()
   }
 
-  const activeReasoningBlock = () => {
-    const block = selectCliTuiActiveBlock(state)
-    return block?.kind === 'reasoning' ? block : undefined
+  const finishThinkingSegment = (record: boolean): void => {
+    const elapsedMs = activity.finishThinkingSegment()
+    if (record && elapsedMs !== undefined) {
+      apply({ type: 'finish_thinking_segment', elapsedMs })
+    }
   }
 
-  const stampClosedReasoning = (
-    blockId: string,
-    startedAt: number,
-  ): void => {
-    const elapsedMs = Math.max(0, now() - startedAt)
-    reasoningStartedAt.delete(blockId)
-    apply({ type: 'set_block_elapsed', blockId, elapsedMs })
-  }
+  const eventFinishesThinking = (event: CliSessionEvent): boolean =>
+    event.type === 'reasoning_end' ||
+    (event.type === 'text' &&
+      typeof event.text === 'string' &&
+      event.text.length > 0) ||
+    event.type === 'summary' ||
+    event.type === 'tool_start' ||
+    event.type === 'tool_progress' ||
+    event.type === 'tool_end' ||
+    event.type === 'web_search' ||
+    event.type === 'permission_request' ||
+    event.type === 'error' ||
+    event.type === 'warning' ||
+    event.type === 'ptl_retry' ||
+    event.type === 'model_retry' ||
+    event.type === 'done'
 
   const printer: SessionEventPrinter = {
     beginTurn(turnOptions) {
       streamedAssistantText = false
-      reasoningStartedAt.clear()
+      activity.finish()
+      turnActivityEnabled = turnOptions?.activity !== false
       apply({
         type: 'begin_turn',
         ...(turnOptions?.prompt !== undefined
@@ -286,73 +365,60 @@ export function createRetainedTuiController(options: {
           ? { echoUser: turnOptions.echoUser }
           : {}),
       })
+      if (turnActivityEnabled) activity.start('Thinking')
     },
     onEvent(event: CliSessionEvent) {
-      if (
-        (event.type === 'reasoning' || event.type === 'reasoning_end') &&
-        !shouldShowThinking(options.showThinking)
-      ) {
-        return
-      }
-      const projected =
-        event.type === 'error' &&
-        typeof event.message === 'string' &&
-        options.explainError
-          ? {
-              ...event,
-              message: options.explainError(event.message),
-            }
-          : event
-      const previousReasoning = activeReasoningBlock()
-      const next = reduceCliTuiViewState(
-        state,
-        projectCliTuiSessionEvent(
-          projected as CliTuiSessionEvent,
-        ),
-      ) as CliTuiViewState | undefined
-      if (!next) return
-      state = next
-      const currentReasoning = activeReasoningBlock()
-      if (
-        currentReasoning &&
-        !reasoningStartedAt.has(currentReasoning.id)
-      ) {
-        reasoningStartedAt.set(currentReasoning.id, now())
-      }
-      if (
-        previousReasoning &&
-        currentReasoning?.id !== previousReasoning.id
-      ) {
-        const startedAt = reasoningStartedAt.get(previousReasoning.id)
-        if (startedAt !== undefined) {
-          stampClosedReasoning(previousReasoning.id, startedAt)
+      const showThinking = shouldShowThinking(options.showThinking)
+      if (turnActivityEnabled) activity.beforeEvent(event)
+      try {
+        if (turnActivityEnabled && eventFinishesThinking(event)) {
+          finishThinkingSegment(showThinking)
         }
+        if (
+          (event.type === 'reasoning' || event.type === 'reasoning_end') &&
+          !showThinking
+        ) {
+          return
+        }
+        const projected =
+          event.type === 'error' &&
+          typeof event.message === 'string' &&
+          options.explainError
+            ? {
+                ...event,
+                message: options.explainError(event.message),
+              }
+            : event
+        state = reduceCliTuiViewState(
+          state,
+          projectCliTuiSessionEvent(projected as CliTuiSessionEvent),
+        )
+        if (
+          event.type === 'text' &&
+          typeof event.text === 'string' &&
+          event.text.length > 0 &&
+          state.activeTurnId !== null
+        ) {
+          streamedAssistantText = true
+        }
+        root.setState(state)
+        requestRender()
+      } finally {
+        if (turnActivityEnabled) activity.afterEvent(event)
       }
-      if (
-        event.type === 'text' &&
-        typeof event.text === 'string' &&
-        event.text.length > 0 &&
-        state.activeTurnId !== null
-      ) {
-        streamedAssistantText = true
-      }
-      root.setState(state)
-      requestRender()
     },
     endTurn(endOptions) {
-      const reasoning = activeReasoningBlock()
-      const startedAt = reasoning
-        ? reasoningStartedAt.get(reasoning.id)
-        : undefined
+      if (turnActivityEnabled) {
+        finishThinkingSegment(shouldShowThinking(options.showThinking))
+        activity.finish(endOptions?.terminalReason ?? 'completed')
+      }
       apply({
         type: 'end_turn',
         terminal: {
           reason: endOptions?.terminalReason ?? 'completed',
         },
       })
-      if (reasoning && startedAt !== undefined) {
-        stampClosedReasoning(reasoning.id, startedAt)
-      }
+      turnActivityEnabled = true
     },
     didStreamText() {
       return streamedAssistantText
@@ -368,6 +434,7 @@ export function createRetainedTuiController(options: {
 
   const controller: CliTuiController = {
     root,
+    composer,
     printer,
     configureWelcome(welcomeOptions) {
       root.configureWelcome(welcomeOptions)
@@ -376,6 +443,26 @@ export function createRetainedTuiController(options: {
     setWelcomeVisible(visible) {
       root.setWelcomeVisible(visible)
       requestRender()
+    },
+    configureComposer(composerOptions) {
+      composer.configure(composerOptions)
+    },
+    readInput(inputOptions) {
+      if (stopped) {
+        return Promise.resolve({ type: 'aborted' })
+      }
+      if (suspended) {
+        throw new Error('retained Composer cannot begin input while suspended')
+      }
+      const pending = composer.readInput(inputOptions)
+      if (!composer.isReading()) return pending
+      try {
+        adapter.setInputEnabled(true)
+      } catch (error) {
+        composer.cancelInput()
+        throw error
+      }
+      return pending
     },
     restoreMessages(messages) {
       apply({ type: 'restore_messages', messages })
@@ -392,6 +479,9 @@ export function createRetainedTuiController(options: {
     async stop() {
       if (stopped) return
       stopped = true
+      activity.finish()
+      composer.cancelInput()
+      adapter.setInputEnabled(false)
       if (suspended) {
         suspended = false
         adapter.setExternalOwner(false)

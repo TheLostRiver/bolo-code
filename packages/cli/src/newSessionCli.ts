@@ -24,6 +24,7 @@ import {
   attachSessionEventPrinter,
   attachSessionTerminalSurface,
   attachSessionTuiController,
+  configureSessionComposer,
   createCliOnEvent,
   runOnePrompt,
   runRepl,
@@ -81,6 +82,7 @@ export async function runNewSessionCli(
     showThinking: () => thinkingGate.session?.showThinking !== false,
     timeline: dynamicTui,
     engine,
+    terminalInput: process.stdin,
     terminalOutput: process.stdout,
     env: process.env,
     color,
@@ -164,6 +166,7 @@ export async function runNewSessionCli(
       ? `${session.providerId}/${session.model ?? session.provider?.id ?? '?'}`
       : session.model
   if (controller) {
+    configureSessionComposer(controller, session)
     if (!opts.skipBanner) {
       controller.configureWelcome({
         version: '0.0.1',

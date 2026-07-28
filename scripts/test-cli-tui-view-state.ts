@@ -129,6 +129,54 @@ async function main() {
     assert(user.status === 'complete', 'submitted user input is already complete')
   }
 
+  // ── 1.1) activity 结束本段时，visible/silent thinking 共用一个永久 block ──
+  {
+    let state = reduceCliTuiViewState(createCliTuiViewState(), {
+      type: 'begin_turn',
+      turnId: 'silent-thinking',
+      prompt: 'wait for the model',
+    })
+    state = reduceCliTuiViewState(state, {
+      type: 'finish_thinking_segment',
+      elapsedMs: 4_200,
+    })
+    const silentThought = state.turns[0]!.blocks[1]!
+    assert(
+      silentThought.kind === 'reasoning' &&
+        silentThought.text === '' &&
+        silentThought.status === 'complete' &&
+        silentThought.elapsedMs === 4_200,
+      `silent wait becomes one completed Thought block: ${JSON.stringify(silentThought)}`,
+    )
+    const unchanged = reduceCliTuiViewState(state, {
+      type: 'finish_thinking_segment',
+      elapsedMs: 9_900,
+    })
+    assert(
+      unchanged === state,
+      'consumed thinking segment cannot append a duplicate Thought block',
+    )
+
+    let visible = reduceCliTuiViewState(createCliTuiViewState(), {
+      type: 'begin_turn',
+      turnId: 'visible-thinking',
+      prompt: 'show reasoning',
+    })
+    visible = onEvent(visible, { type: 'reasoning', text: 'Inspect first.' })
+    visible = reduceCliTuiViewState(visible, {
+      type: 'finish_thinking_segment',
+      elapsedMs: 1_700,
+    })
+    const visibleThought = visible.turns[0]!.blocks[1]!
+    assert(
+      visibleThought.kind === 'reasoning' &&
+        visibleThought.text === 'Inspect first.' &&
+        visibleThought.status === 'complete' &&
+        visibleThought.elapsedMs === 1_700,
+      'visible reasoning is finalized in place by the same segment action',
+    )
+  }
+
   // ── 2) 多段 reasoning/text 与 tool/search 原位更新保持到达顺序 ──
   {
     let state = createCliTuiViewState()
