@@ -368,7 +368,7 @@ try {
     isTty: true,
     columns: 48,
     rows: 8,
-    env: { NO_COLOR: '1' },
+    env: { NO_COLOR: '1', BOLO_TUI_ENGINE: 'legacy' },
     readKey: async () => ttyKeys[ttyKeyIndex++] ?? 'eof',
     writeOut: (text: string) => ttyOut.push(text),
     writeErr: () => undefined,
@@ -402,7 +402,7 @@ try {
       isTty: true,
       columns: 48,
       rows: 8,
-      env: { NO_COLOR: '1', BOLO_TUI_ENGINE: 'retained' },
+      env: { NO_COLOR: '1' },
       terminalInput: retainedInput,
       terminalOutput: retainedOutput,
       readKey: async () => {
@@ -440,7 +440,7 @@ try {
     assert.equal(
       retainedOut.join('').includes('\u001b[2J'),
       false,
-      'explicit retained runtime query avoids the legacy full-screen clear',
+      'default retained runtime query avoids the legacy full-screen clear',
     )
   } finally {
     retainedTerminal.dispose()
@@ -460,7 +460,7 @@ try {
     isTty: true,
     columns: 48,
     rows: 8,
-    env: { NO_COLOR: '1' },
+    env: { NO_COLOR: '1', BOLO_TUI_ENGINE: 'legacy' },
     readKey: async () => {
       inspectReads += 1
       return 'quit'
@@ -482,7 +482,7 @@ try {
     isTty: true,
     columns: 48,
     rows: 8,
-    env: {},
+    env: { BOLO_TUI_ENGINE: 'legacy' },
     readKey: async () => 'quit',
     writeOut: (text: string) => colorOut.push(text),
     writeErr: () => undefined,
@@ -499,7 +499,7 @@ try {
     isTty: true,
     columns: 48,
     rows: 8,
-    env: { NO_COLOR: '1' },
+    env: { NO_COLOR: '1', BOLO_TUI_ENGINE: 'legacy' },
     readKey: async () => {
       ctrlCReads += 1
       return 'ctrl-c'
@@ -519,7 +519,7 @@ try {
     isTty: true,
     columns: 48,
     rows: 8,
-    env: { NO_COLOR: '1' },
+    env: { NO_COLOR: '1', BOLO_TUI_ENGINE: 'legacy' },
     readKey: async () => {
       throw new Error('injected pager input failure')
     },

@@ -102,18 +102,25 @@ async function createFixture(columns: number, rows = 36) {
 }
 
 async function main() {
-  // Engine choice is fixed at controller creation. OI-14G has not switched
-  // the default yet, and machine-readable paths never opt into retained.
+  // Engine choice is fixed at controller creation. OI-14G makes retained the
+  // dynamic default while preserving explicit legacy and plain sentinels.
   assert(
-    resolveCliTuiEngine({ dynamicTui: true, env: {} }) === 'legacy',
-    'missing engine flag keeps legacy default',
+    resolveCliTuiEngine({ dynamicTui: true, env: {} }) === 'retained',
+    'missing engine flag selects retained by default',
+  )
+  assert(
+    resolveCliTuiEngine({
+      dynamicTui: true,
+      env: { BOLO_TUI_ENGINE: '   ' },
+    }) === 'retained',
+    'blank engine flag selects retained by default',
   )
   assert(
     resolveCliTuiEngine({
       dynamicTui: true,
       env: { BOLO_TUI_ENGINE: 'retained' },
     }) === 'retained',
-    'retained requires explicit opt-in',
+    'explicit retained remains supported',
   )
   assert(
     resolveCliTuiEngine({
@@ -333,7 +340,7 @@ async function main() {
     assert(err.join('') === '', 'plain fixture keeps stderr empty')
   }
 
-  // The product new/resume lifecycle reads the opt-in once, starts the same
+  // The product new/resume lifecycle uses retained by default, starts the same
   // controller, restores history, and tears down its resize ownership.
   {
     const tempParent = path.resolve('.bolo-tmp')
@@ -372,7 +379,7 @@ async function main() {
       const cwd = path.join(tempRoot, 'workspace')
       await fs.mkdir(cwd, { recursive: true })
       process.env.BOLO_CONFIG_DIR = path.join(tempRoot, 'user')
-      process.env.BOLO_TUI_ENGINE = 'retained'
+      delete process.env.BOLO_TUI_ENGINE
       process.env.BOLO_PROVIDER = 'mock'
       process.env.NO_COLOR = '1'
       process.env.TERM = 'xterm-256color'
@@ -443,6 +450,27 @@ async function main() {
         !resumeBytes.includes('\u001b[3J'),
         'resume lifecycle preserved scrollback',
       )
+
+      process.env.BOLO_TUI_ENGINE = 'legacy'
+      const legacyWrites: string[] = []
+      const legacyCreated = await runNewSessionCli({
+        cwd,
+        prompt: 'explicit legacy rollback smoke',
+        forceMock: true,
+        isTty: true,
+        readPermissionAnswer: async () => 'n',
+        writeOut: (text) => legacyWrites.push(text),
+        writeErr: (text) => legacyWrites.push(text),
+      })
+      assert(
+        getSessionTuiController(legacyCreated.session) === undefined,
+        'explicit legacy keeps the production rollback off retained',
+      )
+      assert(
+        !legacyWrites.join('').includes('\u001b[?2026h'),
+        'explicit legacy does not start retained synchronized rendering',
+      )
+      delete process.env.BOLO_TUI_ENGINE
 
       const runInteractiveExit = async (
         run: (

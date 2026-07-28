@@ -8,5 +8,6 @@ export function resolveCliTuiEngine(options: {
   const requested = (
     options.env ?? process.env
   ).BOLO_TUI_ENGINE?.trim().toLowerCase()
+  if (!requested) return 'retained'
   return requested === 'retained' ? 'retained' : 'legacy'
 }
