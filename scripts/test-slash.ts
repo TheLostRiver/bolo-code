@@ -85,17 +85,25 @@ async function main() {
   const ctx = await submitUserInput(session, '/context')
   assert(ctx.type === 'slash', 'context slash')
   if (ctx.type === 'slash') {
-    assert(ctx.message.includes(session.id), 'context id')
-    assert(ctx.message.includes('messages:'), 'context msgs')
-    assert(ctx.message.includes('mock-a'), 'context model')
-    assert(ctx.message.includes('usage:'), 'context has usage line')
-    assert(ctx.message.includes('tokens (est):'), 'context token est')
-    assert(ctx.message.includes('Environment'), 'context section label')
-    assert(ctx.message.includes('Project rules'), 'context section label 2')
+    assert(ctx.contextView?.session.id === session.id, 'context id')
+    assert(ctx.contextView?.session.messageCount === 2, 'context msgs')
+    assert(ctx.contextView?.session.model === 'mock-a', 'context model')
+    assert(ctx.message.includes('Context usage:'), 'context plain summary')
+  }
+  const ctxDetails = await submitUserInput(session, '/context details')
+  assert(ctxDetails.type === 'slash', 'context details slash')
+  if (ctxDetails.type === 'slash') {
+    assert(ctxDetails.message.includes('usage:'), 'context has usage line')
+    assert(ctxDetails.message.includes('tokens (est):'), 'context token est')
+    assert(ctxDetails.message.includes('Environment'), 'context section label')
     assert(
-      ctx.message.includes('cache:') &&
-        (ctx.message.includes('cache_control') ||
-          ctx.message.includes('prompt_cache_key')),
+      ctxDetails.message.includes('Project rules'),
+      'context section label 2',
+    )
+    assert(
+      ctxDetails.message.includes('cache:') &&
+        (ctxDetails.message.includes('cache_control') ||
+          ctxDetails.message.includes('prompt_cache_key')),
       'context cache tip',
     )
   }
@@ -349,7 +357,7 @@ async function main() {
   if (usageAlias.type === 'slash') {
     assert(usageAlias.message.includes('calls:'), '/usage same as cost')
   }
-  const ctx2 = await submitUserInput(session, '/context')
+  const ctx2 = await submitUserInput(session, '/context details')
   if (ctx2.type === 'slash') {
     assert(
       /usage:\s+\d+ tokens/.test(ctx2.message),

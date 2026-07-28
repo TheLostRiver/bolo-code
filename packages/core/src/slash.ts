@@ -46,6 +46,7 @@ import {
   estimateSystemSectionsTokens,
   estimateTokens,
   getContextPressure,
+  isAutoCompactEnvDisabled,
   resolveAutoCompactTokenCount,
   type CompactSummarizer,
 } from '../../compact/src/index.ts'
@@ -57,6 +58,7 @@ import {
   isSkillUserInvocable,
   skillUserInvokeBlockReason,
   type LoadedSkill,
+  type SkillCatalogStats,
 } from '../../skills/src/index.ts'
 import type { Terminal } from './queryLoop.ts'
 import {
@@ -247,9 +249,78 @@ export type ParseSlashResult =
   | { kind: 'prompt'; text: string }
   | { kind: 'empty' }
 
+export type ContextUsageSource = 'actual' | 'estimated' | 'hybrid'
+
+export type ContextUsageCategory = {
+  id: 'messages' | 'system' | 'free'
+  label: string
+  tokens: number
+  source: 'estimated' | 'derived'
+}
+
+export type ContextUsageSection = {
+  index: number
+  label: string
+  chars: number
+  tokens: number
+  role: string
+}
+
+export type ContextUsageViewModel = {
+  session: {
+    id: string
+    cwd: string
+    messageCount: number
+    chars: number
+    permissionMode: PermissionMode
+    model?: string
+    effort: string
+    thinking: boolean
+    persistReasoning: boolean
+  }
+  estimate: {
+    messagesTokens: number
+    systemTokens: number
+    totalTokens: number
+  }
+  usage: {
+    tokenCount: number
+    windowTokens: number
+    effectiveWindowTokens: number
+    autoThresholdTokens: number
+    freeTokens: number
+    percentOfWindow: number
+    percentOfThreshold: number
+    level: 'ok' | 'warn' | 'critical' | 'over'
+    source: ContextUsageSource
+    resolutionSource: 'usage' | 'estimate' | 'hybrid'
+    inputUsageTokens?: number
+    anchorInputTokens?: number
+    tailEstimatedTokens?: number
+  }
+  categories: ContextUsageCategory[]
+  sections: ContextUsageSection[]
+  skills: SkillCatalogStats
+  autoCompact: {
+    enabled: boolean
+    envDisabled: boolean
+    aboveThreshold: boolean
+  }
+  lastCompact?: {
+    at: string
+    trigger: 'manual' | 'auto'
+    summaryChars: number
+    messagesAfter: number
+  }
+  usageLine: string
+  promptCacheLine?: string
+}
+
 export type SlashDispatchResult = {
   message: string
   ok: boolean
+  /** `/context` overview data; terminal renderers must not parse message text. */
+  contextView?: ContextUsageViewModel
   /**
    * U1：TTY 下 CLI 可打开 Diff 交互面板（core 不依赖 cli）。
    * 非 TTY / 无处理器时仅展示 message。
@@ -288,6 +359,7 @@ export type SubmitUserInputResult =
       interactiveEffort?: {
         mode: 'pick'
       }
+      contextView?: ContextUsageViewModel
     }
   | { type: 'prompt'; terminal: Terminal }
   | { type: 'empty' }
@@ -783,7 +855,21 @@ async function cmdCompact(
   }
 }
 
-function cmdContext(session: SlashSession, _args: string): SlashDispatchResult {
+function resolveContextUsageSource(
+  session: SlashSession,
+  resolutionSource: 'usage' | 'estimate' | 'hybrid',
+): ContextUsageSource {
+  if (resolutionSource === 'hybrid') return 'hybrid'
+  if (resolutionSource === 'estimate') return 'estimated'
+  const usageIsEstimated = session.usage?.lastCall
+    ? session.usage.lastCall.estimated === true
+    : session.usage?.estimated === true
+  return usageIsEstimated ? 'estimated' : 'actual'
+}
+
+export function buildContextUsageViewModel(
+  session: SlashSession,
+): ContextUsageViewModel {
   const chars = approxChars(session)
   const est = estimateSessionContextTokens(session)
   const window =
@@ -822,90 +908,186 @@ function cmdContext(session: SlashSession, _args: string): SlashDispatchResult {
     contextWindowTokens: window,
   })
   const autoOn = session.autoCompactEnabled === true
-  // 延迟读 env，避免循环依赖；compact 包为纯函数
-  let envDisabled = false
-  try {
-    // sync require 不可用（ESM）；用已导出的同步路径：从 process 直接判断
-    const v1 = process.env.BOLO_DISABLE_AUTO_COMPACT
-    const v2 = process.env.BOLO_DISABLE_COMPACT
-    const truthy = (v: string | undefined) => {
-      if (!v) return false
-      const t = v.trim().toLowerCase()
-      return t === '1' || t === 'true' || t === 'yes' || t === 'on'
-    }
-    envDisabled = truthy(v1) || truthy(v2)
-  } catch {
-    envDisabled = false
+  const envDisabled = isAutoCompactEnvDisabled(process.env)
+  const sections = session.systemPromptSections.map((section, index) => ({
+    index: index + 1,
+    label: sectionLabel(section),
+    chars: section.length,
+    tokens: estimateSystemSectionsTokens([section]),
+    role: sectionRoleHint(section),
+  }))
+  const { stats: skills } = formatSkillCatalogWithStats(session.skills ?? [], {
+    contextWindowTokens: window,
+  })
+  const promptCacheLine = formatPromptCacheSessionLine(
+    session.promptCacheState,
+  )?.replace(/^\s*promptCache:\s*/, 'promptCache:     ')
+  const source = resolveContextUsageSource(session, resolved.source)
+  const freeTokens = Math.max(0, window - resolved.tokenCount)
+
+  return {
+    session: {
+      id: session.id,
+      cwd: session.cwd,
+      messageCount: session.messages.length,
+      chars,
+      permissionMode: session.permissionMode,
+      ...(session.model ? { model: session.model } : {}),
+      effort: session.effortLevel ?? 'auto',
+      thinking: session.showThinking !== false,
+      persistReasoning: session.persistReasoning === true,
+    },
+    estimate: est,
+    usage: {
+      tokenCount: resolved.tokenCount,
+      windowTokens: window,
+      effectiveWindowTokens: pressure.effectiveWindow,
+      autoThresholdTokens: pressure.autoThreshold,
+      freeTokens,
+      percentOfWindow: pressure.percentOfWindow,
+      percentOfThreshold: pressure.percentOfThreshold,
+      level: pressure.level,
+      source,
+      resolutionSource: resolved.source,
+      ...(usageIn != null ? { inputUsageTokens: usageIn } : {}),
+      ...(resolved.source === 'hybrid' && anchor
+        ? {
+            anchorInputTokens: anchor.anchorInputTokens,
+            tailEstimatedTokens: Math.max(
+              0,
+              resolved.tokenCount - anchor.anchorInputTokens,
+            ),
+          }
+        : {}),
+    },
+    categories: [
+      {
+        id: 'messages',
+        label: 'Messages',
+        tokens: est.messagesTokens,
+        source: 'estimated',
+      },
+      {
+        id: 'system',
+        label: 'System',
+        tokens: est.systemTokens,
+        source: 'estimated',
+      },
+      {
+        id: 'free',
+        label: 'Free',
+        tokens: freeTokens,
+        source: 'derived',
+      },
+    ],
+    sections,
+    skills,
+    autoCompact: {
+      enabled: autoOn,
+      envDisabled,
+      aboveThreshold: pressure.aboveAutoThreshold,
+    },
+    ...(session.lastCompact
+      ? { lastCompact: { ...session.lastCompact } }
+      : {}),
+    usageLine: formatUsageOneLiner(session.usage),
+    ...(promptCacheLine ? { promptCacheLine } : {}),
   }
-  const sections = session.systemPromptSections
+}
+
+export function formatContextUsagePlain(view: ContextUsageViewModel): string {
+  const autoCompact = view.autoCompact.enabled
+    ? view.autoCompact.envDisabled
+      ? 'on (env-disabled)'
+      : view.autoCompact.aboveThreshold
+        ? 'on (threshold reached)'
+        : 'on'
+    : 'off'
+  return [
+    `Context usage: ${view.usage.tokenCount} / ${view.usage.windowTokens} tokens (${view.usage.percentOfWindow}%; ${view.usage.source})`,
+    `Breakdown (estimated): messages ~${view.estimate.messagesTokens} · system ~${view.estimate.systemTokens} · free ~${view.usage.freeTokens}`,
+    `Pressure: ${view.usage.level} · auto threshold ~${view.usage.autoThresholdTokens} (${view.usage.percentOfThreshold}%)`,
+    `Model: ${view.session.model ?? '(unset)'} · effort ${view.session.effort} · auto compact ${autoCompact}`,
+    `Session: ${view.session.messageCount} messages · ${view.sections.length} system sections · ${view.skills.totalSkills} skills`,
+    'Use /context details for sections, cache, memory, and compact diagnostics.',
+  ].join('\n')
+}
+
+export function formatContextUsageDetails(view: ContextUsageViewModel): string {
+  const sourceDetail =
+    view.usage.source === 'hybrid' &&
+    view.usage.anchorInputTokens != null &&
+    view.usage.tailEstimatedTokens != null
+      ? `  (anchor input ~${view.usage.anchorInputTokens} + tail est ~${view.usage.tailEstimatedTokens}, ×4/3 pad)`
+      : view.usage.inputUsageTokens != null
+        ? `  (usage input ~${view.usage.inputUsageTokens}${view.usage.source === 'estimated' ? '; provider marked estimated' : ''})`
+        : ''
   const lines = [
-    `id:              ${session.id}`,
-    `cwd:             ${session.cwd}`,
-    `messages:        ${session.messages.length}`,
-    `chars (approx):  ${chars}`,
-    `tokens (est):    ~${est.totalTokens}  (messages ~${est.messagesTokens} + system ~${est.systemTokens})`,
+    `id:              ${view.session.id}`,
+    `cwd:             ${view.session.cwd}`,
+    `messages:        ${view.session.messageCount}`,
+    `chars (approx):  ${view.session.chars}`,
+    `tokens (est):    ~${view.estimate.totalTokens}  (messages ~${view.estimate.messagesTokens} + system ~${view.estimate.systemTokens})`,
     `  heuristic:     text≈chars/4; dense JSON≈chars/2; tool_calls counted (local only, not billing)`,
-    `pressure source: ${resolved.source}${
-      resolved.source === 'hybrid' && anchor
-        ? `  (anchor input ~${anchor.anchorInputTokens} + tail est ~${Math.max(0, resolved.tokenCount - anchor.anchorInputTokens)}, ×4/3 pad)`
-        : usageIn != null
-          ? `  (usage input ~${usageIn})`
-          : ''
-    }`,
-    `window:          ${window}  (effective ~${pressure.effectiveWindow}; auto threshold ~${pressure.autoThreshold})`,
-    `pressure:        ${pressure.level}  (~${pressure.percentOfWindow}% of window; ~${pressure.percentOfThreshold}% of auto threshold)`,
-    `autoCompact:     ${autoOn ? 'on' : 'off'}${autoOn && pressure.aboveAutoThreshold && !envDisabled ? '  (would trigger on next prepare/mid-turn)' : ''}${envDisabled ? '  (env-disabled)' : ''}`,
+    `pressure source: ${view.usage.source}${sourceDetail}`,
+    `window:          ${view.usage.windowTokens}  (effective ~${view.usage.effectiveWindowTokens}; auto threshold ~${view.usage.autoThresholdTokens})`,
+    `pressure:        ${view.usage.level}  (~${view.usage.percentOfWindow}% of window; ~${view.usage.percentOfThreshold}% of auto threshold)`,
+    `autoCompact:     ${view.autoCompact.enabled ? 'on' : 'off'}${view.autoCompact.enabled && view.autoCompact.aboveThreshold && !view.autoCompact.envDisabled ? '  (would trigger on next prepare/mid-turn)' : ''}${view.autoCompact.envDisabled ? '  (env-disabled)' : ''}`,
     `keep policy:     user-turns (default smart; keepRecentUserTurns / keepRecentMessageCount)`,
-    `permissionMode:  ${session.permissionMode}`,
-    `model:           ${session.model ?? '(unset)'}`,
-    `effort:          ${session.effortLevel ?? 'auto'}`,
-    `thinking:        ${session.showThinking === false ? 'off' : 'on'}  (/thinking; persist=${session.persistReasoning === true ? 'on' : 'off'})`,
-    `system sections: ${sections.length}`,
+    `permissionMode:  ${view.session.permissionMode}`,
+    `model:           ${view.session.model ?? '(unset)'}`,
+    `effort:          ${view.session.effort}`,
+    `thinking:        ${view.session.thinking ? 'on' : 'off'}  (/thinking; persist=${view.session.persistReasoning ? 'on' : 'off'})`,
+    `system sections: ${view.sections.length}`,
   ]
-  if (session.lastCompact) {
-    const lc = session.lastCompact
+  if (view.lastCompact) {
+    const lc = view.lastCompact
     lines.push(
       `last compact:    ${lc.trigger} @ ${lc.at}  summaryChars=${lc.summaryChars}  messagesAfter=${lc.messagesAfter}`,
     )
   }
-  if (sections.length) {
-    for (let i = 0; i < sections.length; i++) {
-      const s = sections[i] ?? ''
-      const secTok = estimateSystemSectionsTokens([s])
-      const role = sectionRoleHint(s)
-      lines.push(
-        `  [${i + 1}] ${sectionLabel(s)}  (${s.length} chars, ~${secTok} tok, ${role})`,
-      )
-    }
+  for (const section of view.sections) {
+    lines.push(
+      `  [${section.index}] ${section.label}  (${section.chars} chars, ~${section.tokens} tok, ${section.role})`,
+    )
   }
-  // S-PORT-5：skill catalog 预算可观测
-  const skills = session.skills ?? []
-  if (skills.length) {
-    const { stats } = formatSkillCatalogWithStats(skills, {
-      contextWindowTokens: window,
-    })
-    lines.push(formatSkillCatalogStatsLine(stats))
+  if (view.skills.totalSkills > 0) {
+    lines.push(formatSkillCatalogStatsLine(view.skills))
   } else {
     lines.push('skill catalog:     (no skills loaded)')
   }
-  // CP-OBS：memory 预算提示（不读盘大文件；只提示路径与 cap 常量）
   lines.push(
     'memory:          user ~/.bolo/memory + project .bolo/memory · index caps 200 lines / 25k chars · /memory',
-  )
-  lines.push(
     'cache:           stable system prefix first; providers may send cache_control / prompt_cache_key (see docs/PROMPT_CACHE.md)',
   )
-  const pcLine = formatPromptCacheSessionLine(session.promptCacheState)
-  if (pcLine) {
-    // formatPromptCacheSessionLine 自带两空格缩进标题；/context 对齐其它键
-    lines.push(pcLine.replace(/^\s*promptCache:\s*/, 'promptCache:     '))
+  if (view.promptCacheLine) {
+    lines.push(view.promptCacheLine)
   }
   lines.push(
     'prepare order:   snip → microcompact → auto full compact → callModel; mid-turn after tools (C3); PTL truncate fallback',
     'toggle:          /autocompact [on|off]',
-    formatUsageOneLiner(session.usage),
+    view.usageLine,
   )
-  return { ok: true, message: lines.join('\n') }
+  return lines.join('\n')
+}
+
+function cmdContext(session: SlashSession, args: string): SlashDispatchResult {
+  const raw = args.trim().toLowerCase()
+  if (raw && raw !== 'details' && raw !== 'detail' && raw !== '--details') {
+    return {
+      ok: false,
+      message: 'Usage: /context [details]',
+    }
+  }
+  const view = buildContextUsageViewModel(session)
+  if (raw) {
+    return { ok: true, message: formatContextUsageDetails(view) }
+  }
+  return {
+    ok: true,
+    message: formatContextUsagePlain(view),
+    contextView: view,
+  }
 }
 
 function turnControlId(prefix: 'control' | 'turn'): string {
@@ -3654,6 +3836,7 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
   {
     name: 'context',
     summary: 'Context stats: msgs, chars, token est, sections, cache tip, usage',
+    usage: '[details]',
     group: 'session',
     run: cmdContext,
   },
@@ -4044,6 +4227,7 @@ export async function submitUserInput(
       ...(r.interactiveEffort
         ? { interactiveEffort: r.interactiveEffort }
         : {}),
+      ...(r.contextView ? { contextView: r.contextView } : {}),
     }
   }
 

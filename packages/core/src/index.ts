@@ -3176,6 +3176,9 @@ export {
   EFFORT_LEVELS,
   isEffortLevel,
   approxTokensFromChars,
+  buildContextUsageViewModel,
+  formatContextUsagePlain,
+  formatContextUsageDetails,
   sectionLabel,
   editDistance,
   suggestSlashCommands,
@@ -3190,6 +3193,10 @@ export {
   type SlashCommandCandidateSource,
   type SlashCommandGroup,
   type EffortLevel,
+  type ContextUsageCategory,
+  type ContextUsageSection,
+  type ContextUsageSource,
+  type ContextUsageViewModel,
 } from './slash.ts'
 
 export {

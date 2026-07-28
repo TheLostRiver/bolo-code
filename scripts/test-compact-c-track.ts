@@ -237,7 +237,7 @@ async function main() {
 
   // C4：有 skills 时 compact 后 catalog 段可出现
   const { submitUserInput } = await import('../packages/core/src/slash.ts')
-  const ctx = await submitUserInput(sess, '/context')
+  const ctx = await submitUserInput(sess, '/context details')
   assert(ctx.type === 'slash', 'context slash')
   if (ctx.type === 'slash') {
     assert(ctx.message.includes('pressure source:'), 'context pressure source')

@@ -64,19 +64,63 @@ async function main() {
 
   const ctx = await dispatchSlashCommand(session, 'context', '')
   assert(ctx.ok, 'context ok')
-  assert(ctx.message.includes('pressure:'), 'context shows pressure')
-  assert(ctx.message.includes('auto threshold'), 'context shows threshold')
-  assert(ctx.message.includes('messages ~'), 'context splits messages/system')
-  assert(ctx.message.includes('heuristic:'), 'context explains heuristic')
-  assert(ctx.message.includes('prepare order:'), 'context shows prepare order')
-  assert(ctx.message.includes('autoCompact:     on'), 'context auto on')
-  assert(ctx.message.includes('pressure source:'), 'context pressure source')
-  assert(ctx.message.includes('keep policy:'), 'context keep policy')
-  assert(ctx.message.includes('~'), 'token estimates present')
-  assert(ctx.message.includes('/autocompact'), 'context points to toggle')
+  assert(ctx.contextView, 'default context exposes a structured view model')
   assert(
-    ctx.message.includes('skill catalog:     (no skills loaded)'),
-    'context skill catalog empty line',
+    ctx.contextView?.usage.source === 'estimated',
+    'no provider usage is labeled estimated',
+  )
+  assert(
+    ctx.contextView?.categories.map((category) => category.id).join(',') ===
+      'messages,system,free',
+    'context view exposes the primary breakdown',
+  )
+  assert(ctx.message.includes('Context usage:'), 'plain context has a summary')
+  assert(
+    ctx.message.includes('/context details'),
+    'plain context points to diagnostics',
+  )
+  assert(
+    !ctx.message.includes('prepare order:'),
+    'default plain context keeps diagnostics collapsed',
+  )
+
+  const ctxDetails = await dispatchSlashCommand(session, 'context', 'details')
+  assert(ctxDetails.ok, 'context details ok')
+  assert(!ctxDetails.contextView, 'details bypasses the TTY dashboard')
+  assert(ctxDetails.message.includes('pressure:'), 'details shows pressure')
+  assert(
+    ctxDetails.message.includes('auto threshold'),
+    'details shows threshold',
+  )
+  assert(
+    ctxDetails.message.includes('messages ~'),
+    'details splits messages/system',
+  )
+  assert(
+    ctxDetails.message.includes('heuristic:'),
+    'details explains heuristic',
+  )
+  assert(
+    ctxDetails.message.includes('prepare order:'),
+    'details shows prepare order',
+  )
+  assert(
+    ctxDetails.message.includes('autoCompact:     on'),
+    'details reflects auto compact',
+  )
+  assert(
+    ctxDetails.message.includes('pressure source:'),
+    'details shows pressure source',
+  )
+  assert(ctxDetails.message.includes('keep policy:'), 'details shows keep policy')
+  assert(ctxDetails.message.includes('~'), 'details has token estimates')
+  assert(
+    ctxDetails.message.includes('/autocompact'),
+    'details points to toggle',
+  )
+  assert(
+    ctxDetails.message.includes('skill catalog:     (no skills loaded)'),
+    'details has an empty skill catalog line',
   )
 
   session.skills = [
@@ -94,9 +138,22 @@ async function main() {
   ]
   const ctxSkills = await dispatchSlashCommand(session, 'context', '')
   assert(ctxSkills.ok, 'context with skills ok')
-  assert(ctxSkills.message.includes('skill catalog:'), 'context skill catalog stats')
-  assert(ctxSkills.message.includes('listed'), 'context catalog listed')
-  assert(ctxSkills.message.includes('chars'), 'context catalog chars')
+  assert(
+    ctxSkills.contextView?.skills.totalSkills === 1 &&
+      ctxSkills.contextView.skills.listed === 1,
+    'context view carries skill catalog stats',
+  )
+  const ctxSkillDetails = await dispatchSlashCommand(
+    session,
+    'context',
+    '--details',
+  )
+  assert(
+    ctxSkillDetails.message.includes('skill catalog:') &&
+      ctxSkillDetails.message.includes('listed') &&
+      ctxSkillDetails.message.includes('chars'),
+    'context details keeps skill catalog diagnostics',
+  )
 
   // 多轮：大前缀 + 小尾部 keep，确保 compact 后 messages token 下降
   const thr = getAutoCompactThreshold(8_000)
@@ -128,7 +185,16 @@ async function main() {
   )
 
   const ctxAfter = await dispatchSlashCommand(session, 'context', '')
-  assert(ctxAfter.message.includes('last compact:'), 'context last compact line')
+  assert(ctxAfter.contextView?.lastCompact, 'context view carries last compact')
+  const ctxAfterDetails = await dispatchSlashCommand(
+    session,
+    'context',
+    'details',
+  )
+  assert(
+    ctxAfterDetails.message.includes('last compact:'),
+    'context details keeps last compact line',
+  )
 
   // ── AR2A0a：/context hybrid 来源显示 ──
   const { fingerprintMessagePrefix } = await import(
@@ -151,15 +217,25 @@ async function main() {
       ),
     },
   }
+  const ctxActual = await dispatchSlashCommand(session, 'context', '')
+  assert(
+    ctxActual.contextView?.usage.source === 'actual',
+    'provider input usage is labeled actual before a local tail is added',
+  )
   // 锚 == 全长 → usage；追加一条尾部消息 → hybrid
   session.messages.push({ role: 'user', content: 'tail after usage anchor' })
   const ctxHybrid = await dispatchSlashCommand(session, 'context', '')
   assert(
-    ctxHybrid.message.includes('pressure source: hybrid'),
+    ctxHybrid.contextView?.usage.source === 'hybrid',
     'context shows hybrid source with anchored tail',
   )
+  const ctxHybridDetails = await dispatchSlashCommand(
+    session,
+    'context',
+    'details',
+  )
   assert(
-    ctxHybrid.message.includes('anchor input ~4000'),
+    ctxHybridDetails.message.includes('anchor input ~4000'),
     'context shows anchor input tokens',
   )
   // 头部形状被改写（模拟 snip/compact 重排）→ 锚失效 → 不再显示 hybrid
@@ -171,7 +247,7 @@ async function main() {
   }
   const ctxStale = await dispatchSlashCommand(session, 'context', '')
   assert(
-    !ctxStale.message.includes('pressure source: hybrid'),
+    ctxStale.contextView?.usage.source !== 'hybrid',
     'stale anchor no longer reports hybrid',
   )
   session.messages[0] = savedFirst
@@ -181,7 +257,10 @@ async function main() {
   assert(ac.ok, 'autocompact off ok')
   assert(session.autoCompactEnabled === false, 'session auto off')
   const ctx2 = await dispatchSlashCommand(session, 'context', '')
-  assert(ctx2.message.includes('autoCompact:     off'), 'context reflects off')
+  assert(
+    ctx2.contextView?.autoCompact.enabled === false,
+    'context view reflects auto compact off',
+  )
 
   console.log('CONTEXT SLASH TESTS PASS')
 }

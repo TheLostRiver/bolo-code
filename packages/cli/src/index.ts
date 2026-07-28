@@ -135,6 +135,10 @@ export {
   type TurnActivityIndicator,
 } from './tui/turnActivity.ts'
 export {
+  renderContextDashboard,
+  type RenderedContextDashboard,
+} from './tui/contextDashboard.ts'
+export {
   createTtyAskPermission,
   parsePermissionAnswer,
   formatPermissionPrompt,

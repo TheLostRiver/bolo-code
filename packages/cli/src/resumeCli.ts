@@ -52,6 +52,7 @@ import {
   createTerminalSurface,
   type TerminalSurface,
 } from './tui/terminalSurface.ts'
+import { renderContextDashboard } from './tui/contextDashboard.ts'
 
 export type ResumeCliOptions = {
   /** session id / 路径；省略或 true 时进入项目列表选择 */
@@ -618,6 +619,8 @@ export async function runOnePrompt(
     writeOut?: (s: string) => void
     writeErr?: (s: string) => void
     isTty?: boolean
+    columns?: number
+    color?: boolean
     /** REPL：打开 raw 面板前暂停 readline */
     pauseInput?: () => void
     resumeInput?: () => void
@@ -653,6 +656,24 @@ export async function runOnePrompt(
 
     if (result.type === 'slash') {
       terminalReason = 'slash'
+      if (
+        result.contextView &&
+        (options?.isTty ?? process.stdin.isTTY === true)
+      ) {
+        const rendered = renderContextDashboard({
+          view: result.contextView,
+          columns: options?.columns ?? process.stdout.columns,
+          color:
+            options?.color ??
+            (process.env.NO_COLOR === undefined &&
+              process.env.BOLO_THEME?.trim().toLowerCase() !== 'plain'),
+        })
+        writeOut(`${rendered.text}\n`)
+        return {
+          terminalReason: 'slash',
+          assistantText: result.message,
+        }
+      }
       // U1：TTY 且 /diff 请求面板 → 交互 diffPane；失败回落文本
       if (
         result.interactiveDiff &&
@@ -1102,6 +1123,8 @@ export async function runRepl(
           writeOut: runtimeOut,
           writeErr: runtimeErr,
           isTty,
+          columns: process.stdout.columns,
+          color,
           pauseInput: pauseInteractiveSurface,
           resumeInput: resumeInteractiveSurface,
           signal: turnController.signal,
