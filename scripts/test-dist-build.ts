@@ -85,6 +85,7 @@ async function main() {
   const defaultGate = scripts.test ?? ''
   for (const required of [
     'scripts/test-ptl-retry.ts',
+    'scripts/test-cli-tui-vt-legacy.ts',
     'scripts/test-desktop-launch.ts',
     'scripts/test-runtime-core-transport.ts',
     'scripts/test-session-model-effort-settings.ts',
@@ -117,6 +118,10 @@ async function main() {
   )
   const devDeps = (pkg.devDependencies ?? {}) as Record<string, string>
   assert('esbuild' in devDeps, 'esbuild is a devDependency')
+  assert(
+    devDeps['@xterm/headless'] === '5.5.0',
+    '@xterm/headless stays an exact test-only devDependency',
+  )
 
   // ── 4) bin 指向产物，不再 spawn tsx ──
   const bin = pkg.bin as Record<string, string> | string
