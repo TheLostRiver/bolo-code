@@ -75,12 +75,22 @@ async function main() {
     writes.map((entry) => entry.text).join('').includes('Message'),
     'composer is painted',
   )
+  const idlePaint = writes.at(-1)?.text ?? ''
+  assert(
+    idlePaint.includes(`\n${composer.lines[0]}`),
+    'idle history and composer keep one surface-owned breathing row',
+  )
 
   surface.setActivity('✦ Thinking · 1.2s')
   assert(surface.isDockVisible(), 'activity update keeps the dock visible')
   assert(
     writes.map((entry) => entry.text).join('').includes('Thinking'),
     'activity is part of the temporary region',
+  )
+  const activityPaint = writes.at(-1)?.text ?? ''
+  assert(
+    activityPaint.includes(`✦ Thinking · 1.2s\n\n${composer.lines[0]}`),
+    'activity and composer keep one surface-owned breathing row',
   )
 
   surface.writeOutput('● Bolo\nanswer chunk')

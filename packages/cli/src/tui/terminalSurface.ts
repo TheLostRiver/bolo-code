@@ -53,7 +53,7 @@ export function createTerminalSurface(options: {
 
   const composite = (): { lines: string[]; cursorRow: number } => {
     if (!dock) return { lines: [], cursorRow: 0 }
-    const prefix = activity ? [activity] : []
+    const prefix = activity ? [activity, ''] : ['']
     return {
       lines: [...prefix, ...dock.lines],
       cursorRow:
