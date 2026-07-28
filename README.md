@@ -17,6 +17,7 @@
 | **新用户 / 要跑起来** | **[docs/USAGE.md](docs/USAGE.md)**（含 **如何配置 Agent/Subagent**） |
 | **接手开发的 Agent / 同事** | **[docs/AGENT_HANDOFF.md](docs/AGENT_HANDOFF.md)**（架构 · 进度 · 改码规矩） |
 | **查总进度与各轨** | **[docs/ROADMAP.md](docs/ROADMAP.md)**（进度真源） |
+| **查 CLI TUI 重构** | **[docs/CLI_TUI_REFACTOR_PLAN.md](docs/CLI_TUI_REFACTOR_PLAN.md)**（OI-14 架构 · 迁移 · 验收） |
 | **查分层边界** | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 
 ---
@@ -28,7 +29,7 @@
 | Headless 核心 | ~82–90% | queryLoop · 权限 · tools · STE；partial stream fail-closed |
 | **Agent 能力面（工具集）** | **~82–88%** | 15 个常驻/可选工具 + **Web search**（hosted、MCP、SearXNG 均已活体验证） |
 | 会话 / CLI | ~92–97% | **零步骤首次启动** · 用户级 workspace JSONL · 旧项目会话兼容 · durable runtime · query/action CLI · TTY pager · pipe/JSON automation |
-| **CLI TUI** | **~90–95%** | OI-09–OI-13：100-cell 响应式水晶工作台 · 常驻全宽 composer + idle/running 共享完整空行 · slash 发现/补全/参数提示 · `/context` 仪表盘 · 响应式 gutter/全宽用户块 · paste 事务 · 分段 Thinking/可靠 `Thought for` · model/token/快捷键 footer · 可审计三态权限 · 局部面板重绘 · 非 TTY 回落；真实 Windows Terminal 观感/按键未验 |
+| **CLI TUI** | **~55–65%** | slash/context/paste/Thought/权限/水晶等能力已存在；OI-14 已确认当前 direct-write surface 在物理 wrap、Markdown、resize/cursor 下不可靠，真实终端会出现正文碎片、巨大空洞与续行贴左；retained renderer 重构进行中 |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
 | Subagent | ~89–95% | `config.agents` + `agents/*.md` · durable task/result · overflow FIFO/cancel · safe delivery · worktree 保全 |
 | 文件 Diff 日用 | ~95%+ | D0–D7 · U0–U4 |
@@ -41,24 +42,27 @@
 | Electron GUI | ~80–88% | 壳 + 流式 + 权限 + runtime IPC/client + 会话切换/恢复 + composer controls + model/effort + control/tool progress 投影 + 多 provider；真人点击/视觉未验 |
 | 相对 HC 全家桶 UI | 另计 | 不设 100% |
 
-**已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Runtime DR0–DR4 · Autonomous Road AR1 CLI/TUI runtime UX · **AR-T1–T3+ Agent 能力面** · AR2 Compact depth · AR3 Desktop 产品接线 · AR4 evidence gate · AR5 release hardening · **OI-04 SearXNG 直连、OI-X1 真实实例 smoke、OI-07 上游诊断 / `search doctor` / 可选 Docker setup、OI-08B CLI 零步骤首次启动、OI-09 CLI TUI 交互重构、OI-10 命令发现与 TUI 一致性、OI-11 持久终端表面与可审计权限交互、OI-12 TUI 信息架构与多行输入稳定性、OI-13 TUI 垂直节奏与水晶工作台**。
+**已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX
+CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Runtime DR0–DR4 · Autonomous Road
+AR1 · **AR-T1–T3+ Agent 能力面** · AR2 Compact depth · AR3 Desktop 产品接线 ·
+AR4 evidence gate · AR5 release hardening · **OI-04 SearXNG 直连、OI-X1 真实实例
+smoke、OI-07 上游诊断 / `search doctor` / 可选 Docker setup、OI-08B CLI 零步骤
+首次启动**。OI-09–OI-13 的 slash/context/paste/Thought/权限/welcome 局部能力仍然
+有效，但不再作为整个 TUI renderer 稳定的证据。
 
-**当前主线：** 没有默认的 agent 可闭环开放项。普通 `bolo` 已是唯一首次启动主路径：
-自动准备用户级 `~/.bolo`，新会话写入用户目录下的 workspace 分桶，不会仅因进入仓库
-就在 cwd 创建 `.bolo/`。项目模板只由显式 `bolo init [--project]` 创建；旧项目会话
-继续可 list/resume。OI-09–OI-13 已把本轮已知 CLI TUI 缺陷收口：运行中 composer
-常驻，用户历史块与 composer 跟随同一 dock 宽度；Agent/slash 正文使用响应式留白；
-slash 补全后继续显示参数提示；`/context` 默认显示分层概览；多行 paste 按一次事务
-插入，不会把 Windows 换行误当提交。Thinking 按段计时，Bash 权限显示实际
-command/cwd/timeout 并提供 once/always/deny；即使 provider 不发送 reasoning 文本，
-正文前也会留下本段 `Thought for`；running surface 与 idle 输入框共用 top gap，
-最终回答、活动行与 composer 之间都有完整空行。欢迎页使用
-最大 100 cells 的 Bolo 水晶工作台：宽屏水晶/状态双列，中/紧凑屏单列。SearXNG
-的只读 doctor 与显式 Docker 管理也已落地，Docker 仍不是默认依赖。
+**当前主线：OI-14A。** 先用真正的 headless terminal 复现长 URL/ANSI、随机
+streaming chunk、常驻 composer 和 resize 下的物理行故障，再完成 Pi TUI
+direct/fork 与 OpenTUI 备选的 Node/esbuild/Windows/体积/许可选型。之后按
+live view-state、retained renderer、Markdown/transcript、常驻 Composer、overlays、
+默认切换和删除 legacy 的顺序推进。
 
-**人工项：** CLI TUI 与 AskUserQuestion 的真实 Windows Terminal 按键/观感、Desktop
-点击与视觉走查需要真人验证，不以自动测试冒充完成。SearXNG 已在真实 Docker 实例和
-上游引擎上完成 live smoke。
+普通 `bolo` 仍是唯一首次启动主路径：自动准备用户级 `~/.bolo`，不会仅因进入仓库
+就在 cwd 创建 `.bolo/`；项目模板只由显式 `bolo init [--project]` 创建。SearXNG
+doctor 与显式 Docker 管理也已落地，Docker 不是默认依赖。
+
+**人工项：** 已知正文碎片、巨大空洞、续行贴左、cursor/resize 等代码缺陷先由
+OI-14 自动门禁关闭。之后才由真人检查 Windows Terminal 的字体、颜色、动画和按键/
+鼠标手感；Desktop 点击与视觉也仍需真人。SearXNG 已完成真实实例 live smoke。
 
 进度真源：[docs/ROADMAP.md](docs/ROADMAP.md)
 
@@ -184,6 +188,11 @@ allow once、always 或 deny；嵌入式 picker/diff 不再清除整屏历史。
 pipe、`-p`/`--print` 和 JSON 路径保持追加式输出，不发送动态光标控制。完整键位、
 欢迎页宽度档位和回落开关见
 [docs/TUI.md](docs/TUI.md)。
+
+当前动态 TTY renderer 正在按 OI-14 重构：真实终端已确认长 Markdown/URL、流式输出
+与常驻 composer 组合时可能出现物理折行和 cursor 布局错误。自动化或脚本场景继续用
+非 TTY/`--print` plain 路径；重构计划与回滚边界见
+[docs/CLI_TUI_REFACTOR_PLAN.md](docs/CLI_TUI_REFACTOR_PLAN.md)。
 
 `runtime list|inspect` 的文本输出在 **stdin/stdout 都是 TTY** 且内容超过一页时自动分页：`n/j/↓/→` 下一页，`p/k/↑/←` 上一页，`q/Esc` 退出，`Ctrl-C` 返回 130。0/1 页不读键盘；pipe 与 `--json` 永不进入 pager、不会输出 ANSI/banner，也不会因为大列表挂起。
 
@@ -332,6 +341,7 @@ scripts/       单测与 smoke
 | [docs/SESSIONS.md](docs/SESSIONS.md) | 会话落盘 · resume |
 | [docs/SLASH_COMMANDS.md](docs/SLASH_COMMANDS.md) | 斜杠命令 |
 | [docs/TUI.md](docs/TUI.md) | CLI TUI · 环境变量 |
+| [docs/CLI_TUI_REFACTOR_PLAN.md](docs/CLI_TUI_REFACTOR_PLAN.md) | OI-14 retained renderer 重构 · 参考审计 · 迁移/回滚/验收 |
 | [docs/SKILLS.md](docs/SKILLS.md) · [MCP.md](docs/MCP.md) · [PLUGINS.md](docs/PLUGINS.md) | 扩展面 |
 | [docs/SUBAGENT.md](docs/SUBAGENT.md) · [SUBAGENT_SPEC.md](docs/SUBAGENT_SPEC.md) | Subagent |
 | [docs/PROMPT_CACHE.md](docs/PROMPT_CACHE.md) | Prompt cache 观测 |
@@ -380,8 +390,8 @@ query/action/renderer/pager/automation、PTL 恢复与真实 Electron 启动专�
 ## 原则
 
 1. **职责分明**的模块架构优先于炫技实现  
-2. 借鉴 HC / Codex **语义**，不嵌入其本地路径、不抄遥测  
+2. 先审计许可证与兼容性；允许复用成熟基础库或有归属的窄 fork，不复制未许可源码、不嵌入本机参考路径、不抄遥测
 3. 密钥走环境变量 / `apiKeyEnv`；**不**写进 transcript  
-4. 可用 TUI 不等于必须引入 Ink/ratatui；先守住输入、状态与非 TTY 契约 — 见 ROADMAP 双轨说明
+4. TUI 必须由真实物理终端测试证明；不盲选框架，也不为“零依赖”重复手搓成熟 renderer — 见 OI-14 方案
 
 License：MIT

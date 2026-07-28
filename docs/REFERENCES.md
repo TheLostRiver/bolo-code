@@ -20,7 +20,7 @@
 
 **不要搬**
 
-- Ink TUI 全家桶（我们用 Electron）
+- 未确认许可证的 snapshot 源码、品牌文案和产品细节；CLI TUI 只能观察信息架构
 - 遥测 / GrowthBook / 大量 feature flag 迷宫
 - 与 Anthropic 产品强绑定的 OAuth/bridge
 
@@ -33,8 +33,18 @@
 - `pi-coding-agent`：产品 CLI
 - `pi-tui`：终端 UI
 
-**借鉴**：core 与 UI 分包；统一 LLM API。  
+**借鉴/复用**：core 与 UI 分包；统一 LLM API。OI-14 首选复用 Pi TUI 的
+retained renderer、Markdown、cell-width wrap、Editor 与 VirtualTerminal 测试；
+不依赖整个 pi-coding-agent。当前 TUI package 声明 Node `>=22.19.0`，必须先完成
+Bolo Node/esbuild/Windows/资产 spike，再决定 direct bundle、Node 升级或最小 MIT fork。
 **注意**：权限默认弱，Bolo 必须自带 PermissionRequest 体系。
+
+## oh-my-pi
+
+- 在 Pi retained renderer 基础上加入 native scrollback、render backpressure、
+  terminal capability、tmux/Ghostty、scroll view 与更广 VirtualTerminal 回归。
+- TUI package 声明 Bun，并依赖 native/utils/cache；首次迁移不直接接入。
+- 用作 OI-14G 的可靠性清单，不把整套产品依赖带入 Bolo。
 
 ### 推理 / thinking（对 Bolo Effort 轨）
 
@@ -50,6 +60,8 @@
 - 本地 coding agent 产品完整度高
 - CLI + App/IDE 多入口
 - 实现语言以 Rust 为主——**思想可借，栈不跟**
+- TUI 的 raw Markdown source、history cell、stream controller、transcript reflow、
+  bottom pane 与 VT100 snapshot 是 OI-14 的架构/验收基准；不复制 Rust 实现
 
 ### 推理 effort（对 Bolo）
 
@@ -67,8 +79,12 @@
 - **`ProviderTransform`**：同一 `high` 按 npm/SDK 变成 `reasoningEffort`、`reasoning.effort`、`effort`、`thinkingLevel`…
 - 按模型 id / release_date **裁** OpenAI 的 `none`/`xhigh`，减少 400
 - 多厂商变换最全，但与 **AI SDK 绑定**
+- TUI 使用 OpenTUI + Solid retained tree，`box` 拥有 gap/padding/flex，
+  `scrollbox` 拥有 sticky viewport；当前栈依赖 Bun/Effect/workspace
 
 → 学 **「意图 → 请求碎片」**；Bolo 用轻量 dialect patch，**不**引入 AI SDK 巨表。
+TUI 方面只作为 Pi 路线失败后的有时限备选 spike，必须证明 Node/esbuild/Windows
+可行后才能采用。
 
 ## HelsincyCode · Effort（补充）
 
@@ -90,6 +106,7 @@
 | [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md) | E6–E9 能力视图 |
 | [PROVIDER_UX.md](./PROVIDER_UX.md) | **CX 便利层**（preset · caps · resume · 错误 · ultrathink 默认 off · tip/turn） |
 | [PROVIDERS.md](./PROVIDERS.md) | 协议与多实例 |
+| [CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md) | OI-14 参考审计、选型、迁移与验收 |
 
 ## 工程纪律
 

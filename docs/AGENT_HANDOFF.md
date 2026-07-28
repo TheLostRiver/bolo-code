@@ -19,7 +19,7 @@ Bolo Code = Headless Agent Runtime (packages/*)
 | **无遥测** | 不实现 / 不预留 phone-home、GrowthBook、官方分析 |
 | **无官方市场 API** | 不接 Claude/Codex 官方插件市场 |
 | **先契约后壳** | 改 `packages/*` 契约，再接 CLI / Desktop |
-| **借鉴语义不抄路径** | 可对标 HC / Codex / OpenCode / Pi；**禁止**把本机 HC/Codex 路径写进产品文档 |
+| **许可与证据先行** | 可复用许可明确、兼容 spike 通过的成熟基础库或窄 fork；禁止复制未许可源码、盲搬重量级产品和把本机参考路径写进产品文档 |
 | **日用 ≠ UI 全家桶** | 95%+ 日用契约 ≠ Ink/ratatui 100% 密度 |
 | **临时文件** | 只写 `.bolo-tmp/`；**永不提交** |
 | **密钥** | env / `apiKeyEnv`；不进 transcript / 仓库 |
@@ -77,6 +77,19 @@ UserPromptSubmit hooks
 
 权限判断在 **PermissionGate**，不在各个 tool 内私自 allow/deny。
 
+OI-14 的 TTY 目标数据流：
+
+```text
+SessionEvent
+  → packages/shared CliTuiViewState 纯 reducer
+  → Bolo retained component tree
+  → width-aware physical lines
+  → 唯一 differential terminal writer
+```
+
+在 OI-14H 前，`formatSessionEvent.ts` / `TerminalSurface` 仍是 legacy 实现。不要再给
+它们增加 spacer、prefix、Markdown 或 cursor 修补；新 TUI 能力只进入 retained 路径。
+
 ### 2.3 配置合并
 
 ```text
@@ -110,7 +123,7 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | **Agent 能力面（工具集）** | **~82–88%** | 15 个常驻/可选工具 + 显式 SearXNG `WebSearch`（ROADMAP §14 · [TOOLS.md](./TOOLS.md)） |
 | **分发（CLI）** | **~87–93%** | `npm i -g` / `npx` 单文件产物；安装后直接 `bolo`，无需 init；零运行时依赖（ROADMAP §15 · [RELEASE.md](./RELEASE.md)） |
 | 会话 / CLI | ~92–97% | 用户级 workspace JSONL · 旧项目/用户会话兼容 · 零项目副作用首次启动 · new/resume 同构 runtime · durable controls/tasks |
-| **CLI TUI** | **~90–95%** | OI-09–OI-13：100-cell 水晶工作台 · 常驻全宽 composer/idle-running 共享完整空行 · slash 发现/补全/参数提示 · context 仪表盘 · 响应式 gutter/dock-width 用户块 · paste 事务 · 分段 Thinking/可靠 Thought · 三态权限详情 · 局部 VT 面板 · abort 诊断 · 非 TTY 回落；真人 Windows Terminal 未验 |
+| **CLI TUI** | **~55–65%** | slash/context/paste/Thought/权限/水晶等业务能力已存在；OI-14 已确认 direct-write surface 无法可靠处理物理 wrap、Markdown、resize 与 cursor，真实截图出现正文碎片、巨大空洞和续行贴左；retained renderer 重构进行中 |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
 | Subagent | ~89–95% | Spec v0；durable task/result · overflow FIFO/cancel · safe-boundary delivery · worktree 成果保全 |
 | 文件 Diff 日用 | ~95%+ | **D0–D7** |
@@ -122,16 +135,16 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | Provider UX | ~95–98% | **CX0–CX8**（ultrathink 默认 off） |
 | Durable Runtime | DR0–DR4 ✅ | 输入先落盘 · recovery · 单 runner · durable control/task · FIFO/promotion · v1 protocol/resolution · crash/restart closeout |
 | Electron GUI | ~80–88% | runtime IPC/client、会话切换/恢复、composer controls、model/effort 与 control/tool progress 已真接并经 Electron 自动化；真人点击/视觉未验 |
-| 产品相对 HC 全家桶 | ~74–88% | 日用高；UI 密度另计 |
+| 产品相对 HC 全家桶 | ~68–82% | Headless 日用高；CLI TUI 渲染可靠性已重新计入 |
 
-**已闭环：** Diff · Hooks · Compact（含 AR2 全段）· Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR-T1–T3+ Agent 能力面** · **AR3/OI-06 Desktop 产品接线** · **AR4 evidence gate** · **AR5 release hardening** · **OI-04 SearXNG 直连、OI-X1 真实实例 smoke、OI-07 上游诊断 / doctor / 可选 Docker setup、OI-08B CLI 零步骤首次启动、OI-09 CLI TUI 交互重构、OI-10 CLI 命令发现与 TUI 一致性、OI-11 CLI TUI 持久表面与可审计权限、OI-12 CLI TUI 信息架构与多行输入稳定性、OI-13 CLI TUI 垂直节奏与水晶工作台**。
+**已闭环：** Diff · Hooks · Compact（含 AR2 全段）· Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR-T1–T3+ Agent 能力面** · **AR3/OI-06 Desktop 产品接线** · **AR4 evidence gate** · **AR5 release hardening** · **OI-04 SearXNG 直连、OI-X1 真实实例 smoke、OI-07 上游诊断 / doctor / 可选 Docker setup、OI-08B CLI 零步骤首次启动**。OI-09–OI-13 的局部 TUI 能力保留为完成历史，但不再代表 renderer 整体稳定。
 
-**当前主线：** 默认 agent 可闭环队列为空。最近 OI-13 的四批代码已推送：
-`fe2d39a`（silent Thought）、`bf25077`（running surface 呼吸行）、`2b9d008`
-（idle/running 共享 gap）、`4c4fb08`（100-cell 响应式水晶工作台）。默认门禁仍为
-123 个串联脚本，pack/install 和
-Desktop launch 全绿，根 `dependencies` 仍为 `{}`；真实 Windows Terminal 走查继续
-只记 OI-H3。
+**当前主线：OI-14A。** 先用 `@xterm/headless` 复现
+“长 URL/ANSI + 随机 streaming chunk + running composer + resize”的物理行故障，
+再完成 Pi TUI direct/fork 与 OpenTUI 备选的 Node/esbuild/Windows/体积/许可 spike。
+后续固定顺序为 live view-state → retained renderer → transcript/Markdown →
+Composer/activity/footer → overlays → 默认切换 → 删除 legacy。完整方案见
+[CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md)。
 
 OI-X1 已在 SearXNG `2026.7.26-b060c780d` 真实 Docker 实例完成：JSON API、
 生产配置/status、permission-gated `WebSearch` 与真实上游 URL 全链通过；默认引擎
@@ -145,7 +158,7 @@ OI-X1 已在 SearXNG `2026.7.26-b060c780d` 真实 Docker 实例完成：JSON API
 | OI-07 | ✅ A `7754525` · B `3e96573` · C `ef03f3d` / `f623ad9`：诊断、doctor 与可选 Docker 管理均关闭 |
 | OI-H1 | `AskUserQuestion` 真 TTY 按键；自动化未覆盖真人终端 |
 | OI-H2 | Desktop 点击、键盘与视觉走查；自动化只证明窗口与 IPC 可用 |
-| OI-H3 | CLI TUI 真实 Windows Terminal 的字体/颜色、光标、鼠标/剪贴板粘贴、resize、权限切换与按键观感；自动化已证明 100-cell split/single 水晶工作台、ASCII/NO_COLOR、常驻 dock、idle/running gap owner 交接、slash 参数提示、context 仪表盘、paste 状态机、silent Thought/分段活动、权限详情和局部 VT，Codex PTY 不能替代真人终端 |
+| OI-H3 | 等 OI-14 自动关闭已知 wrap/cursor/resize/layout 缺陷后，只验字体、颜色、动画主观流畅度与真人按键/鼠标手感；不得把正文碎片、巨大空洞或续行贴左塞进人工 blocker |
 | LSP / remote compact / 任意中段 rewrite | 已按证据门控关闭；满足专题 ADR 的重开条件前不立项 |
 
 Durable Runtime 与 Autonomous Road 的长期执行顺序以 [ROADMAP.md](./ROADMAP.md) §13.10–§13.11 为准（已完成切片详情存档于 [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)）：
@@ -186,6 +199,7 @@ DR2A 单 session runner ✅
 → OI-07B search doctor ✅
 → OI-07C 可选 Docker setup/status/logs/stop ✅
 → OI-13 CLI TUI 垂直节奏与水晶工作台 ✅
+→ OI-14 CLI TUI retained renderer 重构 ▶ A NEXT
 ```
 
 每刀都必须先改 `packages/*` 契约和失败测试，再接 CLI/Desktop；定向测试、typecheck、完整 `npm test`、scoped `diff --check` 全绿后，代码与文档分批 commit/push。遇到需要数据库/daemon/RPC、用户脏文件冲突、数据丢失或副作用自动重放风险时停止扩张。
@@ -262,6 +276,7 @@ renderer 壳原样复制，共享 `RuntimeClient` 单独打成 browser ESM。不
 | Provider / 热切 | [PROVIDERS.md](./PROVIDERS.md) · [PROVIDER_UX.md](./PROVIDER_UX.md) |
 | Effort | [EFFORT.md](./EFFORT.md) · [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md) |
 | Diff | [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) · [TUI.md](./TUI.md) |
+| **CLI TUI 重构** | **[CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md)** · [OPEN_ISSUES.md](./OPEN_ISSUES.md) OI-14 |
 | Hooks | [HOOKS.md](./HOOKS.md) |
 | Compact | [COMPACTION.md](./COMPACTION.md) |
 | Subagent | [SUBAGENT.md](./SUBAGENT.md) · [SUBAGENT_SPEC.md](./SUBAGENT_SPEC.md) |
@@ -420,8 +435,9 @@ cd apps/desktop && npm install && set BOLO_DESKTOP_MOCK=1 && npm start
 | **OI-09** | 响应式欢迎页 · 真实输入框 · 原子活动行 · 结构化时间线 · 非 TTY 回落；旧 Bolot 身份已由 OI-11G 替换，真人验收见 OI-H3 |
 | **OI-10** | 共享 frame · slash catalog/menu · CLI-local/Plugin/Skill 动态候选 · ↑↓/Tab/Enter/Esc · 原子多帧 Thinking；代码 `67421bb`，真人观感仍见 OI-H3 |
 | **OI-11** | terminal surface · timeline/status · segment activity · permission details/chooser · local panel VT · Responses abort diagnosis · Bolo crystal；代码 `e9a32cf`–`8088fbb`，121 项门禁，真人观感仍见 OI-H3 |
-| **OI-12** | argument hint · context view-model/dashboard · shared content gutter · dock-width 用户块 · bracketed paste transaction；代码 `1696127` / `7f76093` / `15b37ed` / `40a5d41` / `8d2a7a5`，123 项门禁，真人观感仍见 OI-H3 |
-| **OI-13** | silent Thought completion · running surface row · idle/running shared gap · 100-cell responsive crystal workbench；代码 `fe2d39a` / `bf25077` / `2b9d008` / `4c4fb08`，123 项门禁，真人观感仍见 OI-H3 |
+| **OI-12** | argument hint · context view-model/dashboard · logical content gutter · dock-width 用户块 · bracketed paste transaction；代码 `1696127` / `7f76093` / `15b37ed` / `40a5d41` / `8d2a7a5`；物理 wrap 证明不足，转 OI-14 |
+| **OI-13** | silent Thought completion · 显式 surface/gap · 100-cell responsive crystal workbench；代码 `fe2d39a` / `bf25077` / `2b9d008` / `4c4fb08`；局部完成，不代表 renderer 整体稳定 |
+| **OI-14 · OPEN** | retained renderer 重构：A 真实 VT/选型 → B live view-state → C renderer → D Markdown/transcript → E Composer → F overlays → G 默认切换 → H 删除 legacy；当前 OI-14A |
 | **AR5C-early** | esbuild 单文件产物 · 发布元数据 · `getBundledSkillsDir()` 双布局 · pack→install→run E2E 进门禁 · [RELEASE.md](./RELEASE.md) |
 
 最新 commit 以 `git log` 为准。

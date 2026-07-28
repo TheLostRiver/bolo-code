@@ -1,12 +1,14 @@
 # CLI TUI
 
 > 无遥测。品牌见 `docs/BRAND.md`。  
-> **现状：** OI-09–OI-13 零运行时依赖 TTY controller：Bolo 水晶工作台 ·
-> 常驻全宽 composer · slash 菜单/补全/参数提示 · `/context` 仪表盘 ·
-> 响应式正文 gutter/全宽用户块 · paste 事务 · 分段 Thinking ·
-> 可靠 Thought 收尾 · idle/running 共享呼吸行 · 结构化时间线/status footer ·
-> 可审计权限选择 · 局部重绘 picker/Diff。
-> **框架选择：** 没有依赖 React Ink；完成标准是交互和输出契约，不是框架名称。
+> **现状：** OI-09–OI-13 已建立 Bolo 水晶、slash 菜单/参数提示、`/context`、paste
+> 事务、分段 Thinking/Thought、权限详情与非 TTY fallback 等业务能力；但后续真实
+> Windows Terminal 截图已确认当前 direct-write surface 会出现正文碎片、巨大空洞、
+> 物理续行贴左和 cursor/layout 漂移。系统性修复已重开为 **OI-14**。
+> **框架选择：** 采用成熟 retained-mode renderer，不再继续扩展自研
+> `TerminalSurface + contentPrefixer + tiny Markdown`。Pi TUI 为首选基座，最终
+> direct/fork 形态由 Node/esbuild/Windows/许可证 spike 决定；见
+> [CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md)。
 > Diff 轨见 [ROADMAP.md](./ROADMAP.md) §3 ·
 > [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) 轨 B。
 
@@ -43,15 +45,15 @@
 | `tui/crystalLogo.ts` | 水晶常量、源稿归一化、整块 cell-width 居中与 ASCII 降级 |
 | `tui/inkLayout.ts` | 一次性水晶工作台；宽屏 split、中/紧凑单列，不伪装成输入框 |
 | `tui/frame.ts` | 100-cell welcome、160-cell content 与全宽 dock 三套明确宽度契约 |
-| `tui/contentLayout.ts` | Agent/slash 正文的响应式 gutter 与跨 chunk 行首 prefixer |
+| `tui/contentLayout.ts` | **legacy**：只识别逻辑换行的 gutter prefixer；OI-14 将由 block layout 替代 |
 | `tui/contextDashboard.ts` | core `ContextUsageViewModel` 的响应式 TTY 仪表盘 |
 | `tui/inputBox.ts` | 输入/slash reducer、argument hint、CJK-safe renderer、bracketed-paste raw driver、running dock |
-| `tui/composerSpacing.ts` | idle raw editor 与 running surface 共用的 top-gap/cursor row 纯契约 |
-| `tui/terminalSurface.ts` | append-only 历史与底部临时 dock/activity 的行所有权 |
-| `tui/localPanel.ts` | picker/diff/question/permission 共用的局部行 erase/repaint |
-| `tui/terminalText.ts` | ANSI/CJK/emoji grapheme cell 宽度、裁切、补齐与折行 |
+| `tui/composerSpacing.ts` | **legacy**：idle/running top-gap 补丁；OI-14 将由父级 layout gap 替代 |
+| `tui/terminalSurface.ts` | **legacy**：按逻辑行记账的 append/dock surface；不拥有 terminal auto-wrap |
+| `tui/localPanel.ts` | **legacy**：局部 erase/repaint；OI-14 将迁入 OverlayHost |
+| `tui/terminalText.ts` | 当前字段级 ANSI/CJK/emoji helper；通用 wrap 将迁入成熟 renderer |
 | `tui/turnActivity.ts` | reasoning/tool/search/retry 分段生命周期、动画与独立计时 |
-| `tui/terminalMarkdown.ts` | 流式 inline emphasis/code renderer |
+| `tui/terminalMarkdown.ts` | **legacy**：只处理 inline emphasis/code；OI-14 将由 block Markdown 替代 |
 | `tui/arrowPicker.ts` | F-T8：↑↓ 选择 |
 | `tui/theme.ts` | F-T9：主题 |
 | `tui/banner.ts` · `statusLine.ts` | 启动/状态 |
@@ -64,9 +66,24 @@
 | `runtimeCli.ts` | AR1：顶层 runtime query/action consumer 与 automation 输出 |
 | `newSessionCli.ts` · `resumeCli.ts` · `main.ts` | 入口 |
 
+### 2.1 已知架构限制
+
+当前 TTY 路径仍是 event formatter 直接写 stdout。`contentLayout.ts` 只在字符串中的
+逻辑行首加 gutter，`TerminalSurface` 只记录 renderer 提供的逻辑行数；超长 URL、
+ANSI 或 Markdown 由终端自动折出的额外物理行不进 erase/restore 账本。idle editor、
+running dock 和临时面板又分别拥有 cursor 生命周期，因此 provider streaming、dock
+重绘或 resize 后可能出现续行贴左、文本碎片和巨大纵向空洞。
+
+现有简化 `TestTerminalScreen` 没有 terminal width/auto-wrap/双宽 cell/resize，过去
+的 123 项门禁只证明局部字符串、reducer 和显式 cursor 序列，不能证明物理终端布局。
+OI-14A 将先用 `@xterm/headless` 固化真实红灯，再迁移 retained component tree。
+
 ---
 
-## 3. 会话交互（OI-09–OI-13）
+## 3. 会话交互（OI-09–OI-13 业务契约；OI-14 重建渲染）
+
+以下交互是需要保留的产品契约，不表示当前 legacy renderer 已满足全部物理布局要求。
+OI-14 迁移时不得回退 slash、context、paste、Thought、权限与非 TTY 行为。
 
 ### 3.1 欢迎首页
 
@@ -81,7 +98,9 @@
 `resolveTuiFrameWidth()` 封顶 160 cells；用户历史块、composer/status dock 使用
 `resolveTuiDockWidth()` 跟随终端可用宽度。Agent 与 TTY slash 正文在各自 renderer
 内再使用响应式 gutter：24–31 列为 0、32–47 列为 2、48 列以上为 4；流式 chunk
-只在真实行首添加一次。四层宽度各有明确所有权。
+当前只在**逻辑**行首添加一次，终端 auto-wrap 的物理续行仍可能绕过 gutter；OI-14
+目标是所有 block 在给定 width 内先生成完整物理行，welcome、transcript、用户块与
+composer 由同一个 viewport/layout tree 计算。
 `NO_COLOR` 只移除颜色；`BOLO_ASCII=1` 保留结构并切成 ASCII 字符；
 `BOLO_THEME=plain` / `BOLO_PLAIN=1` 才简化为纯文本；`BOLO_MASCOT=0` 只隐藏水晶。
 
@@ -120,6 +139,10 @@ dock，结束后恢复，不与空闲 listener 竞争。composer 上方一行 sp
 首帧与输入重绘由 `readTuiInput` 拥有。该行始终与 composer 一起参与 cursor offset、
 局部 erase 和 repaint，因此 running → clearDock → idle 交接也不会让最终回答贴框。
 
+上段是 OI-11/OI-13 建立的局部契约；真实截图已经证明它在超长物理行和 streaming
+重绘下不能保证整个屏幕。OI-14 将把 Composer 改为同一 retained tree 中的常驻节点，
+idle/running/permission 只切 mode，不再销毁 editor 或转移 cursor owner。
+
 raw driver 进入时启用 terminal mode 2004，退出、提交和 abort 时恢复。收到
 `paste-start` 后跨 data chunk 聚合正文，到 `paste-end` 才规范化 CRLF/CR 并调用一次
 `insertText()`、重绘一次；marker 不进入输入 state，粘贴中的换行也不会触发 submit。
@@ -134,7 +157,7 @@ raw driver 进入时启用 terminal mode 2004，退出、提交和 abort 时恢�
 | reasoning / silent provider wait | 当前段持续动画；边界到达后留下 `Thought for <duration>`，即使 provider 未发送可见 reasoning delta |
 | `tool_start/end` | 进入永久工具时间线；结束后回到 Thinking |
 | `tool_progress` | 只在 activity 原位更新“工具名 · 进度”，不把每个 tick 刷成永久消息 |
-| assistant text | 正文保留稳定 gutter；inline `**bold**` / `` `code` `` 不再原样泄露 |
+| assistant text | 正文所有物理续行保留稳定 gutter；完整 block Markdown 在当前 width 重排 |
 | turn 完成 | 清掉活动行并把常驻 composer 从 running 切回 idle；共享 gap 保留，不冒充输出总思考耗时 |
 | slash command | 回显用户命令但不启动虚假的模型 Thinking |
 | composer footer | 按宽度保留 model/mode/effort、高亮按键与 `↓input ↑output`；估算 usage 加 `~` |
@@ -307,7 +330,7 @@ npx tsx scripts/test-file-diff.ts
 npx tsx scripts/test-diff-view.ts
 ```
 
-专项分别覆盖持久 dock/历史追加、响应式 gutter/dock-width 用户块/status footer、
+既有专项分别覆盖持久 dock/历史追加、响应式逻辑 gutter/dock-width 用户块/status footer、
 分段计时、权限详情与三态选择、局部 VT 重绘、水晶源稿/三档/ASCII/NO_COLOR 与
 单文件 dist 嵌入。`test:cli-tui` 继续覆盖 grapheme/CJK/emoji、输入/slash reducer、
 argument hint、bracketed paste 生命周期/跨 chunk/CRLF/单次重绘、菜单窗口与非 TTY
@@ -315,6 +338,12 @@ argument hint、bracketed paste 生命周期/跨 chunk/CRLF/单次重绘、菜�
 `test:slash-completion` 覆盖内置/Plugin/Skill projection、动态 effort、重名、
 hidden alias、exact/prefix 与空匹配。完整门禁当前包含 **123** 个串联
 `scripts/*.ts`。
+
+这些测试不覆盖 terminal auto-wrap、resize reflow 或真实 cell buffer。OI-14 新增的
+`test:cli-tui-vt` 必须使用 `@xterm/headless`，覆盖 24/38/56/80/120/160/220 列、
+随机 chunk、长 URL/token、Markdown list/code/table、CJK/emoji、ANSI/OSC 8、
+running/idle Composer、overlay、scrollback 与 resize。测试矩阵和性能预算见
+[CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md) §9。
 
 **仍需真人验收：** Windows Terminal 中的字体观感、实际光标位置、窗口 resize、
 鼠标/剪贴板真实多行粘贴、Ctrl+J/历史/删除组合键、权限切换和长回答滚动。自动测试
@@ -326,7 +355,7 @@ hidden alias、exact/prefix 与空匹配。完整门禁当前包含 **123** 个�
 
 | 项 | 说明 |
 |----|------|
-| React Ink 整站 REPL | 当前零依赖 controller 已满足 OI-09；只有出现可复现能力缺口才按 AR4 重开 |
+| 盲选 React Ink/OpenTUI/Pi coding-agent 整站 | 不搬重量级产品；只采用许可、Node/esbuild/Windows spike 通过的 renderer 基座与公共组件 |
 | ratatui / Rust TUI | 不做 |
 | IDE `useDiffInIDE` | 产品后置 |
 | 遥测 | 永不 |

@@ -9,7 +9,9 @@
 2. 读 `docs/AGENT_HANDOFF.md`（交接约定与 git 规则）、`README.md`。
 3. 用 planning-with-files 恢复/建立上下文（见第 5 节）。
 4. `git status` 确认工作区干净、`HEAD == origin/main`。
-5. 功能实现 架构 开发思想 等等 可以借鉴D:\DEV\HelsincyCode，E:\Tools\codex，E:\Tools\opencode这三个项目，但要注意这三项目非常庞大
+5. 功能、架构和开发思想可参考 Pi、oh-my-pi、Codex、OpenCode 与 HelsincyCode；
+   复用前先核对许可证和运行栈，禁止把本机参考路径写进产品文档。OI-14 的审计与选型
+   结论以 `docs/CLI_TUI_REFACTOR_PLAN.md` 为准。
 
 ## 1. 任务从哪来
 
@@ -26,8 +28,9 @@ agent 独立解决的问题。** 不要越过外部/人工阻塞项，也不要�
 | 4 | OI-X1 · 真实 SearXNG live smoke | ✅ 已收口（2026-07-27） |
 | 5 | OI-07 · 上游诊断、doctor 与可选 Docker setup | ✅ 已收口（`7754525` · `3e96573` · `ef03f3d` · `f623ad9`） |
 | 6 | OI-08B · CLI 零步骤首次启动 | ✅ 已收口（代码 `22c0d0c`） |
-| 7 | 默认 agent 可闭环队列 | 无；不要自行从历史 TODO 发明任务 |
-| 8 | OI-H1/H2 · 真 TTY、真人点击与视觉走查 | 人工阻塞 |
+| 7 | OI-14A · CLI TUI 真实 VT 红灯与 retained renderer 选型 | **OPEN · NEXT** |
+| 8 | OI-14B–H · view-state/renderer/Markdown/Composer/overlay/收口 | 按 A–H 顺序推进 |
+| 9 | OI-H1/H2/H3 · 真 TTY、真人点击与视觉走查 | 人工阻塞；已知 TUI 代码缺陷先走 OI-14 |
 
 OI-04 已完成零依赖、显式配置、fail-closed 的 SearXNG JSON 搜索契约、fixture、
 CLI/Desktop warning 与文档收口；OI-X1 已补齐真实 Docker 实例和上游搜索证据；
@@ -36,10 +39,17 @@ OI-08B 已完成安装后直接 `bolo`、用户级 workspace session store、旧
 `bolo init`；普通启动不创建项目 `.bolo/`。Docker 不是默认依赖，公网 live 不进默认
 门禁。不要重复实现。
 
+**当前只取 OI-14。** A 先用 `@xterm/headless` 复现物理 auto-wrap/cursor 故障并完成
+Pi direct/fork 与 OpenTUI 备选 spike；B–H 的固定顺序、停止条件、回滚和验收见
+[CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md)。在 A 完成前，不要继续给
+`TerminalSurface`、`contentPrefixer`、tiny Markdown 或 composer spacer 打补丁。
+
 **一条已知的遗留（不阻塞，顺手可做）：** `AskUserQuestion` 的**真人在真终端按键**没验过——
 控件测试注入 `readKey`，覆盖不到真实 raw-mode 与 REPL 抢 stdin 的问题。
 文档与 ROADMAP 已如实标注「真 TTY 交互未验」。**不要在没有真正验证的情况下把这个标注抹掉。**
-其余能力面候选已经落地、书面关闭或写明重开条件，不再作为隐含队列。
+CLI TUI 的字体、颜色和真人按键手感仍由 OI-H3 人工验；正文碎片、巨大空洞、续行贴左、
+cursor/resize 等已知缺陷属于 OI-14，不得塞进人工 blocker。其余能力面候选已经落地、
+书面关闭或写明重开条件，不再作为隐含队列。
 
 ### 关于 Electron / GUI（OI-06，已关闭）
 

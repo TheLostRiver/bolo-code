@@ -22,28 +22,30 @@
 | **文件 Diff · 日用契约** | **~95%+** | **D0–D7 已收口**；见 [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) |
 | **文件 Diff · 交互 UI** | **~90–95%** | **U0–U4 已落地**；U5 真·Ink/IDE 可选（AR4 证据门控） |
 | **斜杠** | **~88–93%** | OI-10 命令级发现/补全 + OI-12A 精确命令 argument hint；`/effort ` 动态读取当前 provider/model 合法档位 |
-| **CLI TUI** | **~90–95%** | OI-09–OI-13：100-cell 响应式水晶工作台、常驻全宽 composer/idle-running 共享完整空行、context 仪表盘、响应式正文 gutter/dock-width 用户块、分段 activity/可靠 Thought、可审计权限与 paste 事务；真人 Windows Terminal 观感继续单列 |
+| **CLI TUI** | **~55–65%** | slash/context/paste/Thought/权限等业务能力已存在，但 OI-14 已确认当前 direct-write surface 无法正确拥有物理 wrap、Markdown、resize 与 cursor；真实截图出现正文碎片、巨大空洞和续行贴左，retained renderer 重构进行中 |
 | **Electron GUI** | **~80–88%** | 壳 + 流式 + 权限 + 多 provider（CX7）+ runtime v1 + **会话切换/恢复 + composer controls + model/effort 设置 + control/tool progress 投影** + AskUserQuestion；真人点击/视觉仍未验 |
 | **Hooks · 日用契约** | **~96–98%** | **H0–H5 已落地**（SessionEnd · exit 语义 · updatedInput · `/hooks recent`） |
 | **Compact · 日用管道** | **~96–98%** | **C0–C5 + AR2 全段已落地**（hybrid 计数 · 中段截断 · 防重摘要 · range/watermark 契约 · 切分不拆对穷举验证 · 写失败完整回退 · durable 条目不丢 · **估算按字符类别分档**（CJK 1.3 / 散文 4.5 / 其余 3.5；实测推翻了「密文 = token 密」的旧前提，最差高估 109% → 19.5%）· 管道基准）；中段压缩与远端压缩均**显式关闭**（§13.10.2 · [ADR](./ADR_COMPACT_REMOTE.md)） |
 | **Provider · 多实例热切** | **~92–96%** | **P0–P4.1 + CX7 Desktop** |
 | **Effort · 推理强度方言** | **~92–95%** | **E0–E9 已落地**；adaptive thinking 归 AR4 |
 | **Provider UX · 便利层** | **~95–98%** | **CX0–CX8 已落地**（ultrathink 默认 off）· [PROVIDER_UX.md](./PROVIDER_UX.md) |
-| **产品整体（相对 HC）** | **~74–88%** | 日用高；UI 全家桶另计 |
+| **产品整体（相对 HC）** | **~68–82%** | Headless 日用高；CLI TUI 渲染可靠性按 OI-14 重新计入 |
 
-**已闭环主线：** headless 日用 → Diff（D0–D7 / U0–U4）· Hooks（H0–H5）· Compact（C0–C5）· Provider（P0–P4.1）· Effort（E0–E9）· Provider UX（CX0–CX8）· 可靠性（R0–R4）· **Durable Runtime（DR0–DR4）** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR3 Desktop 产品接线** · **OI-07 SearXNG 上游诊断、`search doctor` 与可选 Docker setup** · **OI-08B CLI 零步骤首次启动** · **OI-09 CLI TUI 交互重构** · **OI-10 CLI 命令发现与 TUI 一致性** · **OI-11 CLI TUI 持久终端表面与可审计权限交互** · **OI-12 CLI TUI 信息架构与多行输入稳定性** · **OI-13 CLI TUI 垂直节奏与水晶工作台**。切片明细 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
+**已闭环主线：** headless 日用 → Diff（D0–D7 / U0–U4）· Hooks（H0–H5）· Compact（C0–C5）· Provider（P0–P4.1）· Effort（E0–E9）· Provider UX（CX0–CX8）· 可靠性（R0–R4）· **Durable Runtime（DR0–DR4）** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR3 Desktop 产品接线** · **OI-07 SearXNG 上游诊断、`search doctor` 与可选 Docker setup** · **OI-08B CLI 零步骤首次启动**。OI-09–OI-13 的 slash/context/paste/Thought/权限/welcome 等局部切片保留为完成历史，但后续真实截图已证伪“整个 TUI renderer 稳定”的口径，系统性主线重开为 **OI-14**。切片明细 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
 
-**当前默认 agent 队列：空。** OI-13 已于 2026-07-28 闭环：silent-thinking 会可靠
-留下 `Thought for <duration>`；共享 composer gap 在 running surface 与 idle editor
-交接前后都保留完整空行；欢迎页改为最大 100 cells 的水晶工作台（宽屏 split，
-中/紧凑 single）。代码提交为 `fe2d39a`、`bf25077`、`2b9d008`、`4c4fb08`；关闭证据见
-[OPEN_ISSUES.md](./OPEN_ISSUES.md)。
+**当前默认 agent 队列：OI-14A。** 先用真正的 headless terminal 固化
+“长 URL/ANSI + 随机 streaming chunk + 常驻 composer + resize”的物理行红灯，并完成
+Pi TUI direct/fork 与 OpenTUI 备选的 Node/esbuild/Windows/体积/许可证 spike；随后按
+view-state → retained renderer → Markdown/transcript → Composer/overlay → 默认切换
+顺序迁移。完整方案见
+[CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md)，问题与关闭条件见
+[OPEN_ISSUES.md](./OPEN_ISSUES.md) OI-14。
 
 **外部或人工阻塞项单列，不与 agent 队列混淆：**
 
 | 待办 | 卡在哪 |
 |------|--------|
-| CLI TUI 真实 Windows Terminal 观感/光标/按键 | OI-13 已用实际 VT row 关闭 idle/running gap、Thought 与 welcome 结构缺陷；仍需真人确认实际字体、颜色、动画流畅度、鼠标粘贴、光标、resize 与按键观感 |
+| CLI TUI 真实 Windows Terminal 观感/按键 | 已知物理布局/cursor/resize 缺陷先由 OI-14 自动解决；OI-H3 之后只保留字体、颜色、动画主观流畅度与真人按键/鼠标手感 |
 | 桌面窗口视觉 · AskUserQuestion 真人按键/点击 | 只能人工验，自动化覆盖不到 |
 | LSP | 暂缓，触发条件已写死 → [ADR_AR4_EVIDENCE_GATE.md](./ADR_AR4_EVIDENCE_GATE.md) §6 |
 
@@ -52,10 +54,10 @@
 
 **已插队并收口：** **AR-T · Agent 能力面**（§14）。准入证据：基础设施深度（DR0–DR4 + AR1）已远超能力广度——彼时 agent 无法跨步骤记住计划，也无法启动任何活过一次工具调用的进程。AR2 压缩深化顺延，A0a/A0b 成果不受影响。
 
-**agent 可闭环开放项：当前为空。** OI-13A–OI-13D（含 B2 回归）已按
-[OPEN_ISSUES.md](./OPEN_ISSUES.md) 的关闭条件完成。CLI init 不再是默认安装步骤，
-SearXNG Docker 管理也只是显式可选能力；真人验收状态仍单列，已知代码缺陷不能放入
-`BLOCKED: HUMAN`。
+**agent 可闭环开放项：OI-14A–OI-14H。** OI-13A–OI-13D（含 B2 回归）的局部
+提交仍保留，但其简化 VT 不能覆盖 terminal auto-wrap，不能再把后续截图中的已知代码
+缺陷放入 `BLOCKED: HUMAN`。CLI init 不再是默认安装步骤，SearXNG Docker 管理也只是
+显式可选能力。
 
 ---
 
@@ -122,7 +124,7 @@ SearXNG Docker 管理也只是显式可选能力；真人验收状态仍单列�
 | **OI-10 · CLI 命令发现与 TUI 一致性** | ✅ 共享 frame、原子多帧动画、slash catalog/menu、CLI-local/Plugin/Skill 动态候选与键盘补全；真人 Windows Terminal 验收单列 |
 | **OI-11 · CLI TUI 持久终端表面与可审计权限交互** | ✅ 常驻全宽 composer、时间线层级/usage、分段 Thinking、权限详情选择、viewport 稳定、Responses abort 诊断与水晶欢迎页均已进入默认门禁；真人项见 OI-H3 |
 | **OI-12 · CLI TUI 信息架构与多行输入稳定性** | ✅ argument hint、context dashboard、统一内容 gutter、全宽用户块与 paste transaction 已进入默认门禁；真人项见 OI-H3 |
-| **OI-13 · CLI TUI 垂直节奏与水晶工作台** | ✅ silent Thought、idle/running 共享完整空行、100-cell 响应式水晶工作台与文档已进入默认门禁；真实字体/颜色/动画观感仍归 OI-H3 |
+| **OI-13 · CLI TUI 垂直节奏与水晶工作台** | ✅ 局部切片完成；后续物理 wrap/cursor/layout 证据转入 OI-14，不再以本项门禁证明整个 renderer |
 | **AR-T3+ 能力面续刀**（WebSearch · plan 工具流 · AskUserQuestion） | ✅ 三项均已落地（AskUserQuestion 的真 TTY 交互未验，见 §14.5） |
 | **AR2 Compact depth（A0a/A0b/A1/A2/B1/B2/C 全段）** | ✅ |
 | AR3 Desktop shell | ✅ runtime 生产桥/会话切换恢复/视图模型/composer/model-effort/control-tool progress/NSIS 已收口；真人点击/视觉仍未验 |
@@ -135,14 +137,15 @@ SearXNG Docker 管理也只是显式可选能力；真人验收状态仍单列�
 
 状态真源见 **§0**；里程碑逐项明细已并入 §0 与 [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
 
-**一句话：** 核心主路径已收口；默认 agent 可闭环队列为空，外部资源和真人验收继续
-单列。
+**一句话：** Headless 核心主路径已收口；默认 agent 队列为 OI-14A，先重建 CLI TUI
+物理终端测试与 retained renderer 基座；外部资源和真人验收继续单列。
 
 **最近闭环：** OI-13A–OI-13D（含 B2）。代码批为 `fe2d39a`（silent Thought）、
 `bf25077`（running surface 呼吸行）、`2b9d008`（idle/running 共享 gap）、
 `4c4fb08`（响应式水晶工作台）；123 项完整门禁、
-pack/install、Desktop bundle/Electron launch 全绿。**当前实施：** 无默认 agent 项；
-真人 Windows Terminal 验收仍单列，不以自动快照或注入按键冒充完成。
+pack/install、Desktop bundle/Electron launch 全绿。**当前实施：** OI-14A 先建立
+真实物理终端红灯与 retained renderer 选型证据；真人 Windows Terminal 验收仍单列，
+但已知 auto-wrap/cursor/layout 缺陷不再冒充人工项。
 中段压缩与远端压缩按证据门控**显式关闭**
 （后者见 [ADR_COMPACT_REMOTE.md](./ADR_COMPACT_REMOTE.md)）。
 
@@ -161,6 +164,7 @@ pack/install、Desktop bundle/Electron launch 全绿。**当前实施：** 无�
 | [EFFORT.md](./EFFORT.md) / [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md) | Effort 方言 |
 | [COMPACTION.md](./COMPACTION.md) | Compact **实现真源** |
 | [DESKTOP_DESIGN.md](./DESKTOP_DESIGN.md) | **AR3 设计方案**（信息架构 · 交互 · 视觉 · 不做什么） |
+| [CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md) | **OI-14 设计方案**（retained renderer · 复用审计 · 迁移/回滚/验收） |
 | [ADR_COMPACT_REMOTE.md](./ADR_COMPACT_REMOTE.md) | **AR2C 决定**：compaction 保持 local-only（含重开条件） |
 | [ADR_AR4_EVIDENCE_GATE.md](./ADR_AR4_EVIDENCE_GATE.md) | **AR4 决定**：六个候选逐条书面决定（含证据与重开条件） |
 | [LOCAL_SEARCH_AND_FETCH.md](./LOCAL_SEARCH_AND_FETCH.md) | **本地搜索/抓取**：SearXNG compose + Bolo 直连配置 · 每条路径查询去哪 |
@@ -388,7 +392,8 @@ AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 regis
 1. 每次从最前面的未完成阶段选一个最小切片；不同时铺 CLI、Compact、Desktop 三个大工程。
 2. 先更新 `packages/*` schema/view-model 与失败测试，再接 CLI/Desktop；renderer 不持有第二状态机。
 3. 每切片代码/测试与文档分批 commit/push；ROADMAP 水位只在验收全绿后前移。
-4. 对标 HC/Codex/OpenCode/Pi 只借鉴语义、失败模式和测试；不复制重量级目录、依赖或本机路径。
+4. 对标 HC/Codex/OpenCode/Pi 时先审计许可证、运行模型与依赖成本；允许复用许可明确、
+   spike 通过的成熟基础库或窄 fork，禁止盲搬重量级产品目录、未许可源码和本机路径。
 5. AR4 属条件触发项：缺少真实需求必须书面关闭，而不是留永久"待办"。
 6. 每切片开始把准入证据和预计触碰路径写入 PWF；结束记录专项、typecheck、完整测试、scoped diff 和远端 commit。
 7. 一个代码提交只承载一个可描述的行为变化；文档水位独立提交。commit 后立即 push 并核对 `HEAD == origin/main`。
@@ -421,6 +426,7 @@ AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 regis
 | 26 | **OI-11 · CLI TUI 持久终端表面与可审计权限交互** | A terminal surface/composer · B timeline/status · C segment activity · D permission chooser/details · E viewport VT · F abort diagnosis · G crystal identity · H docs | turn 中输入区常驻全宽 · gutter/用户块/token/model/keys · 每段 Thought · command 可见三态权限 · 历史不被 clear · timeout 可行动 · Bolo 水晶欢迎页 | OI-11 专项 + 既有 TUI/provider/permission 回归 + typecheck + 121 项完整门禁 + dist smoke | ✅ A–H 已闭环；代码 `e9a32cf` / `59acdf6` / `b0feb0c` / `4fc3791` / `da0533c` / `b0fbb86` / `8088fbb`，真人观感移交 OI-H3 |
 | 27 | **OI-12 · CLI TUI 信息架构与多行输入稳定性** | A argument hint · B context view-model/dashboard · C shared gutter · D dock-width user block · E paste transaction · F docs | `/effort ` 可见合法档位 · `/context` 图形概览/明细分层 · 正文不贴墙 · 用户块全宽 · 多行 paste 不误提交/滚屏 | OI-12 专项 + slash/TUI/compact/usage 回归 + typecheck + 123 项完整门禁 + dist smoke | ✅ A `1696127` · B `15b37ed` · C `40a5d41` · D `8d2a7a5` · E `7f76093` · F 本文档批；真人字体/鼠标粘贴/resize/按键仍归 OI-H3 |
 | 28 | **OI-13 · CLI TUI 垂直节奏与水晶工作台** | A silent Thought completion · B running surface breathing row · B2 idle/running shared gap · C responsive crystal workbench · D docs | 直接正文前仍有本段 `Thought for` · activity/final answer 与 composer 间有稳定完整空行 · 欢迎页最大 100 cells、宽屏双列/中紧凑单列并保留水晶 | thinking/surface/owner-handoff VT/crystal/TUI 专项 + typecheck + 完整门禁 + dist smoke | ✅ A `fe2d39a` · B `bf25077` · B2 `2b9d008` · C `4c4fb08` · D 文档批 |
+| 29 | **OI-14 · CLI TUI retained renderer 重构** | A 真实 VT/选型 · B live view-state · C retained 基座 · D transcript/Markdown · E Composer/activity/footer · F overlays · G 默认切换 · H 删除旧实现/文档 | 正文不再碎裂或产生巨大空洞；物理续行 gutter 一致；user/agent/composer 有稳定间距；stream/resize/paste/permission 不破坏屏幕 | `@xterm/headless` auto-wrap/resize + chunk property + Markdown/Unicode/ANSI/OSC 8 + editor/overlay + perf + dist/pack/install + 真人 Windows Terminal | **▶ OI-14A NEXT**；完整方案 [CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md) |
 
 固定 checkpoint：
 
