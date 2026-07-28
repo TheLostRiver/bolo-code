@@ -998,6 +998,19 @@ export async function runOnePrompt(
     return { terminalReason: terminal.reason, assistantText }
   } finally {
     printer?.endTurn({ terminalReason })
+    if (controller) {
+      try {
+        await controller.flush()
+      } catch (error) {
+        if (
+          terminalReason === 'completed' ||
+          terminalReason === 'slash' ||
+          terminalReason === 'empty'
+        ) {
+          throw error
+        }
+      }
+    }
   }
 }
 
