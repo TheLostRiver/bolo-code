@@ -6,6 +6,7 @@
 import { renderUserMessage } from './inputBox.ts'
 import { createTerminalMarkdownStream } from './terminalMarkdown.ts'
 import { stripTerminalAnsi } from './terminalText.ts'
+import { createTuiContentPrefixer } from './contentLayout.ts'
 import type { TurnActivityIndicator } from './turnActivity.ts'
 
 /** 与 core SessionEvent 对齐的最小形状（避免 cli↔core 环依赖过重） */
@@ -221,21 +222,11 @@ export function createSessionEventPrinter(opts: {
   let streamedText = false
   let reasoningPrefixDone = false
   let assistantHeaderDone = false
-  let timelineLineStart = true
+  const contentPrefixer = createTuiContentPrefixer({ columns: opts.columns })
 
   const withTimelineGutter = (text: string): string => {
     if (!timeline || !text) return text
-    let rendered = ''
-    for (const char of text) {
-      if (timelineLineStart && char !== '\n' && char !== '\r') {
-        rendered += '  '
-        timelineLineStart = false
-      }
-      rendered += char
-      if (char === '\n') timelineLineStart = true
-      else if (char !== '\r') timelineLineStart = false
-    }
-    return rendered
+    return contentPrefixer.format(text)
   }
   const emitOut = (text: string) => writeOut(withTimelineGutter(text))
   const emitErr = (text: string) => writeErr(withTimelineGutter(text))
@@ -278,7 +269,7 @@ export function createSessionEventPrinter(opts: {
       openReasoningLine = false
       reasoningPrefixDone = false
       assistantHeaderDone = false
-      timelineLineStart = true
+      contentPrefixer.reset()
       markdown.reset()
       if (
         timeline &&
@@ -292,7 +283,7 @@ export function createSessionEventPrinter(opts: {
             color,
           })}\n\n`,
         )
-        timelineLineStart = true
+        contentPrefixer.reset()
       }
       if (timeline && options?.activity !== false) {
         opts.activity?.start('Thinking')

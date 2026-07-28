@@ -71,6 +71,14 @@ export {
   TUI_FRAME_MAX_COLUMNS,
 } from './tui/frame.ts'
 export {
+  createTuiContentPrefixer,
+  prefixTuiContentBlock,
+  resolveTuiContentColumns,
+  resolveTuiContentGutter,
+  TUI_CONTENT_GUTTER_CELLS,
+  type TuiContentPrefixer,
+} from './tui/contentLayout.ts'
+export {
   createTerminalSurface,
   type TerminalDock,
   type TerminalSurface,

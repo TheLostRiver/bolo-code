@@ -6,8 +6,10 @@ import {
   createTuiInputState,
   formatTuiTokenCount,
   measureTerminalText,
+  prefixTuiContentBlock,
   renderTuiInputBox,
   renderUserMessage,
+  resolveTuiContentGutter,
   resolveTuiFrameWidth,
   stripTerminalAnsi,
 } from '../packages/cli/src/index.ts'
@@ -21,6 +23,18 @@ function plainLines(text: string): string[] {
 }
 
 async function main() {
+  assert(resolveTuiContentGutter(24) === 0, '24 columns preserve content width')
+  assert(resolveTuiContentGutter(38) === 2, '38 columns use a compact gutter')
+  assert(resolveTuiContentGutter(80) === 4, '80 columns use the full gutter')
+  assert(resolveTuiContentGutter(160) === 4, 'wide terminals keep stable rhythm')
+  const prefixedCjk = plainLines(
+    prefixTuiContentBlock('中文🙂\nnext', { columns: 38 }),
+  )
+  assert(
+    prefixedCjk.every((line) => line.startsWith('  ')),
+    'block gutter preserves CJK and emoji lines',
+  )
+
   assert(formatTuiTokenCount(0) === '0', 'zero token format')
   assert(formatTuiTokenCount(999) === '999', 'sub-thousand token format')
   assert(formatTuiTokenCount(1_000) === '1k', 'one-thousand token format')
@@ -78,10 +92,15 @@ async function main() {
   printer.onEvent({ type: 'text', text: 'after tool' })
   printer.endTurn({ terminalReason: 'completed' })
   const timeline = plainLines(out.join(''))
+  const expectedGutter = ' '.repeat(resolveTuiContentGutter(80))
   for (const expected of ['● Bolo', 'first line', 'second line', '✓ Read', 'after tool']) {
     const line = timeline.find((candidate) => candidate.includes(expected))
     assert(line !== undefined, `timeline contains ${expected}`)
-    assert(line.startsWith('  '), `${expected} uses the shared gutter: ${line}`)
+    assert(
+      line.startsWith(expectedGutter) &&
+        !line.startsWith(`${expectedGutter} `),
+      `${expected} uses exactly the shared gutter: ${line}`,
+    )
   }
   assert(
     !timeline.some(

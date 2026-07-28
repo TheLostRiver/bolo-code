@@ -7,6 +7,7 @@ import {
 } from '../packages/core/src/index.ts'
 import {
   measureTerminalText,
+  resolveTuiContentGutter,
   renderContextDashboard,
   resolveTuiFrameWidth,
   runOnePrompt,
@@ -136,6 +137,14 @@ async function main(): Promise<void> {
   assert(tty.terminalReason === 'slash', 'TTY context remains a slash result')
   assert(ttyText.includes('█') || ttyText.includes('░'), 'TTY uses dashboard')
   assert(!ttyText.includes('prepare order:'), 'TTY hides diagnostics by default')
+  const ttyGutter = ' '.repeat(resolveTuiContentGutter(80))
+  assert(
+    ttyText
+      .split('\n')
+      .filter((line) => /[╭│╰]/u.test(line))
+      .every((line) => line.startsWith(ttyGutter)),
+    'TTY dashboard uses the shared content gutter',
+  )
 
   const plainOut: string[] = []
   await runOnePrompt(session, '/context', {
@@ -146,6 +155,10 @@ async function main(): Promise<void> {
   const plainText = plainOut.join('')
   assert(plainText.includes('Context usage:'), 'non-TTY uses compact plain text')
   assert(!plainText.includes('╭'), 'non-TTY does not emit a frame')
+  assert(
+    plainText.startsWith('Context usage:'),
+    'non-TTY plain text is not padded with TTY layout',
+  )
 
   const detailsOut: string[] = []
   await runOnePrompt(session, '/context details', {
@@ -158,6 +171,13 @@ async function main(): Promise<void> {
   const detailsText = detailsOut.join('')
   assert(detailsText.includes('prepare order:'), 'details keeps diagnostics')
   assert(!detailsText.includes('╭─ Context'), 'details bypasses dashboard')
+  assert(
+    detailsText
+      .split('\n')
+      .filter(Boolean)
+      .every((line) => line.startsWith(ttyGutter)),
+    'TTY slash diagnostics use the shared content gutter',
+  )
 
   console.log('PASS: context dashboard')
 }

@@ -53,6 +53,10 @@ import {
   type TerminalSurface,
 } from './tui/terminalSurface.ts'
 import { renderContextDashboard } from './tui/contextDashboard.ts'
+import {
+  prefixTuiContentBlock,
+  resolveTuiContentColumns,
+} from './tui/contentLayout.ts'
 
 export type ResumeCliOptions = {
   /** session id / 路径；省略或 true 时进入项目列表选择 */
@@ -634,6 +638,14 @@ export async function runOnePrompt(
 ): Promise<{ terminalReason: string; assistantText: string }> {
   const writeOut = options?.writeOut ?? ((s) => process.stdout.write(s))
   const writeErr = options?.writeErr ?? ((s) => process.stderr.write(s))
+  const isTty = options?.isTty ?? process.stdin.isTTY === true
+  const columns = options?.columns ?? process.stdout.columns ?? 80
+  const withContentLayout = (text: string): string =>
+    isTty ? prefixTuiContentBlock(text, { columns }) : text
+  const writeSlashOutput = (text: string) => {
+    const line = text.endsWith('\n') ? text : `${text}\n`
+    writeOut(withContentLayout(line))
+  }
   const printer = getSessionEventPrinter(session)
   let terminalReason = 'failed'
   printer?.beginTurn({
@@ -658,17 +670,17 @@ export async function runOnePrompt(
       terminalReason = 'slash'
       if (
         result.contextView &&
-        (options?.isTty ?? process.stdin.isTTY === true)
+        isTty
       ) {
         const rendered = renderContextDashboard({
           view: result.contextView,
-          columns: options?.columns ?? process.stdout.columns,
+          columns: resolveTuiContentColumns(columns),
           color:
             options?.color ??
             (process.env.NO_COLOR === undefined &&
               process.env.BOLO_THEME?.trim().toLowerCase() !== 'plain'),
         })
-        writeOut(`${rendered.text}\n`)
+        writeSlashOutput(rendered.text)
         return {
           terminalReason: 'slash',
           assistantText: result.message,
@@ -677,7 +689,7 @@ export async function runOnePrompt(
       // U1：TTY 且 /diff 请求面板 → 交互 diffPane；失败回落文本
       if (
         result.interactiveDiff &&
-        (options?.isTty ?? process.stdin.isTTY === true) &&
+        isTty &&
         process.env.BOLO_DIFF_PANEL !== '0'
       ) {
         try {
@@ -716,7 +728,7 @@ export async function runOnePrompt(
       // P 轨 UX：TTY 且 /provider 无参 → 箭头选后端并热切
       if (
         result.interactiveProvider?.mode === 'pick' &&
-        (options?.isTty ?? process.stdin.isTTY === true) &&
+        isTty &&
         process.env.BOLO_PROVIDER_PANEL !== '0' &&
         process.env.BOLO_ARROW_PICKER !== '0'
       ) {
@@ -735,12 +747,12 @@ export async function runOnePrompt(
               if (ar.ok) {
                 const sw = switchSessionProvider(session, ar.id)
                 const out = sw.ok ? sw.message : sw.reason
-                writeOut(out.endsWith('\n') ? out : `${out}\n`)
+                writeSlashOutput(out)
                 return { terminalReason: 'slash', assistantText: out }
               }
               if (ar.reason === 'cancel') {
                 const msg = 'provider pick cancelled'
-                writeOut(`${msg}\n`)
+                writeSlashOutput(msg)
                 return { terminalReason: 'slash', assistantText: msg }
               }
               // unsupported → fall through to text list
@@ -756,7 +768,7 @@ export async function runOnePrompt(
       // E8：TTY 且 /effort 无参 → 箭头选推理强度
       if (
         result.interactiveEffort?.mode === 'pick' &&
-        (options?.isTty ?? process.stdin.isTTY === true) &&
+        isTty &&
         process.env.BOLO_EFFORT_PANEL !== '0' &&
         process.env.BOLO_ARROW_PICKER !== '0'
       ) {
@@ -813,12 +825,12 @@ export async function runOnePrompt(
                     isAgent: true,
                     model,
                   })
-                writeOut(out.endsWith('\n') ? out : `${out}\n`)
+                writeSlashOutput(out)
                 return { terminalReason: 'slash', assistantText: out }
               }
               if (ar.reason === 'cancel') {
                 const msg = 'effort pick cancelled'
-                writeOut(`${msg}\n`)
+                writeSlashOutput(msg)
                 return { terminalReason: 'slash', assistantText: msg }
               }
             } finally {
@@ -831,7 +843,7 @@ export async function runOnePrompt(
       }
 
       const msg = result.message
-      writeOut(msg.endsWith('\n') ? msg : `${msg}\n`)
+      writeSlashOutput(msg)
       return { terminalReason: 'slash', assistantText: msg }
     }
 
@@ -840,13 +852,18 @@ export async function runOnePrompt(
     const assistantText = lastAssistantText(session.messages, before)
     // T4：已流式打印 text 则不再整段回放；未流式则整段输出
     if (assistantText && !printer?.didStreamText()) {
-      writeOut(
-        assistantText.endsWith('\n') ? assistantText : `${assistantText}\n`,
-      )
+      const output = assistantText.endsWith('\n')
+        ? assistantText
+        : `${assistantText}\n`
+      writeOut(withContentLayout(output))
     }
     if (terminal.reason !== 'completed') {
       const detail = terminal.detail ? `: ${terminal.detail}` : ''
-      writeErr(`warn: turn ended with ${terminal.reason}${detail}\n`)
+      writeErr(
+        withContentLayout(
+          `warn: turn ended with ${terminal.reason}${detail}\n`,
+        ),
+      )
     }
     return { terminalReason: terminal.reason, assistantText }
   } finally {
