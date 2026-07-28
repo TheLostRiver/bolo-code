@@ -512,11 +512,12 @@ C4: compact 成功且非 override system 时可选刷新短 skill catalog 段（
 | 切片 | 代码批 | 已关闭行为 |
 |------|--------|------------|
 | OI-13A · silent thought completion | `fe2d39a` | provider 不发送 reasoning delta、直接进入正文时，已结束 thinking segment 仍输出一次 `Thought for <duration>` |
-| OI-13B · surface breathing row | `bf25077` | history/activity 与常驻 composer 之间的空行由 `TerminalSurface` 所有，参与同一 cursor/erase/repaint 契约 |
+| OI-13B · running surface breathing row | `bf25077` | turn 内 history/activity 与 running composer 之间的空行由 `TerminalSurface` 所有 |
+| OI-13B2 · idle/running shared gap | `2b9d008` | 共享 top-gap/cursor 契约同时接入 surface 与 idle editor；最小 VT screen 覆盖 clearDock owner 交接、重绘不累加与 cleanup 不擦历史 |
 | OI-13C · crystal workbench | `4c4fb08` | welcome 最大 100 cells；宽屏水晶/状态 split，中/紧凑 single，ASCII/NO_COLOR/mascot-off 与 CJK/emoji 安全回落 |
 
 - OI-13D 同步 README、TUI、USAGE、ROADMAP、OPEN_ISSUES、handoff 与 release。
-- 每刀先建失败测试，再运行专项、typecheck 和完整 `npm.cmd test`；三批均验证
+- 每刀先建失败测试，再运行专项、typecheck 和完整 `npm.cmd test`；四批均验证
   dist build、真实 pack/install、Desktop bundle 与 Electron launch，根
   `dependencies` 保持 `{}`。
 - 自动化不替代 OI-H3：真实 Windows Terminal 的字体、颜色、动画流畅度、光标、

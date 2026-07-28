@@ -28,7 +28,7 @@
 | Headless 核心 | ~82–90% | queryLoop · 权限 · tools · STE；partial stream fail-closed |
 | **Agent 能力面（工具集）** | **~82–88%** | 15 个常驻/可选工具 + **Web search**（hosted、MCP、SearXNG 均已活体验证） |
 | 会话 / CLI | ~92–97% | **零步骤首次启动** · 用户级 workspace JSONL · 旧项目会话兼容 · durable runtime · query/action CLI · TTY pager · pipe/JSON automation |
-| **CLI TUI** | **~90–95%** | OI-09–OI-13：100-cell 响应式水晶工作台 · 常驻全宽 composer + 固定呼吸行 · slash 发现/补全/参数提示 · `/context` 仪表盘 · 响应式 gutter/全宽用户块 · paste 事务 · 分段 Thinking/可靠 `Thought for` · model/token/快捷键 footer · 可审计三态权限 · 局部面板重绘 · 非 TTY 回落；真实 Windows Terminal 观感/按键未验 |
+| **CLI TUI** | **~90–95%** | OI-09–OI-13：100-cell 响应式水晶工作台 · 常驻全宽 composer + idle/running 共享完整空行 · slash 发现/补全/参数提示 · `/context` 仪表盘 · 响应式 gutter/全宽用户块 · paste 事务 · 分段 Thinking/可靠 `Thought for` · model/token/快捷键 footer · 可审计三态权限 · 局部面板重绘 · 非 TTY 回落；真实 Windows Terminal 观感/按键未验 |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
 | Subagent | ~89–95% | `config.agents` + `agents/*.md` · durable task/result · overflow FIFO/cancel · safe delivery · worktree 保全 |
 | 文件 Diff 日用 | ~95%+ | D0–D7 · U0–U4 |
@@ -51,7 +51,8 @@
 slash 补全后继续显示参数提示；`/context` 默认显示分层概览；多行 paste 按一次事务
 插入，不会把 Windows 换行误当提交。Thinking 按段计时，Bash 权限显示实际
 command/cwd/timeout 并提供 once/always/deny；即使 provider 不发送 reasoning 文本，
-正文前也会留下本段 `Thought for`，时间线与 composer 之间有固定空行。欢迎页使用
+正文前也会留下本段 `Thought for`；running surface 与 idle 输入框共用 top gap，
+最终回答、活动行与 composer 之间都有完整空行。欢迎页使用
 最大 100 cells 的 Bolo 水晶工作台：宽屏水晶/状态双列，中/紧凑屏单列。SearXNG
 的只读 doctor 与显式 Docker 管理也已落地，Docker 仍不是默认依赖。
 
@@ -176,7 +177,7 @@ provider/model 真正可选的档位；开始输入实参后提示消失。菜�
 composer 同宽的灰色消息块，composer 在 Thinking/Running 期间仍保留；Agent 与
 slash 正文按终端宽度保留稳定左侧 gutter。当前思考段显示动画和独立耗时，结束后
 留下 `Thought for <duration>`；provider 直接进入正文时也不会吞掉这行。活动/历史
-与 composer 之间由终端 surface 保留完整空行。底栏按宽度展示 model/mode、高亮快捷键与
+与 composer 之间由 idle/running 共享 gap 保留完整空行。底栏按宽度展示 model/mode、高亮快捷键与
 `↓input ↑output` token。Bash 等非文件权限会显示关键参数，并用 `↑/↓` 或快捷键选择
 allow once、always 或 deny；嵌入式 picker/diff 不再清除整屏历史。TTY `/context`
 显示响应式使用率仪表盘，`/context details` 保留完整诊断；非 TTY 使用紧凑文本。

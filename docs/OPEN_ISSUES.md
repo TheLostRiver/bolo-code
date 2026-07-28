@@ -20,7 +20,7 @@
 
 ### OI-13 · CLI TUI 垂直节奏与水晶工作台
 
-**状态：CLOSED（代码 `fe2d39a`、`bf25077`、`4c4fb08`；2026-07-28 文档同步）**
+**状态：CLOSED（代码 `fe2d39a`、`bf25077`、`2b9d008`、`4c4fb08`；2026-07-28 文档同步）**
 
 准入证据：
 
@@ -28,6 +28,10 @@
   composer 的 `Message` 标题边框；`TerminalSurface.composite()` 当前只生成
   `[activity?, ...dock.lines]`，history、activity 与 dock 之间没有由 surface
   拥有的固定 spacer。这是可由 VT 序列测试证明的结构缺陷，不是字体偏好。
+- `bf25077` 只修复了 turn 内 running composer。后续真实 Windows Terminal 截图
+  仍显示最终回答的下一行就是 idle `Message` 顶边框：`runRepl()` 在 turn 结束后
+  `surface.clearDock()`，下一轮改由 `readTuiInput()` 独立绘制，绕过了 surface
+  spacer。旧测试只匹配输出字符串中的换行，没有执行 owner 交接后的屏幕行。
 - 文档承诺每段思考结束后留下 `Thought for <duration>`，但截图中完全没有。
   `finishReasoningSegment()` 已取得 activity elapsed，随后却在
   `reasoningPrefixDone === false` 时直接返回；provider 没有发送可见 reasoning
@@ -44,21 +48,23 @@
 | 切片 | packages-first 交付 | 人类可见结果 | 自动关闭条件 | 状态 |
 |------|---------------------|--------------|--------------|------|
 | **OI-13A · silent thought completion** | formatter 将“活动段已结束”与“是否收到可见 reasoning 文本”解耦；每段只消费一次 elapsed | provider 直接进入正文前仍留下 `Thought for 4.2s`，不会重复或显示整轮累计时间 | 假时钟覆盖 silent-thinking、显式 reasoning_end、text/tool/error/warning 边界、重复 finish 与 activity-off | CLOSED `fe2d39a` |
-| **OI-13B · surface breathing row** | `TerminalSurface` composite 固定拥有 history/activity 与 dock 之间的一行 spacer；行数、擦除和 cursor offset 同源 | Agent/Thought/Running 与常驻 composer 之间始终有完整空行，局部重绘不漂移 | 无/有 activity、append stdout/stderr、suspend/resume、增长/缩短 dock 的 VT 序列；无整屏 clear | CLOSED `bf25077` |
+| **OI-13B · running surface breathing row** | `TerminalSurface` composite 在 activity 与 running dock 之间保留 spacer；行数、擦除和 cursor offset 同源 | Thinking/Running 与常驻 composer 之间有完整空行，局部重绘不漂移 | 无/有 activity、append stdout/stderr、suspend/resume、增长/缩短 dock 的 VT 序列；无整屏 clear | CLOSED `bf25077` |
+| **OI-13B2 · idle/running shared gap** | `composerSpacing` 纯契约同时接入 `TerminalSurface` 与 `readTuiInput`，gap 与 cursor 一起进入 owned rows | 最终 Agent 回答与 idle `Message` 顶边框之间也固定保留一整行；输入重绘不累加，退出不擦历史 | 最小 VT screen 执行 running → answer → endTurn → clearDock → idle 首帧/重绘/cleanup，按实际 row 断言 0→1 空行 | CLOSED `2b9d008` |
 | **OI-13C · crystal workbench** | cell-aware welcome renderer：宽屏水晶+状态双列，中/紧凑屏单列，`<38` 纯文本 | 欢迎页更紧凑，水晶、品牌、Ready、workspace/model/session/mode 层级清楚；与 composer 节奏协调 | 38/46/56/76/96/120/160/220 列、CJK/emoji/长路径、Unicode/ASCII、NO_COLOR/mascot-off、每行精确宽度 | CLOSED `4c4fb08` |
 | **OI-13D · 验收与文档** | 新专项进入默认门禁；README/TUI/USAGE/ROADMAP/OPEN_ISSUES/handoff/RELEASE 同步 | 源码、dist 与用户说明口径一致，旧 welcome 和 Thought 承诺不再虚假 | 专项、typecheck、完整 `npm test`、pack/install 与 Desktop/Electron 邻接轨全绿 | CLOSED（本文档批） |
 
 实施顺序：
 
 1. OI-13A 先关闭可复现的数据面缺口，确保每次模型等待都有永久完成反馈。
-2. OI-13B 再把垂直间距纳入 surface 所有权，避免 welcome 改版掩盖 VT 回归。
+2. OI-13B 先把 running 垂直间距纳入 surface 所有权；B2 再关闭 turn 结束后
+   idle editor 接管时绕过 spacer 的真实回归。
 3. OI-13C 在运行期表面稳定后重排欢迎页；修改旧“双列禁止”测试时同时建立
    Bolo 品牌、响应式和 exact-width 正向护栏。
-4. OI-13D 最后同步全部文档。A/B/C 各自独立中文提交并推送，文档批另提。
+4. OI-13D 最后同步全部文档。A/B/B2/C 各自独立中文提交并推送，文档批另提。
 
 自动/真人关闭边界：
 
-- 假时钟、字符串 golden、cell-width 与 VT 序列可以关闭 A/B/C 的代码缺陷；
+- 假时钟、字符串 golden、cell-width 与真实 row 的 VT 序列可以关闭 A/B/B2/C 的代码缺陷；
   自动化不得把这些测试冒充真实 Windows Terminal 的字体、颜色、动画流畅度或观感。
 - OI-H3 继续保留真人字体/颜色、鼠标粘贴、resize、组合键和长滚动走查，但不再承载
   已知可自动复现的 Thought、spacer 或 welcome 结构缺陷。
@@ -69,11 +75,14 @@
   红/绿路径；完成行只取决于已结束 thinking segment 的 elapsed，不取决于可见
   reasoning delta，后续 chunk/endTurn 不会重复。
 - OI-13B 的 `test-cli-terminal-surface` 覆盖 idle 与 activity 两种 paint：
-  composite 自己拥有空行，现有行数、cursor offset 与局部 erase 因而同源。
+  running composite 自己拥有空行，现有行数、cursor offset 与局部 erase 因而同源。
+- OI-13B2 同一专项加入最小 VT screen：旧代码红在 `answer=4, composer=5`；共享
+  top-gap 接线后变为相差 2。输入重绘后仍恰好一个空行、只有一个 `Message` 顶边框；
+  cleanup 清除 composer/gap 且保留 Agent 历史。
 - OI-13C 的 `test-cli-crystal-identity` 覆盖 38/46/56/76/96/120/160/220 列、
   CJK/emoji、ASCII/NO_COLOR、mascot-off 与精确 cell width；宽屏工作台封顶
   100 cells，普通 content frame 仍是 160，dock 继续跟随终端。
-- 每个代码批均先红后绿、独立中文提交并推送；三批均运行 typecheck 与完整
+- 每个代码批均先红后绿、独立中文提交并推送；四批均运行 typecheck 与完整
   `npm.cmd test`。完整门禁继续覆盖 dist build、真实 pack/install、Desktop bundle
   与 Electron launch；根 `dependencies` 保持 `{}`。
 
@@ -536,17 +545,17 @@ Ctrl-C/Esc 以及 REPL 是否抢占 stdin。需要人在真实终端按键确认
 **状态：BLOCKED: HUMAN**
 
 OI-09–OI-13 已自动覆盖 100-cell split/single 水晶工作台、ASCII/NO_COLOR、
-常驻全宽 composer/固定呼吸行、slash reducer/menu/argument hint、context dashboard、
-raw-mode listener/恢复、bracketed paste 事务、CJK/emoji cell 宽度、响应式时间线
-gutter、dock-width 用户块/status footer、silent Thought/分段 Thinking、可审计权限
-详情与三态选择、局部面板 VT 序列、Responses timeout 分源、非 TTY 回落和 123 项完整
-门禁。
+常驻全宽 composer、idle/running gap owner 交接的实际 VT row、slash
+reducer/menu/argument hint、context dashboard、raw-mode listener/恢复、
+bracketed paste 事务、CJK/emoji cell 宽度、响应式时间线 gutter、dock-width
+用户块/status footer、silent Thought/分段 Thinking、可审计权限详情与三态选择、
+局部面板 VT 序列、Responses timeout 分源、非 TTY 回落和 123 项完整门禁。
 Codex PTY 默认因 `TERM=dumb` 降级；仅对子进程覆盖 `TERM=xterm-256color` 后，已实测
 `/`/`/d`、Plugin 来源、方向键、Tab、Esc 与 `/exit` 两阶段提交，但该 PTY 仍不能
 代表真人 Windows Terminal。
 
 2026-07-28 截图与源码审计确认的 slash 参数提示、context 信息架构、内容 gutter、
-普通用户块宽度、多行 paste、silent Thought、surface 呼吸行和 welcome 结构缺陷均已
+普通用户块宽度、多行 paste、silent Thought、idle/running 共享 gap 和 welcome 结构缺陷均已
 由 OI-12/OI-13 关闭。这里现在**只**保留自动化不能替代的判断：真实 Windows
 Terminal 字体/颜色下的水晶与文本观感、动画流畅度、实际光标位置、鼠标/剪贴板真实
 粘贴、窗口 resize 后的重排、Ctrl+J/历史/删除组合键、权限面板真人切换和长回答滚动。

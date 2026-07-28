@@ -4,7 +4,7 @@
 > **现状：** OI-09–OI-13 零运行时依赖 TTY controller：Bolo 水晶工作台 ·
 > 常驻全宽 composer · slash 菜单/补全/参数提示 · `/context` 仪表盘 ·
 > 响应式正文 gutter/全宽用户块 · paste 事务 · 分段 Thinking ·
-> 可靠 Thought 收尾 · surface 呼吸行 · 结构化时间线/status footer ·
+> 可靠 Thought 收尾 · idle/running 共享呼吸行 · 结构化时间线/status footer ·
 > 可审计权限选择 · 局部重绘 picker/Diff。
 > **框架选择：** 没有依赖 React Ink；完成标准是交互和输出契约，不是框架名称。
 > Diff 轨见 [ROADMAP.md](./ROADMAP.md) §3 ·
@@ -46,6 +46,7 @@
 | `tui/contentLayout.ts` | Agent/slash 正文的响应式 gutter 与跨 chunk 行首 prefixer |
 | `tui/contextDashboard.ts` | core `ContextUsageViewModel` 的响应式 TTY 仪表盘 |
 | `tui/inputBox.ts` | 输入/slash reducer、argument hint、CJK-safe renderer、bracketed-paste raw driver、running dock |
+| `tui/composerSpacing.ts` | idle raw editor 与 running surface 共用的 top-gap/cursor row 纯契约 |
 | `tui/terminalSurface.ts` | append-only 历史与底部临时 dock/activity 的行所有权 |
 | `tui/localPanel.ts` | picker/diff/question/permission 共用的局部行 erase/repaint |
 | `tui/terminalText.ts` | ANSI/CJK/emoji grapheme cell 宽度、裁切、补齐与折行 |
@@ -114,9 +115,10 @@ argument hint。`/effort ` 的 hint 来自当前 provider/model 方言真源；P
 state 中。每次 turn 开始前负责编辑的 raw key listener 会释放 stdin，但
 `TerminalSurface` 会把同宽 composer 以 running 状态留在底部；历史输出先临时擦除
 dock、追加内容后再恢复，因此输入区不会凭空消失。权限/picker 接管 stdin 时暂时挂起
-dock，结束后恢复，不与空闲 listener 竞争。surface composite 永久拥有 composer
-上方一行 spacer：无 activity 时隔开历史与输入框，有 activity 时隔开活动行与输入框；
-该行与 dock 一起参与 cursor offset、局部 erase 和 repaint。
+dock，结束后恢复，不与空闲 listener 竞争。composer 上方一行 spacer 由共享
+`composerSpacing` 契约生成：turn 内由 `TerminalSurface` 拥有，turn 结束后的 idle
+首帧与输入重绘由 `readTuiInput` 拥有。该行始终与 composer 一起参与 cursor offset、
+局部 erase 和 repaint，因此 running → clearDock → idle 交接也不会让最终回答贴框。
 
 raw driver 进入时启用 terminal mode 2004，退出、提交和 abort 时恢复。收到
 `paste-start` 后跨 data chunk 聚合正文，到 `paste-end` 才规范化 CRLF/CR 并调用一次
@@ -133,7 +135,7 @@ raw driver 进入时启用 terminal mode 2004，退出、提交和 abort 时恢�
 | `tool_start/end` | 进入永久工具时间线；结束后回到 Thinking |
 | `tool_progress` | 只在 activity 原位更新“工具名 · 进度”，不把每个 tick 刷成永久消息 |
 | assistant text | 正文保留稳定 gutter；inline `**bold**` / `` `code` `` 不再原样泄露 |
-| turn 完成 | 清掉活动行并把常驻 composer 从 running 切回 idle；不冒充输出总思考耗时 |
+| turn 完成 | 清掉活动行并把常驻 composer 从 running 切回 idle；共享 gap 保留，不冒充输出总思考耗时 |
 | slash command | 回显用户命令但不启动虚假的模型 Thinking |
 | composer footer | 按宽度保留 model/mode/effort、高亮按键与 `↓input ↑output`；估算 usage 加 `~` |
 

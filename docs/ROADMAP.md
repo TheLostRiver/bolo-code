@@ -22,7 +22,7 @@
 | **文件 Diff · 日用契约** | **~95%+** | **D0–D7 已收口**；见 [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) |
 | **文件 Diff · 交互 UI** | **~90–95%** | **U0–U4 已落地**；U5 真·Ink/IDE 可选（AR4 证据门控） |
 | **斜杠** | **~88–93%** | OI-10 命令级发现/补全 + OI-12A 精确命令 argument hint；`/effort ` 动态读取当前 provider/model 合法档位 |
-| **CLI TUI** | **~90–95%** | OI-09–OI-13：100-cell 响应式水晶工作台、常驻全宽 composer/固定呼吸行、context 仪表盘、响应式正文 gutter/dock-width 用户块、分段 activity/可靠 Thought、可审计权限与 paste 事务；真人 Windows Terminal 观感继续单列 |
+| **CLI TUI** | **~90–95%** | OI-09–OI-13：100-cell 响应式水晶工作台、常驻全宽 composer/idle-running 共享完整空行、context 仪表盘、响应式正文 gutter/dock-width 用户块、分段 activity/可靠 Thought、可审计权限与 paste 事务；真人 Windows Terminal 观感继续单列 |
 | **Electron GUI** | **~80–88%** | 壳 + 流式 + 权限 + 多 provider（CX7）+ runtime v1 + **会话切换/恢复 + composer controls + model/effort 设置 + control/tool progress 投影** + AskUserQuestion；真人点击/视觉仍未验 |
 | **Hooks · 日用契约** | **~96–98%** | **H0–H5 已落地**（SessionEnd · exit 语义 · updatedInput · `/hooks recent`） |
 | **Compact · 日用管道** | **~96–98%** | **C0–C5 + AR2 全段已落地**（hybrid 计数 · 中段截断 · 防重摘要 · range/watermark 契约 · 切分不拆对穷举验证 · 写失败完整回退 · durable 条目不丢 · **估算按字符类别分档**（CJK 1.3 / 散文 4.5 / 其余 3.5；实测推翻了「密文 = token 密」的旧前提，最差高估 109% → 19.5%）· 管道基准）；中段压缩与远端压缩均**显式关闭**（§13.10.2 · [ADR](./ADR_COMPACT_REMOTE.md)） |
@@ -34,16 +34,16 @@
 **已闭环主线：** headless 日用 → Diff（D0–D7 / U0–U4）· Hooks（H0–H5）· Compact（C0–C5）· Provider（P0–P4.1）· Effort（E0–E9）· Provider UX（CX0–CX8）· 可靠性（R0–R4）· **Durable Runtime（DR0–DR4）** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR3 Desktop 产品接线** · **OI-07 SearXNG 上游诊断、`search doctor` 与可选 Docker setup** · **OI-08B CLI 零步骤首次启动** · **OI-09 CLI TUI 交互重构** · **OI-10 CLI 命令发现与 TUI 一致性** · **OI-11 CLI TUI 持久终端表面与可审计权限交互** · **OI-12 CLI TUI 信息架构与多行输入稳定性** · **OI-13 CLI TUI 垂直节奏与水晶工作台**。切片明细 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
 
 **当前默认 agent 队列：空。** OI-13 已于 2026-07-28 闭环：silent-thinking 会可靠
-留下 `Thought for <duration>`；`TerminalSurface` 在 history/activity 与 composer
-间拥有固定呼吸行；欢迎页改为最大 100 cells 的水晶工作台（宽屏 split，中/紧凑
-single）。代码提交为 `fe2d39a`、`bf25077`、`4c4fb08`；关闭证据见
+留下 `Thought for <duration>`；共享 composer gap 在 running surface 与 idle editor
+交接前后都保留完整空行；欢迎页改为最大 100 cells 的水晶工作台（宽屏 split，
+中/紧凑 single）。代码提交为 `fe2d39a`、`bf25077`、`2b9d008`、`4c4fb08`；关闭证据见
 [OPEN_ISSUES.md](./OPEN_ISSUES.md)。
 
 **外部或人工阻塞项单列，不与 agent 队列混淆：**
 
 | 待办 | 卡在哪 |
 |------|--------|
-| CLI TUI 真实 Windows Terminal 观感/光标/按键 | OI-13 已关闭已知 Thought/spacer/welcome 代码缺陷；仍需真人确认实际字体、颜色、动画流畅度、鼠标粘贴、光标、resize 与按键观感 |
+| CLI TUI 真实 Windows Terminal 观感/光标/按键 | OI-13 已用实际 VT row 关闭 idle/running gap、Thought 与 welcome 结构缺陷；仍需真人确认实际字体、颜色、动画流畅度、鼠标粘贴、光标、resize 与按键观感 |
 | 桌面窗口视觉 · AskUserQuestion 真人按键/点击 | 只能人工验，自动化覆盖不到 |
 | LSP | 暂缓，触发条件已写死 → [ADR_AR4_EVIDENCE_GATE.md](./ADR_AR4_EVIDENCE_GATE.md) §6 |
 
@@ -52,7 +52,7 @@ single）。代码提交为 `fe2d39a`、`bf25077`、`4c4fb08`；关闭证据见
 
 **已插队并收口：** **AR-T · Agent 能力面**（§14）。准入证据：基础设施深度（DR0–DR4 + AR1）已远超能力广度——彼时 agent 无法跨步骤记住计划，也无法启动任何活过一次工具调用的进程。AR2 压缩深化顺延，A0a/A0b 成果不受影响。
 
-**agent 可闭环开放项：当前为空。** OI-13A–OI-13D 已按
+**agent 可闭环开放项：当前为空。** OI-13A–OI-13D（含 B2 回归）已按
 [OPEN_ISSUES.md](./OPEN_ISSUES.md) 的关闭条件完成。CLI init 不再是默认安装步骤，
 SearXNG Docker 管理也只是显式可选能力；真人验收状态仍单列，已知代码缺陷不能放入
 `BLOCKED: HUMAN`。
@@ -122,7 +122,7 @@ SearXNG Docker 管理也只是显式可选能力；真人验收状态仍单列�
 | **OI-10 · CLI 命令发现与 TUI 一致性** | ✅ 共享 frame、原子多帧动画、slash catalog/menu、CLI-local/Plugin/Skill 动态候选与键盘补全；真人 Windows Terminal 验收单列 |
 | **OI-11 · CLI TUI 持久终端表面与可审计权限交互** | ✅ 常驻全宽 composer、时间线层级/usage、分段 Thinking、权限详情选择、viewport 稳定、Responses abort 诊断与水晶欢迎页均已进入默认门禁；真人项见 OI-H3 |
 | **OI-12 · CLI TUI 信息架构与多行输入稳定性** | ✅ argument hint、context dashboard、统一内容 gutter、全宽用户块与 paste transaction 已进入默认门禁；真人项见 OI-H3 |
-| **OI-13 · CLI TUI 垂直节奏与水晶工作台** | ✅ silent Thought、surface 呼吸行、100-cell 响应式水晶工作台与文档已进入默认门禁；真实字体/颜色/动画观感仍归 OI-H3 |
+| **OI-13 · CLI TUI 垂直节奏与水晶工作台** | ✅ silent Thought、idle/running 共享完整空行、100-cell 响应式水晶工作台与文档已进入默认门禁；真实字体/颜色/动画观感仍归 OI-H3 |
 | **AR-T3+ 能力面续刀**（WebSearch · plan 工具流 · AskUserQuestion） | ✅ 三项均已落地（AskUserQuestion 的真 TTY 交互未验，见 §14.5） |
 | **AR2 Compact depth（A0a/A0b/A1/A2/B1/B2/C 全段）** | ✅ |
 | AR3 Desktop shell | ✅ runtime 生产桥/会话切换恢复/视图模型/composer/model-effort/control-tool progress/NSIS 已收口；真人点击/视觉仍未验 |
@@ -138,8 +138,9 @@ SearXNG Docker 管理也只是显式可选能力；真人验收状态仍单列�
 **一句话：** 核心主路径已收口；默认 agent 可闭环队列为空，外部资源和真人验收继续
 单列。
 
-**最近闭环：** OI-13A–OI-13D。代码批为 `fe2d39a`（silent Thought）、
-`bf25077`（surface 呼吸行）、`4c4fb08`（响应式水晶工作台）；123 项完整门禁、
+**最近闭环：** OI-13A–OI-13D（含 B2）。代码批为 `fe2d39a`（silent Thought）、
+`bf25077`（running surface 呼吸行）、`2b9d008`（idle/running 共享 gap）、
+`4c4fb08`（响应式水晶工作台）；123 项完整门禁、
 pack/install、Desktop bundle/Electron launch 全绿。**当前实施：** 无默认 agent 项；
 真人 Windows Terminal 验收仍单列，不以自动快照或注入按键冒充完成。
 中段压缩与远端压缩按证据门控**显式关闭**
@@ -419,7 +420,7 @@ AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 regis
 | 25 | **OI-10 · CLI 命令发现与 TUI 一致性** | A frame width helper · B activity frame · C slash candidate projection · D menu reducer/renderer · E CLI-local/Plugin/Skill 动态贡献 · F 门禁/文档 | `/` 全量、`/d` 过滤 `/doctor` · ↑↓/Tab/Enter/Esc · 上下框同宽 · Thinking 有动画且无空白帧 | `test:cli-tui` + `test:slash-completion` + typecheck + 114 脚本完整门禁 + dist smoke | ✅ 代码 `67421bb`；文档已同步。⚠️ 真实 Windows Terminal 观感/按键仍需真人验 |
 | 26 | **OI-11 · CLI TUI 持久终端表面与可审计权限交互** | A terminal surface/composer · B timeline/status · C segment activity · D permission chooser/details · E viewport VT · F abort diagnosis · G crystal identity · H docs | turn 中输入区常驻全宽 · gutter/用户块/token/model/keys · 每段 Thought · command 可见三态权限 · 历史不被 clear · timeout 可行动 · Bolo 水晶欢迎页 | OI-11 专项 + 既有 TUI/provider/permission 回归 + typecheck + 121 项完整门禁 + dist smoke | ✅ A–H 已闭环；代码 `e9a32cf` / `59acdf6` / `b0feb0c` / `4fc3791` / `da0533c` / `b0fbb86` / `8088fbb`，真人观感移交 OI-H3 |
 | 27 | **OI-12 · CLI TUI 信息架构与多行输入稳定性** | A argument hint · B context view-model/dashboard · C shared gutter · D dock-width user block · E paste transaction · F docs | `/effort ` 可见合法档位 · `/context` 图形概览/明细分层 · 正文不贴墙 · 用户块全宽 · 多行 paste 不误提交/滚屏 | OI-12 专项 + slash/TUI/compact/usage 回归 + typecheck + 123 项完整门禁 + dist smoke | ✅ A `1696127` · B `15b37ed` · C `40a5d41` · D `8d2a7a5` · E `7f76093` · F 本文档批；真人字体/鼠标粘贴/resize/按键仍归 OI-H3 |
-| 28 | **OI-13 · CLI TUI 垂直节奏与水晶工作台** | A silent Thought completion · B surface breathing row · C responsive crystal workbench · D docs | 直接正文前仍有本段 `Thought for` · history/activity 与 composer 间有稳定空行 · 欢迎页最大 100 cells、宽屏双列/中紧凑单列并保留水晶 | thinking/surface/crystal/TUI 专项 + typecheck + 完整门禁 + dist smoke | ✅ A `fe2d39a` · B `bf25077` · C `4c4fb08` · D 本文档批 |
+| 28 | **OI-13 · CLI TUI 垂直节奏与水晶工作台** | A silent Thought completion · B running surface breathing row · B2 idle/running shared gap · C responsive crystal workbench · D docs | 直接正文前仍有本段 `Thought for` · activity/final answer 与 composer 间有稳定完整空行 · 欢迎页最大 100 cells、宽屏双列/中紧凑单列并保留水晶 | thinking/surface/owner-handoff VT/crystal/TUI 专项 + typecheck + 完整门禁 + dist smoke | ✅ A `fe2d39a` · B `bf25077` · B2 `2b9d008` · C `4c4fb08` · D 文档批 |
 
 固定 checkpoint：
 

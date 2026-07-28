@@ -201,9 +201,10 @@ exact/prefix 过滤。菜单打开时 `↑/↓` 选择，Tab/Enter 只补成 `/<
 `✦ → ✧ → ✶ → ✧` Thinking、本段耗时和中断提示，工具运行时显示
 `Running <tool>`；每段 reasoning 结束后留下 `Thought for <duration>`，不会把整轮
 时间冒充单段思考；provider 没有发送可见 reasoning 文本而直接回答时也会保留该行。
-历史/活动与 composer 之间有一行固定空白，活动刷新或局部重绘不会吞掉它。Agent/slash
-正文按终端宽度保留稳定 gutter，底栏显示 model/mode、快捷键和 `↓input ↑output`
-token。完整键位见 [TUI.md](./TUI.md) §3。
+历史/活动与 composer 之间有一行固定空白；running surface 和回合结束后的 idle
+输入框共用同一间距契约，输入重绘、活动刷新或 owner 交接都不会吞掉或重复累加。
+Agent/slash 正文按终端宽度保留稳定 gutter，底栏显示 model/mode、快捷键和
+`↓input ↑output` token。完整键位见 [TUI.md](./TUI.md) §3。
 
 活动行每次把完整内容与擦尾控制合成一次原位写入，不会先清空再绘制；glyph 与耗时
 以 250ms 节奏刷新。需要授权时，Bash 面板会显示实际 command、cwd、前后台与 timeout，
