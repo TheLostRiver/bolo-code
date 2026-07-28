@@ -183,45 +183,35 @@ export function createBoloTerminalAdapter(options: {
     let rawModeAttempted = false
     let pasteEnabled = false
     try {
-      input.on('data', dataHandler)
       listenerAttached = true
+      input.on('data', dataHandler)
       rawModeAttempted = true
       input.setRawMode(true)
       inputBuffer = buffer
       inputDataHandler = dataHandler
       inputWasRaw = wasRaw
       inputActive = true
-      emitRetained(BRACKETED_PASTE_ENABLE)
       pasteEnabled = true
+      emitRetained(BRACKETED_PASTE_ENABLE)
       input.resume()
     } catch (error) {
       inputActive = false
-      if (listenerAttached) {
-        try {
-          input.removeListener('data', dataHandler)
-        } catch {
-          /* preserve the acquisition error */
-        }
-      }
-      buffer.destroy()
       inputBuffer = undefined
       inputDataHandler = undefined
-      if (pasteEnabled) {
-        try {
-          emitRetained(BRACKETED_PASTE_DISABLE)
-        } catch {
-          /* preserve the acquisition error */
-        }
-      }
-      if (rawModeAttempted && !wasRaw) {
-        try {
-          input.setRawMode(false)
-        } catch {
-          /* preserve the acquisition error */
-        }
-      }
       try {
-        input.pause()
+        runCleanupSteps([
+          () => {
+            if (listenerAttached) input.removeListener('data', dataHandler)
+          },
+          () => buffer.destroy(),
+          () => {
+            if (pasteEnabled) emitRetained(BRACKETED_PASTE_DISABLE)
+          },
+          () => {
+            if (rawModeAttempted && !wasRaw) input.setRawMode?.(false)
+          },
+          () => input.pause(),
+        ])
       } catch {
         /* preserve the acquisition error */
       }

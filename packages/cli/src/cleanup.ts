@@ -34,3 +34,22 @@ export async function runAsyncCleanupSteps(
   }
   if (failed) throw firstError
 }
+
+export async function runWithAsyncCleanup<T>(
+  body: () => Promise<T>,
+  cleanupSteps: readonly AsyncCleanupStep[],
+): Promise<T> {
+  let bodyFailed = false
+  try {
+    return await body()
+  } catch (error) {
+    bodyFailed = true
+    throw error
+  } finally {
+    try {
+      await runAsyncCleanupSteps(cleanupSteps)
+    } catch (cleanupError) {
+      if (!bodyFailed) throw cleanupError
+    }
+  }
+}

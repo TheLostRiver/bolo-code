@@ -10,6 +10,7 @@ import {
   type BoloSession,
   type SessionEvent,
 } from '../../core/src/index.ts'
+import { runWithAsyncCleanup } from './cleanup.ts'
 import { createCliProvider, isExplicitMockProvider } from './provider.ts'
 import { createSessionErrorExplainer } from './explainSessionError.ts'
 import { createTtyAskPermission } from './tui/askPermissionTty.ts'
@@ -234,25 +235,30 @@ export async function runNewSessionCli(
   const interactive = !print && !prompt && isTty
 
   if (prompt) {
-    try {
-      const turn = await runOnePrompt(session, prompt, {
-        writeOut: controller?.writeOutput ?? writeOut,
-        writeErr: controller?.writeError ?? writeErr,
-        isTty,
-        columns: process.stdout.columns,
-        color,
-        signal: opts.signal,
-      })
-      try {
-        const { endSession } = await import('../../core/src/index.ts')
-        await endSession(session, { reason: 'other' })
-      } catch {
-        /* ignore */
-      }
-      return { session, terminalReason: turn.terminalReason }
-    } finally {
-      await controller?.stop()
-    }
+    return runWithAsyncCleanup(
+      async () => {
+        const turn = await runOnePrompt(session, prompt, {
+          writeOut: controller?.writeOutput ?? writeOut,
+          writeErr: controller?.writeError ?? writeErr,
+          isTty,
+          columns: process.stdout.columns,
+          color,
+          signal: opts.signal,
+        })
+        return { session, terminalReason: turn.terminalReason }
+      },
+      [
+        () => controller?.stop(),
+        async () => {
+          try {
+            const { endSession } = await import('../../core/src/index.ts')
+            await endSession(session, { reason: 'other' })
+          } catch {
+            /* ignore */
+          }
+        },
+      ],
+    )
   }
 
   if (interactive) {
@@ -268,12 +274,18 @@ export async function runNewSessionCli(
   writeErr(
     'Non-interactive terminal: pass a prompt, use --print with text, or --resume. See --help.\n',
   )
-  await controller?.stop()
-  try {
-    const { endSession } = await import('../../core/src/index.ts')
-    await endSession(session, { reason: 'other' })
-  } catch {
-    /* ignore */
-  }
-  return { session }
+  return runWithAsyncCleanup(
+    async () => ({ session }),
+    [
+      () => controller?.stop(),
+      async () => {
+        try {
+          const { endSession } = await import('../../core/src/index.ts')
+          await endSession(session, { reason: 'other' })
+        } catch {
+          /* ignore */
+        }
+      },
+    ],
+  )
 }

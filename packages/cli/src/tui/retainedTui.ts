@@ -534,21 +534,30 @@ export function createRetainedTuiController(options: {
     async start() {
       if (started || stopped) return
       started = true
-      tui.start()
-      overlayHandle = tui.showOverlay(overlay, {
-        width: '100%',
-        maxHeight: options.rootVisible === false ? '100%' : '90%',
-        anchor: 'bottom-center',
-        margin: {
-          left: 1,
-          right: 1,
-          bottom: options.rootVisible === false ? 0 : 2,
-        },
-        visible: () => overlay.isActive(),
-      })
-      overlay.attach(overlayHandle)
-      overlayHandle.setHidden(true)
-      await flush()
+      try {
+        tui.start()
+        overlayHandle = tui.showOverlay(overlay, {
+          width: '100%',
+          maxHeight: options.rootVisible === false ? '100%' : '90%',
+          anchor: 'bottom-center',
+          margin: {
+            left: 1,
+            right: 1,
+            bottom: options.rootVisible === false ? 0 : 2,
+          },
+          visible: () => overlay.isActive(),
+        })
+        overlay.attach(overlayHandle)
+        overlayHandle.setHidden(true)
+        await flush()
+      } catch (error) {
+        try {
+          await controller.stop()
+        } catch {
+          /* preserve the renderer start error */
+        }
+        throw error
+      }
     },
     async stop() {
       if (stopped) return

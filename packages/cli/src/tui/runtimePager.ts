@@ -21,6 +21,7 @@ import type {
   BoloTerminalInput,
   BoloTerminalOutput,
 } from './boloTerminalAdapter.ts'
+import { runWithAsyncCleanup } from '../cleanup.ts'
 import { createRetainedTuiController } from './retainedTui.ts'
 
 export { applyRuntimePagerKey, parseRuntimePagerKey }
@@ -317,18 +318,19 @@ export async function runRetainedRuntimePager(options: {
     color: options.color,
     rootVisible: false,
   })
-  await controller.start()
-  try {
-    return await controller.runPagerOverlay({
-      view: options.view,
-      pageSize,
-      ...(options.filter ? { filter: options.filter } : {}),
-      ...(options.signal ? { signal: options.signal } : {}),
-      ...(options.onInterrupt
-        ? { onInterrupt: options.onInterrupt }
-        : {}),
-    })
-  } finally {
-    await controller.stop()
-  }
+  return runWithAsyncCleanup(
+    async () => {
+      await controller.start()
+      return controller.runPagerOverlay({
+        view: options.view,
+        pageSize,
+        ...(options.filter ? { filter: options.filter } : {}),
+        ...(options.signal ? { signal: options.signal } : {}),
+        ...(options.onInterrupt
+          ? { onInterrupt: options.onInterrupt }
+          : {}),
+      })
+    },
+    [() => controller.stop()],
+  )
 }

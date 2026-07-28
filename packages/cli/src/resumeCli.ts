@@ -22,6 +22,10 @@ import {
   type SessionSnapshot,
 } from '../../core/src/index.ts'
 import type { ChatMessage } from '../../shared/src/index.ts'
+import {
+  runAsyncCleanupSteps,
+  runWithAsyncCleanup,
+} from './cleanup.ts'
 import { createCliProvider, isExplicitMockProvider } from './provider.ts'
 import { createSessionErrorExplainer } from './explainSessionError.ts'
 import { createTtyAskPermission } from './tui/askPermissionTty.ts'
@@ -1198,6 +1202,7 @@ export async function runRepl(
   }
   options?.signal?.addEventListener('abort', onExternalAbort, { once: true })
 
+  let bodyFailed = false
   try {
     while (!replClosed) {
       if (controller) configureSessionComposer(controller, session, history)
@@ -1352,23 +1357,40 @@ export async function runRepl(
         if (activeTurn === turnController) activeTurn = null
       }
     }
+  } catch (error) {
+    bodyFailed = true
+    throw error
   } finally {
-    replClosed = true
-    if (activeTurn && !activeTurn.signal.aborted) {
-      activeTurn.abort('repl_closed')
-    }
-    if (dynamicTui) process.removeListener('SIGINT', onSigint)
-    else rl?.removeListener('SIGINT', onSigint)
-    options?.signal?.removeEventListener('abort', onExternalAbort)
-    surface?.dispose()
-    await controller?.stop()
-    rl?.close()
-    // H0：REPL 正常退出 → SessionEnd
     try {
-      const { endSession } = await import('../../core/src/index.ts')
-      await endSession(session, { reason: 'prompt_input_exit' })
-    } catch {
-      /* teardown 失败不抛 */
+      await runAsyncCleanupSteps([
+        () => {
+          replClosed = true
+        },
+        () => {
+          if (activeTurn && !activeTurn.signal.aborted) {
+            activeTurn.abort('repl_closed')
+          }
+        },
+        () => {
+          if (dynamicTui) process.removeListener('SIGINT', onSigint)
+          else rl?.removeListener('SIGINT', onSigint)
+        },
+        () => options?.signal?.removeEventListener('abort', onExternalAbort),
+        () => surface?.dispose(),
+        () => controller?.stop(),
+        () => rl?.close(),
+        async () => {
+          // H0：REPL 正常退出 → SessionEnd；session teardown 仍为 best effort。
+          try {
+            const { endSession } = await import('../../core/src/index.ts')
+            await endSession(session, { reason: 'prompt_input_exit' })
+          } catch {
+            /* teardown 失败不抛 */
+          }
+        },
+      ])
+    } catch (cleanupError) {
+      if (!bodyFailed) throw cleanupError
     }
   }
 }
@@ -1465,25 +1487,30 @@ export async function runResumeCli(
   }
 
   if (prompt) {
-    try {
-      const turn = await runOnePrompt(result.session, prompt, {
-        writeOut: controller?.writeOutput ?? writeOut,
-        writeErr: controller?.writeError ?? writeErr,
-        isTty,
-        columns: process.stdout.columns,
-        signal: opts.signal,
-      })
-      result.terminalReason = turn.terminalReason
-      try {
-        const { endSession } = await import('../../core/src/index.ts')
-        await endSession(result.session, { reason: 'other' })
-      } catch {
-        /* ignore */
-      }
-      return result
-    } finally {
-      await controller?.stop()
-    }
+    return runWithAsyncCleanup(
+      async () => {
+        const turn = await runOnePrompt(result.session, prompt, {
+          writeOut: controller?.writeOutput ?? writeOut,
+          writeErr: controller?.writeError ?? writeErr,
+          isTty,
+          columns: process.stdout.columns,
+          signal: opts.signal,
+        })
+        result.terminalReason = turn.terminalReason
+        return result
+      },
+      [
+        () => controller?.stop(),
+        async () => {
+          try {
+            const { endSession } = await import('../../core/src/index.ts')
+            await endSession(result.session, { reason: 'other' })
+          } catch {
+            /* ignore */
+          }
+        },
+      ],
+    )
   }
 
   if (interactive) {
@@ -1496,12 +1523,18 @@ export async function runResumeCli(
   }
 
   // --print 且无 prompt：仅摘要后结束
-  await controller?.stop()
-  try {
-    const { endSession } = await import('../../core/src/index.ts')
-    await endSession(result.session, { reason: 'other' })
-  } catch {
-    /* ignore */
-  }
-  return result
+  return runWithAsyncCleanup(
+    async () => result,
+    [
+      () => controller?.stop(),
+      async () => {
+        try {
+          const { endSession } = await import('../../core/src/index.ts')
+          await endSession(result.session, { reason: 'other' })
+        } catch {
+          /* ignore */
+        }
+      },
+    ],
+  )
 }
