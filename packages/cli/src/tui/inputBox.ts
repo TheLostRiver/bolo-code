@@ -336,6 +336,7 @@ export function applyTuiInputKey(
 type WrappedInputLine = {
   text: string
   width: number
+  ghostText?: string
 }
 
 function wrapInputAtCursor(
@@ -377,6 +378,34 @@ function wrapInputAtCursor(
     line.width += cellWidth
   }
   return { lines, cursorLine, cursorWidth }
+}
+
+function resolveSlashArgumentHint(state: TuiInputState): string {
+  const chars = splitTerminalGraphemes(state.value)
+  if (state.cursor !== chars.length) return ''
+  const match = /^\/([^\s/]+) $/u.exec(state.value)
+  if (!match) return ''
+  const commandName = match[1]!.toLowerCase()
+  return (
+    state.slashCandidates
+      .find((candidate) => candidate.name.toLowerCase() === commandName)
+      ?.argumentHint?.trim() ?? ''
+  )
+}
+
+function appendInputGhostHint(
+  lines: WrappedInputLine[],
+  hint: string,
+  width: number,
+): void {
+  const line = lines[lines.length - 1]
+  if (!line || !hint) return
+  const available = Math.max(0, width - line.width)
+  if (!available) return
+  const ghostText = clipTerminalText(hint, available)
+  if (!ghostText) return
+  line.ghostText = ghostText
+  line.width += measureTerminalText(ghostText)
 }
 
 function borderLine(
@@ -698,6 +727,11 @@ export function renderTuiInputBox(options: {
   const contentWidth = Math.max(8, frameWidth - 6)
   const maxBodyRows = Math.max(1, options.maxBodyRows ?? 4)
   const wrapped = wrapInputAtCursor(options.state, contentWidth)
+  appendInputGhostHint(
+    wrapped.lines,
+    resolveSlashArgumentHint(options.state),
+    contentWidth,
+  )
   const start = Math.max(
     0,
     Math.min(
@@ -719,7 +753,13 @@ export function renderTuiInputBox(options: {
   )
   for (let index = 0; index < visible.length; index++) {
     const marker = start + index === 0 ? '❯ ' : '  '
-    const body = padTerminalText(visible[index]!.text, contentWidth)
+    const inputLine = visible[index]!
+    const ghost = inputLine.ghostText
+      ? `${dim}${inputLine.ghostText}${reset}`
+      : ''
+    const body = `${inputLine.text}${ghost}${' '.repeat(
+      Math.max(0, contentWidth - inputLine.width),
+    )}`
     lines.push(
       `${border}│${reset} ${prompt}${marker}${reset}${body} ${border}│${reset}`,
     )

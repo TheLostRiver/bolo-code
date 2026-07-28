@@ -14,6 +14,16 @@ function assert(condition: unknown, message: string): asserts condition {
 }
 
 const candidates = getSlashCommandCandidates({
+  effortDialect: {
+    id: 'test-effort-hint',
+    levels: ['low', 'high'],
+    choosable: ['low', 'high'],
+    map: {
+      low: 'low',
+      high: 'high',
+    },
+    wire: [{ shape: 'none' }],
+  },
   pluginCommands: [
     {
       name: 'demo:review',
@@ -105,6 +115,16 @@ assert(
     candidates.find((candidate) => candidate.name === 'doctor')?.source ===
       'builtin',
   'built-in command wins a skill id collision',
+)
+assert(
+  candidates.find((candidate) => candidate.name === 'effort')?.argumentHint ===
+    '[low|high|auto]',
+  'effort argument hint follows the active dialect and keeps auto last',
+)
+assert(
+  candidates.find((candidate) => candidate.name === 'skill')?.argumentHint ===
+    '<id>',
+  'ordinary built-in argument hints reuse registry usage',
 )
 
 const all = filterSlashCommandCandidates(candidates, '/')

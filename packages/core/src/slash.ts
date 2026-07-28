@@ -2678,7 +2678,12 @@ async function cmdProviderAdd(
   return { ok: true, message: added.message }
 }
 
-function resolveSessionEffortDialect(session: SlashSession) {
+type SlashEffortSession = Pick<
+  SlashSession,
+  'effortDialect' | 'providerProfile' | 'provider' | 'model'
+>
+
+function resolveSessionEffortDialect(session: SlashEffortSession) {
   return (
     session.effortDialect ??
     session.providerProfile?.effortDialect ??
@@ -3863,6 +3868,7 @@ export type SlashCommandCandidate = {
   name: string
   description: string
   usage?: string
+  argumentHint?: string
   source: SlashCommandCandidateSource
   sourceLabel?: string
   hidden?: boolean
@@ -3870,8 +3876,29 @@ export type SlashCommandCandidate = {
 
 export type SlashCommandCandidateSession = Pick<
   SlashSession,
-  'pluginCommands' | 'skills'
+  | 'pluginCommands'
+  | 'skills'
+  | 'effortDialect'
+  | 'providerProfile'
+  | 'provider'
+  | 'model'
 >
+
+function formatEffortSlashArgumentHint(
+  session: SlashCommandCandidateSession,
+): string | undefined {
+  const choices = listEffortChoosable(
+    resolveSessionEffortDialect(session) as string | undefined,
+    {
+      isAgent: true,
+      model: session.model ?? session.providerProfile?.model,
+    },
+  )
+  if (!choices.length) return undefined
+  const ordered = choices.filter((choice) => choice !== 'auto')
+  if (choices.includes('auto')) ordered.push('auto')
+  return `[${ordered.join('|')}]`
+}
 
 function normalizeSlashCandidateName(value: string): string {
   const name = value.trim().replace(/^\/+/, '').toLowerCase()
@@ -3895,10 +3922,15 @@ export function getSlashCommandCandidates(
   }
 
   for (const command of SLASH_COMMANDS) {
+    const argumentHint =
+      command.name === 'effort'
+        ? formatEffortSlashArgumentHint(session)
+        : command.usage
     add({
       name: command.name,
       description: command.summary,
       ...(command.usage ? { usage: command.usage } : {}),
+      ...(argumentHint ? { argumentHint } : {}),
       source: 'builtin',
       ...(command.hidden ? { hidden: true } : {}),
     })

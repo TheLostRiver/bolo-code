@@ -87,6 +87,12 @@ async function main(): Promise<void> {
       source: 'builtin' as const,
     },
     {
+      name: 'effort',
+      description: 'Set reasoning effort',
+      argumentHint: '[low|high|auto]',
+      source: 'builtin' as const,
+    },
+    {
       name: 'demo:review',
       description: 'Review changes from the demo plugin',
       source: 'plugin' as const,
@@ -195,6 +201,51 @@ async function main(): Promise<void> {
     tabCompletion.state.value === '/doctor ' &&
       tabCompletion.state.slashMenu === null,
     'Tab completes the selected command and closes the menu',
+  )
+  const effortHintState = createTuiInputState({
+    slashCandidates,
+    value: '/effort ',
+  })
+  const effortHintRendered = renderTuiInputBox({
+    state: effortHintState,
+    columns: 64,
+    color: true,
+  })
+  assert(
+    effortHintRendered.text.includes(
+      '/effort \u001b[2m[low|high|auto]\u001b[0m',
+    ),
+    'exact slash command plus one space renders a dim argument hint',
+  )
+  assert(
+    effortHintState.value === '/effort ' &&
+      effortHintState.cursor === '/effort '.length,
+    'argument hint is display-only and does not move the input cursor',
+  )
+  const effortWithArgument = renderTuiInputBox({
+    state: createTuiInputState({
+      slashCandidates,
+      value: '/effort h',
+    }),
+    columns: 64,
+    color: true,
+  })
+  assert(
+    !effortWithArgument.text.includes('[low|high|auto]'),
+    'argument hint disappears after the user starts an argument',
+  )
+  const narrowEffortHint = renderTuiInputBox({
+    state: effortHintState,
+    columns: 24,
+    color: false,
+  })
+  assert(
+    narrowEffortHint.lines.every(
+      (line) => visibleWidth(line) <= resolveTuiDockWidth(24),
+    ),
+    `argument hint is clipped within a 24-column dock: ${narrowEffortHint.lines
+      .map(visibleWidth)
+      .join(',')}`,
   )
   const enterCompletion = applyTuiInputKey(
     createTuiInputState({ slashCandidates, value: '/d' }),
