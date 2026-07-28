@@ -216,6 +216,7 @@ async function main(): Promise<void> {
       'the user can scroll away from the live bottom',
     )
 
+    const burstEpoch = fixture.controller.getRenderEpoch()
     fixture.controller.printer.beginTurn({
       prompt: 'live user tail marker',
       echoUser: true,
@@ -269,6 +270,10 @@ async function main(): Promise<void> {
     fixture.controller.printer.endTurn({ terminalReason: 'completed' })
     await fixture.controller.flush()
     await fixture.terminal.flush()
+    assert(
+      fixture.controller.getRenderEpoch() - burstEpoch <= 1,
+      'stream/tool/search burst is coalesced into one retained frame',
+    )
     const afterLiveTurn = fixture.terminal.snapshot()
     assert(
       afterLiveTurn.viewportY < afterLiveTurn.baseY,
@@ -285,14 +290,17 @@ async function main(): Promise<void> {
     )
 
     const resizeDurations: number[] = []
+    const resizeTrace: string[] = []
     for (const columns of [24, 220, 38, 160, 31, 120, 48, 80]) {
       const epoch = fixture.controller.getRenderEpoch()
-      const startedAt = performance.now()
       fixture.terminal.resize(columns, 40)
+      const startedAt = performance.now()
       fixture.output.resize(columns, 40)
       await fixture.controller.waitForRender(epoch)
       await fixture.terminal.flush()
-      resizeDurations.push(performance.now() - startedAt)
+      const resizeMs = performance.now() - startedAt
+      resizeDurations.push(resizeMs)
+      resizeTrace.push(`${columns}:${resizeMs.toFixed(1)}ms`)
 
       const snapshot = fixture.terminal.snapshot()
       assert(
@@ -343,6 +351,21 @@ async function main(): Promise<void> {
     const listenersBeforeInput = fixture.input.listenerCount('data')
     const inputResult = fixture.controller.readInput()
     assert(fixture.input.isRaw, 'long-session input acquires raw mode')
+    const inputLatencies: number[] = []
+    for (let index = 0; index < 48; index += 1) {
+      const startedAt = performance.now()
+      fixture.input.send('x')
+      inputLatencies.push(performance.now() - startedAt)
+    }
+    inputLatencies.sort((left, right) => left - right)
+    const inputP95 =
+      inputLatencies[Math.ceil(inputLatencies.length * 0.95) - 1] ??
+      Infinity
+    assert(
+      inputP95 <= 50,
+      `long-session input p95 must stay <= 50ms, got ${inputP95.toFixed(1)}ms`,
+    )
+    fixture.input.send('\u0015')
     const pasteEpoch = fixture.controller.getRenderEpoch()
     fixture.input.send('\u001b[200~first\r\n')
     fixture.input.send('第二行✅')
@@ -465,9 +488,16 @@ async function main(): Promise<void> {
     const sortedResize = [...resizeDurations].sort((a, b) => a - b)
     const resizeP95 =
       sortedResize[Math.ceil(sortedResize.length * 0.95) - 1] ?? 0
+    assert(
+      resizeP95 <= 200,
+      `long-session resize p95 must stay <= 200ms, got ` +
+        `${resizeP95.toFixed(1)}ms; samples=${resizeTrace.join(',')}`,
+    )
     console.log(
       `PASS: CLI TUI long-session reliability ` +
-        `(initial=${initialRenderMs.toFixed(1)}ms, resize-p95=${resizeP95.toFixed(1)}ms)`,
+        `(initial=${initialRenderMs.toFixed(1)}ms, ` +
+        `input-p95=${inputP95.toFixed(1)}ms, ` +
+        `resize-p95=${resizeP95.toFixed(1)}ms)`,
     )
   } finally {
     await fixture.controller.stop()

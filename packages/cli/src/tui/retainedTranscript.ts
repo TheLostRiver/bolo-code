@@ -22,6 +22,9 @@ import { stripTerminalAnsi } from './terminalText.ts'
 import { resolveTuiTheme } from './theme.ts'
 
 const RESET = '\x1b[0m'
+const TAIL_WINDOW_BLOCK_THRESHOLD = 100
+const TAIL_WINDOW_MIN_LINES = 80
+const TAIL_WINDOW_VIEWPORT_MULTIPLIER = 3
 
 type TranscriptStyles = {
   markdown: MarkdownTheme
@@ -389,9 +392,17 @@ export class RetainedTranscript implements Component {
   private readonly styles: TranscriptStyles
   private readonly blockCache = new Map<string, RetainedTranscriptBlock>()
   private orderedBlocks: RetainedTranscriptBlock[] = []
+  // Native scrollback owns the full first render. After a large history has
+  // been seeded, xterm reflows it and retained redraws only the live tail.
+  private lastRenderedWidth?: number
+  private seededFullHistory = false
+  private tailWindow = false
 
   constructor(
-    private readonly options: { env: NodeJS.ProcessEnv },
+    private readonly options: {
+      env: NodeJS.ProcessEnv
+      getViewportRows?: () => number
+    },
   ) {
     this.styles = createTranscriptStyles(options.env)
   }
@@ -435,19 +446,92 @@ export class RetainedTranscript implements Component {
     const normalizedWidth = Number.isFinite(width)
       ? Math.max(1, Math.floor(width))
       : 80
+    const widthChanged =
+      this.lastRenderedWidth !== undefined &&
+      this.lastRenderedWidth !== normalizedWidth
+    if (
+      widthChanged &&
+      this.seededFullHistory &&
+      this.orderedBlocks.length > TAIL_WINDOW_BLOCK_THRESHOLD
+    ) {
+      this.tailWindow = true
+    }
+    this.lastRenderedWidth = normalizedWidth
+
     const gutterWidth = resolveTuiContentGutter(normalizedWidth)
     const gutter = ' '.repeat(gutterWidth)
     const contentWidth = Math.max(1, normalizedWidth - gutterWidth)
-    const lines: string[] = []
-
-    for (const component of this.orderedBlocks) {
-      const blockLines = component.render(contentWidth)
-      if (blockLines.length === 0) continue
-      if (lines.length > 0) lines.push(gutter)
-      for (const line of blockLines) {
-        lines.push(`${gutter}${line}`)
-      }
+    const lines = this.tailWindow
+      ? this.renderTailWindow(contentWidth, gutter)
+      : this.renderAllBlocks(contentWidth, gutter)
+    if (
+      !this.tailWindow &&
+      this.orderedBlocks.length > TAIL_WINDOW_BLOCK_THRESHOLD &&
+      lines.length > this.tailWindowLineBudget()
+    ) {
+      this.seededFullHistory = true
     }
     return lines
+  }
+
+  private renderAllBlocks(contentWidth: number, gutter: string): string[] {
+    const lines: string[] = []
+    for (const component of this.orderedBlocks) {
+      this.appendBlock(lines, component.render(contentWidth), gutter)
+    }
+    return lines
+  }
+
+  private renderTailWindow(
+    contentWidth: number,
+    gutter: string,
+  ): string[] {
+    const budget = this.tailWindowLineBudget()
+    const sections: string[][] = []
+    let remaining = budget
+    for (
+      let index = this.orderedBlocks.length - 1;
+      index >= 0 && remaining > 0;
+      index -= 1
+    ) {
+      const blockLines = this.orderedBlocks[index]!.render(contentWidth)
+      if (blockLines.length === 0) continue
+      const gap = sections.length > 0 ? 1 : 0
+      const available = Math.max(0, remaining - gap)
+      if (available === 0) break
+      if (blockLines.length > available) {
+        sections.unshift(blockLines.slice(-available))
+        remaining = 0
+        break
+      }
+      sections.unshift(blockLines)
+      remaining -= blockLines.length + gap
+    }
+
+    const lines: string[] = []
+    for (const section of sections) {
+      this.appendBlock(lines, section, gutter)
+    }
+    return lines
+  }
+
+  private appendBlock(
+    lines: string[],
+    blockLines: readonly string[],
+    gutter: string,
+  ): void {
+    if (blockLines.length === 0) return
+    if (lines.length > 0) lines.push(gutter)
+    for (const line of blockLines) {
+      lines.push(`${gutter}${line}`)
+    }
+  }
+
+  private tailWindowLineBudget(): number {
+    const rows = this.options.getViewportRows?.() ?? 24
+    return Math.max(
+      TAIL_WINDOW_MIN_LINES,
+      Math.floor(rows) * TAIL_WINDOW_VIEWPORT_MULTIPLIER,
+    )
   }
 }

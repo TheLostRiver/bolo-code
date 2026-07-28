@@ -165,10 +165,11 @@ class RetainedRoot extends Container {
     composer: RetainedComposer,
     activity: RetainedActivity,
     color: boolean,
+    getViewportRows: () => number,
   ) {
     super()
     this.welcome = new WelcomeComponent(env)
-    this.transcript = new RetainedTranscript({ env })
+    this.transcript = new RetainedTranscript({ env, getViewportRows })
     this.activity = activity
     this.composer = composer
     this.footer = new RetainedComposerFooter(
@@ -341,7 +342,13 @@ export function createRetainedTuiController(options: {
     },
   })
   const activityView = new RetainedActivity(requestComponentRender)
-  root = new RetainedRoot(env, composer, activityView, color)
+  root = new RetainedRoot(
+    env,
+    composer,
+    activityView,
+    color,
+    () => adapter.rows,
+  )
   root.setVisible(options.rootVisible !== false)
   tui = new TUI(
     adapter,
