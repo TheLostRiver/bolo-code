@@ -315,6 +315,7 @@ export {
 
 // AR3B：turn timeline 视图模型（消息 + 工具 + diff → 可回看的分组时间线）
 export {
+  COMPACT_SUMMARY_MARKER,
   buildTurnTimeline,
   type TimelineItem,
   type TimelineTurn,
@@ -342,6 +343,44 @@ export {
   type ComposerIntentInput,
   type ComposerIntentResult,
 } from './composerIntent.ts'
+
+// OI-14B：CLI live transcript / activity / composer / overlay 的纯状态真源
+export {
+  CLI_TUI_BLOCK_KINDS,
+  CLI_TUI_BLOCK_STATUSES,
+  CLI_TUI_COMPOSER_MODES,
+  CLI_TUI_OVERLAY_MODES,
+  createCliTuiViewState,
+  createCliTuiViewStateFromMessages,
+  projectCliTuiSessionEvent,
+  reduceCliTuiViewState,
+  selectCliTuiActiveBlock,
+  type CliTuiAssistantBlock,
+  type CliTuiBlock,
+  type CliTuiBlockBase,
+  type CliTuiBlockKind,
+  type CliTuiBlockStatus,
+  type CliTuiComposerMode,
+  type CliTuiComposerState,
+  type CliTuiErrorBlock,
+  type CliTuiOverlayMode,
+  type CliTuiOverlayState,
+  type CliTuiPermissionPreview,
+  type CliTuiPermissionRequest,
+  type CliTuiReasoningBlock,
+  type CliTuiSearchBlock,
+  type CliTuiSearchCitation,
+  type CliTuiSessionEvent,
+  type CliTuiSummaryBlock,
+  type CliTuiTerminal,
+  type CliTuiToolBlock,
+  type CliTuiTurnState,
+  type CliTuiTurnStatus,
+  type CliTuiUserBlock,
+  type CliTuiViewAction,
+  type CliTuiViewState,
+  type CliTuiWarningBlock,
+} from './cliTuiViewState.ts'
 
 // AR3E：secret 不越过进程/持久化边界
 export { redactSecretsDeep } from './secretBoundary.ts'

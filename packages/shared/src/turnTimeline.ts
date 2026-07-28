@@ -24,7 +24,7 @@
 import type { ChatMessage } from './index.ts'
 
 /** compact 产生的 summary 消息前缀（与 compact 包同一字面量） */
-const COMPACT_SUMMARY_MARKER =
+export const COMPACT_SUMMARY_MARKER =
   'This session is being continued from a previous conversation'
 
 export type TimelineFileDiff = {

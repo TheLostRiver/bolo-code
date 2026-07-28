@@ -85,6 +85,7 @@ async function main() {
   const defaultGate = scripts.test ?? ''
   for (const required of [
     'scripts/test-ptl-retry.ts',
+    'scripts/test-cli-tui-view-state.ts',
     'scripts/test-cli-tui-vt-legacy.ts',
     'scripts/test-desktop-launch.ts',
     'scripts/test-runtime-core-transport.ts',
