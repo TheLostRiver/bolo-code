@@ -1,9 +1,11 @@
 # CLI TUI retained renderer 重构方案
 
-> **状态：** OI-14 `OPEN`
+> **状态：** OI-14 `OPEN`（OI-14A 已关闭；当前 OI-14B）
 > **方案锚点：** Bolo `c2e6a98`；Pi `c820aa26fe09`；oh-my-pi
 > `d16c6168c86f`；Codex `f61b51ddd924`；OpenCode `66495a2a22cd`；
 > HelsincyCode `e6dd86ef990e`。
+> **OI-14A 交付：** `1ae9f53` · `f04f8de` ·
+> [CLI_TUI_RENDERER_DECISION.md](./CLI_TUI_RENDERER_DECISION.md)。
 > **范围：** 本文定义 CLI TTY 路径的重构方案。非 TTY、`--print`、pipe、JSON 和
 > Desktop 的既有输出契约必须保持兼容。
 > **结论先行：** 停止继续扩展自研 `TerminalSurface + 字符串 prefix + tiny
@@ -93,7 +95,7 @@ code point 都当一列，所以即使字符串测试与简化 VT 行数全绿�
 | **oh-my-pi** | MIT；Bun；native/utils/cache 依赖 | native scrollback、render backpressure、terminal capability、tmux/Ghostty、scroll view、resize/DECCARA 回归 | 首次迁移不直接接入；作为 Pi 基座之后的可靠性清单 |
 | **Codex** | Apache-2.0；Rust Ratatui/Crossterm | raw Markdown source、history cell、stream controller、transcript reflow、bottom pane、VT100 snapshots | 只借鉴契约与测试意图，不复制 Rust 实现 |
 | **OpenCode** | 根 MIT；OpenTUI + Solid；Bun/Effect/workspace | retained component tree、box gap/padding/flex、sticky scrollbox、结构化 permission/prompt/reasoning/tool | 有时限的备选 spike；不能把 OpenCode 整体依赖带入 Bolo |
-| **HelsincyCode** | 本地 snapshot 未发现 LICENSE；Ink 6 + React 19 | Messages、VirtualMessageList、Markdown、PromptInput 的信息架构 | 只观察行为；未确认许可前禁止复制源码、文案和品牌细节 |
+| **HelsincyCode** | 用户自有私有仓库；Ink 6 + React 19 | Messages、VirtualMessageList、Markdown、PromptInput 的功能实现与信息架构 | 可作内部功能复用来源；公开产物不得泄露私有源码/路径/品牌或未授权第三方内容，视觉目标不以 HC 为上限 |
 
 共同结论与具体框架无关：
 
@@ -110,40 +112,33 @@ code point 都当一列，所以即使字符串测试与简化 VT 行数全绿�
 
 ### 4.1 主路线
 
-采用 Pi 风格 retained renderer。优先尝试固定版本的 `@earendil-works/pi-tui` 公共
-API，复用其 renderer、Markdown、width、Editor 和基础组件；Bolo 自己实现
+采用精确版本 `@earendil-works/pi-tui@0.82.1` 的公共 API，复用其 renderer、
+Markdown、width、Editor 和基础组件；Bolo 自己实现
 SessionEvent adapter 与领域组件。
 
 不采用 Pi coding-agent，不复制其 provider/session/tool 业务，也不引入 Pi 的产品
 目录、配置或品牌。构造 TUI 时必须显式传入 Bolo 的日志目录，禁止回落到 `~/.pi`。
 
-### 4.2 Phase 0 兼容决策
+### 4.2 Phase 0 兼容决策（OI-14A 已完成）
 
-当前 Bolo 声明 Node `>=20`、使用 esbuild 生成单文件 ESM；当前 Pi TUI 声明
-Node `>=22.19.0`。开始产品迁移前必须完成隔离 spike：
+OI-14A 开始时 Bolo 声明 Node `>=20`，Pi TUI 声明 Node `>=22.19.0`。隔离 spike
+完成后的决定如下；完整数字和复现命令见
+[CLI_TUI_RENDERER_DECISION.md](./CLI_TUI_RENDERER_DECISION.md)。
 
-| 检查 | 通过条件 |
+| 检查 | 实测结果 |
 |------|----------|
-| Node | 在上游支持的 Node 版本运行；不得忽略 engine 警告后继续宣称支持 Node 20 |
-| esbuild | `packages: bundle` 后 `dist/bolo.mjs` 无第三方运行时 import |
-| Windows | ProcessTerminal/raw mode/resize/cleanup 在 Windows 终端可用 |
-| 资产 | 不需要遗漏的 native、图片或动态路径资产 |
-| 副作用 | 不创建 `~/.pi`，不新增遥测或运行时联网 |
-| 体积/启动 | 记录 baseline；超预算必须书面说明收益，不静默膨胀 |
-| 许可 | 固定版本、lockfile、MIT attribution 与分发清单齐全 |
+| Node | Windows Node 24 通过；真实 Node 20.18.3 也能运行，但上游不支持，Bolo 已提升到 `>=22.19.0` |
+| esbuild | 两个 `packages=bundle` 单文件入口均通过，无第三方 runtime import |
+| Windows | renderer/components 通过；`ProcessTerminal` 依赖未嵌入的动态 native helper |
+| 资产 | 首轮使用 Bolo terminal adapter，不引入动态 native 资产 |
+| 副作用 | 无联网/遥测；正常 import/render 不创建 `~/.pi`；必须显式传 Bolo log dir |
+| 体积/启动 | candidate 约 179 KB；冷启动 p50 145.8 ms，均低于软预算 |
+| 许可 | Pi、marked、width 依赖均为 MIT；精确版本与 lockfile 已固定 |
 
-决策顺序：
-
-1. **构建期依赖并 bundle**：全部通过时采用，固定精确版本，优先放在
-   `devDependencies`；esbuild 产物不得留下第三方运行时 import，现有根
-   `dependencies: {}` 发行护栏继续生效，除非另有明确产品决策。
-2. **升级 Bolo 最低 Node 版本**：唯一阻碍是受支持 Node 版本，且发行 E2E 通过时采用；
-   不在文档批里偷偷修改支持范围。
-3. **维护最小 MIT fork**：Node 支持或入口模块图无法满足，但 renderer/Markdown
-   本身可移植时，放入独立 `packages/tui-kit`，保留 LICENSE、来源 commit、差异说明
-   与上游同步测试。它是有来源的窄 fork，不是重新手搓一套。
-4. **OpenTUI spike**：只有 Pi 路线不能满足 primary-buffer scrollback、viewport 或
-   Windows 正确性时才启动；必须证明 Node/esbuild/Windows 可行，否则关闭。
+最终采用 direct build-time dependency，并提升 Node 支持线；不为已 EOL 的 Node 20
+维护 fork。首轮不采用 Pi `ProcessTerminal`；modifier 若出现真实回归，再单独评估
+带 attribution 的 Windows native helper。Pi 路线没有实质失败，因此不启动
+OpenTUI spike。
 
 不得选择“继续修当前 `TerminalSurface`”作为长期方案。它可以在迁移期开 fallback，
 但不再新增布局能力。
@@ -274,7 +269,7 @@ retained renderer -> width-aware physical lines -> one differential terminal wri
 
 | 顺序 | 切片 | 交付 | 自动关闭条件 |
 |------|------|------|--------------|
-| **OI-14A** | 真实终端红灯与依赖决策 | `@xterm/headless` 物理终端 harness；复现最新截图故障；Pi direct/fork 与 OpenTUI 备选 spike；许可证/Node/体积报告 | 长 URL + ANSI + 随机 chunk + running dock 在旧代码稳定红；选型表全部有数据 |
+| **OI-14A ✅** | 真实终端红灯与依赖决策 | `@xterm/headless` 物理终端 harness；复现最新截图故障；Pi direct/fork 与 OpenTUI 备选 spike；许可证/Node/体积报告 | 四项 legacy 签名稳定；选型数据与 direct/Node 决定已固化 |
 | **OI-14B** | Live view-state | `packages/shared` 的 `CliTuiViewState`、action/reducer、stable block id、stream merge、segment 与 composer mode | reducer 无 I/O；随机 chunk property、resume projection、error/tool 边界全绿 |
 | **OI-14C** | Renderer 基座 | 单 terminal writer、根 component tree、theme/width/resize、welcome、legacy feature flag | 24/38/56/80/120/160/220 列无超宽物理行；resize 无残影；plain path byte-stable |
 | **OI-14D** | Transcript 与 Markdown | User/Assistant/Thought/Tool/Search/Error blocks；成熟 Markdown/wrap；父级 spacing | 截图复现转绿；列表 hanging indent、URL、CJK/emoji、ANSI/OSC 8、代码块、表格全绿 |
@@ -380,7 +375,7 @@ OI-14 只有同时满足以下条件才可 `CLOSED`：
 
 | 风险 | 控制 |
 |------|------|
-| Pi Node engine 高于 Bolo 当前声明 | Phase A 先决策；升级支持范围或维护窄 fork，不使用上游未支持组合 |
+| Pi Node engine 高于 Bolo 旧声明 | OI-14A 已把 Bolo 提升到 `>=22.19.0`，不宣称支持已 EOL 的 Node 20 |
 | 第三方 renderer 带入产品副作用 | 只用公共 TUI API；显式 Bolo log dir；无遥测/运行时网络静态与动态检查 |
 | fork 漂移 | 固定来源 commit、MIT attribution、差异清单、定期跑上游 width/Markdown 测试 |
 | primary-buffer scrollback 与 resize 冲突 | xterm physical-screen + scrollback 测试；保留 raw source；不默认 alternate screen |
@@ -389,7 +384,7 @@ OI-14 只有同时满足以下条件才可 `CLOSED`：
 | ANSI/OSC 污染布局或安全 | 使用成熟 parser/wrapper；未知控制序列过滤；宽度测试覆盖 hyperlink |
 | 双 renderer 竞争 | feature flag 只能二选一；controller 建立时锁定 engine |
 | legacy 永久残留 | OI-14H 删除条件写入看板；新功能禁止接 legacy |
-| 未许可源码污染 | HelsincyCode 只观察；复制代码必须有明确许可证与归属 |
+| 私有源码污染 | HC 可作内部功能复用来源，但公开产物不得泄露私有源码/路径/品牌或未授权第三方内容 |
 
 ---
 
@@ -398,7 +393,7 @@ OI-14 只有同时满足以下条件才可 `CLOSED`：
 建议中文提交顺序：
 
 1. `test(tui): 用真实终端复现物理折行与光标错位`
-2. `build(tui): 锁定 retained renderer 依赖与许可证`
+2. `build(tui): 锁定 retained renderer 依赖与 Node 基线`
 3. `feat(tui): 建立实时会话视图状态`
 4. `feat(tui): 接入单一 retained 渲染表面`
 5. `feat(tui): 迁移 Markdown 与会话时间线`
@@ -416,12 +411,13 @@ OI-14 只有同时满足以下条件才可 `CLOSED`：
 
 ## 13. 下一步
 
-当前下一刀是 **OI-14A**：
+当前下一刀是 **OI-14B**：
 
-1. 将最新真实故障固化为 `@xterm/headless` 红灯。
-2. 在隔离环境完成 Pi direct bundle 的 Node/esbuild/Windows/资产/体积 spike。
-3. 依据本文决策顺序选 direct dependency、Node 版本升级或最小 MIT fork。
-4. 独立提交测试/选型证据；不在这一刀改 Agent 业务行为。
+1. 在 `packages/shared` 定义无 I/O 的 `CliTuiViewState`、action 与 reducer。
+2. 用 stable block id 合并 assistant/reasoning/tool/search 的 streaming 更新。
+3. 用整段、逐字符和固定随机 chunk 证明最终 state 不依赖 chunk 边界，并覆盖
+   error/abort/resume 与 composer/overlay mode。
+4. 本刀不接 terminal、不 import renderer；OI-14C 才建立 Bolo adapter 与 retained tree。
 
-在 OI-14A 完成前，不再对 `TerminalSurface`、`contentPrefixer`、tiny Markdown 或
-composer spacer 做新的布局补丁。
+继续禁止对 `TerminalSurface`、`contentPrefixer`、tiny Markdown 或 composer spacer
+添加新的布局补丁。

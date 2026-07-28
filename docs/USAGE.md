@@ -8,7 +8,7 @@
 
 ## 1. 安装与首次启动
 
-**要求：** Node ≥ 20 · npm 11（根 `packageManager` 锁定 11.17.0）
+**要求：** Node ≥ 22.19.0 · npm 11（根 `packageManager` 锁定 11.17.0）
 
 ```bash
 npm install -g bolo-code

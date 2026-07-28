@@ -17,7 +17,7 @@
 | **新用户 / 要跑起来** | **[docs/USAGE.md](docs/USAGE.md)**（含 **如何配置 Agent/Subagent**） |
 | **接手开发的 Agent / 同事** | **[docs/AGENT_HANDOFF.md](docs/AGENT_HANDOFF.md)**（架构 · 进度 · 改码规矩） |
 | **查总进度与各轨** | **[docs/ROADMAP.md](docs/ROADMAP.md)**（进度真源） |
-| **查 CLI TUI 重构** | **[docs/CLI_TUI_REFACTOR_PLAN.md](docs/CLI_TUI_REFACTOR_PLAN.md)**（OI-14 架构 · 迁移 · 验收） |
+| **查 CLI TUI 重构** | **[docs/CLI_TUI_REFACTOR_PLAN.md](docs/CLI_TUI_REFACTOR_PLAN.md)**（OI-14 架构 · 迁移 · 验收）· [选型证据](docs/CLI_TUI_RENDERER_DECISION.md) |
 | **查分层边界** | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 
 ---
@@ -50,11 +50,12 @@ smoke、OI-07 上游诊断 / `search doctor` / 可选 Docker setup、OI-08B CLI 
 首次启动**。OI-09–OI-13 的 slash/context/paste/Thought/权限/welcome 局部能力仍然
 有效，但不再作为整个 TUI renderer 稳定的证据。
 
-**当前主线：OI-14A。** 先用真正的 headless terminal 复现长 URL/ANSI、随机
-streaming chunk、常驻 composer 和 resize 下的物理行故障，再完成 Pi TUI
-direct/fork 与 OpenTUI 备选的 Node/esbuild/Windows/体积/许可选型。之后按
-live view-state、retained renderer、Markdown/transcript、常驻 Composer、overlays、
-默认切换和删除 legacy 的顺序推进。
+**当前主线：OI-14B。** OI-14A 已用真正的 headless terminal 稳定捕获 legacy 的
+续行 gutter、dock column、chunk invariant 与 resize 四类故障，并选定精确版本的
+Pi TUI direct bundle；Bolo 最低 Node 同步提升到 `>=22.19.0`。下一刀先建立无 I/O 的
+live view-state，再按 retained renderer、Markdown/transcript、常驻 Composer、
+overlays、默认切换和删除 legacy 的顺序推进。选型数据见
+[docs/CLI_TUI_RENDERER_DECISION.md](docs/CLI_TUI_RENDERER_DECISION.md)。
 
 普通 `bolo` 仍是唯一首次启动主路径：自动准备用户级 `~/.bolo`，不会仅因进入仓库
 就在 cwd 创建 `.bolo/`；项目模板只由显式 `bolo init [--project]` 创建。SearXNG
@@ -70,7 +71,7 @@ OI-14 自动门禁关闭。之后才由真人检查 Windows Terminal 的字体�
 
 ## 快速开始
 
-**要求：** Node ≥ 20。**无运行时依赖**——装完就是一个自包含的单文件。
+**要求：** Node ≥ 22.19.0。**无独立运行时依赖**——装完就是一个自包含的单文件。
 
 ```bash
 npm install -g bolo-code

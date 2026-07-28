@@ -2,7 +2,9 @@
 
 ## HelsincyCode / Claude Code 系参考实现
 
-体量：约 50 万行级、Claude Code 系 CLI（仅作架构参考，仓库内不嵌入外部源码路径）。
+体量：约 50 万行级、Claude Code 系 CLI。该仓库由用户自有且保持私有，用户已授权
+作为 Bolo 的内部功能实现与复用来源；公开产物不得嵌入其本机路径、私有源码、品牌或
+其中未授权的第三方内容。HC 主要承担功能实用性基准，视觉目标另看 Pi/Codex/OpenCode。
 
 **值得抽的结构**
 
@@ -20,7 +22,7 @@
 
 **不要搬**
 
-- 未确认许可证的 snapshot 源码、品牌文案和产品细节；CLI TUI 只能观察信息架构
+- 私有仓库路径、品牌文案、与 Bolo 无关的产品细节和其中未授权的第三方内容
 - 遥测 / GrowthBook / 大量 feature flag 迷宫
 - 与 Anthropic 产品强绑定的 OAuth/bridge
 
@@ -33,10 +35,11 @@
 - `pi-coding-agent`：产品 CLI
 - `pi-tui`：终端 UI
 
-**借鉴/复用**：core 与 UI 分包；统一 LLM API。OI-14 首选复用 Pi TUI 的
-retained renderer、Markdown、cell-width wrap、Editor 与 VirtualTerminal 测试；
-不依赖整个 pi-coding-agent。当前 TUI package 声明 Node `>=22.19.0`，必须先完成
-Bolo Node/esbuild/Windows/资产 spike，再决定 direct bundle、Node 升级或最小 MIT fork。
+**借鉴/复用**：core 与 UI 分包；统一 LLM API。OI-14A 已选定
+`@earendil-works/pi-tui@0.82.1` direct bundle，复用 retained renderer、Markdown、
+cell-width wrap、Editor 与基础组件；不依赖整个 pi-coding-agent。Bolo 已把最低
+Node 提升到上游支持线 `>=22.19.0`，首轮保留 Bolo terminal adapter，完整实测见
+[CLI_TUI_RENDERER_DECISION.md](./CLI_TUI_RENDERER_DECISION.md)。
 **注意**：权限默认弱，Bolo 必须自带 PermissionRequest 体系。
 
 ## oh-my-pi
@@ -83,8 +86,8 @@ Bolo Node/esbuild/Windows/资产 spike，再决定 direct bundle、Node 升级�
   `scrollbox` 拥有 sticky viewport；当前栈依赖 Bun/Effect/workspace
 
 → 学 **「意图 → 请求碎片」**；Bolo 用轻量 dialect patch，**不**引入 AI SDK 巨表。
-TUI 方面只作为 Pi 路线失败后的有时限备选 spike，必须证明 Node/esbuild/Windows
-可行后才能采用。
+TUI 方面保留为 Pi 路线发生 primary-buffer/Windows/viewport 实质失败时的有时限备选；
+OI-14A 的 Pi 路线已通过，因此当前不启动 OpenTUI spike。
 
 ## HelsincyCode · Effort（补充）
 
@@ -98,7 +101,7 @@ TUI 方面只作为 Pi 路线失败后的有时限备选 spike，必须证明 No
 
 ## 综合决策（一句话）
 
-> **HelsincyCode 的扩展与 Hook / Tool 管道语义 + pi 的包边界与 thinkingLevelMap 清晰度 + Codex 的「按模型选档」+ OpenCode 的「意图→options」思想（简化）+ Electron GUI；不做遥测；不绑 AI SDK。**
+> **HelsincyCode 的功能实用性与扩展/Hook/Tool 管道语义 + Pi retained renderer 与包边界 + Codex/OpenCode 的视觉和状态分层基准 + Electron GUI；不做遥测；不绑 AI SDK。**
 
 | 文档 | 角色 |
 |------|------|
@@ -107,6 +110,7 @@ TUI 方面只作为 Pi 路线失败后的有时限备选 spike，必须证明 No
 | [PROVIDER_UX.md](./PROVIDER_UX.md) | **CX 便利层**（preset · caps · resume · 错误 · ultrathink 默认 off · tip/turn） |
 | [PROVIDERS.md](./PROVIDERS.md) | 协议与多实例 |
 | [CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md) | OI-14 参考审计、选型、迁移与验收 |
+| [CLI_TUI_RENDERER_DECISION.md](./CLI_TUI_RENDERER_DECISION.md) | OI-14A 真实 VT、Node/Windows/体积/资产/许可实测与选型决定 |
 
 ## 工程纪律
 

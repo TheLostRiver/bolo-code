@@ -18,7 +18,7 @@ npx bolo-code              →   bolo
 |------|-----|
 | 运行时依赖 | **0**（`dependencies` 恒为 `{}`） |
 | tarball 内容 | `dist/`（含 `bundled-skills/`）+ `README.md` + `LICENSE` + `package.json`，共 6 项 |
-| Node 要求 | ≥ 20 |
+| Node 要求 | ≥ 22.19.0 |
 | bin | `./dist/bolo.mjs`（产物自带 shebang，没有 wrapper 层） |
 | 首次启动 | 安装后直接 `bolo`；自动准备用户状态，不创建项目 `.bolo/` |
 
@@ -43,7 +43,7 @@ esbuild 是**构建期**工具。产物里不含它，用户也装不到它。
 ## 2. 构建
 
 ```bash
-npm run build          # → dist/bolo.mjs (~1.1 MB, 125 模块)
+npm run build          # → dist/bolo.mjs (~1.35 MB, 71 模块)
 ```
 
 `scripts/build-dist.ts` 做三件事：
@@ -54,6 +54,8 @@ npm run build          # → dist/bolo.mjs (~1.1 MB, 125 模块)
 3. 把 `packages/bundled-skills/` 拷到 `dist/bundled-skills/`
 
 > 构建日志走 **stderr**。`prepack` 会调用它，stdout 要留给 `npm pack --json` 之类的消费者。
+> `target=node20` 只是保守的 JavaScript 语法输出目标，不是运行支持承诺；CLI 的
+> 最低运行版本以 package `engines.node >=22.19.0` 为准。
 
 ### 打包会踩的两个坑（已处理，改动时别踩回去）
 
@@ -85,6 +87,7 @@ npm run test:dist-install   # 真实 pack → 安装 → 运行
 - `private !== true`、有 `name`/`version`/`files`
 - `files` 不含 `.bolo-tmp` / `.planning` / `.bolo` / `.`
 - **`dependencies` 为空**
+- `engines.node` 与 retained renderer 上游支持线一致，Pi/xterm 均为精确构建期版本
 - 有 `prepack`（保证 tarball 里不会是旧产物）
 - bin 指向产物本身、产物带 shebang
 - 产物不含 `tsx` 引用、不含 `.ts` 导入、能跑 `--help`
@@ -151,7 +154,7 @@ git push --follow-tags
 `test-desktop-bundle.ts` 与 `test-dist-install.ts` 在门禁里断言。
 发布的 tarball 里除了自己的代码，没有第三方运行时代码。
 
-构建期依赖共 **4** 个，都不进产物：
+构建期依赖共 **6** 个；当前都不形成用户侧独立安装树：
 
 | 包 | 用途 | 为什么不进产物 |
 |---|---|---|
@@ -159,6 +162,12 @@ git push --follow-tags
 | `typescript` | `npm run typecheck` | 仅类型检查，不产出 JS |
 | `tsx` | 跑 `scripts/*.ts` 测试 | 只在开发/测试期 |
 | `electron-builder` | Windows NSIS 安装包 | 构建工具 |
+| `@xterm/headless` | OI-14 真实 cell/auto-wrap/resize 测试 | 仅测试 |
+| `@earendil-works/pi-tui` | OI-14 retained renderer 基座 | OI-14A 已锁定但产品入口尚未 import；OI-14C 起由 esbuild 打入单文件 |
+
+Pi 版本、MIT 许可、传递依赖、Node/Windows/资产与体积数据见
+[CLI_TUI_RENDERER_DECISION.md](./CLI_TUI_RENDERER_DECISION.md)。OI-14C 首次把 Pi
+代码打入 `dist` 时必须同时加入发布用第三方许可证/NOTICE。
 
 > 核对命令（任何人可跑）：
 > ```bash
@@ -209,7 +218,7 @@ git push --follow-tags
 | **Windows 安装包（NSIS）** | ✅ 构建已验证 | Node 24 / npm 11.17.0 / electron-builder 26.15.3 已生成安装包与 blockmap；没有证书，用户仍会看到 SmartScreen 提示 → [DESKTOP_DESIGN §7c](./DESKTOP_DESIGN.md) |
 | **桌面窗口的视觉呈现** | ❌ 未验证 | 应用**能启动**且 renderer 挂载已由 `test-desktop-launch.ts` 实证；但布局观感、Windows 主题切换与 maximize 渲染、键盘走查、长会话滚动**没有肉眼验证过** |
 | **`AskUserQuestion` 的真 TTY 交互** | ❌ 未验证 | 控件逻辑测试注入 `readKey`，覆盖不到真实 raw-mode 与 REPL 抢 stdin |
-| **CLI TUI retained renderer** | ❌ 已确认缺陷 · OI-14 OPEN | OI-09–OI-13 的 slash/context/paste/Thought/权限/水晶局部契约仍有自动测试，但后续真实 Windows Terminal 截图已确认 direct-write surface 会出现正文碎片、巨大空洞、物理续行贴左与 cursor/layout 漂移；旧简化 VT 没有 auto-wrap/双宽 cell/resize，123 项门禁不能关闭该风险。发布时必须说明 OI-14 正在以真实 headless terminal + retained renderer 重构；plain/`--print` 路径不受动态 cursor 问题影响 |
+| **CLI TUI retained renderer** | ❌ 已确认缺陷 · OI-14B NEXT | OI-09–OI-13 的 slash/context/paste/Thought/权限/水晶局部契约仍有自动测试，但 legacy direct-write surface 仍会出现正文碎片、巨大空洞、物理续行贴左与 cursor/layout 漂移。OI-14A 已用真实 xterm 固化四项失败并选定 Pi direct bundle；这不是可见修复。下一步先建 live view-state，再迁 renderer；plain/`--print` 路径不受动态 cursor 问题影响 |
 | **`mcp-external` 搜索** | ⚠️ 仅验过 Exa | Exa 免密层已真连；其它 MCP 搜索服务仍取决于外部端点 |
 | **SearXNG 直连** | ✅ 实例/诊断/可选 setup 已验证 | `2026.7.26-b060c780d` Docker 实例：JSON API、生产 status/session/`WebSearch`、真实 URL 与源码/dist doctor 全链通过；OI-07A 已区分正常空结果、全故障和部分成功，OI-07B doctor 检查版本/能力并要求非空 smoke，OI-07C 的源码/dist managed setup/status/logs/stop 已实跑。Docker 仍须用户预装且不是默认依赖；默认引擎仍可能 429/CAPTCHA/timeout |
 | **中段 compact** | 🚫 显式不启用 | 契约就绪但产品代码零调用；两个参考实现都没真正跑过它 → §13.10.2 |
@@ -235,7 +244,7 @@ git push --follow-tags
 ### 6.6 发布 checklist（逐项可执行）
 
 ```bash
-npm test                              # 当前 typecheck + 123 个串联门禁脚本，必须 EXIT=0；不等于 OI-14 已关闭
+npm test                              # 当前 typecheck + 124 个串联门禁脚本，必须 EXIT=0；不等于 OI-14 已关闭
 node -e "console.log(JSON.stringify(require('./package.json').dependencies))"
                                       # 必须输出 {}
 npm pack --dry-run                    # 清单只应有 6 项

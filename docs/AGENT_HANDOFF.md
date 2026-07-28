@@ -19,7 +19,7 @@ Bolo Code = Headless Agent Runtime (packages/*)
 | **无遥测** | 不实现 / 不预留 phone-home、GrowthBook、官方分析 |
 | **无官方市场 API** | 不接 Claude/Codex 官方插件市场 |
 | **先契约后壳** | 改 `packages/*` 契约，再接 CLI / Desktop |
-| **许可与证据先行** | 可复用许可明确、兼容 spike 通过的成熟基础库或窄 fork；禁止复制未许可源码、盲搬重量级产品和把本机参考路径写进产品文档 |
+| **许可与证据先行** | 可复用许可明确、兼容 spike 通过的成熟基础库或窄 fork；用户自有私有仓库可作内部复用来源，但禁止向公开产物泄露私有源码/路径/品牌或未授权第三方内容 |
 | **日用 ≠ UI 全家桶** | 95%+ 日用契约 ≠ Ink/ratatui 100% 密度 |
 | **临时文件** | 只写 `.bolo-tmp/`；**永不提交** |
 | **密钥** | env / `apiKeyEnv`；不进 transcript / 仓库 |
@@ -89,6 +89,8 @@ SessionEvent
 
 在 OI-14H 前，`formatSessionEvent.ts` / `TerminalSurface` 仍是 legacy 实现。不要再给
 它们增加 spacer、prefix、Markdown 或 cursor 修补；新 TUI 能力只进入 retained 路径。
+OI-14A 已锁定 `@earendil-works/pi-tui@0.82.1`，首轮由 Bolo terminal adapter
+承接 Pi renderer/components；不要擅自切到 Pi `ProcessTerminal` 或引入动态 native 资产。
 
 ### 2.3 配置合并
 
@@ -121,7 +123,7 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 |----|------|----------|
 | Headless 核心 | ~82–90% | queryLoop · STE · 权限 · tools；partial stream fail-closed |
 | **Agent 能力面（工具集）** | **~82–88%** | 15 个常驻/可选工具 + 显式 SearXNG `WebSearch`（ROADMAP §14 · [TOOLS.md](./TOOLS.md)） |
-| **分发（CLI）** | **~87–93%** | `npm i -g` / `npx` 单文件产物；安装后直接 `bolo`，无需 init；零运行时依赖（ROADMAP §15 · [RELEASE.md](./RELEASE.md)） |
+| **分发（CLI）** | **~87–93%** | Node `>=22.19.0`；`npm i -g` / `npx` 单文件产物；安装后直接 `bolo`，无需 init；零独立运行时依赖（ROADMAP §15 · [RELEASE.md](./RELEASE.md)） |
 | 会话 / CLI | ~92–97% | 用户级 workspace JSONL · 旧项目/用户会话兼容 · 零项目副作用首次启动 · new/resume 同构 runtime · durable controls/tasks |
 | **CLI TUI** | **~55–65%** | slash/context/paste/Thought/权限/水晶等业务能力已存在；OI-14 已确认 direct-write surface 无法可靠处理物理 wrap、Markdown、resize 与 cursor，真实截图出现正文碎片、巨大空洞和续行贴左；retained renderer 重构进行中 |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
@@ -137,14 +139,15 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | Electron GUI | ~80–88% | runtime IPC/client、会话切换/恢复、composer controls、model/effort 与 control/tool progress 已真接并经 Electron 自动化；真人点击/视觉未验 |
 | 产品相对 HC 全家桶 | ~68–82% | Headless 日用高；CLI TUI 渲染可靠性已重新计入 |
 
-**已闭环：** Diff · Hooks · Compact（含 AR2 全段）· Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR-T1–T3+ Agent 能力面** · **AR3/OI-06 Desktop 产品接线** · **AR4 evidence gate** · **AR5 release hardening** · **OI-04 SearXNG 直连、OI-X1 真实实例 smoke、OI-07 上游诊断 / doctor / 可选 Docker setup、OI-08B CLI 零步骤首次启动**。OI-09–OI-13 的局部 TUI 能力保留为完成历史，但不再代表 renderer 整体稳定。
+**已闭环：** Diff · Hooks · Compact（含 AR2 全段）· Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR-T1–T3+ Agent 能力面** · **AR3/OI-06 Desktop 产品接线** · **AR4 evidence gate** · **AR5 release hardening** · **OI-04 SearXNG 直连、OI-X1 真实实例 smoke、OI-07 上游诊断 / doctor / 可选 Docker setup、OI-08B CLI 零步骤首次启动、OI-14A 真实 VT 与 renderer 选型**。OI-09–OI-13 的局部 TUI 能力保留为完成历史，但不再代表 renderer 整体稳定。
 
-**当前主线：OI-14A。** 先用 `@xterm/headless` 复现
-“长 URL/ANSI + 随机 streaming chunk + running composer + resize”的物理行故障，
-再完成 Pi TUI direct/fork 与 OpenTUI 备选的 Node/esbuild/Windows/体积/许可 spike。
-后续固定顺序为 live view-state → retained renderer → transcript/Markdown →
+**当前主线：OI-14B。** OI-14A 已用 `@xterm/headless` 稳定捕获四项 legacy
+物理终端故障，并选定 Pi direct bundle、Node `>=22.19.0` 与 Bolo terminal adapter。
+当前先在 `packages/shared` 建立无 I/O 的 live view-state；后续固定顺序为 retained
+renderer → transcript/Markdown →
 Composer/activity/footer → overlays → 默认切换 → 删除 legacy。完整方案见
-[CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md)。
+[CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md)，选型数据见
+[CLI_TUI_RENDERER_DECISION.md](./CLI_TUI_RENDERER_DECISION.md)。
 
 OI-X1 已在 SearXNG `2026.7.26-b060c780d` 真实 Docker 实例完成：JSON API、
 生产配置/status、permission-gated `WebSearch` 与真实上游 URL 全链通过；默认引擎
@@ -199,7 +202,8 @@ DR2A 单 session runner ✅
 → OI-07B search doctor ✅
 → OI-07C 可选 Docker setup/status/logs/stop ✅
 → OI-13 CLI TUI 垂直节奏与水晶工作台 ✅
-→ OI-14 CLI TUI retained renderer 重构 ▶ A NEXT
+→ OI-14A 真实 VT 与 renderer 选型 ✅
+→ OI-14B live view-state ▶ NEXT
 ```
 
 每刀都必须先改 `packages/*` 契约和失败测试，再接 CLI/Desktop；定向测试、typecheck、完整 `npm test`、scoped `diff --check` 全绿后，代码与文档分批 commit/push。遇到需要数据库/daemon/RPC、用户脏文件冲突、数据丢失或副作用自动重放风险时停止扩张。
@@ -276,7 +280,7 @@ renderer 壳原样复制，共享 `RuntimeClient` 单独打成 browser ESM。不
 | Provider / 热切 | [PROVIDERS.md](./PROVIDERS.md) · [PROVIDER_UX.md](./PROVIDER_UX.md) |
 | Effort | [EFFORT.md](./EFFORT.md) · [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md) |
 | Diff | [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) · [TUI.md](./TUI.md) |
-| **CLI TUI 重构** | **[CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md)** · [OPEN_ISSUES.md](./OPEN_ISSUES.md) OI-14 |
+| **CLI TUI 重构** | **[CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md)** · [OI-14A 选型证据](./CLI_TUI_RENDERER_DECISION.md) · [OPEN_ISSUES.md](./OPEN_ISSUES.md) OI-14 |
 | Hooks | [HOOKS.md](./HOOKS.md) |
 | Compact | [COMPACTION.md](./COMPACTION.md) |
 | Subagent | [SUBAGENT.md](./SUBAGENT.md) · [SUBAGENT_SPEC.md](./SUBAGENT_SPEC.md) |
@@ -437,7 +441,7 @@ cd apps/desktop && npm install && set BOLO_DESKTOP_MOCK=1 && npm start
 | **OI-11** | terminal surface · timeline/status · segment activity · permission details/chooser · local panel VT · Responses abort diagnosis · Bolo crystal；代码 `e9a32cf`–`8088fbb`，121 项门禁，真人观感仍见 OI-H3 |
 | **OI-12** | argument hint · context view-model/dashboard · logical content gutter · dock-width 用户块 · bracketed paste transaction；代码 `1696127` / `7f76093` / `15b37ed` / `40a5d41` / `8d2a7a5`；物理 wrap 证明不足，转 OI-14 |
 | **OI-13** | silent Thought completion · 显式 surface/gap · 100-cell responsive crystal workbench；代码 `fe2d39a` / `bf25077` / `2b9d008` / `4c4fb08`；局部完成，不代表 renderer 整体稳定 |
-| **OI-14 · OPEN** | retained renderer 重构：A 真实 VT/选型 → B live view-state → C renderer → D Markdown/transcript → E Composer → F overlays → G 默认切换 → H 删除 legacy；当前 OI-14A |
+| **OI-14 · OPEN** | retained renderer 重构：A 真实 VT/选型 ✅（`1ae9f53` / `f04f8de`）→ B live view-state → C renderer → D Markdown/transcript → E Composer → F overlays → G 默认切换 → H 删除 legacy；当前 OI-14B |
 | **AR5C-early** | esbuild 单文件产物 · 发布元数据 · `getBundledSkillsDir()` 双布局 · pack→install→run E2E 进门禁 · [RELEASE.md](./RELEASE.md) |
 
 最新 commit 以 `git log` 为准。

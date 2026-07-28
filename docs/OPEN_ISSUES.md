@@ -1,7 +1,7 @@
 # 开放问题清单
 
 > 首次盘点锚点：`a17e840`（2026-07-27）；OI-14 补充锚点：
-> `c2e6a98`（2026-07-28）。
+> `c2e6a98`（2026-07-28）；OI-14A 关闭锚点：`f04f8de`（2026-07-28）。
 > 本文只列当前仓库中有代码、测试、实测或互相矛盾文档支撑的问题。
 > 历史 TODO、已关闭的候选和仅凭印象提出的功能不算开放问题。
 
@@ -16,14 +16,15 @@
 
 ## 1. Agent 可直接解决
 
-当前默认 agent 可闭环队列为 **OI-14A**。以下已关闭条目继续保留准入与关闭证据，
+当前默认 agent 可闭环队列为 **OI-14B**。以下已关闭条目继续保留准入与关闭证据，
 但 OI-09–OI-13 的局部关闭不再作为“整个 TUI renderer 已稳定”的证据。
 
 ### OI-14 · CLI TUI retained renderer 重构
 
-**状态：OPEN（当前：OI-14A）**
+**状态：OPEN（当前：OI-14B）**
 
-完整方案：[CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md)
+完整方案：[CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md) ·
+OI-14A 实测决定：[CLI_TUI_RENDERER_DECISION.md](./CLI_TUI_RENDERER_DECISION.md)
 
 准入证据：
 
@@ -42,7 +43,8 @@
 - Pi 的 MIT TUI 提供 `Component.render(width): string[]`、differential renderer、
   block Markdown、ANSI/OSC 8/CJK/emoji wrap、Editor 与 VirtualTerminal 测试；
   语言和产品形态最接近 Bolo。oh-my-pi、Codex、OpenCode 分别提供可靠性、验收与
-  retained layout 对照；无许可证的 HelsincyCode 只观察，不复制。
+  retained layout 对照。HelsincyCode 是用户自有私有仓库，可作为内部功能实现与
+  复用来源，但不得向公开产物泄露私有源码、路径、品牌或未授权第三方内容。
 
 架构决定：
 
@@ -54,15 +56,27 @@ SessionEvent
   -> 唯一 differential terminal writer
 ```
 
-优先采用固定版本的 Pi TUI 公共 API；先做 Node/esbuild/Windows/资产/许可 spike。
-若上游 Node engine 或模块图不兼容，则维护有 MIT attribution、固定来源 commit 和
-上游回归的最小 fork。OpenTUI 只有在 Pi 路线不能满足关键能力时才进入有时限备选
-spike。禁止继续扩展当前 `TerminalSurface + contentPrefixer + tiny Markdown`。
+已选定 `@earendil-works/pi-tui@0.82.1` direct build-time dependency，Bolo
+最低 Node 同步提升为 `>=22.19.0`。首轮复用 Pi renderer/Markdown/Editor 并保留
+Bolo terminal adapter，不直接分发 `ProcessTerminal` 的动态 native helper。
+Pi 路线没有实质失败，因此不启动 OpenTUI spike，也不维护 Node 20 fork。
+禁止继续扩展当前 `TerminalSurface + contentPrefixer + tiny Markdown`。
+
+OI-14A 关闭证据：
+
+- `@xterm/headless@5.5.0` 稳定捕获
+  `wrapped-continuation-lost-gutter`、`dock-column-drift`、
+  `chunk-boundary-changes-screen`、`resize-breaks-composer`。
+- candidate 在 Windows Node 24 和真实 Node 20.18.3 均可运行；上游支持线仍是
+  Node `>=22.19.0`，因此产品不宣称支持已 EOL 的 Node 20。
+- candidate 单文件约 179 KB，当前 Bolo baseline 1,385,065 bytes；冷启动 p50
+  145.8 ms，无遥测/联网/常态 `~/.pi` 副作用。
+- 测试 `1ae9f53`、依赖与 Node 基线 `f04f8de` 均已独立提交并 push。
 
 | 切片 | packages-first 交付 | 人类可见结果 | 自动关闭条件 | 状态 |
 |------|---------------------|--------------|--------------|------|
-| **OI-14A · 真实 VT 红灯与选型** | `@xterm/headless` physical terminal harness；Pi direct/fork 与 OpenTUI 备选的 Node/esbuild/Windows/体积/许可报告 | 暂无产品改动；先准确复现碎片、空洞、续行贴左和 cursor 漂移 | 长 URL + ANSI + 随机 chunk + running composer 在旧代码稳定红；选型表有实测数据 | **OPEN · NEXT** |
-| **OI-14B · live view-state** | `packages/shared` action/reducer、stable block id、stream merge、segment/composer/overlay state | stream 更新同一消息，不再按 chunk 增高页面 | 纯 reducer、随机 chunk property、tool/reasoning/error/abort/resume 全绿 | OPEN |
+| **OI-14A · 真实 VT 红灯与选型** | `@xterm/headless` physical terminal harness；Pi direct/fork 与 OpenTUI 备选的 Node/esbuild/Windows/体积/许可报告 | 暂无产品改动；先准确复现碎片、空洞、续行贴左和 cursor 漂移 | 长 URL + ANSI + 随机 chunk + running composer 在旧代码稳定红；选型表有实测数据 | **CLOSED · `1ae9f53` / `f04f8de`** |
+| **OI-14B · live view-state** | `packages/shared` action/reducer、stable block id、stream merge、segment/composer/overlay state | stream 更新同一消息，不再按 chunk 增高页面 | 纯 reducer、随机 chunk property、tool/reasoning/error/abort/resume 全绿 | **OPEN · NEXT** |
 | **OI-14C · retained 基座** | 单 terminal writer、根 component tree、theme/width/resize、welcome 与 feature flag | 所有区域使用同一 viewport 和 cursor owner | 24–220 列、resize、plain byte-stable、无超宽物理行 | OPEN |
 | **OI-14D · transcript/Markdown** | User/Assistant/Thought/Tool/Search/Error blocks；成熟 Markdown/wrap；父级 spacing | 正文不碎裂、不空洞，列表/URL/代码块续行一致，user/agent 有稳定间距 | 截图 fixture、CJK/emoji、ANSI/OSC 8、list/table/code、chunk invariant | OPEN |
 | **OI-14E · Composer/Activity/Footer** | 常驻 Editor、slash/hint/paste、分段 activity、usage/footer | 思考时输入框不消失；动画、Thought、model/token/快捷键稳定 | idle/running 同节点、burst backpressure、输入延迟与间距 VT | OPEN |

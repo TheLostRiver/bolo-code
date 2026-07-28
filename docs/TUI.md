@@ -5,10 +5,10 @@
 > 事务、分段 Thinking/Thought、权限详情与非 TTY fallback 等业务能力；但后续真实
 > Windows Terminal 截图已确认当前 direct-write surface 会出现正文碎片、巨大空洞、
 > 物理续行贴左和 cursor/layout 漂移。系统性修复已重开为 **OI-14**。
-> **框架选择：** 采用成熟 retained-mode renderer，不再继续扩展自研
-> `TerminalSurface + contentPrefixer + tiny Markdown`。Pi TUI 为首选基座，最终
-> direct/fork 形态由 Node/esbuild/Windows/许可证 spike 决定；见
-> [CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md)。
+> **框架选择：** OI-14A 已选定精确版本的 Pi TUI direct bundle，不再继续扩展自研
+> `TerminalSurface + contentPrefixer + tiny Markdown`。首轮复用 renderer/Markdown/
+> Editor 并保留 Bolo terminal adapter；Node、Windows、体积、资产和许可证据见
+> [CLI_TUI_RENDERER_DECISION.md](./CLI_TUI_RENDERER_DECISION.md)。
 > Diff 轨见 [ROADMAP.md](./ROADMAP.md) §3 ·
 > [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) 轨 B。
 
@@ -76,7 +76,8 @@ running dock 和临时面板又分别拥有 cursor 生命周期，因此 provide
 
 现有简化 `TestTerminalScreen` 没有 terminal width/auto-wrap/双宽 cell/resize，过去
 的 123 项门禁只证明局部字符串、reducer 和显式 cursor 序列，不能证明物理终端布局。
-OI-14A 将先用 `@xterm/headless` 固化真实红灯，再迁移 retained component tree。
+OI-14A 已用 `@xterm/headless` 固化四项真实 legacy 红灯；OI-14B 先建立 live
+view-state，OI-14C 才接入 retained component tree。
 
 ---
 
@@ -312,6 +313,7 @@ npm test
 npm run test:cli-tui
 npm run test:context-dashboard
 npm run test:cli-terminal-surface
+npm run test:cli-tui-vt
 npm run test:cli-timeline-hierarchy
 npm run test:cli-thinking-segments
 npm run test:cli-permission-panel
@@ -336,14 +338,16 @@ npx tsx scripts/test-diff-view.ts
 argument hint、bracketed paste 生命周期/跨 chunk/CRLF/单次重绘、菜单窗口与非 TTY
 回落；`test:context-dashboard` 覆盖 view-model 的 24/38/80/160 列 TTY 投影；
 `test:slash-completion` 覆盖内置/Plugin/Skill projection、动态 effort、重名、
-hidden alias、exact/prefix 与空匹配。完整门禁当前包含 **123** 个串联
+hidden alias、exact/prefix 与空匹配。完整门禁当前包含 **124** 个串联
 `scripts/*.ts`。
 
-这些测试不覆盖 terminal auto-wrap、resize reflow 或真实 cell buffer。OI-14 新增的
-`test:cli-tui-vt` 必须使用 `@xterm/headless`，覆盖 24/38/56/80/120/160/220 列、
-随机 chunk、长 URL/token、Markdown list/code/table、CJK/emoji、ANSI/OSC 8、
-running/idle Composer、overlay、scrollback 与 resize。测试矩阵和性能预算见
-[CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md) §9。
+OI-14A 新增的 `test:cli-tui-vt` 使用 `@xterm/headless` 执行真实 cell
+auto-wrap/scrollback/resize，已覆盖 ANSI、长 URL、CJK/emoji、整段/逐字符/固定随机
+chunk、running composer 与 56 -> 38 resize，并稳定捕获四项 legacy 失败签名。
+24/38/56/80/120/160/220 列、Markdown list/code/table、OSC 8、overlay 与完整
+scrollback 矩阵随 OI-14C-G 逐步转绿；见
+[CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md) §9 和
+[CLI_TUI_RENDERER_DECISION.md](./CLI_TUI_RENDERER_DECISION.md)。
 
 **仍需真人验收：** Windows Terminal 中的字体观感、实际光标位置、窗口 resize、
 鼠标/剪贴板真实多行粘贴、Ctrl+J/历史/删除组合键、权限切换和长回答滚动。自动测试
