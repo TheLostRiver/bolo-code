@@ -488,3 +488,36 @@ C4: compact 成功且非 override system 时可选刷新短 skill catalog 段（
 - 自动化证明 reducer、renderer、provider 分类、VT 序列和分发产物，不替代真人
   Windows Terminal 的字体/颜色、实际光标、resize、组合键、权限切换与长回答滚动；
   唯一剩余边界继续记录为 OI-H3。
+
+---
+
+## H12. OI-12 · CLI TUI 信息架构与多行输入稳定性
+
+| 切片 | 代码批 | 已关闭行为 |
+|------|--------|------------|
+| OI-12A · argument hints | `1696127` | 精确 slash 命令后的首个尾随空格仍显示 provider/model 真源参数提示 |
+| OI-12B · context dashboard | `15b37ed` | core view-model 驱动 TTY 使用率概览与 plain/details 回落 |
+| OI-12C · content gutter | `40a5d41` | Agent、thinking、tool 与 slash 正文共享响应式留白，不再贴左墙 |
+| OI-12D · full-width user block | `8d2a7a5` | 已提交用户块与 composer 使用同一 dock width |
+| OI-12E · paste transaction | `7f76093` | bracketed paste 跨 chunk 聚合，CRLF/CR 不会中途 submit 或反复滚屏 |
+
+- OI-12F 同步 README、TUI、USAGE、ROADMAP、OPEN_ISSUES、handoff 与 release。
+- 123 项完整门禁、pack/install、Desktop bundle/launch 全绿，根 `dependencies` 保持
+  `{}`；真人 Windows Terminal 的字体、颜色、resize 与按键观感继续交由 OI-H3。
+
+---
+
+## H13. OI-13 · CLI TUI 垂直节奏与水晶工作台
+
+| 切片 | 代码批 | 已关闭行为 |
+|------|--------|------------|
+| OI-13A · silent thought completion | `fe2d39a` | provider 不发送 reasoning delta、直接进入正文时，已结束 thinking segment 仍输出一次 `Thought for <duration>` |
+| OI-13B · surface breathing row | `bf25077` | history/activity 与常驻 composer 之间的空行由 `TerminalSurface` 所有，参与同一 cursor/erase/repaint 契约 |
+| OI-13C · crystal workbench | `4c4fb08` | welcome 最大 100 cells；宽屏水晶/状态 split，中/紧凑 single，ASCII/NO_COLOR/mascot-off 与 CJK/emoji 安全回落 |
+
+- OI-13D 同步 README、TUI、USAGE、ROADMAP、OPEN_ISSUES、handoff 与 release。
+- 每刀先建失败测试，再运行专项、typecheck 和完整 `npm.cmd test`；三批均验证
+  dist build、真实 pack/install、Desktop bundle 与 Electron launch，根
+  `dependencies` 保持 `{}`。
+- 自动化不替代 OI-H3：真实 Windows Terminal 的字体、颜色、动画流畅度、光标、
+  鼠标/剪贴板粘贴、resize、组合键和长回答滚动仍需真人走查。

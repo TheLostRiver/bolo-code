@@ -51,4 +51,5 @@ ASCII 降级只改变字符集，不改变 workspace/model/session 的信息层�
 
 ## 与 TUI 关系
 
-见 `docs/TUI.md`：启动区 = **BOLO 字标 + 响应式水晶 + workspace/model/session 纵向信息轨**。
+见 `docs/TUI.md`：启动区 = **顶边框中的 BOLO 字标 + 响应式水晶工作台 + runtime
+状态**；宽屏水晶与状态分列，中/紧凑屏单列，始终保留 Bolo 自有水晶身份。

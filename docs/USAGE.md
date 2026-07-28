@@ -173,9 +173,10 @@ npx bolo runtime discard turn <turnId> --resume <id> --json
 npx bolo runtime retry-safe control <controlId> --continue --json
 ```
 
-真实 TTY 中，REPL 会先显示 Bolo Code 水晶欢迎页：96 列以上使用完整源稿，
-56–95 列使用中型水晶，38–55 列使用紧凑水晶；workspace/model/session 在图形下方
-纵向排列，不使用左右等分卡。随后显示全宽输入框而不是裸 `bolo>`：
+真实 TTY 中，REPL 会先显示 Bolo Code 水晶工作台：96 列以上把完整水晶置于左栏，
+Ready/workspace/model/session/runtime state 置于右栏；56–95 列使用中型水晶单列，
+38–55 列使用紧凑水晶单列。工作台在超宽终端封顶 100 cells，随后显示全宽输入框
+而不是裸 `bolo>`：
 
 ```text
 ╭─ Message ─────────────────────────────────────────╮
@@ -199,8 +200,10 @@ exact/prefix 过滤。菜单打开时 `↑/↓` 选择，Tab/Enter 只补成 `/<
 思考和工具执行期间仍保留在底部。provider 首 token 到达前显示
 `✦ → ✧ → ✶ → ✧` Thinking、本段耗时和中断提示，工具运行时显示
 `Running <tool>`；每段 reasoning 结束后留下 `Thought for <duration>`，不会把整轮
-时间冒充单段思考。Agent/slash 正文按终端宽度保留稳定 gutter，底栏显示 model/mode、
-快捷键和 `↓input ↑output` token。完整键位见 [TUI.md](./TUI.md) §3。
+时间冒充单段思考；provider 没有发送可见 reasoning 文本而直接回答时也会保留该行。
+历史/活动与 composer 之间有一行固定空白，活动刷新或局部重绘不会吞掉它。Agent/slash
+正文按终端宽度保留稳定 gutter，底栏显示 model/mode、快捷键和 `↓input ↑output`
+token。完整键位见 [TUI.md](./TUI.md) §3。
 
 活动行每次把完整内容与擦尾控制合成一次原位写入，不会先清空再绘制；glyph 与耗时
 以 250ms 节奏刷新。需要授权时，Bash 面板会显示实际 command、cwd、前后台与 timeout，

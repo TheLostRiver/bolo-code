@@ -110,7 +110,7 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | **Agent 能力面（工具集）** | **~82–88%** | 15 个常驻/可选工具 + 显式 SearXNG `WebSearch`（ROADMAP §14 · [TOOLS.md](./TOOLS.md)） |
 | **分发（CLI）** | **~87–93%** | `npm i -g` / `npx` 单文件产物；安装后直接 `bolo`，无需 init；零运行时依赖（ROADMAP §15 · [RELEASE.md](./RELEASE.md)） |
 | 会话 / CLI | ~92–97% | 用户级 workspace JSONL · 旧项目/用户会话兼容 · 零项目副作用首次启动 · new/resume 同构 runtime · durable controls/tasks |
-| **CLI TUI** | **~90–95%** | OI-09–OI-12：水晶欢迎页 · 常驻全宽 composer · slash 发现/补全/参数提示 · context 仪表盘 · 响应式 gutter/dock-width 用户块 · paste 事务 · 分段 Thinking · 三态权限详情 · 局部 VT 面板 · abort 诊断 · 非 TTY 回落；真人 Windows Terminal 未验 |
+| **CLI TUI** | **~90–95%** | OI-09–OI-13：100-cell 水晶工作台 · 常驻全宽 composer/固定呼吸行 · slash 发现/补全/参数提示 · context 仪表盘 · 响应式 gutter/dock-width 用户块 · paste 事务 · 分段 Thinking/可靠 Thought · 三态权限详情 · 局部 VT 面板 · abort 诊断 · 非 TTY 回落；真人 Windows Terminal 未验 |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
 | Subagent | ~89–95% | Spec v0；durable task/result · overflow FIFO/cancel · safe-boundary delivery · worktree 成果保全 |
 | 文件 Diff 日用 | ~95%+ | **D0–D7** |
@@ -124,13 +124,13 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | Electron GUI | ~80–88% | runtime IPC/client、会话切换/恢复、composer controls、model/effort 与 control/tool progress 已真接并经 Electron 自动化；真人点击/视觉未验 |
 | 产品相对 HC 全家桶 | ~74–88% | 日用高；UI 密度另计 |
 
-**已闭环：** Diff · Hooks · Compact（含 AR2 全段）· Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR-T1–T3+ Agent 能力面** · **AR3/OI-06 Desktop 产品接线** · **AR4 evidence gate** · **AR5 release hardening** · **OI-04 SearXNG 直连、OI-X1 真实实例 smoke、OI-07 上游诊断 / doctor / 可选 Docker setup、OI-08B CLI 零步骤首次启动、OI-09 CLI TUI 交互重构、OI-10 CLI 命令发现与 TUI 一致性、OI-11 CLI TUI 持久表面与可审计权限、OI-12 CLI TUI 信息架构与多行输入稳定性**。
+**已闭环：** Diff · Hooks · Compact（含 AR2 全段）· Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR-T1–T3+ Agent 能力面** · **AR3/OI-06 Desktop 产品接线** · **AR4 evidence gate** · **AR5 release hardening** · **OI-04 SearXNG 直连、OI-X1 真实实例 smoke、OI-07 上游诊断 / doctor / 可选 Docker setup、OI-08B CLI 零步骤首次启动、OI-09 CLI TUI 交互重构、OI-10 CLI 命令发现与 TUI 一致性、OI-11 CLI TUI 持久表面与可审计权限、OI-12 CLI TUI 信息架构与多行输入稳定性、OI-13 CLI TUI 垂直节奏与水晶工作台**。
 
-**当前主线：** 默认 agent 可闭环队列为空。OI-12 的五个代码批已推送：
-`1696127`（argument hint）、`7f76093`（paste transaction）、`15b37ed`（context
-dashboard）、`40a5d41`（content gutter）、`8d2a7a5`（dock-width 用户块）。
-默认门禁现为 123 个串联脚本，pack/install 和 Desktop launch 全绿，根
-`dependencies` 仍为 `{}`；真实 Windows Terminal 走查继续只记 OI-H3。
+**当前主线：** 默认 agent 可闭环队列为空。最近 OI-13 的三批代码已推送：
+`fe2d39a`（silent Thought）、`bf25077`（surface 呼吸行）、`4c4fb08`
+（100-cell 响应式水晶工作台）。默认门禁仍为 123 个串联脚本，pack/install 和
+Desktop launch 全绿，根 `dependencies` 仍为 `{}`；真实 Windows Terminal 走查继续
+只记 OI-H3。
 
 OI-X1 已在 SearXNG `2026.7.26-b060c780d` 真实 Docker 实例完成：JSON API、
 生产配置/status、permission-gated `WebSearch` 与真实上游 URL 全链通过；默认引擎
@@ -144,7 +144,7 @@ OI-X1 已在 SearXNG `2026.7.26-b060c780d` 真实 Docker 实例完成：JSON API
 | OI-07 | ✅ A `7754525` · B `3e96573` · C `ef03f3d` / `f623ad9`：诊断、doctor 与可选 Docker 管理均关闭 |
 | OI-H1 | `AskUserQuestion` 真 TTY 按键；自动化未覆盖真人终端 |
 | OI-H2 | Desktop 点击、键盘与视觉走查；自动化只证明窗口与 IPC 可用 |
-| OI-H3 | CLI TUI 真实 Windows Terminal 的字体/颜色、光标、鼠标/剪贴板粘贴、resize、权限切换与按键观感；自动化已证明水晶三档/ASCII/NO_COLOR、常驻 dock、slash 参数提示、context 仪表盘、paste 状态机、分段活动、权限详情和局部 VT，Codex PTY 不能替代真人终端 |
+| OI-H3 | CLI TUI 真实 Windows Terminal 的字体/颜色、光标、鼠标/剪贴板粘贴、resize、权限切换与按键观感；自动化已证明 100-cell split/single 水晶工作台、ASCII/NO_COLOR、常驻 dock/呼吸行、slash 参数提示、context 仪表盘、paste 状态机、silent Thought/分段活动、权限详情和局部 VT，Codex PTY 不能替代真人终端 |
 | LSP / remote compact / 任意中段 rewrite | 已按证据门控关闭；满足专题 ADR 的重开条件前不立项 |
 
 Durable Runtime 与 Autonomous Road 的长期执行顺序以 [ROADMAP.md](./ROADMAP.md) §13.10–§13.11 为准（已完成切片详情存档于 [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)）：
@@ -184,6 +184,7 @@ DR2A 单 session runner ✅
 → OI-07A SearXNG 上游诊断 ✅
 → OI-07B search doctor ✅
 → OI-07C 可选 Docker setup/status/logs/stop ✅
+→ OI-13 CLI TUI 垂直节奏与水晶工作台 ✅
 ```
 
 每刀都必须先改 `packages/*` 契约和失败测试，再接 CLI/Desktop；定向测试、typecheck、完整 `npm test`、scoped `diff --check` 全绿后，代码与文档分批 commit/push。遇到需要数据库/daemon/RPC、用户脏文件冲突、数据丢失或副作用自动重放风险时停止扩张。
@@ -419,6 +420,7 @@ cd apps/desktop && npm install && set BOLO_DESKTOP_MOCK=1 && npm start
 | **OI-10** | 共享 frame · slash catalog/menu · CLI-local/Plugin/Skill 动态候选 · ↑↓/Tab/Enter/Esc · 原子多帧 Thinking；代码 `67421bb`，真人观感仍见 OI-H3 |
 | **OI-11** | terminal surface · timeline/status · segment activity · permission details/chooser · local panel VT · Responses abort diagnosis · Bolo crystal；代码 `e9a32cf`–`8088fbb`，121 项门禁，真人观感仍见 OI-H3 |
 | **OI-12** | argument hint · context view-model/dashboard · shared content gutter · dock-width 用户块 · bracketed paste transaction；代码 `1696127` / `7f76093` / `15b37ed` / `40a5d41` / `8d2a7a5`，123 项门禁，真人观感仍见 OI-H3 |
+| **OI-13** | silent Thought completion · surface breathing row · 100-cell responsive crystal workbench；代码 `fe2d39a` / `bf25077` / `4c4fb08`，123 项门禁，真人观感仍见 OI-H3 |
 | **AR5C-early** | esbuild 单文件产物 · 发布元数据 · `getBundledSkillsDir()` 双布局 · pack→install→run E2E 进门禁 · [RELEASE.md](./RELEASE.md) |
 
 最新 commit 以 `git log` 为准。

@@ -1,10 +1,11 @@
 # CLI TUI
 
 > 无遥测。品牌见 `docs/BRAND.md`。  
-> **现状：** OI-09–OI-12 零运行时依赖 TTY controller：Bolo 水晶欢迎页 ·
+> **现状：** OI-09–OI-13 零运行时依赖 TTY controller：Bolo 水晶工作台 ·
 > 常驻全宽 composer · slash 菜单/补全/参数提示 · `/context` 仪表盘 ·
 > 响应式正文 gutter/全宽用户块 · paste 事务 · 分段 Thinking ·
-> 结构化时间线/status footer · 可审计权限选择 · 局部重绘 picker/Diff。
+> 可靠 Thought 收尾 · surface 呼吸行 · 结构化时间线/status footer ·
+> 可审计权限选择 · 局部重绘 picker/Diff。
 > **框架选择：** 没有依赖 React Ink；完成标准是交互和输出契约，不是框架名称。
 > Diff 轨见 [ROADMAP.md](./ROADMAP.md) §3 ·
 > [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) 轨 B。
@@ -15,7 +16,7 @@
 
 | 条件 | 行为 |
 |------|------|
-| stdin/stdout 双 TTY + stdin 支持 raw mode | 响应式水晶欢迎页 + 常驻全宽 composer + slash 参数提示 + context 仪表盘 + 动态 Thinking/Running 时间线 |
+| stdin/stdout 双 TTY + stdin 支持 raw mode | 响应式水晶工作台 + 常驻全宽 composer + slash 参数提示 + context 仪表盘 + 动态 Thinking/Running 时间线 |
 | TTY 但 raw mode 不可用 | 回落 readline `bolo>`；不发送动态光标控制 |
 | 非 TTY / pipe / `-p` / `--print` | 追加式纯文本；不回显伪输入框、不挂起等按键 |
 | `NO_COLOR` | 关闭 SGR 颜色，保留欢迎页结构与真实输入能力 |
@@ -23,9 +24,9 @@
 | `BOLO_PLAIN=1` / `BOLO_THEME=plain` | 关闭颜色并简化欢迎区；真实输入能力仍可用 |
 | `BOLO_TUI_INPUT=0` | 关闭动态输入/时间线，回落 readline |
 | `BOLO_TUI_LAYOUT=0` / `TERM=dumb` | 关闭 layout 与动态路径，回落 readline |
-| `>=96` 列 | 欢迎页使用完整水晶源稿与纵向 workspace/model/session 信息轨 |
-| `56–95` 列 | 欢迎页使用中型水晶与同一纵向信息轨 |
-| `38–55` 列 | 欢迎页使用 6 行紧凑水晶；动态文本按 cell 宽度裁切 |
+| `>=96` 列 | 最大 100-cell 工作台：完整水晶在左，Ready/workspace/model/session 在右 |
+| `56–95` 列 | 单列工作台：中型水晶、居中状态、左对齐 metadata |
+| `38–55` 列 | 单列工作台：6 行紧凑水晶；动态文本按 cell 宽度裁切 |
 | `<38` 列 | 欢迎页回落无边框纯文本，避免最小终端破框 |
 | `BOLO_MASCOT=0` | 隐藏水晶，保留品牌字标和 workspace/model/session 信息 |
 | `--resume` 无 id | **箭头键 picker**（↑↓ Enter；`BOLO_ARROW_PICKER=0` 用编号） |
@@ -40,8 +41,8 @@
 | 文件 | 角色 |
 |------|------|
 | `tui/crystalLogo.ts` | 水晶常量、源稿归一化、整块 cell-width 居中与 ASCII 降级 |
-| `tui/inkLayout.ts` | 一次性水晶欢迎页；纵向环境信息，不伪装成输入框 |
-| `tui/frame.ts` | 欢迎 content frame 与用户块/composer/status dock 两套明确宽度契约 |
+| `tui/inkLayout.ts` | 一次性水晶工作台；宽屏 split、中/紧凑单列，不伪装成输入框 |
+| `tui/frame.ts` | 100-cell welcome、160-cell content 与全宽 dock 三套明确宽度契约 |
 | `tui/contentLayout.ts` | Agent/slash 正文的响应式 gutter 与跨 chunk 行首 prefixer |
 | `tui/contextDashboard.ts` | core `ContextUsageViewModel` 的响应式 TTY 仪表盘 |
 | `tui/inputBox.ts` | 输入/slash reducer、argument hint、CJK-safe renderer、bracketed-paste raw driver、running dock |
@@ -64,20 +65,22 @@
 
 ---
 
-## 3. 会话交互（OI-09–OI-12）
+## 3. 会话交互（OI-09–OI-13）
 
 ### 3.1 欢迎首页
 
-默认欢迎页使用 `bolo-logo-tui.txt` 的 **Bolo Crystal**。宽屏渲染完整源稿，中屏和
-紧凑屏使用独立简化图形；水晶下方是 workspace/model/session 纵向信息轨，不再使用
-Claude 式左右等分信息卡。图形先去公共缩进，再按整块最大 cell 宽居中；动态值使用
-grapheme cell 宽度裁切，所以 CJK、emoji、长模型名和长路径不会越界。
+默认欢迎页使用 `bolo-logo-tui.txt` 的 **Bolo Crystal**，产品名/version 嵌入顶边框。
+96 列以上使用完整源稿，并把水晶与 Ready/workspace/model/session/runtime state
+组成 Bolo 自有双列工作台；56–95 列与 38–55 列分别使用中型/紧凑水晶和单列状态，
+不是复制 Claude 的文案、配色、图标或 action card。图形先去公共缩进，再按整块
+最大 cell 宽居中；动态值使用 grapheme cell 宽度裁切，所以 CJK、emoji、长模型名
+和长路径不会越界。`BOLO_MASCOT=0` 在宽屏也回落单列，不留下空水晶栏。
 
-欢迎内容由 `resolveTuiFrameWidth()` 在超宽终端封顶 160 列；用户历史块、
-composer/status dock 使用 `resolveTuiDockWidth()` 跟随终端可用宽度。Agent 与
-TTY slash 正文在各自 renderer 内再使用响应式 gutter：24–31 列为 0、32–47 列为
-2、48 列以上为 4；流式 chunk 只在真实行首添加一次。三层宽度不再被错误地当成
-同一布局。
+欢迎内容由 `resolveTuiWelcomeWidth()` 在超宽终端封顶 100 cells；普通内容页继续由
+`resolveTuiFrameWidth()` 封顶 160 cells；用户历史块、composer/status dock 使用
+`resolveTuiDockWidth()` 跟随终端可用宽度。Agent 与 TTY slash 正文在各自 renderer
+内再使用响应式 gutter：24–31 列为 0、32–47 列为 2、48 列以上为 4；流式 chunk
+只在真实行首添加一次。四层宽度各有明确所有权。
 `NO_COLOR` 只移除颜色；`BOLO_ASCII=1` 保留结构并切成 ASCII 字符；
 `BOLO_THEME=plain` / `BOLO_PLAIN=1` 才简化为纯文本；`BOLO_MASCOT=0` 只隐藏水晶。
 
@@ -111,7 +114,9 @@ argument hint。`/effort ` 的 hint 来自当前 provider/model 方言真源；P
 state 中。每次 turn 开始前负责编辑的 raw key listener 会释放 stdin，但
 `TerminalSurface` 会把同宽 composer 以 running 状态留在底部；历史输出先临时擦除
 dock、追加内容后再恢复，因此输入区不会凭空消失。权限/picker 接管 stdin 时暂时挂起
-dock，结束后恢复，不与空闲 listener 竞争。
+dock，结束后恢复，不与空闲 listener 竞争。surface composite 永久拥有 composer
+上方一行 spacer：无 activity 时隔开历史与输入框，有 activity 时隔开活动行与输入框；
+该行与 dock 一起参与 cursor offset、局部 erase 和 repaint。
 
 raw driver 进入时启用 terminal mode 2004，退出、提交和 abort 时恢复。收到
 `paste-start` 后跨 data chunk 聚合正文，到 `paste-end` 才规范化 CRLF/CR 并调用一次
@@ -124,7 +129,7 @@ raw driver 进入时启用 terminal mode 2004，退出、提交和 abort 时恢�
 |-------------|--------------|
 | 提交普通消息 | 立即进入与 composer 同宽的背景用户消息块；不等 provider 首 token |
 | provider 尚未输出 | `✦/✧/✶/✧ Thinking · 本段耗时 · Ctrl+C interrupt` 原位刷新 |
-| reasoning | 当前段持续动画；边界到达后留下 `Thought for <duration>` |
+| reasoning / silent provider wait | 当前段持续动画；边界到达后留下 `Thought for <duration>`，即使 provider 未发送可见 reasoning delta |
 | `tool_start/end` | 进入永久工具时间线；结束后回到 Thinking |
 | `tool_progress` | 只在 activity 原位更新“工具名 · 进度”，不把每个 tick 刷成永久消息 |
 | assistant text | 正文保留稳定 gutter；inline `**bold**` / `` `code` `` 不再原样泄露 |
@@ -137,7 +142,9 @@ tool、search、retry 切换会重置段起点，同一 reasoning chunk 不会�
 `\r + 完整状态行 + erase-to-end` 合成一次 writer 调用，不再先清空整行再绘制，
 因此不会周期性出现空白帧。每帧仍读取当前终端列宽，完整文案放不下时依次退化为
 紧凑/最小文案，避免自动换行残影。`NO_COLOR` 只移除 SGR，不移除必要的
-cursor-control。
+cursor-control。永久 Thought 的资格由 activity 是否交回已结束 thinking segment
+elapsed 决定，不再依赖是否展示过 reasoning 文本；消费后清空段状态，所以正文的
+后续 chunk 或 `endTurn` 不会重复打印。
 
 ### 3.4 Context 仪表盘
 
