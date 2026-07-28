@@ -190,19 +190,27 @@ npx bolo runtime retry-safe control <controlId> --continue --json
 
 输入 `/` 会显示内置、CLI-local、Plugin 与 user-invocable Skill，继续输入实时按
 exact/prefix 过滤。菜单打开时 `↑/↓` 选择，Tab/Enter 只补成 `/<name> `，Esc 关闭并
-保留文本；再次 Enter 才提交。菜单关闭后 `Enter` 发送、`Ctrl+J` 换行、`↑/↓` 浏览
-本进程历史；支持 `←/→`、`Home/End`、`Backspace/Delete` 和常见 Emacs 编辑键。
-提交后用户消息立即进入灰色时间线块；composer 在 provider 思考和工具执行期间仍
-保留在底部。provider 首 token 到达前显示 `✦ → ✧ → ✶ → ✧` Thinking、本段耗时和
-中断提示，工具运行时显示 `Running <tool>`；每段 reasoning 结束后留下
-`Thought for <duration>`，不会把整轮时间冒充单段思考。正文保留稳定 gutter，
-底栏按宽度显示 model/mode、快捷键和 `↓input ↑output` token。完整键位见
-[TUI.md](./TUI.md) §3。
+保留文本；补全后的精确命令在首个尾随空格继续显示弱化参数提示，例如 `/effort `
+展示当前 provider/model 真正可选的档位，开始输入实参后提示消失；再次 Enter 才
+提交。菜单关闭后 `Enter` 发送、`Ctrl+J` 换行、`↑/↓` 浏览本进程历史；支持
+`←/→`、`Home/End`、`Backspace/Delete` 和常见 Emacs 编辑键。支持 bracketed paste
+的终端会把跨 chunk 多行粘贴合并为一次输入，规范化 CRLF/CR，粘贴中的换行不会误
+提交。提交后用户消息立即进入与 composer 同宽的灰色时间线块；composer 在 provider
+思考和工具执行期间仍保留在底部。provider 首 token 到达前显示
+`✦ → ✧ → ✶ → ✧` Thinking、本段耗时和中断提示，工具运行时显示
+`Running <tool>`；每段 reasoning 结束后留下 `Thought for <duration>`，不会把整轮
+时间冒充单段思考。Agent/slash 正文按终端宽度保留稳定 gutter，底栏显示 model/mode、
+快捷键和 `↓input ↑output` token。完整键位见 [TUI.md](./TUI.md) §3。
 
 活动行每次把完整内容与擦尾控制合成一次原位写入，不会先清空再绘制；glyph 与耗时
 以 250ms 节奏刷新。需要授权时，Bash 面板会显示实际 command、cwd、前后台与 timeout，
 再让用户用 `↑/↓` 或 `y/a/n` 选择 allow once、always 或 deny；Always 作用于本会话
 后续同名工具。picker、Diff 和权限面板只重绘自己拥有的行，不会清除整屏历史。
+
+`/context` 在 TTY 中显示响应式使用率仪表盘，明确区分 actual、estimated 与 hybrid
+来源，并展示已用/可用窗口、阈值和主要分类；非 TTY 输出同一数据的紧凑文本。
+`/context details`（或 `--details`）才输出 sections、skills、memory、cache 和
+prepare/compact 的完整诊断。
 
 `BOLO_MASCOT=0` 可隐藏水晶；`BOLO_ASCII=1` 使用 ASCII 水晶；`NO_COLOR` 只去颜色并
 保留欢迎页结构，显式 `BOLO_THEME=plain` / `BOLO_PLAIN=1` 才简化欢迎页。
@@ -342,7 +350,7 @@ PowerShell/Bash 外壳补全。
 | `/help` | 命令列表 |
 | `/provider` · `/provider use <id>` · `/provider add …` | 后端列表 / 热切 / preset |
 | `/model` · `/model name` · `/model id/name` | 模型 |
-| `/effort` · `/effort high` | 推理强度（方言 wire） |
+| `/effort` · `/effort high` | 推理强度（方言 wire；输入 `/effort ` 可见当前合法档位） |
 | `/ultrathink [off\|tip\|turn]` | CX8 糖；**默认 off** |
 | `/agents` · `/bg` · `/bg cancel <taskId>` | subagent 后台 FIFO/status；只取消 queued；resume 后显示 interrupted 诊断 |
 | `/turn status` | 当前 active turn 与 queue/steer/interrupt control 状态 |
@@ -354,7 +362,7 @@ PowerShell/Bash 外壳补全。
 | `/runtime discard <turn\|control\|task> <id>` | 对 interrupted 记录追加人工确认；不删除原历史 |
 | `/runtime retry-safe <turn\|control\|task> <id>` | 只为 admitted-only turn 或未启动 queue 建立新 FIFO turn；其它类型拒绝 |
 | `/diff` · `/diff last` · `/diff git` | 本会话文件改动 |
-| `/compact` · `/context` · `/cost` | 压缩 · 压力 · 本地 token |
+| `/compact` · `/context [details]` · `/cost` | 压缩 · 上下文概览/完整诊断 · 本地 token |
 | `/permissions` · `/plan` · `/allow` · `/deny` | 权限 |
 | `/hooks` · `/hooks recent` | Hooks |
 | `/doctor` | 本地诊断 |
@@ -543,6 +551,9 @@ CLI：
 /effort high
 /effort auto
 ```
+
+在输入框中补全 `/effort` 并键入首个尾随空格时，会显示当前方言的合法档位提示；
+提示不是输入内容，继续键入档位后自动消失。
 
 方言由 provider `effort.dialect` 或 detect 决定（DeepSeek / Responses / Anthropic / max-tokens…）。见 [EFFORT.md](./EFFORT.md)。
 

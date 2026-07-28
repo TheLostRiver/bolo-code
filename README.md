@@ -28,7 +28,7 @@
 | Headless 核心 | ~82–90% | queryLoop · 权限 · tools · STE；partial stream fail-closed |
 | **Agent 能力面（工具集）** | **~82–88%** | 15 个常驻/可选工具 + **Web search**（hosted、MCP、SearXNG 均已活体验证） |
 | 会话 / CLI | ~92–97% | **零步骤首次启动** · 用户级 workspace JSONL · 旧项目会话兼容 · durable runtime · query/action CLI · TTY pager · pipe/JSON automation |
-| **CLI TUI** | **~90–95%** | Bolo 水晶欢迎页 · 常驻全宽 composer · `/` 命令发现/补全 · gutter/用户消息块 · 分段 Thinking/`Thought for` · model/token/快捷键 footer · 可审计三态权限 · 局部面板重绘 · 非 TTY 回落；真实 Windows Terminal 观感/按键未验 |
+| **CLI TUI** | **~90–95%** | OI-09–OI-12：Bolo 水晶欢迎页 · 常驻全宽 composer · slash 发现/补全/参数提示 · `/context` 仪表盘 · 响应式 gutter/全宽用户块 · paste 事务 · 分段 Thinking/`Thought for` · model/token/快捷键 footer · 可审计三态权限 · 局部面板重绘 · 非 TTY 回落；真实 Windows Terminal 观感/按键未验 |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
 | Subagent | ~89–95% | `config.agents` + `agents/*.md` · durable task/result · overflow FIFO/cancel · safe delivery · worktree 保全 |
 | 文件 Diff 日用 | ~95%+ | D0–D7 · U0–U4 |
@@ -41,15 +41,17 @@
 | Electron GUI | ~80–88% | 壳 + 流式 + 权限 + runtime IPC/client + 会话切换/恢复 + composer controls + model/effort + control/tool progress 投影 + 多 provider；真人点击/视觉未验 |
 | 相对 HC 全家桶 UI | 另计 | 不设 100% |
 
-**已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Runtime DR0–DR4 · Autonomous Road AR1 CLI/TUI runtime UX · **AR-T1–T3+ Agent 能力面** · AR2 Compact depth · AR3 Desktop 产品接线 · AR4 evidence gate · AR5 release hardening · **OI-04 SearXNG 直连、OI-X1 真实实例 smoke、OI-07 上游诊断 / `search doctor` / 可选 Docker setup、OI-08B CLI 零步骤首次启动、OI-09 CLI TUI 交互重构、OI-10 命令发现与 TUI 一致性、OI-11 持久终端表面与可审计权限交互**。
+**已收口：** 日用改文件 · hooks · compact · 多后端热切 · effort · Provider UX CX0–CX8 · CLI/Agent 可靠性 R0–R4 · Durable Runtime DR0–DR4 · Autonomous Road AR1 CLI/TUI runtime UX · **AR-T1–T3+ Agent 能力面** · AR2 Compact depth · AR3 Desktop 产品接线 · AR4 evidence gate · AR5 release hardening · **OI-04 SearXNG 直连、OI-X1 真实实例 smoke、OI-07 上游诊断 / `search doctor` / 可选 Docker setup、OI-08B CLI 零步骤首次启动、OI-09 CLI TUI 交互重构、OI-10 命令发现与 TUI 一致性、OI-11 持久终端表面与可审计权限交互、OI-12 TUI 信息架构与多行输入稳定性**。
 
 **当前主线：** 没有默认的 agent 可闭环开放项。普通 `bolo` 已是唯一首次启动主路径：
 自动准备用户级 `~/.bolo`，新会话写入用户目录下的 workspace 分桶，不会仅因进入仓库
 就在 cwd 创建 `.bolo/`。项目模板只由显式 `bolo init [--project]` 创建；旧项目会话
-继续可 list/resume。OI-11 已把已知 CLI TUI 缺陷收口：运行中 composer 常驻并使用
-终端可用宽度，时间线和权限面板只重绘自己拥有的行，Thinking 按段计时，Bash 权限
-显示实际 command/cwd/timeout 并提供 once/always/deny，欢迎页改为 Bolo 水晶结构。
-SearXNG 的只读 doctor 与显式 Docker 管理也已落地，Docker 仍不是默认依赖。
+继续可 list/resume。OI-09–OI-12 已把本轮已知 CLI TUI 缺陷收口：运行中 composer
+常驻，用户历史块与 composer 跟随同一 dock 宽度；Agent/slash 正文使用响应式留白；
+slash 补全后继续显示参数提示；`/context` 默认显示分层概览；多行 paste 按一次事务
+插入，不会把 Windows 换行误当提交。Thinking 按段计时，Bash 权限显示实际
+command/cwd/timeout 并提供 once/always/deny，欢迎页使用 Bolo 水晶结构。SearXNG
+的只读 doctor 与显式 Docker 管理也已落地，Docker 仍不是默认依赖。
 
 **人工项：** CLI TUI 与 AskUserQuestion 的真实 Windows Terminal 按键/观感、Desktop
 点击与视觉走查需要真人验证，不以自动测试冒充完成。SearXNG 已在真实 Docker 实例和
@@ -163,11 +165,16 @@ bolo runtime retry-safe control <controlId> --continue --json
 交互 REPL 先按终端宽度显示 Bolo Code 水晶欢迎页，再进入全宽输入框。
 输入 `/` 会列出内置、CLI-local、Plugin 与 user-invocable Skill；继续输入实时按
 精确/前缀过滤。菜单打开时 `↑/↓` 选择、Tab/Enter 补全、Esc 关闭，菜单关闭后
-`Enter` 发送、`Ctrl+J` 换行、`↑/↓` 浏览本进程历史。提交后的问题进入灰色消息块，
-composer 在 Thinking/Running 期间仍保留；当前思考段显示动画和独立耗时，结束后留下
-`Thought for <duration>`。底栏按宽度展示 model/mode、高亮快捷键与 `↓input ↑output`
-token。Bash 等非文件权限会显示关键参数，并用 `↑/↓` 或快捷键选择 allow once、
-always 或 deny；嵌入式 picker/diff 不再清除整屏历史。
+精确命令后的首个空格会显示弱化参数提示，例如 `/effort ` 展示当前
+provider/model 真正可选的档位；开始输入实参后提示消失。菜单关闭后 `Enter` 发送、
+`Ctrl+J` 换行、`↑/↓` 浏览本进程历史；支持 bracketed paste 的终端会把跨 chunk
+多行粘贴聚合成一次插入并规范化 CRLF/CR，不会中途误提交。提交后的问题进入与
+composer 同宽的灰色消息块，composer 在 Thinking/Running 期间仍保留；Agent 与
+slash 正文按终端宽度保留稳定左侧 gutter。当前思考段显示动画和独立耗时，结束后
+留下 `Thought for <duration>`。底栏按宽度展示 model/mode、高亮快捷键与
+`↓input ↑output` token。Bash 等非文件权限会显示关键参数，并用 `↑/↓` 或快捷键选择
+allow once、always 或 deny；嵌入式 picker/diff 不再清除整屏历史。TTY `/context`
+显示响应式使用率仪表盘，`/context details` 保留完整诊断；非 TTY 使用紧凑文本。
 pipe、`-p`/`--print` 和 JSON 路径保持追加式输出，不发送动态光标控制。完整键位、
 欢迎页宽度档位和回落开关见
 [docs/TUI.md](docs/TUI.md)。
@@ -191,7 +198,7 @@ pipe、`-p`/`--print` 和 JSON 路径保持追加式输出，不发送动态光�
 | `/runtime edit <controlId> <prompt>` · `/runtime remove <controlId>` | 同进程 live queue 的 append-only 替换/删除；旧历史保留 |
 | `/runtime discard <turn\|control\|task> <id>` · `/runtime retry-safe <turn\|control\|task> <id>` | interrupted 人工处置；只重排可证明未开始的输入 |
 | `bolo runtime discard\|retry-safe … --resume\|--continue [--json]` | 顶层 recovery actions；稳定 requestId、单 payload、exit 0/1/2；retry-safe 不自动执行 |
-| `/diff` · `/compact` · `/context` · `/cost` | Diff · 压缩 · 费用 |
+| `/diff` · `/compact` · `/context [details]` · `/cost` | Diff · 压缩 · 上下文概览/诊断 · 费用 |
 | `/permissions` · `/hooks` · `/doctor` | 权限 · Hooks · 诊断 |
 
 ### Desktop（可选）

@@ -15,12 +15,13 @@
 
 ## 1. Agent 可直接解决
 
-当前主线为 OI-12。以下已关闭条目继续保留准入与关闭证据，防止后续重复实现或
-状态回退。
+当前默认 agent 可闭环队列为空。以下已关闭条目继续保留准入与关闭证据，防止后续
+重复实现或状态回退。
 
 ### OI-12 · CLI TUI 信息架构与多行输入稳定性
 
-**状态：IN PROGRESS（2026-07-28 登记）**
+**状态：CLOSED（代码 `1696127`、`7f76093`、`15b37ed`、`40a5d41`、`8d2a7a5`；
+2026-07-28 文档同步）**
 
 准入证据：
 
@@ -47,24 +48,26 @@
 
 | 切片 | packages-first 交付 | 人类可见结果 | 自动关闭条件 | 状态 |
 |------|---------------------|--------------|--------------|------|
-| **OI-12A · slash argument hints** | candidate 增加 argument hint；`/effort` 从现有方言/模型真源投影可选档位 | 输入 `/effort ` 后仍看到弱化的合法参数；输入实参后提示消失 | exact command/首个 trailing space、动态 effort、Plugin/Skill/static usage、窄屏/CJK | OPEN |
-| **OI-12B · context dashboard** | core `ContextUsageViewModel` + plain/detail formatter；CLI 响应式 renderer | `/context` 先显示使用率图、窗口/阈值、actual/estimated 来源和主要类别，详细诊断后置 | 24/38/80/160 列、0/估算/真实/hybrid usage、NO_COLOR、非 TTY、`details` 回归 | OPEN |
-| **OI-12C · content gutter** | timeline/slash 共用内容留白契约；流式 chunk 只在真实行首加前缀 | Agent、thinking、tool 与 slash 正文不再贴左墙，层级稳定 | 多 chunk/换行/CR、error stream、ANSI/NO_COLOR、窄屏 | OPEN |
-| **OI-12D · full-width user block** | 用户历史块使用 dock width，与 composer 共享可用宽度而非 content cap | 灰色用户块在内容区内横向铺满，多行仍等宽 | 24/38/80/160/220 列、CJK/emoji、NO_COLOR、composer 等宽 | OPEN |
-| **OI-12E · paste transaction** | bracketed paste lifecycle、跨 chunk buffer、CRLF 规范化与单次 reducer insert/redraw | 多行粘贴不误提交、不反复滚屏，marker 不进入文本 | 单/多 chunk、Windows CR-only/CRLF、Unicode、一次 paint、abort/cleanup、非 paste 回归 | OPEN |
-| **OI-12F · 验收与文档** | 新专项进入默认门禁；README/TUI/USAGE/ROADMAP/handoff 同步 | 源码与 dist 口径一致，真人边界回到 OI-H3 | 专项、typecheck、完整 `npm test`、pack/install 与 Desktop 邻接轨全绿 | OPEN |
+| **OI-12A · slash argument hints** | candidate 增加 argument hint；`/effort` 从现有方言/模型真源投影可选档位 | 输入 `/effort ` 后仍看到弱化的合法参数；输入实参后提示消失 | exact command/首个 trailing space、动态 effort、Plugin/Skill/static usage、窄屏/CJK | CLOSED `1696127` |
+| **OI-12B · context dashboard** | core `ContextUsageViewModel` + plain/detail formatter；CLI 响应式 renderer | `/context` 先显示使用率图、窗口/阈值、actual/estimated 来源和主要类别，详细诊断后置 | 24/38/80/160 列、0/估算/真实/hybrid usage、NO_COLOR、非 TTY、`details` 回归 | CLOSED `15b37ed` |
+| **OI-12C · content gutter** | timeline/slash 共用内容留白契约；流式 chunk 只在真实行首加前缀 | Agent、thinking、tool 与 slash 正文不再贴左墙，层级稳定 | 多 chunk/换行/CR、error stream、ANSI/NO_COLOR、窄屏 | CLOSED `40a5d41` |
+| **OI-12D · full-width user block** | 用户历史块使用 dock width，与 composer 共享可用宽度而非 content cap | 灰色用户块在内容区内横向铺满，多行仍等宽 | 24/38/80/160/220 列、CJK/emoji、NO_COLOR、composer 等宽 | CLOSED `8d2a7a5` |
+| **OI-12E · paste transaction** | bracketed paste lifecycle、跨 chunk buffer、CRLF 规范化与单次 reducer insert/redraw | 多行粘贴不误提交、不反复滚屏，marker 不进入文本 | 单/多 chunk、Windows CR-only/CRLF、Unicode、一次 paint、abort/cleanup、非 paste 回归 | CLOSED `7f76093` |
+| **OI-12F · 验收与文档** | 新专项进入默认门禁；README/TUI/USAGE/ROADMAP/handoff 同步 | 源码与 dist 口径一致，真人边界回到 OI-H3 | 专项、typecheck、完整 `npm test`、pack/install 与 Desktop 邻接轨全绿 | CLOSED（本文档批） |
 
-实施顺序：
+实施顺序（已完成）：
 
 1. OI-12A 先扩展候选契约，避免 CLI 硬编码 effort 列表。
 2. OI-12E 优先关闭会误提交的输入稳定性缺陷。
 3. OI-12B 建立 context view-model 与双 renderer，再做 OI-12C/D 的统一视觉节奏。
 4. OI-12F 最后同步文档；每个代码切片独立中文提交并推送，文档批另提。
 
-总关闭条件：
+关闭证据：
 
-- OI-12A–OI-12F 的代码/测试与文档批均已推送，根 `dependencies` 仍为 `{}`。
-- 自动测试证明 reducer、view-model、renderer、VT/paste 序列、非 TTY 与 dist 行为；
+- OI-12A–OI-12E 的代码/测试批均已推送；OI-12F 文档批独立提交，根
+  `dependencies` 仍为 `{}`。
+- 123 项完整门禁证明 reducer、view-model、renderer、VT/paste 序列、非 TTY、
+  pack/install 与 Desktop/Electron 邻接行为；
   不把静态截图、注入按键或 PTY 冒充真人 Windows Terminal。
 - OI-H3 只保留真实字体/颜色、鼠标选择粘贴、窗口 resize、组合键与长滚动观感。
 
@@ -473,19 +476,20 @@ Ctrl-C/Esc 以及 REPL 是否抢占 stdin。需要人在真实终端按键确认
 
 **状态：BLOCKED: HUMAN**
 
-OI-09–OI-11 已自动覆盖水晶宽/中/紧凑/ASCII/NO_COLOR 欢迎 renderer、常驻全宽
-composer、slash reducer/menu、raw-mode listener/恢复、CJK/emoji cell 宽度、
-时间线 gutter/用户块/status footer、分段 Thinking/`Thought for`、可审计权限详情与
-三态选择、局部面板 VT 序列、Responses timeout 分源、非 TTY 回落和 121 项完整门禁。
+OI-09–OI-12 已自动覆盖水晶宽/中/紧凑/ASCII/NO_COLOR 欢迎 renderer、常驻全宽
+composer、slash reducer/menu/argument hint、context dashboard、raw-mode
+listener/恢复、bracketed paste 事务、CJK/emoji cell 宽度、响应式时间线 gutter、
+dock-width 用户块/status footer、分段 Thinking/`Thought for`、可审计权限详情与
+三态选择、局部面板 VT 序列、Responses timeout 分源、非 TTY 回落和 123 项完整门禁。
 Codex PTY 默认因 `TERM=dumb` 降级；仅对子进程覆盖 `TERM=xterm-256color` 后，已实测
 `/`/`/d`、Plugin 来源、方向键、Tab、Esc 与 `/exit` 两阶段提交，但该 PTY 仍不能
 代表真人 Windows Terminal。
 
-2026-07-28 后续截图与源码审计又确认了 slash 参数提示、context 信息架构、内容 gutter、
-普通用户块宽度和多行 paste 五项可自动修复缺陷，已移入 OI-12，不能以
-`BLOCKED: HUMAN` 为由延后。这里现在**只**保留自动化不能替代的判断：真实 Windows
-Terminal 字体/颜色下的水晶与文本观感、实际光标位置、鼠标/剪贴板真实粘贴、窗口
-resize 后的重排、Ctrl+J/历史/删除组合键、权限面板真人切换和长回答滚动。
+2026-07-28 截图与源码审计确认的 slash 参数提示、context 信息架构、内容 gutter、
+普通用户块宽度和多行 paste 五项可自动修复缺陷已由 OI-12 关闭。这里现在**只**
+保留自动化不能替代的判断：真实 Windows Terminal 字体/颜色下的水晶与文本观感、
+实际光标位置、鼠标/剪贴板真实粘贴、窗口 resize 后的重排、Ctrl+J/历史/删除组合键、
+权限面板真人切换和长回答滚动。
 
 ## 4. 已核实但不列为开放问题
 

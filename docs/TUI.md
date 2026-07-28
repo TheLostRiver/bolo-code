@@ -1,9 +1,10 @@
 # CLI TUI
 
 > 无遥测。品牌见 `docs/BRAND.md`。  
-> **现状：** OI-09/OI-10/OI-11 零运行时依赖 TTY controller：Bolo 水晶欢迎页 ·
-> 常驻全宽 composer · slash 菜单/补全 · 分段 Thinking · 结构化时间线/status footer ·
-> 可审计权限选择 · 局部重绘 picker/Diff。
+> **现状：** OI-09–OI-12 零运行时依赖 TTY controller：Bolo 水晶欢迎页 ·
+> 常驻全宽 composer · slash 菜单/补全/参数提示 · `/context` 仪表盘 ·
+> 响应式正文 gutter/全宽用户块 · paste 事务 · 分段 Thinking ·
+> 结构化时间线/status footer · 可审计权限选择 · 局部重绘 picker/Diff。
 > **框架选择：** 没有依赖 React Ink；完成标准是交互和输出契约，不是框架名称。
 > Diff 轨见 [ROADMAP.md](./ROADMAP.md) §3 ·
 > [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) 轨 B。
@@ -14,7 +15,7 @@
 
 | 条件 | 行为 |
 |------|------|
-| stdin/stdout 双 TTY + stdin 支持 raw mode | 响应式水晶欢迎页 + 常驻全宽 composer + 动态 Thinking/Running 时间线 |
+| stdin/stdout 双 TTY + stdin 支持 raw mode | 响应式水晶欢迎页 + 常驻全宽 composer + slash 参数提示 + context 仪表盘 + 动态 Thinking/Running 时间线 |
 | TTY 但 raw mode 不可用 | 回落 readline `bolo>`；不发送动态光标控制 |
 | 非 TTY / pipe / `-p` / `--print` | 追加式纯文本；不回显伪输入框、不挂起等按键 |
 | `NO_COLOR` | 关闭 SGR 颜色，保留欢迎页结构与真实输入能力 |
@@ -40,8 +41,10 @@
 |------|------|
 | `tui/crystalLogo.ts` | 水晶常量、源稿归一化、整块 cell-width 居中与 ASCII 降级 |
 | `tui/inkLayout.ts` | 一次性水晶欢迎页；纵向环境信息，不伪装成输入框 |
-| `tui/frame.ts` | 欢迎/正文封顶宽度与全宽 composer dock 两套明确契约 |
-| `tui/inputBox.ts` | 输入/slash reducer、CJK-safe renderer、idle raw-mode driver、running dock |
+| `tui/frame.ts` | 欢迎 content frame 与用户块/composer/status dock 两套明确宽度契约 |
+| `tui/contentLayout.ts` | Agent/slash 正文的响应式 gutter 与跨 chunk 行首 prefixer |
+| `tui/contextDashboard.ts` | core `ContextUsageViewModel` 的响应式 TTY 仪表盘 |
+| `tui/inputBox.ts` | 输入/slash reducer、argument hint、CJK-safe renderer、bracketed-paste raw driver、running dock |
 | `tui/terminalSurface.ts` | append-only 历史与底部临时 dock/activity 的行所有权 |
 | `tui/localPanel.ts` | picker/diff/question/permission 共用的局部行 erase/repaint |
 | `tui/terminalText.ts` | ANSI/CJK/emoji grapheme cell 宽度、裁切、补齐与折行 |
@@ -61,7 +64,7 @@
 
 ---
 
-## 3. 会话交互（OI-09/OI-10/OI-11）
+## 3. 会话交互（OI-09–OI-12）
 
 ### 3.1 欢迎首页
 
@@ -70,8 +73,11 @@
 Claude 式左右等分信息卡。图形先去公共缩进，再按整块最大 cell 宽居中；动态值使用
 grapheme cell 宽度裁切，所以 CJK、emoji、长模型名和长路径不会越界。
 
-欢迎/正文仍由 `resolveTuiFrameWidth()` 在超宽终端封顶 160 列；composer/status dock
-改用 `resolveTuiDockWidth()` 跟随终端可用宽度，两者不再被错误地当成同一布局。
+欢迎内容由 `resolveTuiFrameWidth()` 在超宽终端封顶 160 列；用户历史块、
+composer/status dock 使用 `resolveTuiDockWidth()` 跟随终端可用宽度。Agent 与
+TTY slash 正文在各自 renderer 内再使用响应式 gutter：24–31 列为 0、32–47 列为
+2、48 列以上为 4；流式 chunk 只在真实行首添加一次。三层宽度不再被错误地当成
+同一布局。
 `NO_COLOR` 只移除颜色；`BOLO_ASCII=1` 保留结构并切成 ASCII 字符；
 `BOLO_THEME=plain` / `BOLO_PLAIN=1` 才简化为纯文本；`BOLO_MASCOT=0` 只隐藏水晶。
 
@@ -96,18 +102,27 @@ grapheme cell 宽度裁切，所以 CJK、emoji、长模型名和长路径不会
 可见全量，继续输入按 exact/prefix 过滤；`//`、普通文本和带参数输入不会触发。
 内置、CLI-local、Plugin command 与 user-invocable Skill 使用同一菜单，动态来源显示
 短标签；无匹配显示明确空态。Tab/Enter 只写回 `/<name> `，第二次 Enter 才走既有
-submit/dispatch，reducer 不执行命令副作用。其它不可见 C0/C1 控制符不会进入输入框。
+submit/dispatch，reducer 不执行命令副作用。补全后菜单关闭；当输入仍是精确命令和
+首个尾随空格、光标位于末尾且尚无实参时，renderer 会显示 candidate 提供的弱化
+argument hint。`/effort ` 的 hint 来自当前 provider/model 方言真源；Plugin、Skill
+和其它内置命令复用各自 usage。提示只参与显示，不进入 value/cursor；开始输入实参
+或第二个空格后立即消失。其它不可见 C0/C1 控制符不会进入输入框。
 输入框最多显示四行，菜单默认最多显示六项并随选中项滚动；完整文本与候选仍保留在
 state 中。每次 turn 开始前负责编辑的 raw key listener 会释放 stdin，但
 `TerminalSurface` 会把同宽 composer 以 running 状态留在底部；历史输出先临时擦除
 dock、追加内容后再恢复，因此输入区不会凭空消失。权限/picker 接管 stdin 时暂时挂起
 dock，结束后恢复，不与空闲 listener 竞争。
 
+raw driver 进入时启用 terminal mode 2004，退出、提交和 abort 时恢复。收到
+`paste-start` 后跨 data chunk 聚合正文，到 `paste-end` 才规范化 CRLF/CR 并调用一次
+`insertText()`、重绘一次；marker 不进入输入 state，粘贴中的换行也不会触发 submit。
+不支持 bracketed paste 的普通按键/文本路径保持原行为。
+
 ### 3.3 Turn 时间线
 
 | 时点 / 事件 | 人类可见结果 |
 |-------------|--------------|
-| 提交普通消息 | 立即进入带背景的用户消息块；不等 provider 首 token |
+| 提交普通消息 | 立即进入与 composer 同宽的背景用户消息块；不等 provider 首 token |
 | provider 尚未输出 | `✦/✧/✶/✧ Thinking · 本段耗时 · Ctrl+C interrupt` 原位刷新 |
 | reasoning | 当前段持续动画；边界到达后留下 `Thought for <duration>` |
 | `tool_start/end` | 进入永久工具时间线；结束后回到 Thinking |
@@ -124,7 +139,18 @@ tool、search、retry 切换会重置段起点，同一 reasoning chunk 不会�
 紧凑/最小文案，避免自动换行残影。`NO_COLOR` 只移除 SGR，不移除必要的
 cursor-control。
 
-### 3.4 权限与临时面板
+### 3.4 Context 仪表盘
+
+- `/context` 先在 core 建立 `ContextUsageViewModel`。TTY CLI 渲染响应式使用率图、
+  已用/可用窗口、阈值、pressure、model/effort 和主要分类；数据源明确标为
+  `actual`、`estimated` 或 `hybrid`，不会把估算冒充 provider 精确 usage。
+- 24/38/80/160 列分别使用窄屏分行或宽屏概览；CJK/emoji、ANSI/`NO_COLOR` 都按
+  terminal cell 宽度约束。dashboard 使用正文 gutter 后的可用宽度。
+- 非 TTY 输出同一 view-model 的紧凑纯文本。`/context details` 与
+  `/context --details` 保留 sections、skills、memory、cache、prepare/compact 等
+  完整诊断，不把诊断 dump 塞回默认概览。
+
+### 3.5 权限与临时面板
 
 - 非文件工具默认进入三态面板：**Allow once**、**Always allow this tool for this
   session**、**Deny**；默认选中 Deny，可用 `↑/↓`、数字或 `y/a/n`。
@@ -136,7 +162,7 @@ cursor-control。
   `ESC[2J` 或全局 Home。独立 runtime pager 和用户主动 `Ctrl+L` 仍保留整屏语义。
 - 非 TTY、abort 或面板不可用时保持 fail-closed，并保留兼容文本路径。
 
-### 3.5 输出边界
+### 3.6 输出边界
 
 - 动态时间线只在 `shouldUseDynamicTui()` 为真时启用。
 - pipe、JSON、`-p`/`--print` 与 raw-mode 不可用的 fallback 不输出动态 activity、清行、
@@ -252,6 +278,7 @@ npx tsx scripts/test-file-diff.ts
 ```bash
 npm test
 npm run test:cli-tui
+npm run test:context-dashboard
 npm run test:cli-terminal-surface
 npm run test:cli-timeline-hierarchy
 npm run test:cli-thinking-segments
@@ -261,6 +288,7 @@ npm run test:cli-crystal-identity
 npm run test:cli-events
 npm run test:cli
 npm run test:cli-first-run
+npm run test:slash-completion
 npm run test:runtime-cli-renderer
 npm run test:runtime-cli-pager
 npm run test:runtime-cli-automation
@@ -270,15 +298,18 @@ npx tsx scripts/test-file-diff.ts
 npx tsx scripts/test-diff-view.ts
 ```
 
-专项分别覆盖持久 dock/历史追加、gutter/用户块/status footer、分段计时、权限详情与
-三态选择、局部 VT 重绘、水晶源稿/三档/ASCII/NO_COLOR 与单文件 dist 嵌入。
-`test:cli-tui` 继续覆盖 grapheme/CJK/emoji、输入/slash reducer、菜单窗口与非 TTY
-回落；`test:slash-completion` 覆盖内置/Plugin/Skill projection、重名、hidden alias、
-exact/prefix 与空匹配。完整门禁当前包含 **121** 个串联 `scripts/*.ts`。
+专项分别覆盖持久 dock/历史追加、响应式 gutter/dock-width 用户块/status footer、
+分段计时、权限详情与三态选择、局部 VT 重绘、水晶源稿/三档/ASCII/NO_COLOR 与
+单文件 dist 嵌入。`test:cli-tui` 继续覆盖 grapheme/CJK/emoji、输入/slash reducer、
+argument hint、bracketed paste 生命周期/跨 chunk/CRLF/单次重绘、菜单窗口与非 TTY
+回落；`test:context-dashboard` 覆盖 view-model 的 24/38/80/160 列 TTY 投影；
+`test:slash-completion` 覆盖内置/Plugin/Skill projection、动态 effort、重名、
+hidden alias、exact/prefix 与空匹配。完整门禁当前包含 **123** 个串联
+`scripts/*.ts`。
 
 **仍需真人验收：** Windows Terminal 中的字体观感、实际光标位置、窗口 resize、
-Ctrl+J/历史/删除组合键和长回答滚动。自动测试与静态快照不能替代肉眼/真人按键，
-见 [OPEN_ISSUES.md](./OPEN_ISSUES.md) OI-H3。
+鼠标/剪贴板真实多行粘贴、Ctrl+J/历史/删除组合键、权限切换和长回答滚动。自动测试
+与静态快照不能替代肉眼/真人按键，见 [OPEN_ISSUES.md](./OPEN_ISSUES.md) OI-H3。
 
 ---
 

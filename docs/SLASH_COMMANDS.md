@@ -15,7 +15,7 @@
 - 命令：本地执行，返回 `{ type: 'slash', message }`，**不**调用 `submitPrompt`。
 - 普通输入：走现有 `submitPrompt` → `{ type: 'prompt', terminal }`。
 
-## 输入发现与补全（OI-10）
+## 输入发现、补全与参数提示（OI-10/OI-12A）
 
 - `getSlashCommandCandidates(session)` 从 `SLASH_COMMANDS`、Plugin command 与
   user-invocable Skill 投影只读展示对象；按真实 dispatch precedence 去重：
@@ -26,6 +26,10 @@
   优先。不做 substring/fuzzy；`//`、参数和普通文本关闭菜单。
 - 菜单打开时 `↑/↓` 循环选择，Tab/Enter 只补为 `/<name> `，Esc 关闭并保留输入；
   菜单关闭后 ↑/↓ 才恢复历史。无匹配显示空态，Enter 仍可提交给未知命令诊断。
+- 补全后菜单关闭；精确命令 + 首个尾随空格、光标在末尾且尚无实参时，输入框显示
+  candidate 的 dim `argumentHint`。提示不写入输入 state/cursor；输入实参或第二个
+  空格后消失。`/effort ` 从当前 provider/model 方言动态投影合法档位，其它内置、
+  Plugin 与 Skill 可复用自己的 usage，不在 CLI 另写一份参数常量。
 - `/plugins reload` 会原位刷新 `session.pluginCommands` 与 `session.skills`；每次进入
   idle editor 都重新生成候选，所以热加载后的下一次输入立即可发现新命令。
 
@@ -39,7 +43,7 @@
 | `/note [[kind:]text]` | 无参列出最近 system_note；有参 **append** `system_note`（**不进**模型链；rewrite 保留；可选 `kind:text`） |
 | `/compact [note]` | `compactSession`；成功后报告 messages token 前后与节省量；无 summarizer 时错误文案 |
 | `/autocompact [on\|off]` | 会话级 auto compact 开关；无参显示 on/off + summarizer + 环境熔断；重挂 prepare 链 |
-| `/context` | 消息数、字符粗算、**tokens 分拆（messages + system）**、**window / auto threshold / pressure**、permissionMode、model、effort、cwd、id、**各 system section 标签·长度·token·角色（cache-stable/memory·volatile…）**、skill catalog 预算、**memory 路径/cap 提示**、**cache + prepare 顺序**、usage 一行；提示 `/autocompact` |
+| `/context [details\|--details]` | 默认建立 `ContextUsageViewModel`：TTY 显示响应式使用率图、window/threshold/pressure、actual/estimated/hybrid 来源与主要分类；非 TTY 输出紧凑文本。`details` 保留消息/system tokens、sections、skills、memory、cache、prepare/compact 等完整诊断 |
 | `/turn status` | 显示当前进程 coordinator `idle/running`、active turn 与 live control 历史（pending/ready/promoted/cancelled） |
 | `/turn steer <text>` · `/turn interrupt` | 自动携带 snapshot 的 expected active turn；stale/no-active 由 core fail-closed |
 | `/turn queue <text>` · `/turn cancel <controlId>` | active 时 pending、idle 时 ready；REPL FIFO drain；pending/ready 可取消；durable 写成功后才交给执行器 |
