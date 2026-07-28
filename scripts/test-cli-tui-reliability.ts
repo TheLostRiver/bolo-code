@@ -33,11 +33,48 @@ class ResizableOutput extends EventEmitter {
   }
 }
 
+class RawInputHarness extends EventEmitter {
+  readonly isTTY = true
+  isRaw = false
+  readonly rawTransitions: boolean[] = []
+
+  setRawMode(mode: boolean): this {
+    this.rawTransitions.push(mode)
+    this.isRaw = mode
+    return this
+  }
+
+  resume(): this {
+    return this
+  }
+
+  pause(): this {
+    return this
+  }
+
+  send(data: string): void {
+    this.emit('data', Buffer.from(data, 'utf8'))
+  }
+}
+
 type Fixture = {
   controller: CliTuiController
+  input: RawInputHarness
   output: ResizableOutput
   terminal: HeadlessTerminalHarness
   writes: string[]
+}
+
+const permissionRequest = {
+  toolName: 'Bash',
+  toolInput: {
+    command: 'npm.cmd run test:cli-tui-reliability',
+    timeout: 120_000,
+    run_in_background: false,
+    description: 'Verify long-session retained reliability',
+  },
+  toolUseId: 'reliability_permission_1',
+  cwd: 'E:\\DEV\\HelsincyAgent',
 }
 
 function createLongHistory(): ChatMessage[] {
@@ -52,8 +89,16 @@ function createLongHistory(): ChatMessage[] {
       role: 'assistant',
       content: Array.from(
         { length: 39 },
-        (_, line) =>
-          `t${turnId} l${String(line).padStart(2, '0')} 中✅`,
+        (_, line) => {
+          if (turn === 125 && line === 10) {
+            return (
+              'long-url-marker ' +
+              'https://example.test/reliability/a/very/long/path/' +
+              'that/reflows/without/losing/history?mode=retained'
+            )
+          }
+          return `t${turnId} l${String(line).padStart(2, '0')} 中✅`
+        },
       ).join('\n'),
     })
   }
@@ -69,6 +114,7 @@ async function createFixture(
     rows,
     scrollback: 250_000,
   })
+  const input = new RawInputHarness()
   const output = new ResizableOutput(columns, rows)
   const writes: string[] = []
   const controller = createRetainedTuiController({
@@ -80,13 +126,14 @@ async function createFixture(
       writes.push(text)
       terminal.write(text)
     },
+    input,
     output,
     env: { NO_COLOR: '1' },
   })
   controller.setWelcomeVisible(false)
   await controller.start()
   await terminal.flush()
-  return { controller, output, terminal, writes }
+  return { controller, input, output, terminal, writes }
 }
 
 function bufferText(terminal: HeadlessTerminalHarness): string {
@@ -156,6 +203,10 @@ async function main(): Promise<void> {
       initialBuffer.includes('t249 l38'),
       'native scrollback retains the last restored marker',
     )
+    assert(
+      initialBuffer.includes('long-url-marker'),
+      'native scrollback retains the long URL source marker',
+    )
     assertViewportFits(fixture.terminal, 80, 'initial long transcript')
 
     fixture.terminal.scrollLines(-Math.min(200, initial.baseY))
@@ -174,6 +225,47 @@ async function main(): Promise<void> {
       type: 'text',
       text: 'live assistant tail marker',
     })
+    for (let index = 0; index < 6; index += 1) {
+      const id = `reliability-tool-${index}`
+      fixture.controller.printer.onEvent({
+        type: 'tool_start',
+        id,
+        name: 'Bash',
+        input: { command: `echo tool-reliability-${index}` },
+        argumentsJson: JSON.stringify({
+          command: `echo tool-reliability-${index}`,
+        }),
+      })
+      fixture.controller.printer.onEvent({
+        type: 'tool_progress',
+        id,
+        name: 'Bash',
+        message: `tool progress reliability ${index}`,
+      })
+      fixture.controller.printer.onEvent({
+        type: 'tool_end',
+        id,
+        name: 'Bash',
+        output: `tool output reliability ${index}`,
+        ok: true,
+      })
+      fixture.controller.printer.onEvent({
+        type: 'web_search',
+        phase: 'query',
+        query: `search reliability ${index}`,
+      })
+      fixture.controller.printer.onEvent({
+        type: 'web_search',
+        phase: 'results',
+        resultCount: index + 1,
+      })
+      fixture.controller.printer.onEvent({
+        type: 'web_search',
+        phase: 'citation',
+        title: `result reliability ${index}`,
+        url: `https://search.example.test/result/${index}`,
+      })
+    }
     fixture.controller.printer.endTurn({ terminalReason: 'completed' })
     await fixture.controller.flush()
     await fixture.terminal.flush()
@@ -181,6 +273,15 @@ async function main(): Promise<void> {
     assert(
       afterLiveTurn.viewportY < afterLiveTurn.baseY,
       'a live turn does not force a scrolled user back to the bottom',
+    )
+    const liveBuffer = normalizedBufferText(fixture.terminal)
+    assert(
+      liveBuffer.includes('tool output reliability 5'),
+      'continuous tool updates retain their final result',
+    )
+    assert(
+      liveBuffer.includes('search reliability 5'),
+      'continuous search updates retain their final query',
     )
 
     const resizeDurations: number[] = []
@@ -235,12 +336,115 @@ async function main(): Promise<void> {
       atBottom.viewportY === atBottom.baseY,
       'the user can return to the live bottom after repeated resize',
     )
+
+    fixture.controller.configureComposer({
+      history: ['older prompt', 'newer prompt'],
+    })
+    const listenersBeforeInput = fixture.input.listenerCount('data')
+    const inputResult = fixture.controller.readInput()
+    assert(fixture.input.isRaw, 'long-session input acquires raw mode')
+    const pasteEpoch = fixture.controller.getRenderEpoch()
+    fixture.input.send('\u001b[200~first\r\n')
+    fixture.input.send('第二行✅')
+    assert(
+      fixture.controller.composer.getState().value === '',
+      'running paste does not leak partial chunks into the Composer',
+    )
+    fixture.input.send('\u001b[201~')
+    await fixture.controller.flush()
+    await fixture.terminal.flush()
+    const pastedValue = 'first\n第二行✅'
+    assert(
+      fixture.controller.composer.getState().value === pastedValue,
+      'long-session paste commits normalized multiline text once',
+    )
+    assert(
+      fixture.controller.getRenderEpoch() - pasteEpoch <= 1,
+      'long-session paste remains one retained frame',
+    )
+    fixture.input.send('!')
+    const composer = fixture.controller.composer
+    const beforeOverlay = composer.getState()
+    const stableComposer = {
+      value: beforeOverlay.value,
+      cursor: beforeOverlay.cursor,
+      history: [...beforeOverlay.history],
+      historyIndex: beforeOverlay.historyIndex,
+      historyDraft: beforeOverlay.historyDraft,
+    }
+
+    const permission = fixture.controller.runPermissionOverlay({
+      request: permissionRequest,
+    })
+    await fixture.controller.flush()
+    await fixture.terminal.flush()
+    const permissionScreen = fixture.terminal
+      .viewport()
+      .map((line) => line.text)
+      .join('\n')
+    assert(
+      fixture.controller.getState().overlay.mode === 'permission',
+      'permission opens over the long transcript',
+    )
+    assert(
+      permissionScreen.includes(
+        'npm.cmd run test:cli-tui-reliability',
+      ),
+      'long-session permission shows the complete command',
+    )
+    assert(
+      fixture.controller.composer === composer,
+      'overlay keeps the same long-session Composer component',
+    )
+    assert(
+      JSON.stringify({
+        value: composer.getState().value,
+        cursor: composer.getState().cursor,
+        history: composer.getState().history,
+        historyIndex: composer.getState().historyIndex,
+        historyDraft: composer.getState().historyDraft,
+      }) === JSON.stringify(stableComposer),
+      'overlay opening preserves draft, cursor and history state',
+    )
+    assert(
+      fixture.input.isRaw &&
+        fixture.input.rawTransitions.join(',') === 'true',
+      'overlay reuses the existing raw input owner',
+    )
+
+    fixture.input.send('n')
+    assert((await permission) === 'deny', 'permission closes with deny')
+    await fixture.controller.flush()
+    await fixture.terminal.flush()
+    assert(
+      fixture.controller.getState().overlay.mode === 'none',
+      'permission roundtrip restores the root',
+    )
+    assert(
+      fixture.controller.composer === composer &&
+        composer.getState().value === stableComposer.value &&
+        composer.getState().cursor === stableComposer.cursor,
+      'permission return preserves Composer identity, draft and cursor',
+    )
+    fixture.input.send('\u001a')
+    assert(
+      composer.getState().value === pastedValue,
+      'undo history survives the permission roundtrip',
+    )
+    fixture.input.send('\u0003')
+    assert((await inputResult).type === 'exit', 'input exits after overlay return')
+    assert(!fixture.input.isRaw, 'input exit restores cooked mode')
+    assert(
+      fixture.input.listenerCount('data') === listenersBeforeInput,
+      'input exit releases the only data listener',
+    )
+
     assertViewportFits(fixture.terminal, 80, 'final bottom viewport')
     assert(
       fixture.terminal
         .viewport()
-        .some((line) => line.text.includes('live assistant tail marker')),
-      'the final bottom viewport shows the live tail',
+        .some((line) => line.text.includes('search reliability 5')),
+      'the final bottom viewport shows the latest search block',
     )
 
     const stats = fixture.controller.getTerminalStats()
