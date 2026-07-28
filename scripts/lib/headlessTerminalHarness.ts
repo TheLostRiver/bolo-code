@@ -61,6 +61,10 @@ export class HeadlessTerminalHarness {
     this.terminal.resize(columns, rows)
   }
 
+  scrollLines(amount: number): void {
+    this.terminal.scrollLines(amount)
+  }
+
   snapshot(): HeadlessTerminalSnapshot {
     const buffer = this.terminal.buffer.active
     const lines: HeadlessTerminalLine[] = []
