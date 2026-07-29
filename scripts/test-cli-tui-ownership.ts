@@ -106,6 +106,8 @@ async function main(): Promise<void> {
     'runRuntimePager',
   ])
   assertOmits(cliIndexSource, 'CLI public index', [
+    'createTerminalSurface',
+    'TerminalSurface',
     'runArrowPicker',
     'runDiffPane',
     'runDiffApprovePane',
@@ -129,6 +131,7 @@ async function main(): Promise<void> {
     'createLocalPanelPainter',
     'runQuestionPicker',
   ])
+  await assertFileMissing('packages/cli/src/tui/terminalSurface.ts')
   await assertFileMissing('packages/cli/src/tui/localPanel.ts')
 
   const dynamic = createCliOnEvent({

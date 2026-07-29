@@ -81,11 +81,6 @@ export {
   type TuiContentPrefixer,
 } from './tui/contentLayout.ts'
 export {
-  createTerminalSurface,
-  type TerminalDock,
-  type TerminalSurface,
-} from './tui/terminalSurface.ts'
-export {
   createBoloTerminalAdapter,
   type BoloTerminalInput,
   type BoloTerminalAdapter,
