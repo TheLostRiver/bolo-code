@@ -220,7 +220,7 @@ export function createProviderFromEnv(
  */
 export function createProviderFromProfile(
   profile: ProviderProfileInput,
-  opts?: { modelOverride?: string },
+  opts?: { modelOverride?: string; maxTokensOverride?: number },
 ): EnvProviderResult {
   const kindRaw = normalizeKind(profile.kind)
   const kind: ProviderKind =
@@ -253,7 +253,7 @@ export function createProviderFromProfile(
     baseUrl: profile.baseUrl,
     model,
     timeoutMs: profile.timeoutMs,
-    maxTokens: profile.maxTokens,
+    maxTokens: opts?.maxTokensOverride ?? profile.maxTokens,
     effortDialect:
       profile.effortDialect as CreateProviderOptions['effortDialect'],
   })

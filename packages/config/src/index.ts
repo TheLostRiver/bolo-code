@@ -79,6 +79,7 @@ export {
   DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
   DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
   normalizeProviderModelMetadata,
+  parseResolvedModelMetadata,
   resolveModelMetadata,
   validateBoloConfigModelMetadata,
   type ModelMetadataCatalogEntry,

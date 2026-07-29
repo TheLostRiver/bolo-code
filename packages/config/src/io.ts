@@ -153,7 +153,12 @@ export async function loadConfigJson(
  */
 export async function loadConfigJsonWithWarnings(
   layout: BoloLayoutPaths,
-): Promise<{ config: BoloConfigJson; warnings: string[] }> {
+): Promise<{
+  config: BoloConfigJson
+  warnings: string[]
+  /** 文件中实际声明的配置；缺失/损坏时为空，不含 DEFAULT_CONFIG。 */
+  sourceConfig?: BoloConfigJson
+}> {
   const r = await readJsonFileResult<BoloConfigJson>(layout.configJson)
   if (!r.found) return { config: { ...DEFAULT_CONFIG }, warnings: [] }
   if (!r.ok) {
@@ -167,6 +172,7 @@ export async function loadConfigJsonWithWarnings(
   return {
     config: mergeConfigJson({ ...DEFAULT_CONFIG }, r.value),
     warnings: validateBoloConfigModelMetadata(r.value, layout.configJson),
+    sourceConfig: r.value,
   }
 }
 

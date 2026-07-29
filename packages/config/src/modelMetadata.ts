@@ -126,6 +126,68 @@ function isPositiveInteger(value: unknown): value is number {
   )
 }
 
+const MODEL_METADATA_SOURCES = new Set<ModelMetadataSource>([
+  'model',
+  'provider',
+  'catalog',
+  'legacy',
+  'snapshot',
+  'fallback',
+])
+
+/**
+ * Parse persisted resolved metadata without trusting arbitrary transcript JSON.
+ */
+export function parseResolvedModelMetadata(
+  raw: unknown,
+): ResolvedModelMetadata | undefined {
+  if (!isRecord(raw)) return undefined
+  const providerId =
+    typeof raw.providerId === 'string' ? raw.providerId.trim() : ''
+  const model =
+    typeof raw.model === 'string' && raw.model.trim()
+      ? raw.model.trim()
+      : undefined
+  const contextWindowTokens = raw.contextWindowTokens
+  const maxOutputTokens = raw.maxOutputTokens
+  const sources = raw.sources
+  if (
+    !providerId ||
+    !isPositiveInteger(contextWindowTokens) ||
+    !isPositiveInteger(maxOutputTokens) ||
+    maxOutputTokens > contextWindowTokens ||
+    !isRecord(sources) ||
+    !MODEL_METADATA_SOURCES.has(
+      sources.contextWindow as ModelMetadataSource,
+    ) ||
+    !MODEL_METADATA_SOURCES.has(sources.maxOutput as ModelMetadataSource)
+  ) {
+    return undefined
+  }
+  const warnings = Array.isArray(raw.warnings)
+    ? raw.warnings.filter(
+        (warning): warning is string => typeof warning === 'string',
+      )
+    : []
+  const contextSource = sources.contextWindow as ModelMetadataSource
+  const outputSource = sources.maxOutput as ModelMetadataSource
+  return {
+    providerId,
+    ...(model ? { model } : {}),
+    contextWindowTokens,
+    maxOutputTokens,
+    sources: {
+      contextWindow: contextSource,
+      maxOutput: outputSource,
+    },
+    usedFallback:
+      raw.usedFallback === true ||
+      contextSource === 'fallback' ||
+      outputSource === 'fallback',
+    warnings: [...warnings],
+  }
+}
+
 function pushUnique(warnings: string[], warning: string): void {
   if (!warnings.includes(warning)) warnings.push(warning)
 }

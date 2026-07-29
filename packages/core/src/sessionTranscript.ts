@@ -18,6 +18,10 @@ import type {
   PermissionMode,
   SessionPermissionRules,
 } from '../../permissions/src/index.ts'
+import {
+  parseResolvedModelMetadata,
+  type ResolvedModelMetadata,
+} from '../../config/src/modelMetadata.ts'
 import type { PersistableSession } from './sessionPersist.ts'
 import type { SessionUsage } from './sessionUsage.ts'
 import { cloneSessionUsage } from './sessionUsage.ts'
@@ -87,6 +91,8 @@ export type TranscriptMetaEntry = TranscriptEntryBase & {
   systemPromptSections?: string[]
   autoCompactEnabled?: boolean
   contextWindowTokens?: number
+  maxOutputTokens?: number
+  resolvedModel?: ResolvedModelMetadata
   maxPtlRetries?: number
   permissionRules?: SessionPermissionRules
   effortLevel?: string
@@ -102,6 +108,19 @@ export type TranscriptMetaEntry = TranscriptEntryBase & {
 export type TranscriptMessageEntry = TranscriptEntryBase & {
   type: 'message'
   message: ChatMessage
+}
+
+/**
+ * CTX-2：append-only runtime metadata checkpoint。
+ * 首行 meta 保持稳定；provider/model 热切后仅在状态变化时追加，load 时 last-wins。
+ */
+export type TranscriptSessionStateEntry = TranscriptEntryBase & {
+  type: 'session_state'
+  providerId: string
+  model?: string
+  contextWindowTokens: number
+  maxOutputTokens: number
+  resolvedModel: ResolvedModelMetadata
 }
 
 export type TranscriptCompactBoundaryEntry = TranscriptEntryBase & {
@@ -222,6 +241,7 @@ export type TranscriptResolutionEntry = TranscriptEntryBase & {
 
 export type TranscriptEntry =
   | TranscriptMetaEntry
+  | TranscriptSessionStateEntry
   | TranscriptMessageEntry
   | TranscriptCompactBoundaryEntry
   | TranscriptTitleEntry
@@ -243,6 +263,8 @@ export type TranscriptMetaInput = {
   systemPromptSections?: string[]
   autoCompactEnabled?: boolean
   contextWindowTokens?: number
+  maxOutputTokens?: number
+  resolvedModel?: ResolvedModelMetadata
   maxPtlRetries?: number
   permissionRules?: SessionPermissionRules
   effortLevel?: string
@@ -348,6 +370,7 @@ export function metaInputFromSession(
       ? session.providerId.trim()
       : undefined
   const showThinkingOff = session.showThinking === false
+  const resolvedModel = parseResolvedModelMetadata(session.resolvedModel)
   return {
     sessionId: session.id,
     cwd: session.cwd,
@@ -357,7 +380,16 @@ export function metaInputFromSession(
     updatedAt: opts?.updatedAt ?? nowIso(),
     systemPromptSections: [...session.systemPromptSections],
     autoCompactEnabled: session.autoCompactEnabled,
-    contextWindowTokens: session.contextWindowTokens,
+    contextWindowTokens:
+      resolvedModel?.contextWindowTokens ?? session.contextWindowTokens,
+    ...(resolvedModel
+      ? {
+          maxOutputTokens: resolvedModel.maxOutputTokens,
+          resolvedModel,
+        }
+      : session.maxOutputTokens !== undefined
+        ? { maxOutputTokens: session.maxOutputTokens }
+        : {}),
     maxPtlRetries: session.maxPtlRetries,
     phase: session.phase,
     ...(permissionRules ? { permissionRules } : {}),
@@ -376,10 +408,17 @@ export function buildMetaEntry(meta: TranscriptMetaInput): TranscriptMetaEntry {
     typeof meta.effortLevel === 'string' && meta.effortLevel.trim()
       ? meta.effortLevel.trim()
       : undefined
+  const resolvedModel = parseResolvedModelMetadata(meta.resolvedModel)
   const providerId =
-    typeof meta.providerId === 'string' && meta.providerId.trim()
+    resolvedModel?.providerId ??
+    (typeof meta.providerId === 'string' && meta.providerId.trim()
       ? meta.providerId.trim()
-      : undefined
+      : undefined)
+  const model =
+    resolvedModel?.model ??
+    (typeof meta.model === 'string' && meta.model.trim()
+      ? meta.model.trim()
+      : undefined)
   const showThinkingOff = meta.showThinking === false
   return {
     type: 'meta',
@@ -387,7 +426,7 @@ export function buildMetaEntry(meta: TranscriptMetaInput): TranscriptMetaEntry {
     timestamp: nowIso(),
     cwd: meta.cwd,
     permissionMode: meta.permissionMode,
-    model: meta.model,
+    model,
     createdAt: meta.createdAt ?? nowIso(),
     ...(meta.updatedAt ? { updatedAt: meta.updatedAt } : {}),
     ...(meta.systemPromptSections
@@ -396,9 +435,20 @@ export function buildMetaEntry(meta: TranscriptMetaInput): TranscriptMetaEntry {
     ...(meta.autoCompactEnabled !== undefined
       ? { autoCompactEnabled: meta.autoCompactEnabled }
       : {}),
-    ...(meta.contextWindowTokens !== undefined
-      ? { contextWindowTokens: meta.contextWindowTokens }
-      : {}),
+    ...(resolvedModel
+      ? {
+          contextWindowTokens: resolvedModel.contextWindowTokens,
+          maxOutputTokens: resolvedModel.maxOutputTokens,
+          resolvedModel,
+        }
+      : meta.contextWindowTokens !== undefined
+        ? {
+            contextWindowTokens: meta.contextWindowTokens,
+            ...(meta.maxOutputTokens !== undefined
+              ? { maxOutputTokens: meta.maxOutputTokens }
+              : {}),
+          }
+        : {}),
     ...(meta.maxPtlRetries !== undefined
       ? { maxPtlRetries: meta.maxPtlRetries }
       : {}),
@@ -408,6 +458,46 @@ export function buildMetaEntry(meta: TranscriptMetaInput): TranscriptMetaEntry {
     ...(providerId ? { providerId } : {}),
     ...(showThinkingOff ? { showThinking: false } : {}),
     ...(usage ? { usage } : {}),
+  }
+}
+
+function resolvedModelStateKey(
+  resolvedModel: ResolvedModelMetadata | undefined,
+): string | undefined {
+  if (!resolvedModel) return undefined
+  return JSON.stringify({
+    providerId: resolvedModel.providerId,
+    model: resolvedModel.model ?? null,
+    contextWindowTokens: resolvedModel.contextWindowTokens,
+    maxOutputTokens: resolvedModel.maxOutputTokens,
+    sources: resolvedModel.sources,
+    usedFallback: resolvedModel.usedFallback,
+    warnings: resolvedModel.warnings,
+  })
+}
+
+function runtimeStateKeyFromMeta(
+  meta: TranscriptMetaEntry | undefined,
+): string | undefined {
+  return resolvedModelStateKey(
+    parseResolvedModelMetadata(meta?.resolvedModel),
+  )
+}
+
+export function buildSessionStateEntry(
+  session: PersistableSession,
+): TranscriptSessionStateEntry | undefined {
+  const resolvedModel = parseResolvedModelMetadata(session.resolvedModel)
+  if (!resolvedModel) return undefined
+  return {
+    type: 'session_state',
+    sessionId: session.id,
+    timestamp: nowIso(),
+    providerId: resolvedModel.providerId,
+    ...(resolvedModel.model ? { model: resolvedModel.model } : {}),
+    contextWindowTokens: resolvedModel.contextWindowTokens,
+    maxOutputTokens: resolvedModel.maxOutputTokens,
+    resolvedModel,
   }
 }
 
@@ -1192,6 +1282,8 @@ type TranscriptWriteState = {
   filePath: string
   /** 已写入 transcript 的 messages 条数（不含 meta/boundary） */
   appendedMessageCount: number
+  /** 最后一条已落盘的 resolved runtime metadata 指纹 */
+  runtimeStateKey?: string
 }
 
 const transcriptState = new WeakMap<object, TranscriptWriteState>()
@@ -1211,6 +1303,7 @@ export function setTranscriptWriteState(
     filePath: state.filePath ?? prev?.filePath ?? '',
     appendedMessageCount:
       state.appendedMessageCount ?? prev?.appendedMessageCount ?? 0,
+    runtimeStateKey: state.runtimeStateKey ?? prev?.runtimeStateKey,
   })
 }
 
@@ -1595,6 +1688,13 @@ export async function loadTranscriptFile(
           )
         }
         if (
+          typeof o.maxOutputTokens === 'number' &&
+          Number.isFinite(o.maxOutputTokens) &&
+          o.maxOutputTokens > 0
+        ) {
+          meta.maxOutputTokens = Math.floor(o.maxOutputTokens)
+        }
+        if (
           typeof o.maxPtlRetries === 'number' &&
           Number.isFinite(o.maxPtlRetries)
         ) {
@@ -1788,7 +1888,33 @@ export async function loadTranscriptFile(
           }
         }
         if (typeof o.uuid === 'string') meta.uuid = o.uuid
+        const resolvedModel = parseResolvedModelMetadata(o.resolvedModel)
+        if (resolvedModel) {
+          meta.resolvedModel = resolvedModel
+          meta.providerId = resolvedModel.providerId
+          meta.model = resolvedModel.model
+          meta.contextWindowTokens = resolvedModel.contextWindowTokens
+          meta.maxOutputTokens = resolvedModel.maxOutputTokens
+        }
         entries.push(meta)
+        continue
+      }
+      if (o.type === 'session_state') {
+        const resolvedModel = parseResolvedModelMetadata(o.resolvedModel)
+        if (!resolvedModel) continue
+        entries.push({
+          type: 'session_state',
+          sessionId:
+            typeof o.sessionId === 'string' ? o.sessionId : '',
+          timestamp:
+            typeof o.timestamp === 'string' ? o.timestamp : nowIso(),
+          providerId: resolvedModel.providerId,
+          ...(resolvedModel.model ? { model: resolvedModel.model } : {}),
+          contextWindowTokens: resolvedModel.contextWindowTokens,
+          maxOutputTokens: resolvedModel.maxOutputTokens,
+          resolvedModel,
+          uuid: typeof o.uuid === 'string' ? o.uuid : undefined,
+        })
         continue
       }
       if (o.type === 'message') {
@@ -2088,15 +2214,28 @@ export function messagesFromTranscriptEntries(entries: TranscriptEntry[]): {
   systemNotes?: Array<{ text: string; kind?: string; timestamp: string }>
 } {
   let meta: TranscriptMetaEntry | undefined
+  let sessionState: TranscriptSessionStateEntry | undefined
   let lastBoundary = -1
   let title: string | undefined
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i]!
     if (e.type === 'meta' && !meta) meta = e
+    if (e.type === 'session_state') sessionState = e
     if (e.type === 'compact_boundary') lastBoundary = i
     if (e.type === 'title') {
       const t = normalizeSessionTitle(e.title)
       if (t) title = t
+    }
+  }
+  if (meta && sessionState) {
+    meta = {
+      ...meta,
+      providerId: sessionState.providerId,
+      model: sessionState.model,
+      contextWindowTokens: sessionState.contextWindowTokens,
+      maxOutputTokens: sessionState.maxOutputTokens,
+      resolvedModel: sessionState.resolvedModel,
+      updatedAt: sessionState.timestamp,
     }
   }
   const systemNotes = systemNotesFromTranscriptEntries(entries)
@@ -2304,9 +2443,13 @@ export async function writeTranscriptAfterCompact(
     createdAt: opts.createdAt,
     compactBoundarySummary: opts.summary,
   })
+  const runtimeStateKey = resolvedModelStateKey(
+    parseResolvedModelMetadata(session.resolvedModel),
+  )
   setTranscriptWriteState(session, {
     filePath: transcriptPath,
     appendedMessageCount: session.messages.length,
+    ...(runtimeStateKey ? { runtimeStateKey } : {}),
   })
   return { transcriptPath }
 }
@@ -2314,7 +2457,7 @@ export async function writeTranscriptAfterCompact(
 /**
  * T3 主写路径：只写 `{id}.jsonl`（增量 append / shrink rewrite）。
  * - 新文件：meta（含配置切片）+ 全部 messages
- * - 增量：只 append messages[lastCount..]
+ * - 增量：runtime 变化时 append `session_state`，再 append messages[lastCount..]
  * - messages 变短（compact）：全量 rewrite，并写入 compact_boundary（摘要可选）
  * - 冷启动（无 WeakMap）：按磁盘已有 message 行数作基线，避免 resume 后重复 append
  */
@@ -2326,13 +2469,32 @@ export async function dualWriteSessionTranscript(
   const transcriptPath = resolveTranscriptPathFromJson(jsonFilePath)
   const prev = transcriptState.get(session)
   let lastCount = prev?.appendedMessageCount
-  if (lastCount === undefined) {
-    lastCount = await countTranscriptMessageEntries(transcriptPath)
+  let lastRuntimeStateKey = prev?.runtimeStateKey
+  if (lastCount === undefined || lastRuntimeStateKey === undefined) {
+    try {
+      const { entries } = await loadTranscriptFile(transcriptPath)
+      if (lastCount === undefined) {
+        lastCount = entries.filter((entry) => entry.type === 'message').length
+      }
+      if (lastRuntimeStateKey === undefined) {
+        lastRuntimeStateKey = runtimeStateKeyFromMeta(
+          messagesFromTranscriptEntries(entries).meta,
+        )
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') throw error
+      lastCount ??= 0
+    }
   }
+  lastCount ??= 0
   const total = session.messages.length
   const metaBase = metaInputFromSession(session, {
     createdAt: opts?.createdAt,
   })
+  const sessionStateEntry = buildSessionStateEntry(session)
+  const currentRuntimeStateKey = resolvedModelStateKey(
+    sessionStateEntry?.resolvedModel,
+  )
 
   // messages 变短：全量重建（内存已是 compact 后链）；仅显式传入时写 compact_boundary
   if (lastCount > 0 && total < lastCount) {
@@ -2345,17 +2507,32 @@ export async function dualWriteSessionTranscript(
     setTranscriptWriteState(session, {
       filePath: transcriptPath,
       appendedMessageCount: total,
+      ...(currentRuntimeStateKey
+        ? { runtimeStateKey: currentRuntimeStateKey }
+        : {}),
     })
     return { transcriptPath, appended: total, rewritten: true }
   }
 
-  await ensureTranscriptFile(transcriptPath, metaBase)
+  const created = await ensureTranscriptFile(transcriptPath, metaBase)
+  if (created) lastRuntimeStateKey = currentRuntimeStateKey
+
+  if (
+    sessionStateEntry &&
+    currentRuntimeStateKey !== lastRuntimeStateKey
+  ) {
+    await appendTranscriptLine(transcriptPath, sessionStateEntry)
+    lastRuntimeStateKey = currentRuntimeStateKey
+  }
 
   // 磁盘 message 数已 ≥ 内存：视为已同步（resume 后无新消息再 save）
   if (lastCount >= total) {
     setTranscriptWriteState(session, {
       filePath: transcriptPath,
       appendedMessageCount: total,
+      ...(lastRuntimeStateKey
+        ? { runtimeStateKey: lastRuntimeStateKey }
+        : {}),
     })
     return { transcriptPath, appended: 0, rewritten: false }
   }
@@ -2367,6 +2544,7 @@ export async function dualWriteSessionTranscript(
   setTranscriptWriteState(session, {
     filePath: transcriptPath,
     appendedMessageCount: total,
+    ...(lastRuntimeStateKey ? { runtimeStateKey: lastRuntimeStateKey } : {}),
   })
   return { transcriptPath, appended, rewritten: false }
 }

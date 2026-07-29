@@ -21,6 +21,14 @@ import {
   type ProviderRegistry,
 } from '../../config/src/providerRegistry.ts'
 import {
+  resolveModelMetadata,
+  type ResolvedModelMetadata,
+} from '../../config/src/modelMetadata.ts'
+import {
+  formatSkillCatalog,
+  type LoadedSkill,
+} from '../../skills/src/index.ts'
+import {
   createCallModelFromProvider,
   type QueryDeps,
 } from './deps.ts'
@@ -28,6 +36,7 @@ import type { CompactSummarizer } from '../../compact/src/index.ts'
 import type { AutoClassifyFn } from '../../permissions/src/index.ts'
 import { createAutoClassifyFromCompleteText } from '../../permissions/src/index.ts'
 import { clampEffortForSession } from './effortClamp.ts'
+import { replaceSkillCatalogSection } from './systemPrompt.ts'
 
 export type SwitchableProviderSession = {
   provider: LlmProvider
@@ -36,6 +45,12 @@ export type SwitchableProviderSession = {
   providerId?: string
   providerRegistry?: ProviderRegistry
   providerProfile?: ProviderProfile
+  resolvedModel?: ResolvedModelMetadata
+  contextWindowTokens?: number
+  maxOutputTokens?: number
+  legacyContextWindowTokens?: number
+  skills?: LoadedSkill[]
+  systemPromptSections?: string[]
   /** E 轨：当前方言（热切后更新） */
   effortDialect?: string | Record<string, unknown>
   effortLevel?: string
@@ -90,39 +105,62 @@ function rebindSessionRuntime(
     model?: string
     profileId?: string
     profile?: ProviderProfile
+    resolvedModel: ResolvedModelMetadata
+    systemPromptSections?: string[]
   },
   opts?: { rebindSummarizer?: boolean },
 ) {
   const prevCall = session.deps.callModel
+  const nextCall = createCallModelFromProvider(built.provider)
+  const nextSummarizer =
+    opts?.rebindSummarizer === false
+      ? session.compactSummarizer
+      : createCompactSummarizerFromProvider(built.provider)
+  const nextClassifier = built.provider.completeText
+    ? createAutoClassifyFromCompleteText(
+        (messages, o) => built.provider.completeText!(messages, o),
+        { model: built.model },
+      )
+    : undefined
+
   // 保留 prepareMessages / uuid，只换 callModel
   session.provider = built.provider
   session.deps = {
     ...session.deps,
-    callModel: createCallModelFromProvider(built.provider),
+    callModel: nextCall,
   }
   // 若外部曾完全替换 deps，仍确保 callModel 更新
   if (session.deps.callModel === prevCall) {
-    session.deps.callModel = createCallModelFromProvider(built.provider)
+    session.deps.callModel = nextCall
   }
-  if (built.model) session.model = built.model
+  session.model = built.model
   if (built.profileId) session.providerId = built.profileId
   if (built.profile) session.providerProfile = built.profile
-
-  if (opts?.rebindSummarizer !== false) {
-    session.compactSummarizer = createCompactSummarizerFromProvider(
-      built.provider,
-    )
+  session.resolvedModel = built.resolvedModel
+  session.contextWindowTokens = built.resolvedModel.contextWindowTokens
+  session.maxOutputTokens = built.resolvedModel.maxOutputTokens
+  if (built.systemPromptSections) {
+    session.systemPromptSections = built.systemPromptSections
   }
 
-  if (built.provider.completeText) {
-    const p = built.provider
-    session.classifyPermission = createAutoClassifyFromCompleteText(
-      (messages, o) => p.completeText!(messages, o),
-      { model: session.model },
-    )
-  } else {
-    session.classifyPermission = undefined
+  session.compactSummarizer = nextSummarizer
+  session.classifyPermission = nextClassifier
+}
+
+function targetSkillCatalogSections(
+  session: SwitchableProviderSession,
+  resolvedModel: ResolvedModelMetadata,
+): string[] | undefined {
+  if (!session.systemPromptSections?.length || !session.skills?.length) {
+    return undefined
   }
+  const catalog = formatSkillCatalog(session.skills, {
+    contextWindowTokens: resolvedModel.contextWindowTokens,
+  })
+  return replaceSkillCatalogSection(
+    session.systemPromptSections,
+    catalog || undefined,
+  )
 }
 
 /**
@@ -131,7 +169,12 @@ function rebindSessionRuntime(
 export function switchSessionProvider(
   session: SwitchableProviderSession,
   id: string,
-  opts?: { model?: string; rebindSummarizer?: boolean },
+  opts?: {
+    model?: string
+    rebindSummarizer?: boolean
+    /** Resume-only fallback; resolver still prefers current profile/catalog. */
+    snapshot?: ResolvedModelMetadata
+  },
 ): SwitchSessionProviderResult {
   const rawId = id.trim()
   if (!rawId) {
@@ -154,8 +197,18 @@ export function switchSessionProvider(
     }
   }
 
+  const targetModel =
+    opts?.model?.trim() || profile.model || undefined
+  const resolvedModel = resolveModelMetadata({
+    providerId: rawId,
+    model: targetModel,
+    profile,
+    legacyContextWindowTokens: session.legacyContextWindowTokens,
+    snapshot: opts?.snapshot ?? session.resolvedModel,
+  })
   const built = createProviderFromProfile(profile, {
-    modelOverride: opts?.model,
+    modelOverride: targetModel,
+    maxTokensOverride: resolvedModel.maxOutputTokens,
   })
   if (built.missingKey && built.kind === 'mock' && profile.kind !== 'mock') {
     const envHint = profile.apiKeyEnv
@@ -170,6 +223,17 @@ export function switchSessionProvider(
   const previousId = session.providerId
   const prevKind = session.provider?.id
   const prevModel = session.model
+  let systemPromptSections: string[] | undefined
+  try {
+    systemPromptSections = targetSkillCatalogSections(session, resolvedModel)
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `provider "${rawId}" metadata preparation failed: ${
+        error instanceof Error ? error.message : String(error)
+      }; kept previous provider`,
+    }
+  }
 
   rebindSessionRuntime(
     session,
@@ -177,12 +241,11 @@ export function switchSessionProvider(
       provider: built.provider,
       // 显式 model 覆盖 > 工厂返回 > profile 默认
       model:
-        opts?.model?.trim() ||
-        built.model ||
-        profile.model ||
-        undefined,
+        targetModel ?? built.model,
       profileId: rawId,
       profile,
+      resolvedModel,
+      systemPromptSections,
     },
     { rebindSummarizer: opts?.rebindSummarizer },
   )
@@ -253,7 +316,64 @@ export function switchSessionModel(
   const name = model.trim()
   if (!name) return { ok: false, reason: 'model name required' }
   const prev = session.model
-  session.model = name
+  const profile =
+    session.providerProfile ??
+    (session.providerRegistry && session.providerId
+      ? getProviderProfile(session.providerRegistry, session.providerId)
+      : undefined)
+  if (profile) {
+    const providerId =
+      session.providerId?.trim() || profile.id?.trim() || 'default'
+    const resolvedModel = resolveModelMetadata({
+      providerId,
+      model: name,
+      profile,
+      legacyContextWindowTokens: session.legacyContextWindowTokens,
+      snapshot: session.resolvedModel,
+    })
+    const built = createProviderFromProfile(profile, {
+      modelOverride: name,
+      maxTokensOverride: resolvedModel.maxOutputTokens,
+    })
+    if (built.missingKey && built.kind === 'mock' && profile.kind !== 'mock') {
+      return {
+        ok: false,
+        reason: `model switch could not rebuild provider "${providerId}" because its API key is unavailable; kept previous model`,
+      }
+    }
+    let systemPromptSections: string[] | undefined
+    try {
+      systemPromptSections = targetSkillCatalogSections(session, resolvedModel)
+    } catch (error) {
+      return {
+        ok: false,
+        reason: `model metadata preparation failed: ${
+          error instanceof Error ? error.message : String(error)
+        }; kept previous model`,
+      }
+    }
+    rebindSessionRuntime(session, {
+      provider: built.provider,
+      model: name,
+      profileId: providerId,
+      profile,
+      resolvedModel,
+      systemPromptSections,
+    })
+  } else {
+    const resolvedModel = resolveModelMetadata({
+      providerId:
+        session.providerId?.trim() || String(session.provider.id || 'default'),
+      model: name,
+      legacyContextWindowTokens:
+        session.legacyContextWindowTokens ?? session.contextWindowTokens,
+      snapshot: session.resolvedModel,
+    })
+    session.model = name
+    session.resolvedModel = resolvedModel
+    session.contextWindowTokens = resolvedModel.contextWindowTokens
+    session.maxOutputTokens = resolvedModel.maxOutputTokens
+  }
   let cacheBreak = false
   if (prev && prev !== name) {
     forcePromptCacheBreak(session, `model ${prev}→${name}`)

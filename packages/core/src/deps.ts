@@ -163,7 +163,10 @@ export function createMicrocompactPrepare(
 
 export function createAutoCompactPrepare(opts: {
   enabled: boolean
-  contextWindowTokens: number
+  /** Legacy/static caller compatibility. Prefer getContextWindowTokens. */
+  contextWindowTokens?: number
+  /** CTX-2: read the active model window at each prepare invocation. */
+  getContextWindowTokens?: () => number
   runAutoCompact: (messages: ChatMessage[]) => Promise<ChatMessage[] | null>
   /** C2：返回最近 API input tokens；无则 undefined → 用 estimate */
   getUsageInputTokens?: () => number | undefined
@@ -185,6 +188,10 @@ export function createAutoCompactPrepare(opts: {
   let failures = 0
   return async ({ messages, querySource }) => {
     if (!opts.enabled) return { messages }
+    const contextWindowTokens =
+      opts.getContextWindowTokens?.() ??
+      opts.contextWindowTokens ??
+      128_000
     // snip 后 messages 已变短；Bolo 用内容启发式，无需再扣 snipTokensFreed
     const sections = opts.getSystemPromptSections?.()
     const systemTokens =
@@ -206,7 +213,7 @@ export function createAutoCompactPrepare(opts: {
               pad: true,
             }
           : {}),
-        contextWindowTokens: opts.contextWindowTokens,
+        contextWindowTokens,
         enabled: true,
         consecutiveFailures: failures,
         querySource,

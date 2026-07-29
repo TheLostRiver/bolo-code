@@ -22,7 +22,9 @@ import {
 } from '../../providers/src/index.ts'
 import {
   loadWorkspace,
+  resolveModelMetadata,
   type ResolvedWorkspace,
+  type ResolvedModelMetadata,
   type ProviderRegistry,
   type ProviderProfile,
 } from '../../config/src/index.ts'
@@ -631,8 +633,10 @@ export {
   setTranscriptWriteState,
   metaInputFromSession,
   buildMetaEntry,
+  buildSessionStateEntry,
   type TranscriptEntry,
   type TranscriptMetaEntry,
+  type TranscriptSessionStateEntry,
   type TranscriptMessageEntry,
   type TranscriptCompactBoundaryEntry,
   type TranscriptTitleEntry,
@@ -862,6 +866,10 @@ export type CreateSessionOptions = {
   autoCompactEnabled?: boolean
   /** 模型上下文窗口估计（tokens），用于 auto 阈值；默认 128_000 */
   contextWindowTokens?: number
+  /** CTX-2：active provider/model 的统一上下文与输出元数据 */
+  resolvedModel?: ResolvedModelMetadata
+  /** workspace 顶层旧字段，仅供后续热切 resolver fallback */
+  legacyContextWindowTokens?: number
   /**
    * Microcompact（清旧 tool_result，无 LLM）。
    * 默认启用；`false` 关闭。顺序：snip → micro → auto full。
@@ -1015,7 +1023,14 @@ export type BoloSession = {
   persistReasoning?: boolean
   /** 会话级 auto compact 开关（prepareMessages） */
   autoCompactEnabled: boolean
+  /** CTX-2：active provider/model 的 runtime 真源 */
+  resolvedModel: ResolvedModelMetadata
+  /** 兼容投影；新 consumer 应优先读 resolvedModel */
   contextWindowTokens: number
+  /** provider output baseline 的兼容/runtime 投影 */
+  maxOutputTokens: number
+  /** workspace 顶层旧字段，仅供热切解析，不进入用户展示 */
+  legacyContextWindowTokens?: number
   /** PTL 截断重试上限；0 = 关 */
   maxPtlRetries: number
   /**
@@ -1205,6 +1220,41 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
   const provider = opts.provider ?? createMockProvider()
   const permissionMode = parsePermissionMode(opts.permissionMode, 'default')
   const skills = opts.skills ?? []
+  const directProfile =
+    opts.contextWindowTokens !== undefined
+      ? {
+          ...opts.providerProfile,
+          contextWindowTokens: opts.contextWindowTokens,
+        }
+      : opts.providerProfile
+  const resolvedModel =
+    opts.resolvedModel ??
+    resolveModelMetadata({
+      providerId:
+        opts.providerId ??
+        opts.providerProfile?.id ??
+        String(provider.id || 'default'),
+      model: opts.model ?? opts.providerProfile?.model,
+      profile: directProfile,
+      legacyContextWindowTokens: opts.legacyContextWindowTokens,
+    })
+  const contextWindowTokens =
+    opts.contextWindowTokens ?? resolvedModel.contextWindowTokens
+  const effectiveResolvedModel =
+    contextWindowTokens === resolvedModel.contextWindowTokens
+      ? resolvedModel
+      : {
+          ...resolvedModel,
+          contextWindowTokens,
+          maxOutputTokens: Math.min(
+            resolvedModel.maxOutputTokens,
+            contextWindowTokens,
+          ),
+          sources: {
+            ...resolvedModel.sources,
+            contextWindow: 'legacy' as const,
+          },
+        }
 
   let systemPromptSections: string[] = []
   let systemPromptUserConfigDir: string | undefined
@@ -1226,7 +1276,7 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
       model: opts.model ?? extra.model,
       skills: extra.skills ?? skills,
       skillCatalog: extra.skillCatalog,
-      contextWindowTokens: opts.contextWindowTokens ?? 128_000,
+      contextWindowTokens: effectiveResolvedModel.contextWindowTokens,
       boloMd: extra.boloMd,
       loadInstructions: extra.loadInstructions,
       boloRules: extra.boloRules,
@@ -1304,7 +1354,13 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
     persistReasoning: opts.persistReasoning === true,
     // 默认开 auto（对照参考全局 config）；显式 false 关闭
     autoCompactEnabled: opts.autoCompactEnabled !== false,
-    contextWindowTokens: opts.contextWindowTokens ?? 128_000,
+    resolvedModel: effectiveResolvedModel,
+    contextWindowTokens: effectiveResolvedModel.contextWindowTokens,
+    maxOutputTokens: effectiveResolvedModel.maxOutputTokens,
+    legacyContextWindowTokens:
+      'legacyContextWindowTokens' in opts
+        ? opts.legacyContextWindowTokens
+        : opts.contextWindowTokens,
     maxPtlRetries:
       opts.maxPtlRetries === undefined
         ? 3
@@ -1360,7 +1416,7 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
         tokenCount: estimate,
         usageInputTokens: usage,
         ...(anchor ? { anchor, messages: session.messages, pad: true } : {}),
-        contextWindowTokens: session.contextWindowTokens,
+        contextWindowTokens: session.resolvedModel.contextWindowTokens,
         enabled: true,
         consecutiveFailures: 0,
         querySource: 'repl_main_thread',
@@ -1534,8 +1590,8 @@ function resolveWorkspaceUltrathinkMode(
 
 /**
  * new/resume 共用的 workspace → createSession 契约。
- * resume 保留快照内的 model/auto-compact/context/PTL 值，除非调用方显式覆盖；
- * provider、hooks、skills、agent policy、compact summarizer 始终来自当前 workspace。
+ * resume 的 runtime model metadata 先来自当前 workspace，再原子重放快照身份；
+ * messages、权限与其它会话态仍由快照恢复。
  */
 function buildWorkspaceSessionOptions(
   workspace: ResolvedWorkspace,
@@ -1549,10 +1605,7 @@ function buildWorkspaceSessionOptions(
       ? workspace.config.autoCompactEnabled !== false
       : undefined)
   const contextWindowTokens =
-    opts.contextWindowTokens ??
-    (mode === 'create'
-      ? workspace.config.contextWindowTokens ?? 128_000
-      : undefined)
+    opts.contextWindowTokens ?? workspace.resolvedModel.contextWindowTokens
   const maxPtlRetries =
     opts.maxPtlRetries ??
     (mode === 'create' ? workspace.config.maxPtlRetries : undefined)
@@ -1568,12 +1621,14 @@ function buildWorkspaceSessionOptions(
         ? undefined
         : createCompactSummarizerFromProvider(workspace.provider),
     skills: workspace.skills,
-    ...(mode === 'create' && workspace.providerModel
+    ...(workspace.providerModel
       ? { model: workspace.providerModel }
       : {}),
     providerRegistry: workspace.providerRegistry,
     providerId: workspace.providerId,
     providerProfile: workspace.providerProfile,
+    resolvedModel: workspace.resolvedModel,
+    legacyContextWindowTokens: workspace.legacyContextWindowTokens,
     effortDialect: workspace.providerProfile?.effortDialect,
     ultrathinkMode: resolveWorkspaceUltrathinkMode(
       workspace,
@@ -1596,7 +1651,7 @@ function buildWorkspaceSessionOptions(
         ? false
         : {
             skills: injectSkills ? workspace.skills : [],
-            ...(mode === 'create' && workspace.providerModel
+            ...(workspace.providerModel
               ? { model: workspace.providerModel }
               : {}),
             permissionMode: workspace.permissionMode,
@@ -1793,7 +1848,7 @@ export async function reloadSessionPlugins(
 
   if (refreshCatalog) {
     const catalog = formatSkillCatalog(workspace.skills, {
-      contextWindowTokens: session.contextWindowTokens,
+      contextWindowTokens: session.resolvedModel.contextWindowTokens,
     })
     session.systemPromptSections = replaceSkillCatalogSection(
       session.systemPromptSections,
@@ -2546,29 +2601,39 @@ export async function resumeSession(
     autoSave: opts.autoSave ?? opts.create?.autoSave,
   })
 
+  // 恢复期的 provider/effort 警告也属于原会话；必须在任何快照应用或
+  // runtime 重绑定前继承原持久化身份，避免按 create 默认路径写出副本。
+  setSessionPersistMeta(session, {
+    createdAt: snapshot.createdAt,
+    filePath,
+    scope: opts.scope ?? 'workspace',
+  })
+
+  const registryBacked =
+    Boolean(session.providerRegistry) &&
+    Object.keys(session.providerRegistry?.profiles ?? {}).length > 0
   applySnapshotToSession(session, snapshot, {
     restoreSystemSections: !reassemble,
+    restoreModelRuntime: !registryBacked,
   })
 
   // CX6：若有 registry + 快照 providerId，尝试热切到该后端（缺 key 则保留 create 默认并警告）
-  const resumePid = snapshot.providerId?.trim()
-  if (
-    resumePid &&
-    session.providerRegistry &&
-    Object.keys(session.providerRegistry.profiles).length
-  ) {
+  const resumePid =
+    snapshot.resolvedModel?.providerId.trim() ??
+    snapshot.providerId?.trim()
+  if (resumePid && registryBacked) {
     const { switchSessionProvider } = await import('./sessionProvider.ts')
     const sw = switchSessionProvider(session, resumePid, {
-      model: snapshot.model,
+      model: snapshot.resolvedModel?.model ?? snapshot.model,
+      snapshot: snapshot.resolvedModel,
     })
     if (!sw.ok) {
-      session.providerId = resumePid
       try {
         const { appendSessionSystemNote } = await import('./sessionPersist.ts')
         await appendSessionSystemNote(
           session,
           `resume: provider "${resumePid}" unavailable — ${sw.reason}`,
-          { kind: 'resume_provider' },
+          { kind: 'resume_provider', filePath },
         )
       } catch {
         /* best-effort */
@@ -2578,8 +2643,17 @@ export async function resumeSession(
         message: `resume: provider "${resumePid}" unavailable (${sw.reason}); using default backend`,
       })
     }
-  } else if (resumePid && !session.providerId) {
+  } else if (!registryBacked && resumePid && !session.providerId) {
     session.providerId = resumePid
+  } else if (registryBacked && snapshot.model) {
+    const { switchSessionModel } = await import('./sessionProvider.ts')
+    const sw = switchSessionModel(session, snapshot.model)
+    if (!sw.ok) {
+      emit(session, {
+        type: 'error',
+        message: `resume: model "${snapshot.model}" unavailable (${sw.reason}); using current model`,
+      })
+    }
   }
 
   // CX6：effort 与当前后端求交
@@ -2591,6 +2665,7 @@ export async function resumeSession(
         const { appendSessionSystemNote } = await import('./sessionPersist.ts')
         await appendSessionSystemNote(session, clamp.warning, {
           kind: 'effort_clamp',
+          filePath,
         })
       } catch {
         /* ignore */
@@ -2641,12 +2716,6 @@ export async function resumeSession(
   if (reassemble && session.systemPromptSections.length === 0) {
     session.systemPromptSections = [...snapshot.systemPromptSections]
   }
-
-  setSessionPersistMeta(session, {
-    createdAt: snapshot.createdAt,
-    filePath,
-    scope: opts.scope ?? 'workspace',
-  })
 
   return {
     session,
@@ -2824,7 +2893,8 @@ export function wireSessionPrepareMessages(
         microPrepare,
         createAutoCompactPrepare({
           enabled: true,
-          contextWindowTokens: session.contextWindowTokens,
+          getContextWindowTokens: () =>
+            session.resolvedModel.contextWindowTokens,
           // AR2A0a：有锚走混合计数；无锚（旧会话/估算 usage）回退 C2 usage 路径
           getUsageAnchor: () => getSessionUsageAnchor(session),
           // C3：只在估算分支生效；anchor/usage 走服务端真实计数，本就含 system
@@ -2999,7 +3069,7 @@ export async function compactSession(
   if (session.postCompactReinjection !== false && session.skills?.length) {
     try {
       const catalog = formatSkillCatalog(session.skills, {
-        contextWindowTokens: session.contextWindowTokens,
+        contextWindowTokens: session.resolvedModel.contextWindowTokens,
       })
       session.systemPromptSections = replaceSkillCatalogSection(
         session.systemPromptSections,

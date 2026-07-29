@@ -17,6 +17,8 @@ import {
   getProjectLayout,
   getUserLayout,
   getWorkspaceSessionsDir,
+  parseResolvedModelMetadata,
+  type ResolvedModelMetadata,
 } from '../../config/src/index.ts'
 import {
   nowIso,
@@ -89,6 +91,8 @@ export type PersistableSession = {
   model?: string
   autoCompactEnabled: boolean
   contextWindowTokens: number
+  maxOutputTokens?: number
+  resolvedModel?: ResolvedModelMetadata
   maxPtlRetries: number
   phase?: SessionPhase
   /** 会话 Always-allow；可选落盘 */
@@ -150,6 +154,10 @@ export type SessionSnapshot = {
   model?: string
   autoCompactEnabled: boolean
   contextWindowTokens: number
+  /** CTX-2：optional for old JSON/JSONL compatibility */
+  maxOutputTokens?: number
+  /** CTX-2：provider/model identity + value sources */
+  resolvedModel?: ResolvedModelMetadata
   maxPtlRetries: number
   createdAt: string
   updatedAt: string
@@ -536,10 +544,12 @@ export function toSnapshot(
     typeof session.effortLevel === 'string' && session.effortLevel.trim()
       ? session.effortLevel.trim()
       : undefined
+  const resolvedModel = parseResolvedModelMetadata(session.resolvedModel)
   const providerId =
-    typeof session.providerId === 'string' && session.providerId.trim()
+    resolvedModel?.providerId ??
+    (typeof session.providerId === 'string' && session.providerId.trim()
       ? session.providerId.trim()
-      : undefined
+      : undefined)
   // 仅显式 false 落盘；默认 on 不写字段，兼容旧快照
   const showThinkingOff = session.showThinking === false
   const persistReasoningOn = session.persistReasoning === true
@@ -551,9 +561,16 @@ export function toSnapshot(
     permissionMode: session.permissionMode,
     messages: session.messages.map(cloneMessage),
     systemPromptSections: [...session.systemPromptSections],
-    model: session.model,
+    model: resolvedModel?.model ?? session.model,
     autoCompactEnabled: session.autoCompactEnabled,
-    contextWindowTokens: session.contextWindowTokens,
+    contextWindowTokens:
+      resolvedModel?.contextWindowTokens ?? session.contextWindowTokens,
+    ...(resolvedModel
+      ? { maxOutputTokens: resolvedModel.maxOutputTokens }
+      : session.maxOutputTokens !== undefined
+        ? { maxOutputTokens: session.maxOutputTokens }
+        : {}),
+    ...(resolvedModel ? { resolvedModel } : {}),
     maxPtlRetries: session.maxPtlRetries,
     createdAt,
     updatedAt: nowIso(),
@@ -635,6 +652,22 @@ export function parseSessionSnapshot(raw: unknown): SessionSnapshot {
     o.showThinking === false ? false : o.showThinking === true ? true : undefined
   const persistReasoning = o.persistReasoning === true ? true : undefined
   const promptCacheState = parsePromptCacheSessionState(o.promptCacheState)
+  const resolvedModel = parseResolvedModelMetadata(o.resolvedModel)
+  const contextWindowTokens =
+    resolvedModel?.contextWindowTokens ??
+    (typeof o.contextWindowTokens === 'number' &&
+    Number.isFinite(o.contextWindowTokens) &&
+    o.contextWindowTokens > 0
+      ? Math.floor(o.contextWindowTokens)
+      : 128_000)
+  const maxOutputTokens =
+    resolvedModel?.maxOutputTokens ??
+    (typeof o.maxOutputTokens === 'number' &&
+    Number.isFinite(o.maxOutputTokens) &&
+    o.maxOutputTokens > 0 &&
+    o.maxOutputTokens <= contextWindowTokens
+      ? Math.floor(o.maxOutputTokens)
+      : undefined)
   const sessionStartedAtMs =
     typeof o.sessionStartedAtMs === 'number' &&
     Number.isFinite(o.sessionStartedAtMs)
@@ -650,13 +683,13 @@ export function parseSessionSnapshot(raw: unknown): SessionSnapshot {
       : 'default') as PermissionMode,
     messages: o.messages as ChatMessage[],
     systemPromptSections: sections,
-    model: typeof o.model === 'string' ? o.model : undefined,
+    model:
+      resolvedModel?.model ??
+      (typeof o.model === 'string' ? o.model : undefined),
     autoCompactEnabled: o.autoCompactEnabled !== false,
-    contextWindowTokens:
-      typeof o.contextWindowTokens === 'number' &&
-      Number.isFinite(o.contextWindowTokens)
-        ? o.contextWindowTokens
-        : 128_000,
+    contextWindowTokens,
+    ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
+    ...(resolvedModel ? { resolvedModel } : {}),
     maxPtlRetries:
       typeof o.maxPtlRetries === 'number' && Number.isFinite(o.maxPtlRetries)
         ? Math.max(0, Math.floor(o.maxPtlRetries))
@@ -666,7 +699,11 @@ export function parseSessionSnapshot(raw: unknown): SessionSnapshot {
     phase: typeof o.phase === 'string' ? (o.phase as SessionPhase) : undefined,
     ...(permissionRules ? { permissionRules } : {}),
     ...(effortLevel ? { effortLevel } : {}),
-    ...(providerId ? { providerId } : {}),
+    ...(resolvedModel?.providerId
+      ? { providerId: resolvedModel.providerId }
+      : providerId
+        ? { providerId }
+        : {}),
     ...(showThinking !== undefined ? { showThinking } : {}),
     ...(persistReasoning ? { persistReasoning } : {}),
     ...(usage ? { usage } : {}),
@@ -856,6 +893,13 @@ export async function migrateSessionToJsonl(
     model: snapshot.model,
     autoCompactEnabled: snapshot.autoCompactEnabled,
     contextWindowTokens: snapshot.contextWindowTokens,
+    ...(snapshot.maxOutputTokens !== undefined
+      ? { maxOutputTokens: snapshot.maxOutputTokens }
+      : {}),
+    ...(snapshot.resolvedModel
+      ? { resolvedModel: snapshot.resolvedModel }
+      : {}),
+    ...(snapshot.providerId ? { providerId: snapshot.providerId } : {}),
     maxPtlRetries: snapshot.maxPtlRetries,
     phase: snapshot.phase,
     permissionRules: snapshot.permissionRules,
@@ -1222,6 +1266,12 @@ async function snapshotFromTranscriptOnly(
       typeof meta?.contextWindowTokens === 'number'
         ? meta.contextWindowTokens
         : 128_000,
+    ...(meta?.maxOutputTokens !== undefined
+      ? { maxOutputTokens: meta.maxOutputTokens }
+      : {}),
+    ...(meta?.resolvedModel
+      ? { resolvedModel: meta.resolvedModel }
+      : {}),
     maxPtlRetries:
       typeof meta?.maxPtlRetries === 'number' ? meta.maxPtlRetries : 3,
     createdAt: meta?.createdAt ?? now,
@@ -1284,8 +1334,20 @@ export async function loadSessionPair(
       snapshot: {
         ...jsonSnap,
         messages: useTranscript ? transcript.messages : jsonSnap.messages,
-        // meta 可补 JSON 缺省
-        model: jsonSnap.model ?? transcript.meta?.model,
+        // CTX-2：append-only runtime state 覆盖旁路 JSON 的旧身份；旧 meta 仍只补缺省。
+        ...(transcript.meta?.resolvedModel
+          ? {
+              model: transcript.meta.model,
+              providerId: transcript.meta.providerId,
+              contextWindowTokens:
+                transcript.meta.resolvedModel.contextWindowTokens,
+              maxOutputTokens:
+                transcript.meta.resolvedModel.maxOutputTokens,
+              resolvedModel: transcript.meta.resolvedModel,
+            }
+          : {
+              model: jsonSnap.model ?? transcript.meta?.model,
+            }),
         cwd: jsonSnap.cwd || transcript.meta?.cwd || opts?.cwd || process.cwd(),
         createdAt: jsonSnap.createdAt || transcript.meta?.createdAt || jsonSnap.createdAt,
       },
@@ -1485,7 +1547,11 @@ export async function loadSession(
 export function applySnapshotToSession(
   session: PersistableSession,
   snapshot: SessionSnapshot,
-  options?: { restoreSystemSections?: boolean },
+  options?: {
+    restoreSystemSections?: boolean
+    /** Registry-backed resume commits runtime identity through atomic switch. */
+    restoreModelRuntime?: boolean
+  },
 ): void {
   session.messages.length = 0
   session.messages.push(...snapshot.messages.map(cloneMessage))
@@ -1493,18 +1559,33 @@ export function applySnapshotToSession(
     session.systemPromptSections = [...snapshot.systemPromptSections]
   }
   session.permissionMode = snapshot.permissionMode
-  if (snapshot.model !== undefined) session.model = snapshot.model
+  const restoreModelRuntime = options?.restoreModelRuntime !== false
   session.autoCompactEnabled = snapshot.autoCompactEnabled
-  session.contextWindowTokens = snapshot.contextWindowTokens
+  if (restoreModelRuntime) {
+    const resolvedModel = parseResolvedModelMetadata(snapshot.resolvedModel)
+    if (resolvedModel) {
+      session.model = resolvedModel.model
+      session.providerId = resolvedModel.providerId
+      session.resolvedModel = resolvedModel
+      session.contextWindowTokens = resolvedModel.contextWindowTokens
+      session.maxOutputTokens = resolvedModel.maxOutputTokens
+    } else {
+      if (snapshot.model !== undefined) session.model = snapshot.model
+      session.contextWindowTokens = snapshot.contextWindowTokens
+      if (snapshot.maxOutputTokens !== undefined) {
+        session.maxOutputTokens = snapshot.maxOutputTokens
+      }
+      if (snapshot.providerId !== undefined) {
+        session.providerId = snapshot.providerId
+      }
+    }
+  }
   session.maxPtlRetries = snapshot.maxPtlRetries
   if (snapshot.permissionRules) {
     session.permissionRules = clonePermissionRules(snapshot.permissionRules)!
   }
   if (snapshot.effortLevel !== undefined) {
     session.effortLevel = snapshot.effortLevel
-  }
-  if (snapshot.providerId !== undefined) {
-    session.providerId = snapshot.providerId
   }
   if (snapshot.showThinking !== undefined) {
     session.showThinking = snapshot.showThinking

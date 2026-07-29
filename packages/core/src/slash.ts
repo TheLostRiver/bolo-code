@@ -174,6 +174,8 @@ export type SlashSession = {
   autoCompactEnabled?: boolean
   /** 上下文窗口（token 粗估基准）；/context 压力 */
   contextWindowTokens?: number
+  /** CTX-2：active provider/model 的统一 runtime 元数据 */
+  resolvedModel?: import('../../config/src/modelMetadata.ts').ResolvedModelMetadata
   /** C5：最近 compact 摘要；/context */
   lastCompact?: {
     at: string
@@ -1023,9 +1025,12 @@ export function buildContextUsageViewModel(
   const chars = approxChars(session)
   const est = estimateSessionContextTokens(session)
   const window =
-    typeof session.contextWindowTokens === 'number' &&
-    session.contextWindowTokens > 0
-      ? session.contextWindowTokens
+    typeof session.resolvedModel?.contextWindowTokens === 'number' &&
+    session.resolvedModel.contextWindowTokens > 0
+      ? session.resolvedModel.contextWindowTokens
+      : typeof session.contextWindowTokens === 'number' &&
+          session.contextWindowTokens > 0
+        ? session.contextWindowTokens
       : 128_000
   // C5：pressure 计数优先 usage；AR2A0a：有锚（真实 usage + 消息数快照）走混合
   const lastCall = session.usage?.lastCall
@@ -4014,9 +4019,12 @@ function cmdSkills(session: SlashSession, args: string): SlashDispatchResult {
   }
 
   const window =
-    typeof session.contextWindowTokens === 'number' &&
-    session.contextWindowTokens > 0
-      ? session.contextWindowTokens
+    typeof session.resolvedModel?.contextWindowTokens === 'number' &&
+    session.resolvedModel.contextWindowTokens > 0
+      ? session.resolvedModel.contextWindowTokens
+      : typeof session.contextWindowTokens === 'number' &&
+          session.contextWindowTokens > 0
+        ? session.contextWindowTokens
       : 128_000
   // 统计用全表；列表可按 filter 缩小显示
   const { stats } = formatSkillCatalogWithStats(skills, {

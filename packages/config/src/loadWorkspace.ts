@@ -49,6 +49,10 @@ import {
   type ProviderRegistry,
 } from './providerRegistry.ts'
 import {
+  resolveModelMetadata,
+  type ResolvedModelMetadata,
+} from './modelMetadata.ts'
+import {
   resolveSearxngSearchConfigFromSearch,
   type ResolvedSearxngSearchConfig,
 } from './searxng.ts'
@@ -82,6 +86,10 @@ export type ResolvedWorkspace = {
   providerId: string
   /** active profile 快照（无运行时 client） */
   providerProfile?: ProviderProfile
+  /** CTX-2：active provider/model 的统一上下文与输出元数据 */
+  resolvedModel: ResolvedModelMetadata
+  /** 用户/项目显式声明的旧顶层 window；默认注入值不算当前配置来源。 */
+  legacyContextWindowTokens?: number
   createdPaths: string[]
 }
 
@@ -101,7 +109,10 @@ function mergeHooks(a: HooksConfig, b: HooksConfig): HooksConfig {
  * 文件 config + 环境变量 → Provider（active = defaultProvider）。
  * 优先级：profile 字段 / apiKeyEnv > 全局 env 回落 > defaults
  */
-export function resolveProviderFromConfig(config: BoloConfigJson): {
+export function resolveProviderFromConfig(
+  config: BoloConfigJson,
+  options?: { legacyContextWindowTokens?: unknown },
+): {
   provider: LlmProvider
   kind: ProviderKind
   model?: string
@@ -109,24 +120,47 @@ export function resolveProviderFromConfig(config: BoloConfigJson): {
   profileId: string
   registry: ProviderRegistry
   profile?: ProviderProfile
+  resolvedModel: ResolvedModelMetadata
   missingKey?: boolean
 } {
   const registry = normalizeProviderRegistry(config)
   const profileId = registry.defaultId
   const profile = getProviderProfile(registry, profileId)
+  const legacyContextWindowTokens =
+    options &&
+    Object.prototype.hasOwnProperty.call(
+      options,
+      'legacyContextWindowTokens',
+    )
+      ? options.legacyContextWindowTokens
+      : config.contextWindowTokens
 
   if (!profile) {
     // 不应发生；兜底 mock
     const fallback = createProviderFromEnv({ forceMock: true })
+    const resolvedModel = resolveModelMetadata({
+      providerId: 'default',
+      legacyContextWindowTokens,
+    })
     return {
       ...fallback,
       profileId: 'default',
       registry,
+      resolvedModel,
       missingKey: true,
     }
   }
 
-  const built = createProviderFromProfile(profile)
+  const resolvedModel = resolveModelMetadata({
+    providerId: profileId,
+    model: profile.model,
+    profile,
+    legacyContextWindowTokens,
+  })
+  const built = createProviderFromProfile(profile, {
+    modelOverride: profile.model,
+    maxTokensOverride: resolvedModel.maxOutputTokens,
+  })
   return {
     provider: built.provider,
     kind: built.kind,
@@ -135,6 +169,7 @@ export function resolveProviderFromConfig(config: BoloConfigJson): {
     profileId,
     registry,
     profile,
+    resolvedModel,
     ...(built.missingKey ? { missingKey: true } : {}),
   }
 }
@@ -168,6 +203,24 @@ export async function loadWorkspace(
   const projectLoaded = await loadConfigJsonWithWarnings(project)
   const userConfig = userLoaded.config
   const projectConfig = projectLoaded.config
+  const explicitLegacyValue = Object.prototype.hasOwnProperty.call(
+    projectLoaded.sourceConfig ?? {},
+    'contextWindowTokens',
+  )
+    ? projectLoaded.sourceConfig?.contextWindowTokens
+    : Object.prototype.hasOwnProperty.call(
+          userLoaded.sourceConfig ?? {},
+          'contextWindowTokens',
+        )
+      ? userLoaded.sourceConfig?.contextWindowTokens
+      : undefined
+  const legacyContextWindowTokens =
+    typeof explicitLegacyValue === 'number' &&
+    Number.isFinite(explicitLegacyValue) &&
+    Number.isInteger(explicitLegacyValue) &&
+    explicitLegacyValue > 0
+      ? explicitLegacyValue
+      : undefined
   // 配置写坏了不阻断启动（进不去 CLI 更难修），但必须让用户看见
   const configWarnings = [...userLoaded.warnings, ...projectLoaded.warnings]
   const config = mergeConfigs(userConfig, projectConfig)
@@ -290,7 +343,9 @@ export async function loadWorkspace(
   mcpConfigWarnings.push(...mcpMerged.warnings)
   const mcpServers = mcpMerged.servers
 
-  const resolved = resolveProviderFromConfig(config)
+  const resolved = resolveProviderFromConfig(config, {
+    legacyContextWindowTokens,
+  })
   const permissionMode = (config.permissionMode ?? 'default') as PermissionMode
 
   return {
@@ -317,6 +372,10 @@ export async function loadWorkspace(
     providerRegistry: resolved.registry,
     providerId: resolved.profileId,
     providerProfile: resolved.profile,
+    resolvedModel: resolved.resolvedModel,
+    ...(legacyContextWindowTokens !== undefined
+      ? { legacyContextWindowTokens }
+      : {}),
     createdPaths,
   }
 }
