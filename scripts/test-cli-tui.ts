@@ -489,7 +489,10 @@ async function main(): Promise<void> {
   })
   assert(activityLine.includes('Thinking'), 'activity label')
   assert(activityLine.includes('1.2s'), 'activity elapsed time')
-  assert(activityLine.includes('Ctrl+C'), 'activity shows interrupt shortcut')
+  assert(
+    activityLine.includes('Esc') && !activityLine.includes('Ctrl+C'),
+    'activity shows Esc as the primary interrupt shortcut',
+  )
   const laterActivityLine = formatTurnActivityLine({
     label: 'Thinking',
     elapsedMs: 1_540,

@@ -587,7 +587,7 @@ function renderShortcutFooter(options: {
 }): string {
   const { menuOpen, mode, width, color } = options
   const enterSend = [keySegment('Enter'), actionSegment(' send')]
-  const interrupt = [keySegment('Ctrl+C'), actionSegment(' interrupt')]
+  const interrupt = [keySegment('Esc'), actionSegment(' interrupt')]
   const candidates: FooterSegment[][] = menuOpen
     ? [
         [

@@ -87,6 +87,7 @@ export class RetainedComposer implements Component, Focusable {
       color: boolean
       requestRender: () => void
       onInputSettled: () => void
+      onRunningInterrupt: () => void
       clearScreen: () => void
     },
   ) {}
@@ -144,7 +145,15 @@ export class RetainedComposer implements Component, Focusable {
   }
 
   handleInput(data: string): void {
-    if (!this.pending || this.mode !== 'editing' || !data) return
+    if (!data) return
+    if (this.mode === 'running') {
+      const key = parseKey(data)
+      if (key === 'escape' || key === 'ctrl+c') {
+        this.options.onRunningInterrupt()
+      }
+      return
+    }
+    if (!this.pending || this.mode !== 'editing') return
     if (
       data.startsWith(BRACKETED_PASTE_START) &&
       data.endsWith(BRACKETED_PASTE_END)

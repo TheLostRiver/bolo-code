@@ -6,6 +6,7 @@ import {
   type OverlayHandle,
 } from '@earendil-works/pi-tui/dist/tui.js'
 import { Text } from '@earendil-works/pi-tui/dist/components/text.js'
+import { parseKey } from '@earendil-works/pi-tui/dist/keys.js'
 import { getBoloHomeDir } from '../../../config/src/paths.ts'
 import {
   createCliTuiViewState,
@@ -75,6 +76,7 @@ export type CliTuiController = {
   configureWelcome(options: RetainedWelcomeOptions): void
   setWelcomeVisible(visible: boolean): void
   configureComposer(options: RetainedComposerConfig): void
+  setRunningInterruptHandler(handler?: () => void): void
   readInput(options?: { signal?: AbortSignal }): Promise<ReadTuiInputResult>
   restoreMessages(messages: readonly ChatMessage[]): void
   getState(): CliTuiViewState
@@ -319,6 +321,7 @@ export function createRetainedTuiController(options: {
   let stopped = false
   let streamedAssistantText = false
   let turnActivityEnabled = true
+  let runningInterruptHandler: (() => void) | undefined
   let root: RetainedRoot
   let tui: TUI
   let overlayHandle: OverlayHandle | undefined
@@ -333,7 +336,10 @@ export function createRetainedTuiController(options: {
   const composer = new RetainedComposer({
     color,
     requestRender: requestComponentRender,
-    onInputSettled: () => adapter.setInputEnabled(false),
+    onInputSettled: () => {
+      if (!runningInterruptHandler) adapter.setInputEnabled(false)
+    },
+    onRunningInterrupt: () => runningInterruptHandler?.(),
     clearScreen: () => {
       adapter.clearScreen()
       if (started && !stopped) tui.requestRender(true)
@@ -380,9 +386,24 @@ export function createRetainedTuiController(options: {
     setOverlayState: (next) => apply({ type: 'set_overlay', overlay: next }),
     requestRender: requestComponentRender,
     setInputEnabled: (active) => adapter.setInputEnabled(active),
-    shouldKeepInput: () => composer.isReading(),
+    shouldKeepInput: () =>
+      composer.isReading() || runningInterruptHandler !== undefined,
     getColumns: () => adapter.columns,
     getRows: () => adapter.rows,
+  })
+  const removeRunningInterruptInputListener = tui.addInputListener((data) => {
+    const handler = runningInterruptHandler
+    if (
+      !handler ||
+      composer.getMode() !== 'running' ||
+      overlay.isActive()
+    ) {
+      return
+    }
+    const key = parseKey(data)
+    if (key !== 'escape' && key !== 'ctrl+c') return
+    handler()
+    return { consume: true }
   })
 
   const finishThinkingSegment = (record: boolean): void => {
@@ -505,6 +526,10 @@ export function createRetainedTuiController(options: {
     configureComposer(composerOptions) {
       composer.configure(composerOptions)
     },
+    setRunningInterruptHandler(handler) {
+      runningInterruptHandler = handler
+      if (!handler && !composer.isReading()) adapter.setInputEnabled(false)
+    },
     readInput(inputOptions) {
       if (stopped) {
         return Promise.resolve({ type: 'aborted' })
@@ -564,6 +589,10 @@ export function createRetainedTuiController(options: {
         () => activity.finish(),
         () => overlay.cancel(),
         () => activeOverlayHandle?.hide(),
+        () => {
+          runningInterruptHandler = undefined
+        },
+        () => removeRunningInterruptInputListener(),
         () => composer.cancelInput(),
         () => adapter.setInputEnabled(false),
         () => {

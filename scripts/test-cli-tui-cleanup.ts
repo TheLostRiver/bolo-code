@@ -592,10 +592,11 @@ async function testReplCleanupPreservesFailures(): Promise<void> {
         undefined,
         new Error('unused interrupt output fault'),
       )
+      const visibleOutput: string[] = []
       const controller = createRetainedTuiController({
         input,
         output,
-        writeOut: () => {},
+        writeOut: (text) => visibleOutput.push(text),
         env: { NO_COLOR: '1' },
       })
       await controller.start()
@@ -621,10 +622,31 @@ async function testReplCleanupPreservesFailures(): Promise<void> {
         () => session.coordinator.snapshot(session.id).state === 'running',
         'active retained turn',
       )
-      process.emit('SIGINT')
-      await withTimeout(
-        interruptControlHandled,
-        'interrupt control promotion before handler release',
+      assert(
+        !controller.composer.isReading() &&
+          input.listenerCount() === 1 &&
+          input.isRaw,
+        'running retained turn keeps raw stdin without enabling message edits',
+      )
+      const originalComposerInput = controller.composer.handleInput.bind(
+        controller.composer,
+      )
+      let focusedComponentDispatches = 0
+      controller.composer.handleInput = () => {
+        focusedComponentDispatches += 1
+      }
+      try {
+        input.send('\u001b')
+        await withTimeout(
+          interruptControlHandled,
+          'global Esc interrupt before focused Composer dispatch',
+        )
+      } finally {
+        controller.composer.handleInput = originalComposerInput
+      }
+      assert(
+        focusedComponentDispatches === 0,
+        'running interrupt is consumed by the global TUI input boundary',
       )
       await waitFor(
         () => session.coordinator.snapshot(session.id).state === 'idle',
@@ -632,9 +654,9 @@ async function testReplCleanupPreservesFailures(): Promise<void> {
       )
       assert(
         !controller.composer.isReading() &&
-          input.listenerCount() === 0 &&
-          !input.isRaw,
-        'retained REPL must not reacquire input before SIGINT handling settles',
+          input.listenerCount() === 1 &&
+          input.isRaw,
+        'retained REPL keeps one raw owner while interrupt handling settles',
       )
       releaseInterruptHandler?.()
       await waitFor(
@@ -649,6 +671,26 @@ async function testReplCleanupPreservesFailures(): Promise<void> {
         controller.composer.focused,
         'turn interrupt restores retained Composer focus',
       )
+
+      input.send('interrupt me again\r')
+      await waitFor(
+        () => session.coordinator.snapshot(session.id).state === 'running',
+        'second active retained turn',
+      )
+      input.send('\u0003')
+      await waitFor(
+        () => session.coordinator.snapshot(session.id).state === 'idle',
+        'running Ctrl+C compatibility interrupt',
+      )
+      await waitFor(
+        () =>
+          controller.composer.getMode() === 'editing' &&
+          controller.composer.isReading() &&
+          input.listenerCount() === 1 &&
+          input.isRaw,
+        'Composer input after running Ctrl+C compatibility interrupt',
+      )
+
       const inputEventsBeforeExit = controller.getTerminalStats().inputEvents
       input.send('x')
       await waitFor(
@@ -674,6 +716,13 @@ async function testReplCleanupPreservesFailures(): Promise<void> {
       assert(
         process.listenerCount('SIGINT') === sigintListeners,
         'turn interrupt path releases its process SIGINT listener',
+      )
+      const rendered = visibleOutput.join('')
+      assert(
+        !rendered.includes('turn interrupt requested') &&
+          !rendered.includes('turn ended with aborted') &&
+          !rendered.includes('turn_ms'),
+        `user interrupt hides internal control diagnostics: ${JSON.stringify(rendered)}`,
       )
     }
 

@@ -350,16 +350,21 @@ async function main() {
     askPermission: async () => 'allow',
   })
   const cliAbort = new AbortController()
+  const cliAbortErrors: string[] = []
   const pendingCliTurn = runOnePrompt(cliAbortSession, 'cancel cli turn', {
     signal: cliAbort.signal,
     writeOut: () => {},
-    writeErr: () => {},
+    writeErr: (text) => cliAbortErrors.push(text),
   })
   setTimeout(() => cliAbort.abort('test'), 5)
   const cliTurn = await pendingCliTurn
   assert(
     cliTurn.terminalReason === 'aborted',
     `cli abort terminal=${cliTurn.terminalReason}`,
+  )
+  assert(
+    cliAbortErrors.length === 0,
+    `caller abort is normal control flow, not a warning: ${JSON.stringify(cliAbortErrors)}`,
   )
 
   console.log('ok: test-cli-events')

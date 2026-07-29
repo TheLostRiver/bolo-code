@@ -40,8 +40,8 @@ export function formatTurnActivityLine(options: {
   const seconds = Math.max(0, options.elapsedMs) / 1_000
   const elapsed = seconds < 10 ? seconds.toFixed(1) : Math.round(seconds).toString()
   const variants = [
-    `${glyph} ${options.label} · ${elapsed}s · Ctrl+C interrupt`,
-    `${glyph} ${options.label} · ${elapsed}s · ^C`,
+    `${glyph} ${options.label} · ${elapsed}s · Esc interrupt`,
+    `${glyph} ${options.label} · ${elapsed}s · Esc`,
     `${glyph} ${options.label} · ${elapsed}s`,
     `${glyph} ${options.label}`,
   ]

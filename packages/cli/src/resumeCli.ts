@@ -886,7 +886,10 @@ export async function runOnePrompt(
         : `${assistantText}\n`
       writeOut(output)
     }
-    if (terminal.reason !== 'completed') {
+    if (
+      terminal.reason !== 'completed' &&
+      terminal.reason !== 'aborted'
+    ) {
       const detail = terminal.detail ? `: ${terminal.detail}` : ''
       writeErr(`warn: turn ended with ${terminal.reason}${detail}\n`)
     }
@@ -1036,7 +1039,6 @@ export async function runRepl(
           expectedTurnId: snapshot.active.turnId,
         })
         if (result.ok) {
-          runtimeErr(`^C turn interrupt requested (${snapshot.active.turnId})\n`)
           if (result.persistenceWarning) {
             runtimeErr(`warning: ${result.persistenceWarning}\n`)
           }
@@ -1045,7 +1047,6 @@ export async function runRepl(
       }
       // ownership 前的极短窗口或本地 slash 面板：回退本地 signal。
       activeTurn.abort('interrupt')
-      runtimeErr('^C turn cancelled\n')
       return
     }
     replClosed = true
@@ -1069,6 +1070,7 @@ export async function runRepl(
   const onSigint = () => {
     scheduleInterrupt()
   }
+  controller?.setRunningInterruptHandler(scheduleInterrupt)
   if (dynamicTui) process.on('SIGINT', onSigint)
   else rl?.on('SIGINT', onSigint)
   const onExternalAbort = () => {
@@ -1198,6 +1200,7 @@ export async function runRepl(
           else rl?.removeListener('SIGINT', onSigint)
         },
         () => options?.signal?.removeEventListener('abort', onExternalAbort),
+        () => controller?.setRunningInterruptHandler(undefined),
         () => controller?.stop(),
         () => rl?.close(),
         async () => {
