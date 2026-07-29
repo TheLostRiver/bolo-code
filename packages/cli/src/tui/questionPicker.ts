@@ -2,9 +2,8 @@
  * AR-T3+ · AskUserQuestion 的 CLI 选择控件
  *
  * 现有 `arrowPicker` 只能单选，且空格键已被占作「确认」，改造不了；
- * 多选与多问题分组只能新写。分层照 arrowPicker：
- * **纯键位 reducer + 纯渲染 + 可注入 readKey 的循环**，
- * 绝大部分逻辑不需要真终端就能测。
+ * 多选与多问题分组由共享 reducer/renderer 表达；retained OverlayHost
+ * 消费这套状态，plain TTY 使用编号文本回落。
  *
  * 三条硬规则，都是「不许替用户答」在 UI 层的落点：
  *
@@ -20,7 +19,6 @@
  */
 
 import type { AskQuestion, AskUserQuestionSelection } from '../../../shared/src/index.ts'
-import { createLocalPanelPainter } from './localPanel.ts'
 
 export type QuestionPickerState = {
   questions: readonly AskQuestion[]
@@ -269,102 +267,4 @@ export async function runTextQuestionPicker(opts: {
   }
 
   return { kind: 'answered', selections }
-}
-
-export async function runQuestionPicker(opts: {
-  questions: readonly AskQuestion[]
-  writeOut?: (s: string) => void
-  readKey?: () => Promise<string>
-  /** 自由文本输入；缺省时 Other 行不可用 */
-  readLine?: (prompt: string) => Promise<string>
-  isTty?: boolean
-  signal?: AbortSignal
-}): Promise<QuestionPickerOutcome> {
-  if (!opts.questions.length) return { kind: 'cancelled' }
-  const writeOut = opts.writeOut ?? ((s: string) => process.stdout.write(s))
-  const isTty = opts.isTty ?? process.stdin.isTTY === true
-
-  if (!isTty && !opts.readKey) {
-    // 没有终端就没有用户。绝不在这里挑一个「合理的默认」。
-    return {
-      kind: 'unavailable',
-      reason: 'no interactive terminal',
-    }
-  }
-
-  const readKey = opts.readKey ?? defaultReadKey
-  const selections: AskUserQuestionSelection[] = []
-  const painter = createLocalPanelPainter(writeOut)
-
-  try {
-    for (let qi = 0; qi < opts.questions.length; qi++) {
-      let s = createQuestionPickerState(opts.questions, qi)
-      const paint = () => {
-        painter.paint(formatQuestionPickerScreen(s))
-      }
-      paint()
-
-      for (;;) {
-        if (opts.signal?.aborted) return { kind: 'cancelled' }
-        const key = await readKey()
-        const r = applyQuestionPickerKey(s, key)
-        s = r.state
-        if (!r.done) {
-          paint()
-          continue
-        }
-        if (r.done.kind === 'cancelled') {
-          // 半份答案比没有更糟：模型会把没答的题当成已经问过
-          return { kind: 'cancelled' }
-        }
-        if (r.done.kind === 'custom') {
-          if (!opts.readLine) {
-            s = { ...s, notice: 'typing a custom answer is not available here' }
-            paint()
-            continue
-          }
-          painter.clear()
-          const text = (await opts.readLine('your answer: ')).trim()
-          if (!text) {
-            // 敲了个空的不算答案，回到列表继续选
-            s = { ...s, notice: 'nothing typed — pick an option or type an answer' }
-            paint()
-            continue
-          }
-          selections.push({ selected: [text], custom: true })
-          break
-        }
-        selections.push(r.done.selection)
-        break
-      }
-    }
-    return { kind: 'answered', selections }
-  } finally {
-    painter.clear()
-  }
-}
-
-async function defaultReadKey(): Promise<string> {
-  const stdin = process.stdin
-  if (!stdin.isTTY) return 'esc'
-  return await new Promise<string>((resolve) => {
-    const wasRaw = stdin.isRaw
-    stdin.setRawMode?.(true)
-    stdin.resume()
-    stdin.once('data', (buf: Buffer) => {
-      stdin.setRawMode?.(wasRaw ?? false)
-      const s = buf.toString('utf8')
-      if (s === '\u0003') return resolve('ctrl-c')
-      if (s === '\u001b') return resolve('esc')
-      if (s === '\r' || s === '\n') return resolve('enter')
-      if (s === '\u001b[A') return resolve('up')
-      if (s === '\u001b[B') return resolve('down')
-      if (s === ' ') return resolve(' ')
-      if (s === 'q' || s === 'Q') return resolve('q')
-      if (s === 'k') return resolve('up')
-      if (s === 'j') return resolve('down')
-      if (/^[1-9]$/.test(s)) return resolve(s)
-      resolve('none')
-    })
-  })
 }

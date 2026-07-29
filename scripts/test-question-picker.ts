@@ -25,7 +25,6 @@ import {
   applyQuestionPickerKey,
   createQuestionPickerState,
   formatQuestionPickerScreen,
-  runQuestionPicker,
   runTextQuestionPicker,
   type QuestionPickerState,
 } from '../packages/cli/src/tui/questionPicker.ts'
@@ -179,95 +178,7 @@ async function main() {
     assert(/1\s*\/\s*2|1 of 2/i.test(screen), `shows progress: ${screen}`)
   }
 
-  // ── 10) runQuestionPicker：注入按键，走完两题 ──
-  {
-    const keys = ['down', 'enter', ' ', 'enter']
-    let i = 0
-    const out: string[] = []
-    const r = await runQuestionPicker({
-      questions: [SINGLE, MULTI],
-      isTty: true,
-      readKey: async () => keys[i++] ?? 'esc',
-      writeOut: (s) => out.push(s),
-    })
-    assert(r.kind === 'answered', `both questions answered: ${JSON.stringify(r)}`)
-    const sel = (r as { selections: Array<{ selected: string[] }> }).selections
-    assert(sel.length === 2, `one selection per question, got ${sel.length}`)
-    assert(sel[0]!.selected[0] === 'SQLite', `q1: ${JSON.stringify(sel[0])}`)
-    assert(sel[1]!.selected[0] === 'Auth', `q2: ${JSON.stringify(sel[1])}`)
-  }
-
-  // ── 11) 中途取消 → 整体取消，不交半份答案 ──
-  {
-    const keys = ['down', 'enter', 'esc']
-    let i = 0
-    const r = await runQuestionPicker({
-      questions: [SINGLE, MULTI],
-      isTty: true,
-      readKey: async () => keys[i++] ?? 'esc',
-      writeOut: () => {},
-    })
-    assert(
-      r.kind === 'cancelled',
-      `cancelling question 2 cancels the whole thing — a half-filled answer set is worse than none: ${JSON.stringify(r)}`,
-    )
-  }
-
-  // ── 12) 非 TTY → 如实说做不到 ──
-  {
-    const r = await runQuestionPicker({
-      questions: [SINGLE],
-      isTty: false,
-      writeOut: () => {},
-    })
-    assert(
-      r.kind === 'unavailable',
-      `no terminal means no user; must not pick something: ${JSON.stringify(r)}`,
-    )
-  }
-
-  // ── 13) 自由文本走完整条链 ──
-  {
-    const keys = ['up', 'enter']
-    let i = 0
-    const r = await runQuestionPicker({
-      questions: [SINGLE],
-      isTty: true,
-      readKey: async () => keys[i++] ?? 'esc',
-      readLine: async () => 'DuckDB',
-      writeOut: () => {},
-    })
-    assert(r.kind === 'answered', `free text answers: ${JSON.stringify(r)}`)
-    const sel = (r as { selections: Array<{ selected: string[]; custom?: boolean }> })
-      .selections
-    assert(sel[0]!.selected[0] === 'DuckDB', 'carries the typed text')
-    assert(
-      sel[0]!.custom === true,
-      'marks it custom — the model must not treat it as one of its own options',
-    )
-  }
-
-  // ── 14) 自由文本敲了空的 → 不算答案，回到选择 ──
-  {
-    const keys = ['up', 'enter', 'down', 'enter']
-    let i = 0
-    const r = await runQuestionPicker({
-      questions: [SINGLE],
-      isTty: true,
-      readKey: async () => keys[i++] ?? 'esc',
-      readLine: async () => '   ',
-      writeOut: () => {},
-    })
-    assert(
-      r.kind === 'answered',
-      `empty free text falls back to the list rather than submitting nothing: ${JSON.stringify(r)}`,
-    )
-    const sel = (r as { selections: Array<{ selected: string[]; custom?: boolean }> })
-      .selections
-    assert(sel[0]!.custom !== true, 'blank input is not a custom answer')
-  }
-
-  // ── 15) plain text：编号单选 + 逗号多选，不替用户补答案 ──
+  // ── 10) plain text：编号单选 + 逗号多选，不替用户补答案 ──
   {
     const answers = ['invalid', '2', '1,3']
     const writes: string[] = []
@@ -294,7 +205,7 @@ async function main() {
     )
   }
 
-  // ── 16) plain text Other：自由文本明确标记 custom ──
+  // ── 11) plain text Other：自由文本明确标记 custom ──
   {
     const answers = ['other', 'DuckDB']
     const result = await runTextQuestionPicker({
@@ -311,7 +222,7 @@ async function main() {
     )
   }
 
-  // ── 17) plain production adapter 复用注入的 readline ──
+  // ── 12) plain production adapter 复用注入的 readline ──
   {
     const answers = ['2']
     const asker = createTtyAskUserQuestion({
@@ -327,7 +238,7 @@ async function main() {
     )
   }
 
-  // ── 18) retained adapter 不创建第二个 stdin owner ──
+  // ── 13) retained adapter 不创建第二个 stdin owner ──
   {
     let overlayCalls = 0
     const asker = createTtyAskUserQuestion({

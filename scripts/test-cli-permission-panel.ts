@@ -9,7 +9,6 @@ import {
   formatPermissionPanelScreen,
   measureTerminalText,
   resolveTuiDockWidth,
-  runPermissionPanel,
 } from '../packages/cli/src/index.ts'
 import { runToolUse } from '../packages/core/src/toolExecution.ts'
 
@@ -97,26 +96,6 @@ async function main(): Promise<void> {
   assert(
     applyPermissionPanelKey(0, 'esc').decision === 'deny',
     'escape denies',
-  )
-
-  const panelWrites: string[] = []
-  const panelKeys = ['up', 'enter']
-  const panelDecision = await runPermissionPanel({
-    request,
-    readKey: async () => panelKeys.shift() ?? 'n',
-    writeOut: (text) => panelWrites.push(text),
-    isTty: true,
-    columns: 72,
-    color: false,
-  })
-  assert(panelDecision === 'allow_always', 'panel returns selected decision')
-  assert(
-    panelWrites.join('').includes('npm.cmd test -- --runInBand'),
-    'interactive panel renders operation details',
-  )
-  assert(
-    !panelWrites.join('').includes('\u001b[2J'),
-    'permission panel never clears the full screen',
   )
 
   let textPrompt = ''

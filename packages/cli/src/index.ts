@@ -109,12 +109,9 @@ export {
 export {
   applyArrowPickerKey,
   formatArrowPickerScreen,
-  runArrowPicker,
   type ArrowPickItem,
 } from './tui/arrowPicker.ts'
 export {
-  runDiffPane,
-  runDiffApprovePane,
   type DiffPaneResult,
   type DiffPaneBrowseResult,
   type DiffPaneApproveResult,
@@ -179,7 +176,6 @@ export {
 export {
   applyPermissionPanelKey,
   formatPermissionPanelScreen,
-  runPermissionPanel,
   type PermissionPanelKeyResult,
 } from './tui/permissionPanel.ts'
 export { createCliProvider, NO_KEY_MSG } from './provider.ts'

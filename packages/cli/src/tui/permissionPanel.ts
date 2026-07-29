@@ -1,9 +1,4 @@
-/**
- * Structured permission selector for non-file tools.
- *
- * The panel owns only the rows it paints. It never clears the full terminal,
- * so the conversation timeline remains in scrollback.
- */
+/** Shared permission reducer and screen formatter for retained overlays. */
 
 import { resolveTuiDockWidth } from './frame.ts'
 import {
@@ -16,7 +11,6 @@ import type {
   AskPermissionDecision,
   AskPermissionRequest,
 } from './askPermissionTty.ts'
-import { createLocalPanelPainter } from './localPanel.ts'
 
 export type PermissionPanelKeyResult = {
   index: number
@@ -313,137 +307,4 @@ export function formatPermissionPanelScreen(
 
   const color = options?.color !== false
   return lines.map((line) => stylePanelLine(line, color)).join('\n')
-}
-
-function parseRawKey(text: string): string {
-  if (text === '\u0003') return 'ctrl-c'
-  if (text === '\u001b') return 'esc'
-  if (text === '\r' || text === '\n') return 'enter'
-  if (text === '\u001b[A') return 'up'
-  if (text === '\u001b[B') return 'down'
-  if (text === ' ') return ' '
-  if (/^[1-3aynqjk]$/iu.test(text)) return text.toLowerCase()
-  return 'none'
-}
-
-function defaultReadKey(signal?: AbortSignal): Promise<string> {
-  const stdin = process.stdin
-  if (!stdin.isTTY || signal?.aborted) return Promise.resolve('ctrl-c')
-  return new Promise<string>((resolve) => {
-    const wasRaw = stdin.isRaw
-    let settled = false
-    const finish = (key: string) => {
-      if (settled) return
-      settled = true
-      signal?.removeEventListener('abort', onAbort)
-      stdin.removeListener('data', onData)
-      stdin.setRawMode?.(wasRaw ?? false)
-      resolve(key)
-    }
-    const onAbort = () => finish('ctrl-c')
-    const onData = (buffer: Buffer) =>
-      finish(parseRawKey(buffer.toString('utf8')))
-    signal?.addEventListener('abort', onAbort, { once: true })
-    stdin.setRawMode?.(true)
-    stdin.resume()
-    stdin.once('data', onData)
-  })
-}
-
-function readKeyWithAbort(
-  readKey: () => Promise<string>,
-  signal?: AbortSignal,
-): Promise<string> {
-  if (!signal) return readKey()
-  if (signal.aborted) return Promise.resolve('ctrl-c')
-  return new Promise<string>((resolve, reject) => {
-    let settled = false
-    const finish = (key: string) => {
-      if (settled) return
-      settled = true
-      signal.removeEventListener('abort', onAbort)
-      resolve(key)
-    }
-    const onAbort = () => finish('ctrl-c')
-    signal.addEventListener('abort', onAbort, { once: true })
-    readKey().then(finish, (error) => {
-      if (settled) return
-      settled = true
-      signal.removeEventListener('abort', onAbort)
-      reject(error)
-    })
-  })
-}
-
-function formatDecisionSummary(
-  request: AskPermissionRequest,
-  decision: AskPermissionDecision,
-  color: boolean,
-): string {
-  const plain =
-    decision === 'allow'
-      ? `✓ Allowed ${request.toolName} once`
-      : decision === 'allow_always'
-        ? `✓ Always allowed ${request.toolName} for this session`
-        : `✗ Denied ${request.toolName}`
-  if (!color) return `${plain}\n`
-  const tone =
-    decision === 'deny' ? '\u001b[38;5;203m' : '\u001b[38;5;78m'
-  return `${tone}${plain}\u001b[0m\n`
-}
-
-export async function runPermissionPanel(options: {
-  request: AskPermissionRequest
-  writeOut?: (text: string) => void
-  readKey?: () => Promise<string>
-  isTty?: boolean
-  columns?: number
-  color?: boolean
-  signal?: AbortSignal
-  onInterrupt?: () => void
-  initialIndex?: number
-}): Promise<AskPermissionDecision> {
-  const isTty = options.isTty ?? process.stdin.isTTY === true
-  if (!isTty && !options.readKey) return 'deny'
-  if (options.signal?.aborted) return 'deny'
-
-  const writeOut =
-    options.writeOut ?? ((text: string) => process.stdout.write(text))
-  const color =
-    options.color ??
-    (process.env.NO_COLOR === undefined &&
-      process.env.BOLO_THEME?.trim().toLowerCase() !== 'plain')
-  const readKey =
-    options.readKey ?? (() => defaultReadKey(options.signal))
-  const painter = createLocalPanelPainter(writeOut)
-  let index =
-    options.initialIndex == null
-      ? 2
-      : Math.max(0, Math.min(2, Math.floor(options.initialIndex)))
-  const paint = () =>
-    painter.paint(
-      formatPermissionPanelScreen(options.request, index, {
-        columns: options.columns ?? process.stdout.columns,
-        color,
-      }),
-    )
-
-  paint()
-  try {
-    for (;;) {
-      const key = await readKeyWithAbort(readKey, options.signal)
-      if (key === 'ctrl-c') options.onInterrupt?.()
-      const next = applyPermissionPanelKey(index, key)
-      index = next.index
-      if (next.decision) {
-        painter.clear()
-        writeOut(formatDecisionSummary(options.request, next.decision, color))
-        return next.decision
-      }
-      if (key !== 'none') paint()
-    }
-  } catch {
-    painter.clear()
-    return 'deny'
-  }
 }

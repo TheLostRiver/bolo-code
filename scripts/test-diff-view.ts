@@ -13,10 +13,6 @@ import {
   type FileChangeRecord,
 } from '../packages/core/src/index.ts'
 import {
-  runDiffPane,
-  runDiffApprovePane,
-} from '../packages/cli/src/tui/diffPane.ts'
-import {
   createTtyAskPermission,
   parsePermissionAnswer,
 } from '../packages/cli/src/tui/askPermissionTty.ts'
@@ -135,33 +131,6 @@ async function main() {
   })
   assert(pvm.files[0]!.source === 'preview', 'preview source')
 
-  {
-    const keys = ['j', 'enter', 'q']
-    let i = 0
-    const out: string[] = []
-    const pane = await runDiffPane({
-      model: buildDiffViewModelFromLog(log),
-      isTty: false,
-      readKey: async () => keys[i++] ?? 'q',
-      writeOut: (s) => {
-        out.push(s)
-      },
-      rows: 16,
-      cols: 60,
-    })
-    assert(pane.ok && pane.reason === 'quit', 'pane quit')
-    assert(out.length >= 1, 'pane painted')
-  }
-
-  {
-    const pane = await runDiffPane({
-      model: buildDiffViewModelFromLog([]),
-      isTty: true,
-      readKey: async () => 'q',
-    })
-    assert(!pane.ok && pane.reason === 'empty', 'empty pane')
-  }
-
   // U2 approve keys
   {
     let avm = buildDiffViewModelFromPreview({
@@ -201,21 +170,6 @@ async function main() {
       rows: 16,
     })
     assert(scr.includes('y allow') || scr.includes('[y/a/N]'), 'approve help')
-  }
-
-  {
-    const keys = ['enter', 'y']
-    let i = 0
-    const pane = await runDiffApprovePane({
-      model: pvm,
-      toolName: 'Edit',
-      isTty: false,
-      readKey: async () => keys[i++] ?? 'n',
-      writeOut: () => {},
-      rows: 16,
-      cols: 60,
-    })
-    assert(pane.ok && pane.decision === 'allow', 'approve pane allow')
   }
 
   {

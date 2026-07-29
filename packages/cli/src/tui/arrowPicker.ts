@@ -1,10 +1,6 @@
-/**
- * F-T8-PICKER：会话列表箭头键选择（TTY raw mode）。
- * 非 TTY / 无 raw → 调用方回落编号输入。
- */
+/** Shared picker state plus the plain numbered fallback. */
 
 import * as readline from 'node:readline'
-import { createLocalPanelPainter } from './localPanel.ts'
 
 export type ArrowPickItem = {
   id: string
@@ -156,94 +152,5 @@ export async function runNumberedArrowPicker(opts: {
     }
   } finally {
     ownReadline?.close()
-  }
-}
-
-/**
- * 交互箭头 picker。stdin 需 TTY。
- * 测试可注入 readKey 返回 'up'|'down'|'enter'|'q'
- */
-export async function runArrowPicker(opts: {
-  items: ArrowPickItem[]
-  writeOut?: (s: string) => void
-  readKey?: () => Promise<string>
-  isTty?: boolean
-  /** 标题行；缺省 Select session… */
-  title?: string
-  /** 初始选中下标（夹到合法范围） */
-  initialIndex?: number
-}): Promise<ArrowPickResult> {
-  const items = opts.items
-  if (!items.length) {
-    return { ok: false, reason: 'cancel', message: 'empty list' }
-  }
-  const writeOut = opts.writeOut ?? ((s) => process.stdout.write(s))
-  const isTty = opts.isTty ?? process.stdin.isTTY === true
-
-  if (!isTty && !opts.readKey) {
-    return {
-      ok: false,
-      reason: 'unsupported',
-      message: 'arrow picker requires TTY',
-    }
-  }
-
-  const max = items.length - 1
-  let index =
-    opts.initialIndex != null && Number.isFinite(opts.initialIndex)
-      ? Math.max(0, Math.min(max, Math.floor(opts.initialIndex)))
-      : 0
-  const painter = createLocalPanelPainter(writeOut)
-  const paint = () => {
-    painter.paint(
-      formatArrowPickerScreen(items, index, {
-        title: opts.title,
-      }),
-    )
-  }
-
-  const readKey =
-    opts.readKey ??
-    (async () => {
-      const stdin = process.stdin
-      if (!stdin.isTTY) return 'q'
-      return await new Promise<string>((resolve) => {
-        const wasRaw = stdin.isRaw
-        stdin.setRawMode?.(true)
-        stdin.resume()
-        stdin.once('data', (buf: Buffer) => {
-          stdin.setRawMode?.(wasRaw ?? false)
-          const s = buf.toString('utf8')
-          if (s === '\u0003') return resolve('ctrl-c')
-          if (s === '\u001b') return resolve('esc')
-          if (s === '\r' || s === '\n') return resolve('enter')
-          if (s === '\u001b[A') return resolve('up')
-          if (s === '\u001b[B') return resolve('down')
-          if (s === 'q' || s === 'Q') return resolve('q')
-          if (s === 'k') return resolve('up')
-          if (s === 'j') return resolve('down')
-          if (/^[1-9]$/.test(s)) return resolve(s)
-          resolve('none')
-        })
-      })
-    })
-
-  paint()
-  try {
-    for (;;) {
-      const key = await readKey()
-      if (key === 'none') continue
-      const next = applyArrowPickerKey(index, items.length, key)
-      index = next.index
-      if (next.done === 'select') {
-        return { ok: true, id: items[index]!.id, index }
-      }
-      if (next.done === 'cancel') {
-        return { ok: false, reason: 'cancel', message: 'cancelled' }
-      }
-      paint()
-    }
-  } finally {
-    painter.clear()
   }
 }

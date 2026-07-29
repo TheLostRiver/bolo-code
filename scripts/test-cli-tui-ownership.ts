@@ -7,7 +7,7 @@
  */
 
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
+import { access, readFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import { createCliOnEvent } from '../packages/cli/src/resumeCli.ts'
@@ -30,6 +30,13 @@ function assertOmits(
   }
 }
 
+async function assertFileMissing(relative: string): Promise<void> {
+  await assert.rejects(
+    access(path.resolve(relative)),
+    `${relative} must be physically deleted`,
+  )
+}
+
 async function main(): Promise<void> {
   const [
     newSessionSource,
@@ -38,6 +45,11 @@ async function main(): Promise<void> {
     retainedSource,
     adapterSource,
     runtimePagerSource,
+    cliIndexSource,
+    arrowPickerSource,
+    diffPaneSource,
+    permissionPanelSource,
+    questionPickerSource,
   ] =
     await Promise.all([
       readSource('packages/cli/src/newSessionCli.ts'),
@@ -46,6 +58,11 @@ async function main(): Promise<void> {
       readSource('packages/cli/src/tui/retainedTui.ts'),
       readSource('packages/cli/src/tui/boloTerminalAdapter.ts'),
       readSource('packages/cli/src/tui/runtimePager.ts'),
+      readSource('packages/cli/src/index.ts'),
+      readSource('packages/cli/src/tui/arrowPicker.ts'),
+      readSource('packages/cli/src/tui/diffPane.ts'),
+      readSource('packages/cli/src/tui/permissionPanel.ts'),
+      readSource('packages/cli/src/tui/questionPicker.ts'),
     ])
 
   assertOmits(newSessionSource, 'new-session composition', [
@@ -88,6 +105,31 @@ async function main(): Promise<void> {
     'readRuntimePagerKey',
     'runRuntimePager',
   ])
+  assertOmits(cliIndexSource, 'CLI public index', [
+    'runArrowPicker',
+    'runDiffPane',
+    'runDiffApprovePane',
+    'runPermissionPanel',
+  ])
+  assertOmits(arrowPickerSource, 'arrow picker module', [
+    'createLocalPanelPainter',
+    'runArrowPicker',
+  ])
+  assertOmits(diffPaneSource, 'diff view-model module', [
+    'createLocalPanelPainter',
+    'runDiffPaneLoop',
+    'runDiffPane',
+    'runDiffApprovePane',
+  ])
+  assertOmits(permissionPanelSource, 'permission view-model module', [
+    'createLocalPanelPainter',
+    'runPermissionPanel',
+  ])
+  assertOmits(questionPickerSource, 'question view-model module', [
+    'createLocalPanelPainter',
+    'runQuestionPicker',
+  ])
+  await assertFileMissing('packages/cli/src/tui/localPanel.ts')
 
   const dynamic = createCliOnEvent({
     writeOut: () => undefined,

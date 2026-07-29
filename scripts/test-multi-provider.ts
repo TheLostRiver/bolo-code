@@ -26,7 +26,7 @@ import {
 import {
   applyArrowPickerKey,
   formatArrowPickerScreen,
-  runArrowPicker,
+  runNumberedArrowPicker,
 } from '../packages/cli/src/tui/arrowPicker.ts'
 
 function assert(c: unknown, m: string) {
@@ -228,21 +228,18 @@ async function main() {
   assert(aidx >= 0 && aidx < pickItems.length, 'active index in range')
   assert(pickItems[aidx]!.id === session.providerId, 'active index matches')
 
-  // arrow picker 纯逻辑 + 注入 readKey（不占真 TTY）
-  const keys = ['down', 'enter']
-  let ki = 0
-  const ar = await runArrowPicker({
+  // shared arrow reducer + plain numbered fallback（不占真 TTY）
+  const expectedIndex = (aidx + 1) % pickItems.length
+  const ar = await runNumberedArrowPicker({
     items: pickItems,
     writeOut: () => {},
-    readKey: async () => keys[ki++] ?? 'q',
-    isTty: false,
+    readLine: async () => String(expectedIndex + 1),
     title: 'Select provider',
     initialIndex: aidx,
   })
-  assert(ar.ok === true, 'arrow pick ok')
+  assert(ar.ok === true, 'numbered pick ok')
   if (ar.ok) {
-    // aidx 起向下一项
-    const expectId = pickItems[(aidx + 1) % pickItems.length]!.id
+    const expectId = pickItems[expectedIndex]!.id
     assert(ar.id === expectId, `picked ${expectId}`)
   }
   const screen = formatArrowPickerScreen(pickItems, 0, {
