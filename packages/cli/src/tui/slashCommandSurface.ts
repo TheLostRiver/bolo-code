@@ -1,4 +1,7 @@
-import type { SlashDisplayPolicy } from '../../../core/src/index.ts'
+import type {
+  SlashDisplayPolicy,
+  SlashOverlayViewModel,
+} from '../../../core/src/index.ts'
 import type { CliCommandPanelInput } from '../../../shared/src/index.ts'
 import { doesCliCommandPanelOverflow } from './retainedCommandSurface.ts'
 import type { TextPagerContent } from './textPager.ts'
@@ -11,6 +14,15 @@ export type RetainedSlashDisplayProjection =
   | {
       kind: 'pager'
       pager: TextPagerContent
+    }
+  | {
+      kind: 'catalog'
+      catalog: {
+        key: string
+        title: string
+        items: SlashOverlayViewModel['items']
+        emptyMessage?: string
+      }
     }
 
 const DISPLAY_ACRONYMS = new Map([
@@ -46,6 +58,7 @@ export function titleForSlashDisplayKey(key: string): string {
 export function projectRetainedSlashDisplay(options: {
   display: SlashDisplayPolicy
   content: string
+  overlayView?: SlashOverlayViewModel
   columns?: number
   rows?: number
 }): RetainedSlashDisplayProjection | undefined {
@@ -82,6 +95,23 @@ export function projectRetainedSlashDisplay(options: {
         key: display.key,
         title: titleForSlashDisplayKey(display.key),
         content,
+      },
+    }
+  }
+  if (
+    display.surface === 'overlay' &&
+    display.view === 'picker' &&
+    options.overlayView?.kind === 'picker'
+  ) {
+    return {
+      kind: 'catalog',
+      catalog: {
+        key: display.key,
+        title: options.overlayView.title,
+        items: options.overlayView.items,
+        ...(options.overlayView.emptyMessage
+          ? { emptyMessage: options.overlayView.emptyMessage }
+          : {}),
       },
     }
   }

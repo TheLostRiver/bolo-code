@@ -58,6 +58,8 @@ import {
 import { RetainedCommandSurface } from './retainedCommandSurface.ts'
 import {
   RetainedOverlayHost,
+  type RetainedCatalogOverlayHandle,
+  type RetainedCatalogOverlayOptions,
   type RetainedDiffOverlayOptions,
   type RetainedDiffOverlayResult,
   type RetainedPagerOverlayOptions,
@@ -117,6 +119,9 @@ export type CliTuiController = {
     initialIndex?: number
     signal?: AbortSignal
   }): Promise<ArrowPickResult>
+  openCatalogOverlay(
+    options: RetainedCatalogOverlayOptions,
+  ): RetainedCatalogOverlayHandle
   runDiffOverlay(
     options: RetainedDiffOverlayOptions,
   ): Promise<RetainedDiffOverlayResult>
@@ -686,6 +691,26 @@ export function createRetainedTuiController(options: {
         })
       }
       return overlay.runPicker(overlayOptions)
+    },
+    openCatalogOverlay(overlayOptions) {
+      if (stopped) {
+        return {
+          identity: {
+            key: overlayOptions.key,
+            generation: 0,
+            sessionId: overlayOptions.sessionId,
+            cwd: overlayOptions.cwd,
+          },
+          result: Promise.resolve({
+            ok: false,
+            reason: 'cancel',
+            message: 'cancelled',
+          }),
+          replace: () => false,
+          dismiss: () => false,
+        }
+      }
+      return overlay.openCatalog(overlayOptions)
     },
     runDiffOverlay(overlayOptions) {
       if (stopped) {

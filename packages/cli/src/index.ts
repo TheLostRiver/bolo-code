@@ -105,6 +105,10 @@ export {
   type TextPagerContent,
 } from './tui/textPager.ts'
 export {
+  type RetainedCatalogOverlayHandle,
+  type RetainedCatalogOverlayIdentity,
+  type RetainedCatalogOverlayOptions,
+  type RetainedCatalogOverlayUpdate,
   type RetainedTextPagerOverlayOptions,
 } from './tui/retainedOverlay.ts'
 export {

@@ -318,6 +318,18 @@ export type ContextUsageViewModel = {
 
 export type SlashDisplayTone = 'info' | 'success' | 'warning' | 'error'
 
+export type SlashOverlayItem = {
+  readonly id: string
+  readonly label: string
+}
+
+export type SlashOverlayViewModel = {
+  readonly kind: 'picker'
+  readonly title: string
+  readonly items: readonly SlashOverlayItem[]
+  readonly emptyMessage?: string
+}
+
 export type SlashDisplayPolicy =
   | {
       readonly surface: 'history'
@@ -435,6 +447,8 @@ export type SlashDispatchResult = {
   ok: boolean
   /** Renderer-neutral display intent; dispatch fills this when handlers omit it. */
   display?: SlashDisplayPolicy
+  /** Structured overlay content; terminal renderers must not parse message text. */
+  overlayView?: SlashOverlayViewModel
   /** `/context` overview data; terminal renderers must not parse message text. */
   contextView?: ContextUsageViewModel
   /**
@@ -481,6 +495,7 @@ export type SubmitUserInputResult =
         mode: 'pick'
       }
       contextView?: ContextUsageViewModel
+      overlayView?: SlashOverlayViewModel
     }
   | { type: 'prompt'; terminal: Terminal }
   | { type: 'empty' }
@@ -2158,10 +2173,17 @@ function cmdPlugins(session: SlashSession, args: string): Promise<SlashDispatchR
   if (sub === 'commands' || sub === 'cmds') {
     const cmds = session.pluginCommands ?? []
     if (!cmds.length) {
+      const message =
+        'plugin commands: (none)\nAdd commands/*.md under a plugin (or contributes.commands), then /plugins reload.'
       return {
         ok: true,
-        message:
-          'plugin commands: (none)\nAdd commands/*.md under a plugin (or contributes.commands), then /plugins reload.',
+        message,
+        overlayView: {
+          kind: 'picker',
+          title: 'Plugin commands',
+          items: [],
+          emptyMessage: message,
+        },
       }
     }
     const lines = [`plugin commands (${cmds.length}):`]
@@ -2170,7 +2192,21 @@ function cmdPlugins(session: SlashSession, args: string): Promise<SlashDispatchR
       lines.push(`  /${c.name}${desc}  [${c.pluginId}]`)
     }
     lines.push('Invoke: /<plugin-id>:<name>  (body injects into conversation as user message)')
-    return { ok: true, message: lines.join('\n') }
+    return {
+      ok: true,
+      message: lines.join('\n'),
+      overlayView: {
+        kind: 'picker',
+        title: 'Plugin commands',
+        items: cmds.map((command) => ({
+          id: command.name,
+          label:
+            `/${command.name}` +
+            (command.description ? ` — ${command.description}` : '') +
+            ` [${command.pluginId}]`,
+        })),
+      },
+    }
   }
 
   if (sub === 'market' || sub === 'marketplace') {
@@ -2192,10 +2228,17 @@ function cmdPlugins(session: SlashSession, args: string): Promise<SlashDispatchR
   // list（默认）
   const plugins = session.plugins ?? []
   if (!plugins.length) {
+    const message =
+      'plugins: (none loaded)\nPlace plugins under ~/.bolo/plugins/<id>/ or .bolo/plugins/<id>/ with bolo.plugin.json.\nMarket: /plugins market add <path|url> · /plugins search · /plugins install <id>@<market>\nUse /plugins reload after adding files mid-session.'
     return {
       ok: true,
-      message:
-        'plugins: (none loaded)\nPlace plugins under ~/.bolo/plugins/<id>/ or .bolo/plugins/<id>/ with bolo.plugin.json.\nMarket: /plugins market add <path|url> · /plugins search · /plugins install <id>@<market>\nUse /plugins reload after adding files mid-session.',
+      message,
+      overlayView: {
+        kind: 'picker',
+        title: 'Plugins',
+        items: [],
+        emptyMessage: message,
+      },
     }
   }
   const lines = [`plugins (${plugins.length}):`]
@@ -2211,7 +2254,28 @@ function cmdPlugins(session: SlashSession, args: string): Promise<SlashDispatchR
   lines.push(
     'Subcommands: list | commands | reload | market | search | install | uninstall',
   )
-  return { ok: true, message: lines.join('\n') }
+  return {
+    ok: true,
+    message: lines.join('\n'),
+    overlayView: {
+      kind: 'picker',
+      title: 'Plugins',
+      items: plugins.map((plugin) => {
+        const id = plugin.manifest?.id ?? '(unknown)'
+        const version = plugin.manifest?.version
+          ? ` v${plugin.manifest.version}`
+          : ''
+        const scope = plugin.scope ? ` [${plugin.scope}]` : ''
+        const name = plugin.manifest?.name
+          ? ` — ${plugin.manifest.name}`
+          : ''
+        return {
+          id,
+          label: `${id}${version}${scope}${name}`,
+        }
+      }),
+    },
+  }
 }
 
 async function cmdPluginsMarket(
@@ -2228,10 +2292,17 @@ async function cmdPluginsMarket(
     if (action === 'list' || action === '') {
       const known = await listKnownMarketplaces()
       if (!known.length) {
+        const message =
+          'marketplaces: (none)\nAdd: /plugins market add <local-path-or-https-url>'
         return {
           ok: true,
-          message:
-            'marketplaces: (none)\nAdd: /plugins market add <local-path-or-https-url>',
+          message,
+          overlayView: {
+            kind: 'picker',
+            title: 'Plugin marketplaces',
+            items: [],
+            emptyMessage: message,
+          },
         }
       }
       const lines = [`marketplaces (${known.length}):`]
@@ -2239,7 +2310,18 @@ async function cmdPluginsMarket(
         lines.push(`  ${k.name}  ← ${k.source}`)
       }
       lines.push('Search: /plugins search [query]  ·  Install: /plugins install <id>@<market>')
-      return { ok: true, message: lines.join('\n') }
+      return {
+        ok: true,
+        message: lines.join('\n'),
+        overlayView: {
+          kind: 'picker',
+          title: 'Plugin marketplaces',
+          items: known.map((marketplace) => ({
+            id: marketplace.name,
+            label: `${marketplace.name} ← ${marketplace.source}`,
+          })),
+        },
+      }
     }
     if (action === 'add' || action === 'register') {
       const source = parts.slice(1).join(' ').trim()
@@ -2290,7 +2372,24 @@ async function cmdPluginsMarket(
       if (catalog.plugins.length > 40) {
         lines.push(`  … +${catalog.plugins.length - 40} more`)
       }
-      return { ok: true, message: lines.join('\n') }
+      return {
+        ok: true,
+        message: lines.join('\n'),
+        overlayView: {
+          kind: 'picker',
+          title: `Marketplace ${known.name}`,
+          items: catalog.plugins.slice(0, 40).map((plugin) => ({
+            id: plugin.id,
+            label:
+              plugin.id +
+              (plugin.version ? ` v${plugin.version}` : '') +
+              (plugin.description ? ` — ${plugin.description}` : ''),
+          })),
+          ...(catalog.plugins.length
+            ? {}
+            : { emptyMessage: `No plugins in marketplace ${known.name}.` }),
+        },
+      }
     }
     return {
       ok: false,
@@ -2310,11 +2409,18 @@ async function cmdPluginsSearch(query: string): Promise<SlashDispatchResult> {
   try {
     const hits = await searchMarketplacePlugins({ query: query || undefined })
     if (!hits.length) {
+      const message = query
+        ? `No plugins matching "${query}". Register a market first: /plugins market add <path>`
+        : 'No plugins in registered markets. /plugins market add <path>'
       return {
         ok: true,
-        message: query
-          ? `No plugins matching "${query}". Register a market first: /plugins market add <path>`
-          : 'No plugins in registered markets. /plugins market add <path>',
+        message,
+        overlayView: {
+          kind: 'picker',
+          title: 'Plugin search',
+          items: [],
+          emptyMessage: message,
+        },
       }
     }
     const lines = [`search results (${hits.length}):`]
@@ -2325,7 +2431,23 @@ async function cmdPluginsSearch(query: string): Promise<SlashDispatchResult> {
     }
     if (hits.length > 30) lines.push(`  … +${hits.length - 30} more`)
     lines.push('Install: /plugins install <id>@<marketplace>  then /plugins reload')
-    return { ok: true, message: lines.join('\n') }
+    return {
+      ok: true,
+      message: lines.join('\n'),
+      overlayView: {
+        kind: 'picker',
+        title: 'Plugin search',
+        items: hits.slice(0, 30).map((hit) => ({
+          id: `${hit.entry.id}@${hit.marketplace}`,
+          label:
+            `${hit.entry.id}@${hit.marketplace}` +
+            (hit.entry.version ? ` v${hit.entry.version}` : '') +
+            (hit.entry.description
+              ? ` — ${hit.entry.description}`
+              : ''),
+        })),
+      },
+    }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     return { ok: false, message: `search failed: ${msg}` }
@@ -3848,11 +3970,18 @@ function cmdSkills(session: SlashSession, args: string): SlashDispatchResult {
     : skills
 
   if (!list.length) {
+    const message = filter
+      ? `No skills matching "${args.trim()}".`
+      : 'No skills loaded. Place SKILL.md under .bolo/skills/<id>/ or use bundled creators.'
     return {
       ok: true,
-      message: filter
-        ? `No skills matching "${args.trim()}".`
-        : 'No skills loaded. Place SKILL.md under .bolo/skills/<id>/ or use bundled creators.',
+      message,
+      overlayView: {
+        kind: 'picker',
+        title: 'Skills',
+        items: [],
+        emptyMessage: message,
+      },
     }
   }
 
@@ -3890,7 +4019,33 @@ function cmdSkills(session: SlashSession, args: string): SlashDispatchResult {
     `Source precedence (later wins): ${['bundled', 'extra', 'user', 'project', 'plugin'].join(' → ')}`,
   )
   lines.push('Invoke: /<skill-id>  or  /skill <id>')
-  return { ok: true, message: lines.join('\n') }
+  return {
+    ok: true,
+    message: lines.join('\n'),
+    overlayView: {
+      kind: 'picker',
+      title: filter ? `Skills matching "${args.trim()}"` : 'Skills',
+      items: list.map((skill) => {
+        const flags: string[] = []
+        if (skill.meta.disableModelInvocation === true) {
+          flags.push('no-model')
+        }
+        if (skill.meta.userInvocable === false) {
+          flags.push('no-user')
+        }
+        const flagText = flags.length ? ` [${flags.join(',')}]` : ''
+        const description = skill.meta.description
+          ? ` — ${skill.meta.description}`
+          : ''
+        return {
+          id: skill.meta.id,
+          label:
+            `/${skill.meta.id} [${skill.source}]${flagText}` +
+            description,
+        }
+      }),
+    },
+  }
 }
 
 function cmdSkill(session: SlashSession, args: string): SlashDispatchResult {
@@ -4025,13 +4180,38 @@ const contextDisplay: SlashCommandDef['display'] = (args, result) => {
 
 const pluginsDisplay: SlashCommandDef['display'] = (args, result) => {
   if (!result.ok) return toastDisplay('slash:plugins:error', 'error', 8_000)
-  const action = args.trim().split(/\s+/u)[0]?.toLowerCase() || 'list'
+  const parts = args.trim().split(/\s+/u).filter(Boolean)
+  const action = parts[0]?.toLowerCase() || 'list'
+  const marketAction = parts[1]?.toLowerCase() || 'list'
   if (
     action === 'reload' ||
+    action === 'refresh' ||
     action === 'install' ||
-    action === 'uninstall'
+    action === 'uninstall' ||
+    action === 'remove'
   ) {
-    return toastDisplay(`slash:plugins:${action}`)
+    const canonicalAction =
+      action === 'refresh'
+        ? 'reload'
+        : action === 'remove'
+          ? 'uninstall'
+          : action
+    return toastDisplay(`slash:plugins:${canonicalAction}`)
+  }
+  if (
+    (action === 'market' || action === 'marketplace') &&
+    (marketAction === 'add' || marketAction === 'register')
+  ) {
+    return toastDisplay('slash:plugins:market:add')
+  }
+  if (action === 'commands' || action === 'cmds') {
+    return overlayDisplay('slash:plugins:commands', 'picker')
+  }
+  if (action === 'search') {
+    return overlayDisplay('slash:plugins:search', 'picker')
+  }
+  if (action === 'market' || action === 'marketplace') {
+    return overlayDisplay('slash:plugins:market', 'picker')
   }
   return overlayDisplay('slash:plugins', 'picker')
 }
@@ -4575,6 +4755,33 @@ export function getSlashCommand(name: string): SlashCommandDef | undefined {
   return COMMAND_MAP.get(name.toLowerCase())
 }
 
+export type PreviewSlashCommandDisplay = {
+  readonly name: string
+  readonly args: string
+  readonly display: SlashDisplayPolicy
+}
+
+/**
+ * Resolves a built-in command's success surface without running its handler.
+ * Display resolvers must stay pure; dynamic Plugin/Skill fallbacks return undefined.
+ */
+export function previewSlashCommandDisplay(
+  text: string,
+): PreviewSlashCommandDisplay | undefined {
+  const parsed = parseSlashLine(text)
+  if (parsed.kind !== 'command') return undefined
+  const command = getSlashCommand(parsed.name)
+  if (!command) return undefined
+  return {
+    name: parsed.name,
+    args: parsed.args,
+    display: resolveSlashCommandDisplay(command, parsed.args, {
+      ok: true,
+      message: '',
+    }),
+  }
+}
+
 export async function dispatchSlashCommand(
   session: SlashSession,
   name: string,
@@ -4651,6 +4858,7 @@ export async function submitUserInput(
         ? { interactiveEffort: r.interactiveEffort }
         : {}),
       ...(r.contextView ? { contextView: r.contextView } : {}),
+      ...(r.overlayView ? { overlayView: r.overlayView } : {}),
     }
   }
 

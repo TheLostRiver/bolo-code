@@ -9,6 +9,7 @@ import * as readline from 'node:readline'
 import {
   listWorkspaceSessions,
   productionDeps,
+  previewSlashCommandDisplay,
   resumeSessionFromWorkspace,
   requestSessionControl,
   submitUserInput,
@@ -50,12 +51,16 @@ import {
   createRetainedTuiController,
   type CliTuiController,
 } from './tui/retainedTui.ts'
+import type { RetainedCatalogOverlayHandle } from './tui/retainedOverlay.ts'
 import type {
   BoloTerminalInput,
   BoloTerminalOutput,
 } from './tui/boloTerminalAdapter.ts'
 import { renderContextDashboard } from './tui/contextDashboard.ts'
-import { projectRetainedSlashDisplay } from './tui/slashCommandSurface.ts'
+import {
+  projectRetainedSlashDisplay,
+  titleForSlashDisplayKey,
+} from './tui/slashCommandSurface.ts'
 
 export type ResumeCliOptions = {
   /** session id / 路径；省略或 true 时进入项目列表选择 */
@@ -705,7 +710,32 @@ export async function runOnePrompt(
     activity: !prompt.trimStart().startsWith('/'),
   })
   const before = session.messages.length
+  let catalogOverlay: RetainedCatalogOverlayHandle | undefined
   try {
+    const preview = controller
+      ? previewSlashCommandDisplay(prompt)
+      : undefined
+    if (
+      controller &&
+      preview?.display.surface === 'overlay' &&
+      preview.display.view === 'picker' &&
+      (preview.display.key === 'slash:skills' ||
+        preview.display.key.startsWith('slash:plugins'))
+    ) {
+      try {
+        const title = titleForSlashDisplayKey(preview.display.key)
+        catalogOverlay = controller.openCatalogOverlay({
+          key: preview.display.key,
+          sessionId: session.id,
+          cwd: session.cwd,
+          title,
+          loadingText: `Loading ${title.toLowerCase()}...`,
+          ...(options?.signal ? { signal: options.signal } : {}),
+        })
+      } catch {
+        // Another focused business overlay owns input; keep the plain fallback.
+      }
+    }
     const result = await submitUserInput(session, prompt, {
       signal: options?.signal,
       turnId: options?.turnId,
@@ -733,6 +763,9 @@ export async function runOnePrompt(
         const projection = projectRetainedSlashDisplay({
           display: result.display,
           content,
+          ...(result.overlayView
+            ? { overlayView: result.overlayView }
+            : {}),
           columns,
           rows,
         })
@@ -753,7 +786,56 @@ export async function runOnePrompt(
             assistantText: result.message,
           }
         }
+        if (projection?.kind === 'catalog') {
+          let request = catalogOverlay
+          if (
+            !request ||
+            request.identity.key !== projection.catalog.key
+          ) {
+            request?.dismiss()
+            catalogOverlay = undefined
+            try {
+              request = controller.openCatalogOverlay({
+                key: projection.catalog.key,
+                sessionId: session.id,
+                cwd: session.cwd,
+                title: projection.catalog.title,
+                loadingText: `Loading ${projection.catalog.title.toLowerCase()}...`,
+                ...(options?.signal ? { signal: options.signal } : {}),
+              })
+              catalogOverlay = request
+            } catch {
+              request = undefined
+            }
+          }
+          if (
+            request?.replace({
+              key: projection.catalog.key,
+              sessionId: session.id,
+              cwd: session.cwd,
+              title: projection.catalog.title,
+              items: projection.catalog.items,
+              ...(projection.catalog.emptyMessage
+                ? { emptyMessage: projection.catalog.emptyMessage }
+                : {}),
+            })
+          ) {
+            await request.result
+            return {
+              terminalReason: 'slash',
+              assistantText: result.message,
+            }
+          }
+          if (request) {
+            return {
+              terminalReason: 'slash',
+              assistantText: result.message,
+            }
+          }
+        }
       }
+      catalogOverlay?.dismiss()
+      catalogOverlay = undefined
       if (
         result.contextView &&
         isTty
@@ -933,6 +1015,7 @@ export async function runOnePrompt(
     }
     return { terminalReason: terminal.reason, assistantText }
   } finally {
+    catalogOverlay?.dismiss()
     printer?.endTurn({ terminalReason })
     if (controller) {
       try {

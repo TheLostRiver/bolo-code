@@ -81,10 +81,53 @@ export type RetainedPickerOverlayMode =
   | 'provider'
   | 'effort'
 
+export type RetainedCatalogOverlayIdentity = {
+  readonly key: string
+  readonly generation: number
+  readonly sessionId: string
+  readonly cwd: string
+}
+
+export type RetainedCatalogOverlayOptions = OverlaySessionBase & {
+  key: string
+  sessionId: string
+  cwd: string
+  title: string
+  loadingText: string
+}
+
+export type RetainedCatalogOverlayUpdate = {
+  key: string
+  sessionId: string
+  cwd: string
+  title?: string
+  items: readonly ArrowPickItem[]
+  emptyMessage?: string
+}
+
+export type RetainedCatalogOverlayHandle = {
+  readonly identity: RetainedCatalogOverlayIdentity
+  readonly result: Promise<ArrowPickResult>
+  replace(update: RetainedCatalogOverlayUpdate): boolean
+  dismiss(): boolean
+}
+
 type PickerSession = OverlaySessionBase & {
   mode: RetainedPickerOverlayMode
   items: ArrowPickItem[]
   title?: string
+  index: number
+  resolve: (result: ArrowPickResult) => void
+}
+
+type CatalogSession = OverlaySessionBase & {
+  mode: 'catalog'
+  identity: RetainedCatalogOverlayIdentity
+  title: string
+  loadingText: string
+  phase: 'loading' | 'result'
+  items: ArrowPickItem[]
+  emptyMessage?: string
   index: number
   resolve: (result: ArrowPickResult) => void
 }
@@ -148,6 +191,7 @@ type OverlaySession =
   | PermissionSession
   | QuestionSession
   | PickerSession
+  | CatalogSession
   | DiffSession
   | PagerSession
 
@@ -197,6 +241,7 @@ export class RetainedOverlayHost implements Component, Focusable {
   focused = false
   private active: OverlaySession | undefined
   private handle: OverlayHandle | undefined
+  private nextCatalogGeneration = 1
 
   constructor(
     private readonly options: {
@@ -357,6 +402,97 @@ export class RetainedOverlayHost implements Component, Focusable {
       this.active = session
       this.open({ mode: options.mode })
     })
+  }
+
+  openCatalog(
+    options: RetainedCatalogOverlayOptions,
+  ): RetainedCatalogOverlayHandle {
+    if (options.signal?.aborted) {
+      const identity: RetainedCatalogOverlayIdentity = {
+        key: options.key,
+        generation: this.nextCatalogGeneration++,
+        sessionId: options.sessionId,
+        cwd: options.cwd,
+      }
+      return {
+        identity,
+        result: Promise.resolve({
+          ok: false,
+          reason: 'cancel',
+          message: 'cancelled',
+        }),
+        replace: () => false,
+        dismiss: () => false,
+      }
+    }
+    const current = this.active
+    const replacing =
+      current?.mode === 'catalog' &&
+      current.identity.key === options.key
+    if (current && !replacing) {
+      throw new Error(`overlay already active: ${current.mode}`)
+    }
+
+    if (replacing) {
+      this.detachAbort(current)
+      current.resolve({
+        ok: false,
+        reason: 'cancel',
+        message: 'replaced',
+      })
+    }
+
+    const identity: RetainedCatalogOverlayIdentity = {
+      key: options.key,
+      generation: this.nextCatalogGeneration++,
+      sessionId: options.sessionId,
+      cwd: options.cwd,
+    }
+    let resolveResult!: (result: ArrowPickResult) => void
+    const result = new Promise<ArrowPickResult>((resolve) => {
+      resolveResult = resolve
+    })
+    const session: CatalogSession = {
+      mode: 'catalog',
+      identity,
+      title: options.title,
+      loadingText: options.loadingText,
+      phase: 'loading',
+      items: [],
+      index: 0,
+      resolve: resolveResult,
+      ...(options.signal ? { signal: options.signal } : {}),
+    }
+    if (options.signal) {
+      session.onAbort = () =>
+        this.finishCatalog(session, {
+          ok: false,
+          reason: 'cancel',
+          message: 'cancelled',
+        })
+      options.signal.addEventListener('abort', session.onAbort, {
+        once: true,
+      })
+    }
+    this.active = session
+    if (replacing) {
+      this.options.setOverlayState({ mode: 'picker' })
+      this.options.requestRender()
+    } else {
+      this.open({ mode: 'picker' })
+    }
+
+    return {
+      identity,
+      result,
+      replace: (update) => this.replaceCatalog(session, update),
+      dismiss: () =>
+        this.finishCatalog(session, {
+          ok: false,
+          reason: 'cancel',
+          message: 'dismissed',
+        }),
+    }
   }
 
   runDiff(
@@ -541,6 +677,12 @@ export class RetainedOverlayHost implements Component, Focusable {
         reason: 'cancel',
         message: 'cancelled',
       })
+    } else if (this.active?.mode === 'catalog') {
+      this.finishCatalog(this.active, {
+        ok: false,
+        reason: 'cancel',
+        message: 'cancelled',
+      })
     } else if (this.active?.mode === 'diff') {
       this.finishDiff(
         this.active.viewMode === 'approve'
@@ -605,6 +747,45 @@ export class RetainedOverlayHost implements Component, Focusable {
         })
       } else if (next.done === 'cancel') {
         this.finishPicker({
+          ok: false,
+          reason: 'cancel',
+          message: 'cancelled',
+        })
+      } else if (key !== 'none') {
+        this.options.requestRender()
+      }
+      return
+    }
+    if (active.mode === 'catalog') {
+      if (active.phase === 'loading' || !active.items.length) {
+        if (
+          key === 'esc' ||
+          key === 'q' ||
+          key === 'ctrl-c' ||
+          key === 'enter'
+        ) {
+          this.finishCatalog(active, {
+            ok: false,
+            reason: 'cancel',
+            message: 'cancelled',
+          })
+        }
+        return
+      }
+      const next = applyArrowPickerKey(
+        active.index,
+        active.items.length,
+        key,
+      )
+      active.index = next.index
+      if (next.done === 'select') {
+        this.finishCatalog(active, {
+          ok: true,
+          id: active.items[active.index]!.id,
+          index: active.index,
+        })
+      } else if (next.done === 'cancel') {
+        this.finishCatalog(active, {
           ok: false,
           reason: 'cancel',
           message: 'cancelled',
@@ -695,6 +876,38 @@ export class RetainedOverlayHost implements Component, Focusable {
         width,
       )
     }
+    if (active.mode === 'catalog') {
+      if (active.phase === 'loading') {
+        return wrapPanelScreen(
+          [
+            active.title,
+            '',
+            active.loadingText,
+            '',
+            'Esc cancel',
+          ].join('\n'),
+          width,
+        )
+      }
+      if (!active.items.length) {
+        return wrapPanelScreen(
+          [
+            active.title,
+            '',
+            active.emptyMessage ?? 'No items.',
+            '',
+            'Esc close',
+          ].join('\n'),
+          width,
+        )
+      }
+      return wrapPanelScreen(
+        formatArrowPickerScreen(active.items, active.index, {
+          title: `${active.title} (↑/↓ · Enter · q cancel)`,
+        }),
+        width,
+      )
+    }
     if (active.mode === 'diff') {
       return formatDiffViewScreen(active.model, {
         rows: Math.max(8, this.options.getRows() - 4),
@@ -742,9 +955,7 @@ export class RetainedOverlayHost implements Component, Focusable {
   }
 
   private close(active: OverlaySession): void {
-    if (active.signal && active.onAbort) {
-      active.signal.removeEventListener('abort', active.onAbort)
-    }
+    this.detachAbort(active)
     if (active.mode === 'question' && active.customInput) {
       active.customInput.focused = false
     }
@@ -835,6 +1046,49 @@ export class RetainedOverlayHost implements Component, Focusable {
     this.active = undefined
     this.close(active)
     active.resolve(result)
+  }
+
+  private replaceCatalog(
+    session: CatalogSession,
+    update: RetainedCatalogOverlayUpdate,
+  ): boolean {
+    if (this.active !== session) return false
+    if (
+      update.key !== session.identity.key ||
+      update.sessionId !== session.identity.sessionId ||
+      update.cwd !== session.identity.cwd
+    ) {
+      this.finishCatalog(session, {
+        ok: false,
+        reason: 'cancel',
+        message: 'stale request',
+      })
+      return false
+    }
+    session.phase = 'result'
+    session.items = [...update.items]
+    session.index = 0
+    if (update.title !== undefined) session.title = update.title
+    session.emptyMessage = update.emptyMessage
+    this.options.requestRender()
+    return true
+  }
+
+  private finishCatalog(
+    session: CatalogSession,
+    result: ArrowPickResult,
+  ): boolean {
+    if (this.active !== session) return false
+    this.active = undefined
+    this.close(session)
+    session.resolve(result)
+    return true
+  }
+
+  private detachAbort(active: OverlaySession): void {
+    if (active.signal && active.onAbort) {
+      active.signal.removeEventListener('abort', active.onAbort)
+    }
   }
 
   private finishDiff(result: RetainedDiffOverlayResult): void {
