@@ -565,3 +565,10 @@ C4: compact 成功且非 override system 时可选刷新短 skill catalog 段（
   输入；确定性夹具证明 durable SIGINT handler 与下一轮 raw stdin 获取存在竞态。
   REPL 现等待单飞 interrupt task settle 后才恢复 Composer，并验证可继续编辑与
   idle Ctrl+C 退出。当前单文件为 1,691,759 bytes / 195 modules。
+- post-H follow-up `6b7ff99`：真实 Windows 控制台截图进一步证明 turn 期间释放
+  raw stdin 会让 `npm.cmd`/父 shell 抢占 Ctrl+C，并把批处理 Y/N 与内部控制诊断
+  泄漏进画面。retained REPL 现持续持有 raw stdin，在 Pi TUI 全局输入边界以
+  `Esc` 为主键、`Ctrl+C` 为兼容键中断；overlay 不被抢键，主动 abort 静默收口。
+  离线慢流 retained PTY 连续两轮中断、恢复输入与 `/exit` 通过；完整 134 脚本、
+  7-file install、Desktop bundle/Electron launch 全绿，单文件为
+  1,692,863 bytes / 195 modules。

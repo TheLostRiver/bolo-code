@@ -204,12 +204,16 @@ OI-14H 自动关闭证据：
   surface/prefix/tiny Markdown 或 engine env/resolver；构建后的 `dist/bolo.mjs` 也不含
   这些符号。
 - 134 脚本完整 `npm test`、7-file tarball/install、Desktop bundle、Electron launch
-  全绿；单文件为 1,691,759 bytes / 195 modules，两次完整串 cold
-  `+47.0–84.4ms`、CPU `375–672ms`、render heap `+21.0–21.1MB`、
+  全绿；当前单文件为 1,692,863 bytes / 195 modules，三次完整串 cold
+  `+46.8–84.4ms`、CPU `328–672ms`、render heap `+21.0–21.1MB`、
   cleanup retained `+1.5MB`。根 `dependencies` 仍为 `{}`，
   `THIRD_PARTY_NOTICES.md` 与 lockfile 版本一致。
 - `e6ec6cb` 关闭真人复测暴露的 post-interrupt 输入竞态：SIGINT handler 未 settle
   前不重新获取 Composer stdin；完成后恢复 focus/raw input 并验证可继续编辑。
+- `6b7ff99` 关闭同一真人场景暴露的真实控制台链：turn 期间不释放 raw stdin，
+  避免 Windows `npm.cmd`/父 shell 抢占 Ctrl+C；Pi TUI 全局 listener 以 `Esc`
+  为主键、`Ctrl+C` 为兼容键中断，overlay 保留自己的 Esc，主动 abort 不显示
+  durable turn id 或 warning。离线慢流 retained PTY 连续两轮中断并恢复输入通过。
 - 自动化可判断的删除、owner、布局、cursor、resize、cleanup 与发布缺陷已关闭。
   字体、颜色、动画主观流畅度和真人按键/鼠标手感仍诚实保留在 OI-H3。
 

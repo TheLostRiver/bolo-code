@@ -452,11 +452,15 @@ OI-14H 自动部分已完成：
 4. `d4eaed0` 删除 engine resolver、类型、环境变量成功契约与 fixture；双 TTY/raw-mode
    只走 retained，能力不足只走 plain/readline。
 5. 134 脚本、预算、dist/pack/install、Desktop/Electron、第三方 notices 与静态 owner/
-   absence guard 全绿；根 `dependencies` 为 `{}`，单文件 1,691,759 bytes /
-   195 modules，两次完整串 cold `+47.0–84.4ms`、CPU `375–672ms`、render heap
+   absence guard 全绿；根 `dependencies` 为 `{}`，当前单文件 1,692,863 bytes /
+   195 modules，三次完整串 cold `+46.8–84.4ms`、CPU `328–672ms`、render heap
    `+21.0–21.1MB`、cleanup retained `+1.5MB`。
 6. `e6ec6cb` 用确定性挂起的 durable interrupt handler 证明并关闭下一轮 Composer
    提前获取 stdin 的竞态；恢复后可继续编辑，idle Ctrl+C 仍正常退出。
+7. `6b7ff99` 让 retained turn 期间继续持有 raw stdin，并用 Pi TUI 全局 listener
+   在 focus 分发前消费 `Esc` 主键 / `Ctrl+C` 兼容键；overlay 激活时不截获，
+   主动 abort 不输出内部 turn id/warning。离线慢流 retained PTY 连续两轮中断、
+   恢复输入与 `/exit` 通过。
 
 只剩 §9.4 的真人 Windows Terminal 核心场景：记录字体、颜色、动画和按键/鼠标手感。
 它由 [OPEN_ISSUES.md](./OPEN_ISSUES.md) OI-H3 保持 `BLOCKED: HUMAN`；任何能在

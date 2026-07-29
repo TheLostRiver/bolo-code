@@ -227,7 +227,11 @@ pager 均有真实 VT 门禁。面板期间 Composer 不卸载，输入状态、
 writer 不转交给第二 owner；runtime pager 也不发送整屏 `ESC[2J`。普通用户无需设置
 engine，也没有第二套 dynamic renderer 可选。
 
-REPL 中，模型或工具正在运行时按 `Ctrl-C` 会针对 coordinator 当前 active turn 请求 interrupt 并返回提示符；空闲提示符下按 `Ctrl-C` 才退出。若取消发生在权限问答或 diff 审批面板，core 默认按拒绝处理。
+retained REPL 中，模型或工具正在运行时按 `Esc` 会针对 coordinator 当前 active
+turn 请求 interrupt 并返回输入框；`Ctrl-C` 保留为运行态兼容键，空闲输入框下才
+退出 REPL。权限问答、选择器、diff 和 pager 打开时，`Esc` 先交给当前 overlay
+取消/返回，不会被 turn 全局中断抢走；plain/readline 回落仍使用 `Ctrl-C` 中断。
+用户主动取消不会在时间线显示 durable turn id 或 `turn ended with aborted` warning。
 
 动态 TUI 只在 stdin/stdout 双 TTY 且 stdin 支持 raw mode 时启用。pipe、`-p`、
 `--print`、JSON 或不支持 raw mode 的宿主会自动回落追加式输出，不发送动态 activity/

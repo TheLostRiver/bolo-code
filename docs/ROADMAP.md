@@ -42,9 +42,12 @@ stream/tool/search、paste/overlay 往返与单 stdin/writer；turn final flush�
 stdin/renderer/provider/tool failure、Abort/SIGINT/raw Ctrl+C 和进程退出 cleanup
 均已关闭。真人复测随后暴露 durable SIGINT handler 尚未 settle 时下一轮 Composer
 提前获取 stdin 的竞态；`e6ec6cb` 已用确定性夹具关闭，并验证恢复后可继续输入。
-完整 134 脚本、dist build、7-file clean install 与 Desktop/Electron
-launch 全绿；单文件为 1,691,759 bytes / 195 modules，完整串预算复测为 cold
-`+47.0–84.4ms`、CPU `375–672ms`、render heap `+21.0–21.1MB`、
+随后 `6b7ff99` 让 retained turn 期间持续持有 raw stdin，并在 Pi TUI 全局输入边界
+以 `Esc` 为主键、`Ctrl+C` 为兼容键中断；overlay 不被抢键，主动取消不泄漏内部
+turn id/warning。完整 134 脚本、dist build、7-file clean install 与
+Desktop/Electron launch 全绿；单文件为 1,692,863 bytes / 195 modules，完整串
+预算复测为 cold
+`+46.8–84.4ms`、CPU `328–672ms`、render heap `+21.0–21.1MB`、
 cleanup `+1.5MB`。
 根 `dependencies` 仍为 `{}`。完整方案见
 [CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md)，选型决定见
@@ -157,9 +160,10 @@ OverlayHost、默认切换、可靠性/性能与 legacy 删除；默认 agent �
 `--print` 与能力不足回落不变；所有 legacy dynamic owner、surface/layout/Markdown
 补丁和 engine selector 已物理删除并由静态 guard 锁定。500-block/10k-line
 scroll/resize、paste/overlay、backpressure/final flush 与 crash cleanup 均由真实
-xterm/子进程关闭；134 项完整门禁、dist/install、Desktop/Electron 全绿，单文件产物
-为 1,691,759 bytes / 195 modules，cold 相对增量 `47.0–84.4ms`。真人 Windows Terminal
-验收仍单列，不用自动门禁冒充主观观感。
+xterm/子进程关闭；`6b7ff99` 另关闭运行中断的真实控制台 ownership 与按键分发；
+134 项完整门禁、dist/install、Desktop/Electron 全绿，单文件产物为
+1,692,863 bytes / 195 modules，cold 相对增量 `46.8–84.4ms`。真人 Windows
+Terminal 验收仍单列，不用自动门禁冒充主观观感。
 中段压缩与远端压缩按证据门控**显式关闭**
 （后者见 [ADR_COMPACT_REMOTE.md](./ADR_COMPACT_REMOTE.md)）。
 
@@ -584,7 +588,7 @@ MCP 工具失败只吐 `fetch failed`（补 `describeMcpCallError`：指名 serv
 
 | 面 | 落点 |
 |----|------|
-| 构建 | `scripts/build-dist.ts`：esbuild bundle → `dist/bolo.mjs`（1,691,759 bytes / 195 模块，OI-14H + `e6ec6cb`）+ 拷 `bundled-skills` |
+| 构建 | `scripts/build-dist.ts`：esbuild bundle → `dist/bolo.mjs`（1,692,863 bytes / 195 模块，OI-14H + `e6ec6cb` + `6b7ff99`）+ 拷 `bundled-skills` |
 | 发布元数据 | `private:false` · `name`/`version`/`files`/`keywords`/`homepage`/`bugs` · `bin → ./dist/bolo.mjs` · `prepack` |
 | 资产路径 | `getBundledSkillsDir()` 改为**双布局存在性探测**（开发 / 发布产物） |
 | 门禁 | `scripts/test-dist-build.ts`（产物契约）· `scripts/test-dist-install.ts`（真实 pack→install→run） |

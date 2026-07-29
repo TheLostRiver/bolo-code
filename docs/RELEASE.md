@@ -43,7 +43,7 @@ esbuild 是**构建期**工具。产物里不含它，用户也装不到它。
 ## 2. 构建
 
 ```bash
-npm run build          # → dist/bolo.mjs (1,691,759 bytes, 195 模块)
+npm run build          # → dist/bolo.mjs (1,692,863 bytes, 195 模块)
 ```
 
 `scripts/build-dist.ts` 做三件事：
@@ -186,9 +186,9 @@ John Gruber Markdown BSD 条款均已随包声明；许可真源见
 
 | 指标 | 实测 | 预算（超出即需解释） |
 |---|---|---|
-| CLI 产物体积 | 1,691,759 bytes / 195 模块（OI-14H + `e6ec6cb`；较 1,385,065B 基线 +306,694B） | 基线 +1,500,000 bytes |
-| CLI `--help` cold-start | 两次完整串：empty Node 80.6–107.7ms · Bolo 127.6–192.2ms · 增量 47.0–84.4ms | 增量 ≤ 100ms |
-| retained 500 blocks / 10,000 行 | 两次完整串：CPU 375–672ms · render heap +21.0–21.1MB · cleanup retained +1.5MB | CPU ≤ 3s · heap ≤ 128MB · cleanup ≤ 64MB |
+| CLI 产物体积 | 1,692,863 bytes / 195 模块（OI-14H + `e6ec6cb` + `6b7ff99`；较 1,385,065B 基线 +307,798B） | 基线 +1,500,000 bytes |
+| CLI `--help` cold-start | 三次完整串：empty Node 77.2–107.7ms · Bolo 124.0–192.2ms · 增量 46.8–84.4ms | 增量 ≤ 100ms |
+| retained 500 blocks / 10,000 行 | 三次完整串：CPU 328–672ms · render heap +21.0–21.1MB · cleanup retained +1.5MB | CPU ≤ 3s · heap ≤ 128MB · cleanup ≤ 64MB |
 | 桌面主进程产物 | ~1.17 MB | < 3 MB |
 | compact 管道（20 轮 / 100 消息） | 2–3 ms · heap +0.1 MB | < 8 s · < 320 MB（灾难阈） |
 | compact 压缩比 | ×12.9（20 轮）· ×51.9（80 轮） | ≥ ×3 |
@@ -226,7 +226,7 @@ compact 回归由 `test-compact-benchmark.ts` 守；CLI 体积与产物契约由
 | **Windows 安装包（NSIS）** | ✅ 构建已验证 | Node 24 / npm 11.17.0 / electron-builder 26.15.3 已生成安装包与 blockmap；没有证书，用户仍会看到 SmartScreen 提示 → [DESKTOP_DESIGN §7c](./DESKTOP_DESIGN.md) |
 | **桌面窗口的视觉呈现** | ❌ 未验证 | 应用**能启动**且 renderer 挂载已由 `test-desktop-launch.ts` 实证；但布局观感、Windows 主题切换与 maximize 渲染、键盘走查、长会话滚动**没有肉眼验证过** |
 | **`AskUserQuestion` 的真 TTY 交互** | ❌ 未验证 | 控件逻辑测试注入 `readKey`，覆盖不到真实 raw-mode 与 REPL 抢 stdin |
-| **CLI TUI retained renderer** | ✅ 唯一 dynamic renderer · ⚠️ 真人观感未验证 | OI-14D–H 已让 retained transcript/Markdown、常驻 Composer/activity/footer 与单一 OverlayHost 在 24–220 列、500 blocks/10,000 行、chunk/resize/paste/new/resume、ANSI/OSC 8、CJK/emoji、list/table/code、permission/question/picker/diff/pager 下转绿；final flush、故障注入、Abort/SIGINT/raw Ctrl+C、进程退出 cleanup、性能预算、静态 owner 与 legacy 物理缺失均有门禁。`e6ec6cb` 额外串行化 durable SIGINT handler 与下一轮 Composer stdin 获取，覆盖中断后继续输入。双 TTY/raw-mode 只走 retained；plain/`--print` 与能力不足回落独立保留。Windows Terminal 的字体、颜色、动画和真人按键/鼠标手感仍未肉眼验证 |
+| **CLI TUI retained renderer** | ✅ 唯一 dynamic renderer · ⚠️ 真人观感未验证 | OI-14D–H 已让 retained transcript/Markdown、常驻 Composer/activity/footer 与单一 OverlayHost 在 24–220 列、500 blocks/10,000 行、chunk/resize/paste/new/resume、ANSI/OSC 8、CJK/emoji、list/table/code、permission/question/picker/diff/pager 下转绿；final flush、故障注入、Abort/SIGINT/raw Ctrl+C、进程退出 cleanup、性能预算、静态 owner 与 legacy 物理缺失均有门禁。`e6ec6cb` 串行化 durable SIGINT handler 与下一轮 Composer 输入；`6b7ff99` 让 turn 期间持续持有 raw stdin，以全局 `Esc` 主键 / `Ctrl+C` 兼容键中断，并隐藏主动 abort 的内部 id/warning。双 TTY/raw-mode 只走 retained；plain/`--print` 与能力不足回落独立保留。Windows Terminal 的字体、颜色、动画和真人按键/鼠标手感仍未肉眼验证 |
 | **`mcp-external` 搜索** | ⚠️ 仅验过 Exa | Exa 免密层已真连；其它 MCP 搜索服务仍取决于外部端点 |
 | **SearXNG 直连** | ✅ 实例/诊断/可选 setup 已验证 | `2026.7.26-b060c780d` Docker 实例：JSON API、生产 status/session/`WebSearch`、真实 URL 与源码/dist doctor 全链通过；OI-07A 已区分正常空结果、全故障和部分成功，OI-07B doctor 检查版本/能力并要求非空 smoke，OI-07C 的源码/dist managed setup/status/logs/stop 已实跑。Docker 仍须用户预装且不是默认依赖；默认引擎仍可能 429/CAPTCHA/timeout |
 | **中段 compact** | 🚫 显式不启用 | 契约就绪但产品代码零调用；两个参考实现都没真正跑过它 → §13.10.2 |

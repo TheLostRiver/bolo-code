@@ -165,9 +165,11 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 24–220 列反复 resize、paste/overlay 往返与单 stdin/writer；final flush、异常启动、
 provider/tool failure、Abort/SIGINT、raw Ctrl+C 与进程退出 cleanup 均有门禁。
 `e6ec6cb` 另用确定性竞态夹具保证 durable SIGINT handler 完成后才重新获取
-Composer stdin，并实测中断后可继续输入。134 脚本、7-file clean install 与
-Electron launch 全绿；产物为 1,691,759 bytes / 195 modules。OI-14 只剩 OI-H3
-真人 Windows Terminal 走查。完整方案见
+Composer stdin；`6b7ff99` 继续修正真实控制台链：turn 期间不释放 raw stdin，
+Pi TUI 全局 listener 在 focus 分发前消费 `Esc` 主键 / `Ctrl+C` 兼容键，主动 abort
+不再输出 durable id 或 warning，中断后可继续输入。134 脚本、7-file clean install
+与 Electron launch 全绿；产物为 1,692,863 bytes / 195 modules。OI-14 只剩
+OI-H3 真人 Windows Terminal 走查。完整方案见
 [CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md)，选型数据见
 [CLI_TUI_RENDERER_DECISION.md](./CLI_TUI_RENDERER_DECISION.md)。
 

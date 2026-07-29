@@ -92,10 +92,10 @@ cold p50 为 empty Node 79.9ms、Bolo `--help` 130.3ms，相对增量 50.4ms。5
 retained +1.5MB，均低于 +1.5MB bundle、+100ms cold、3s CPU、128MB heap 与 64MB
 cleanup 预算。
 
-OI-14H 删除 legacy、并合入 `e6ec6cb` 中断后输入恢复修复后的当前产物为
-1,691,759 bytes / 195 modules，相对 baseline 增加 306,694B；两次完整串 cold
-为 empty Node 80.6–107.7ms、Bolo `--help`
-127.6–192.2ms、增量 47.0–84.4ms。相同长会话 fixture 为 CPU 375–672ms、
+OI-14H 删除 legacy、并合入 `e6ec6cb` 与 `6b7ff99` 两次中断输入修复后的当前产物为
+1,692,863 bytes / 195 modules，相对 baseline 增加 307,798B；三次完整串 cold
+为 empty Node 77.2–107.7ms、Bolo `--help`
+124.0–192.2ms、增量 46.8–84.4ms。相同长会话 fixture 为 CPU 328–672ms、
 render heap +21.0–21.1MB、cleanup retained +1.5MB，预算继续有余量。
 
 Windows Node 24.15，去掉两次 warmup，`n=10`：

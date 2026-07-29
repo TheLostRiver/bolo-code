@@ -134,13 +134,13 @@ composer 与 footer 由同一个常驻 layout tree 计算，terminal auto-wrap �
 | `←/→` · `Home/End` | 按 grapheme 移动光标 |
 | `↑/↓` | slash 菜单打开时循环选择候选；否则浏览本进程最近 100 条输入 |
 | `Tab` | slash 菜单打开时补全选中项；否则插入两个空格 |
-| `Esc` | 关闭 slash 菜单并保留输入 |
+| `Esc` | turn 运行时请求 interrupt；空闲时关闭 slash 菜单并保留输入 |
 | `Backspace/Delete` | 删除前/后一个 grapheme |
 | `Ctrl+A/E` | 整个输入 buffer 首/尾 |
 | `Ctrl+U/K/W` | 删除光标前/后/前一个词 |
 | `Ctrl+L` | 清屏后重绘输入框 |
 | `Ctrl+D` | 空输入退出；非空时删除光标后的字符 |
-| `Ctrl+C` | 空闲输入时退出 REPL；turn 运行时请求 interrupt |
+| `Ctrl+C` | 空闲输入时退出 REPL；turn 运行时作为兼容键请求 interrupt |
 
 整行以单个 `/` 开始、光标位于命令 token 尾部且尚无参数时打开菜单：裸 `/` 显示
 可见全量，继续输入按 exact/prefix 过滤；`//`、普通文本和带参数输入不会触发。
@@ -172,7 +172,7 @@ adapter 获取 raw stdin 时启用 terminal mode 2004，退出、提交和 abort
 | 时点 / 事件 | 人类可见结果 |
 |-------------|--------------|
 | 提交普通消息 | 立即进入与 composer 同宽的背景用户消息块；不等 provider 首 token |
-| provider 尚未输出 | `✦/✧/✶/✧ Thinking · 本段耗时 · Ctrl+C interrupt` 原位刷新 |
+| provider 尚未输出 | `✦/✧/✶/✧ Thinking · 本段耗时 · Esc interrupt` 原位刷新 |
 | reasoning / silent provider wait | 当前段持续动画；边界到达后留下 `Thought for <duration>`，即使 provider 未发送可见 reasoning delta |
 | `tool_start/end` | 进入永久工具时间线；结束后回到 Thinking |
 | `tool_progress` | 只在 activity 原位更新“工具名 · 进度”，不把每个 tick 刷成永久消息 |
@@ -403,16 +403,19 @@ Ctrl+C、进程退出 cleanup，以及 bundle/cold-start/CPU/render heap/cleanup
 预算。完整串实测为 1,727,232 bytes / 200 modules、cold `+50.4ms`、CPU `422ms`、
 render heap `+21.0MB`、cleanup retained `+1.5MB`。
 
-`e6ec6cb` 补上真人复测暴露的中断竞态：durable interrupt 已把 runner 推回 idle，
-但异步 SIGINT handler 尚未 settle 时，REPL 不得提前让 Composer 重新获取 raw
-stdin。`test-cli-tui-cleanup` 现在确定性挂起 handler 尾部，断言等待期间零 input
-owner、完成后恢复 focus/raw stdin、可继续编辑，并能再次用 idle Ctrl+C 正常退出。
+`e6ec6cb` 先补上真人复测暴露的异步竞态：durable interrupt 已把 runner 推回 idle，
+但 handler 尚未 settle 时，REPL 不得提前开始下一次 Composer read。`6b7ff99` 再按
+真实 Windows 控制台链修正 ownership：retained REPL 生命周期内持续持有一个 raw
+stdin owner，Pi TUI 全局 listener 在 focused component 之前消费运行态 `Esc` 与
+兼容 `Ctrl+C`；overlay 激活时不截获。测试确定性挂起 handler 尾部，验证等待期间
+owner 不释放、两种键都能中断、恢复后可继续编辑，idle Ctrl+C 仍正常退出；主动
+abort 不输出内部 turn id 或 warning。
 
 OI-14H 新增并扩展 `test:cli-tui-ownership` 与 `test:cli-tui-vt`，物理锁定
 compatibility bridge、legacy pager/picker/panel、surface/raw editor/layout/tiny
 Markdown 与 engine selector 不存在，并禁止 production 重新取得第二 stdout/stdin
-owner。完整门禁现为 134 scripts；单文件 1,691,759 bytes / 195 modules，cold
-`+47.0–84.4ms`、CPU `375–672ms`、render heap `+21.0–21.1MB`、
+owner。完整门禁现为 134 scripts；当前单文件 1,692,863 bytes / 195 modules，cold
+`+46.8–84.4ms`、CPU `328–672ms`、render heap `+21.0–21.1MB`、
 cleanup retained `+1.5MB`，
 7-file install、Desktop bundle 与 Electron launch 全绿。
 

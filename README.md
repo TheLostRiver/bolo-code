@@ -61,10 +61,12 @@ raw-mode 不可用宿主继续走独立 plain/readline 路径。真实 xterm 已
 500 blocks / 10,000 行、scrollback、24–220 列反复 resize、paste/overlay 往返和
 单 stdin/writer；final flush、异常启动、provider/tool failure、Abort/SIGINT、
 raw Ctrl+C 与进程退出 cleanup 均有门禁。`e6ec6cb` 进一步串行化 durable SIGINT
-handler 与下一轮 Composer 输入获取，关闭中断后输入失去响应的竞态。完整 134 脚本、
-7-file clean install 与 Electron launch 全绿；单文件为 1,691,759 bytes /
-195 modules。两次完整串实测 cold
-相对 empty Node `+47.0–84.4ms`、CPU `375–672ms`、render heap
+handler 与下一轮 Composer 输入获取；`6b7ff99` 又让 retained turn 运行期间持续持有
+raw stdin，并在 Pi TUI 全局输入边界用 `Esc` 主键（`Ctrl+C` 兼容）请求中断，关闭
+Windows 父批处理抢占 stdin、内部 turn id/warning 泄漏和中断后无法继续输入。完整
+134 脚本、7-file clean install 与 Electron launch 全绿；单文件为 1,692,863 bytes /
+195 modules。三次完整串实测 cold
+相对 empty Node `+46.8–84.4ms`、CPU `328–672ms`、render heap
 `+21.0–21.1MB`、cleanup retained `+1.5MB`；根 `dependencies` 仍为 `{}`。
 方案与选型证据见
 [docs/CLI_TUI_REFACTOR_PLAN.md](docs/CLI_TUI_REFACTOR_PLAN.md) 和
