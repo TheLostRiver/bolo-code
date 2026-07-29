@@ -1,9 +1,8 @@
 /**
  * OI-14H H0: production dynamic TTY composition has one retained owner.
  *
- * This guard intentionally allows legacy implementation modules to exist
- * until later deletion slices. It only forbids production entry points from
- * composing or attaching those implementations again.
+ * It forbids production entry points from composing legacy owners and locks
+ * the deleted implementation modules out of the repository.
  */
 
 import assert from 'node:assert/strict'
@@ -121,6 +120,8 @@ async function main(): Promise<void> {
     'prefixTuiContentBlock',
     'resolveTuiContentColumns',
     'TuiContentPrefixer',
+    'resolveCliTuiEngine',
+    'CliTuiEngine',
     'readTuiInput',
     'runArrowPicker',
     'runDiffPane',
@@ -166,6 +167,7 @@ async function main(): Promise<void> {
     'resolveTuiContentColumns',
   ])
   await assertFileMissing('packages/cli/src/tui/terminalMarkdown.ts')
+  await assertFileMissing('packages/cli/src/tui/tuiEngine.ts')
   await assertFileMissing('packages/cli/src/tui/composerSpacing.ts')
   await assertFileMissing('packages/cli/src/tui/terminalSurface.ts')
   await assertFileMissing('packages/cli/src/tui/localPanel.ts')

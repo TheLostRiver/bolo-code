@@ -1,5 +1,5 @@
 /**
- * H2: the legacy direct-write surface is physically absent.
+ * H2/H3: legacy direct-write and engine-selection modules are absent.
  *
  * Real-VT chunk, gutter, resize and Composer invariants are covered by the
  * retained transcript, base and reliability gates that run before this one.
@@ -13,13 +13,14 @@ async function main(): Promise<void> {
     'packages/cli/src/tui/terminalSurface.ts',
     'packages/cli/src/tui/composerSpacing.ts',
     'packages/cli/src/tui/terminalMarkdown.ts',
+    'packages/cli/src/tui/tuiEngine.ts',
   ]) {
     await assert.rejects(
       access(path.resolve(relative)),
       `${relative} must be physically deleted`,
     )
   }
-  console.log('PASS: legacy terminal surface, spacer and Markdown removed')
+  console.log('PASS: legacy terminal surface, layout and engine modules removed')
 }
 
 await main()

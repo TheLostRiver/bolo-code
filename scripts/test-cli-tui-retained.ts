@@ -1,5 +1,5 @@
 /**
- * OI-14C: retained renderer base, real VT width/resize and engine routing.
+ * OI-14C/H: retained renderer base, real VT width/resize and product lifecycle.
  */
 import { EventEmitter } from 'node:events'
 import { promises as fs } from 'node:fs'
@@ -7,7 +7,6 @@ import path from 'node:path'
 import {
   createCliOnEvent,
   createRetainedTuiController,
-  resolveCliTuiEngine,
   runNewSessionCli,
   runResumeCli,
 } from '../packages/cli/src/index.ts'
@@ -102,48 +101,6 @@ async function createFixture(columns: number, rows = 36) {
 }
 
 async function main() {
-  // Engine choice is fixed at controller creation. OI-14G makes retained the
-  // dynamic default while preserving explicit legacy and plain sentinels.
-  assert(
-    resolveCliTuiEngine({ dynamicTui: true, env: {} }) === 'retained',
-    'missing engine flag selects retained by default',
-  )
-  assert(
-    resolveCliTuiEngine({
-      dynamicTui: true,
-      env: { BOLO_TUI_ENGINE: '   ' },
-    }) === 'retained',
-    'blank engine flag selects retained by default',
-  )
-  assert(
-    resolveCliTuiEngine({
-      dynamicTui: true,
-      env: { BOLO_TUI_ENGINE: 'retained' },
-    }) === 'retained',
-    'explicit retained remains supported',
-  )
-  assert(
-    resolveCliTuiEngine({
-      dynamicTui: true,
-      env: { BOLO_TUI_ENGINE: 'legacy' },
-    }) === 'legacy',
-    'explicit legacy remains the rollback',
-  )
-  assert(
-    resolveCliTuiEngine({
-      dynamicTui: true,
-      env: { BOLO_TUI_ENGINE: 'unknown' },
-    }) === 'legacy',
-    'invalid engine fails safe to legacy',
-  )
-  assert(
-    resolveCliTuiEngine({
-      dynamicTui: false,
-      env: { BOLO_TUI_ENGINE: 'retained' },
-    }) === 'legacy',
-    'non-TTY/plain path ignores retained opt-in',
-  )
-
   // Every supported viewport is rendered through xterm's real cell/auto-wrap
   // semantics. No test-side string screen is allowed here.
   for (const columns of [24, 38, 56, 80, 120, 160, 220]) {
@@ -296,7 +253,7 @@ async function main() {
     assert(err.join('') === '', 'plain fixture keeps stderr empty')
   }
 
-  // The product new/resume lifecycle uses retained by default, starts the same
+  // The product new/resume lifecycle uses retained, starts the same
   // controller, restores history, and tears down its resize ownership.
   {
     const tempParent = path.resolve('.bolo-tmp')
@@ -306,7 +263,6 @@ async function main() {
     )
     const previous = {
       configDir: process.env.BOLO_CONFIG_DIR,
-      engine: process.env.BOLO_TUI_ENGINE,
       noColor: process.env.NO_COLOR,
       provider: process.env.BOLO_PROVIDER,
       term: process.env.TERM,
@@ -335,7 +291,6 @@ async function main() {
       const cwd = path.join(tempRoot, 'workspace')
       await fs.mkdir(cwd, { recursive: true })
       process.env.BOLO_CONFIG_DIR = path.join(tempRoot, 'user')
-      delete process.env.BOLO_TUI_ENGINE
       process.env.BOLO_PROVIDER = 'mock'
       process.env.NO_COLOR = '1'
       process.env.TERM = 'xterm-256color'
@@ -406,27 +361,6 @@ async function main() {
         !resumeBytes.includes('\u001b[3J'),
         'resume lifecycle preserved scrollback',
       )
-
-      process.env.BOLO_TUI_ENGINE = 'legacy'
-      const legacyWrites: string[] = []
-      const legacyCreated = await runNewSessionCli({
-        cwd,
-        prompt: 'ignored legacy env smoke',
-        forceMock: true,
-        isTty: true,
-        readPermissionAnswer: async () => 'n',
-        writeOut: (text) => legacyWrites.push(text),
-        writeErr: (text) => legacyWrites.push(text),
-      })
-      assert(
-        getSessionTuiController(legacyCreated.session) !== undefined,
-        'legacy env no longer changes the production retained owner',
-      )
-      assert(
-        legacyWrites.join('').includes('\u001b[?2026h'),
-        'legacy env still starts retained synchronized rendering',
-      )
-      delete process.env.BOLO_TUI_ENGINE
 
       const runInteractiveExit = async (
         run: (
@@ -537,7 +471,6 @@ async function main() {
       )
     } finally {
       restoreEnv('BOLO_CONFIG_DIR', previous.configDir)
-      restoreEnv('BOLO_TUI_ENGINE', previous.engine)
       restoreEnv('NO_COLOR', previous.noColor)
       restoreEnv('BOLO_PROVIDER', previous.provider)
       restoreEnv('TERM', previous.term)

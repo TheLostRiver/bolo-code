@@ -89,10 +89,6 @@ export {
   type RetainedWelcomeOptions,
 } from './tui/retainedTui.ts'
 export {
-  resolveCliTuiEngine,
-  type CliTuiEngine,
-} from './tui/tuiEngine.ts'
-export {
   resolveTuiTheme,
   type TuiTheme,
   type TuiThemeId,
