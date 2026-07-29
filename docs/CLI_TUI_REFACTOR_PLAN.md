@@ -1,7 +1,7 @@
 # CLI TUI retained renderer 重构方案
 
 > **状态：** OI-14 `BLOCKED: HUMAN`（OI-14A–H 自动实现已关闭；只剩 OI-H3）；
-> OI-15 `IN PROGRESS`（OI-15A–E 已完成；OI-15F 下一刀）
+> OI-15 `CLOSED`（OI-15A–F 自动实现已完成）
 > **方案锚点：** Bolo `c2e6a98`；Pi `c820aa26fe09`；oh-my-pi
 > `d16c6168c86f`；Codex `f61b51ddd924`；OpenCode `66495a2a22cd`；
 > HelsincyCode `e6dd86ef990e`。
@@ -29,6 +29,9 @@
 > **OI-15E 交付：** `1d49d53` · retained CLI 消费 toast/history policy；短动作与
 > 可修正错误进入 footer 单槽，插件 install/uninstall 执行失败显式进入 visual-only
 > error history，reload notes 使用 warning toast；compatibility/session/plain 隔离已进门禁。
+> **OI-15F 交付：** `d1e26bb` · Provider/Effort/Diff 迁入统一 action-picker/diff
+> view；normal slash 不再调用 compatibility writer，visual-only/plain fallback、
+> dist/install/预算与 Electron smoke 已进门禁。
 > **范围：** 本文定义 CLI TTY 路径的重构方案。非 TTY、`--print`、pipe、JSON 和
 > Desktop 的既有输出契约必须保持兼容。
 > **结论先行：** 停止继续扩展自研 `TerminalSurface + 字符串 prefix + tiny
@@ -592,7 +595,7 @@ type SlashDispatchResult = {
   message: string
   // handler 可显式覆盖；中央 dispatch 负责补齐
   display?: SlashDisplayPolicy
-  // 既有 contextView / interactive* payload 渐进迁移
+  // contextView / renderer-neutral overlayView
 }
 
 type ResolvedSlashDispatchResult = SlashDispatchResult & {
@@ -611,7 +614,8 @@ loading，结构化结果按 stable key 原位替换，迟到的 generation/sess
 catalog 关闭后恢复 Composer value/cursor/focus，长目录分页且 resize 后保持选中项可见。
 OI-15E 已迁移 toast/history：20 次短动作只替换 footer 单槽，`ok: false` 不自动进入
 history；只有 handler 显式声明的 durable error 才进入 visual-only history。OI-15F
-再用定向门禁禁止所有 normal slash result 调用 `appendCompatibilityOutput()`。
+已用定向门禁禁止所有 normal slash result 调用 `appendCompatibilityOutput()`，并把
+Provider/Effort/Diff 的旧 `interactive*` payload 迁入统一 `SlashOverlayViewModel`。
 
 `packages/shared`/CLI retained state 新增单槽状态和纯 action：
 
@@ -653,7 +657,7 @@ request generation，并记录 session id、cwd 和 command key；异步完成�
 | `/plugins reload/install/uninstall` 等动作 | toast；失败可升级 history | 成功/可重试失败 5 秒；文件损坏、回滚失败等需审计错误进入 typed error |
 | `/doctor` | panel | 结构化摘要；新输入/`Esc` 清除；内容超过上限升级 pager，不把 dump 截断塞入 panel |
 | `/help`、`/mcp`、`/hooks`、`/memory`、`/cost`、只读 status | panel 或 pager | 每个逻辑视图 stable key；重复命令 replace；长列表走 pager |
-| `/provider`、`/effort`、`/diff` | 现有 overlay | 迁入统一 display policy，删除并行 `interactiveProvider`/`interactiveEffort`/`interactiveDiff` 分支 |
+| `/provider`、`/effort`、`/diff` | 现有 overlay | 已迁入统一 action-picker/diff view；并行 `interactiveProvider`/`interactiveEffort`/`interactiveDiff` 分支已删除 |
 | `/title`、设置开关、queue/interrupt 等短动作 | toast 或 history | 纯确认用 toast；影响 durable runtime 且需要追溯的动作保留 typed history |
 | 未迁移 Plugin/Skill command | explicit fallback | Plugin API 后续允许声明 policy；声明前使用有界 history，不得进入无界 compatibility bucket |
 
@@ -666,7 +670,7 @@ request generation，并记录 session id、cwd 和 command key；异步完成�
 | **OI-15C ✅ · `26f796f`** | context/doctor/status 迁移 | context compact panel/details text pager；doctor/status/help/memory/mcp/hooks 等只读诊断映射 | 20× replace；单页/multi-page/resize/CJK；compatibility/plain writer 为 0；不进入 session messages |
 | **OI-15D ✅ · `21ee1e2` / `87054df`** | Skills/Plugins overlay | core preview、结构化 catalog、picker/pager、loading→result 原位 replace、focus restore、stale async guard、有界分页 | 20× stable-key；cwd/session/request 变化忽略迟到结果；40 项在 18→10 行 resize 下保持选中项可见；PgUp/PgDn/Home/End；取消后输入原值与光标恢复 |
 | **OI-15E ✅ · `1d49d53`** | toast 与错误分级 | action feedback、priority/tone、durable error 显式策略；retained toast/history consumer | 20×短动作单槽；Usage error toast；install/uninstall durable error；reload warning；compatibility/plain writer/session messages 为 0 |
-| **OI-15F** | 清理兼容桶与发布收口 | normal slash 不再走 compatibilityOutput；旧 `interactive*` 字段迁移/删除；docs/dist 审计 | 真实 VT、plain/JSON、full test、pack/install、owner guard 全绿 |
+| **OI-15F ✅ · `d1e26bb`** | 清理兼容桶与发布收口 | normal slash 不再走 compatibilityOutput；旧 `interactive*` 字段迁移/删除；docs/dist 审计 | 真实 VT、plain/JSON、full test、pack/install、owner guard 全绿 |
 
 每个代码切片先写红灯，再实现；代码/测试与文档分批使用中文 commit 并 push。
 不在本阶段引入新 renderer、UI framework、状态库或其它 Agent 的运行时依赖。
@@ -698,5 +702,5 @@ OI-15 自动队列，不能只记为主观验收。
   history + panel/toast/compatibility。
 - 不恢复 OI-14 已删除的 `TerminalSurface`、engine selector、局部 raw input owner
   或第二 stdout writer。
-- OI-15F 删除正常 slash 的 compatibility 路径前，必须有命令注册表 completeness
-  测试；发现漏项时回滚该清理提交，而不是放宽 owner guard。
+- OI-15F 已用命令注册表 completeness 测试关闭正常 slash 的 compatibility 路径；
+  后续发现漏项时回滚该清理提交，而不是放宽 owner guard 或恢复旧 `interactive*`。

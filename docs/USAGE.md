@@ -226,8 +226,10 @@ OI-15D 起，`/skills`、`/plugins`、commands、market/search 会先在唯一 O
 恢复输入内容、光标与焦点。OI-15E 起，短动作、警告和可立即修正错误使用 footer
 单 toast 槽，重复动作只替换旧项；只有显式需要审计的不可恢复错误才进入 visual-only
 history。插件 install/uninstall 执行失败可审计，reload merge notes 使用 warning
-toast；Usage 错误仍是短 error toast。normal slash compatibility cleanup 仍由
-[ROADMAP.md](./ROADMAP.md) 的 OI-15F 完成。
+toast；Usage 错误仍是短 error toast。[ROADMAP.md](./ROADMAP.md) 的 OI-15F
+`d1e26bb` 起，Provider/Effort/Diff 使用统一的结构化 overlay payload；只读
+list/help/git 进入 panel/pager，mutation 进入 toast，overlay 关闭、不可用或无内容时
+回落 visual-only history。normal slash 结果不再进入 compatibility writer。
 pipe、`--print`、JSON 与非 TTY 的 plain 文本契约不会因此改变。
 
 `BOLO_MASCOT=0` 可隐藏水晶；`BOLO_ASCII=1` 使用 ASCII 水晶；`NO_COLOR` 只去颜色并

@@ -7,7 +7,8 @@
 > 局部 raw owner 与 engine selector 均已删除。OI-15A 已补齐 core slash display
 > policy；OI-15B 已接入 retained 单 panel/toast primitive，OI-15C 已迁移
 > context/doctor/status 与只读 panel/pager，OI-15D 已迁移 Skills/Plugins
-> stable-key catalog overlay，OI-15E 已迁移 toast/error；OI-15F 继续 compatibility cleanup；
+> stable-key catalog overlay，OI-15E 已迁移 toast/error，OI-15F 已完成
+> normal slash compatibility cleanup 与统一 action-picker/diff payload；
 > OI-H3 真人 Windows Terminal 走查继续单列。
 > **框架选择：** OI-14A 已选定精确版本的 Pi TUI direct bundle，不再继续扩展自研
 > `TerminalSurface + contentPrefixer + tiny Markdown`。分切片复用 renderer/Markdown/
@@ -109,8 +110,8 @@ Windows Terminal 字体、颜色、动画主观流畅度和真人按键/鼠标�
 
 以下交互由 retained dynamic TTY 与独立 plain fallback 共同守护。slash discovery、
 context 内容、paste、Thought、权限与非 TTY 行为都进入默认门禁；slash **结果的
-surface/lifecycle** 已完成 panel/pager/overlay/toast/history 迁移，最终 normal slash
-compatibility cleanup 仍是 OI-15F 开放项，不能把遗留兼容入口当成完成契约。
+surface/lifecycle** 已完成 panel/pager/overlay/toast/history 迁移；normal slash
+compatibility cleanup 也已由 OI-15F 关闭。
 
 ### 3.1 欢迎首页
 
@@ -234,7 +235,7 @@ segment elapsed 决定，不再依赖是否展示过 reasoning 文本；消费�
 - 当前已实现会话输入框内的 slash completion；尚无 PowerShell/Bash 外壳级 shell
   completion、鼠标输入或跨进程持久命令历史，它们不是 OI-10 的完成条件。
 
-### 3.7 slash 命令结果生命周期（OI-15A–E 已完成，F 待实现）
+### 3.7 slash 命令结果生命周期（OI-15A–F 已完成）
 
 OI-15A 已让 core 为所有内建命令声明并校验四类 surface，Plugin/Skill/unknown 也有
 fail-closed fallback；plain `message` 保持不变。OI-15B `d6bd087` 已建立单 panel/
@@ -245,14 +246,16 @@ runtime pager 的既有单页短路未改变。OI-15D `21ee1e2` / `87054df` 已�
 Skills/Plugins、commands、market/search 使用执行前 display preview 和结构化 catalog，
 并在唯一 OverlayHost 内原位完成 loading→result。OI-15E `1d49d53` 已让 retained
 CLI 消费 toast/history：短动作与可修正错误进入 footer 单槽，显式 durable error
-进入 visual-only history；`ok: false` 不自动持久化。当前映射如下：
+进入 visual-only history；`ok: false` 不自动持久化。OI-15F `d1e26bb` 已删除
+`interactiveProvider`、`interactiveEffort`、`interactiveDiff` 并统一为 renderer-neutral
+action-picker/diff view；normal slash 不再调用 compatibility writer。当前映射如下：
 
 | 类别 | 位置 | 适用 | 清除 |
 |------|------|------|------|
 | history | typed transcript | 需审计动作、不可恢复错误 | 正常随 history 滚动 |
 | panel | **Composer 下方、footer 上方**的单槽 | `/context`、`/doctor`、只读 status/help | 同 key/新 panel 原位替换；编辑输入、`Esc`、reset 或显式 TTL |
 | toast | footer 单行辅助状态 | reload/set/copy 等短反馈 | 默认 5 秒；新 toast 替换旧项并取消旧 timer |
-| overlay | 现有 OverlayHost | Skills/Plugins picker、长诊断/pager | `Esc`/完成关闭并恢复 Composer focus |
+| overlay | 现有 OverlayHost | Skills/Plugins、Provider/Effort picker、Diff、长诊断/pager | `Esc`/完成关闭并恢复 Composer focus |
 
 panel 最多 10 行且不超过可用 rows 的 40%，不能因重复命令继续增加高度。默认
 `/context` 使用 12 秒 compact panel，token 百分比继续留在 footer；
@@ -265,6 +268,9 @@ loading/result 使用 stable key 原位替换，异步结果以
 短动作连续执行只替换 toast；Usage/非法参数保持 error toast。插件 install/uninstall
 进入执行后失败使用 typed error history，reload merge notes 使用 8 秒 warning toast。
 这些 retained 结果不写 compatibility/plain writer/session messages。
+overlay 被占用、UI 开关关闭或 Diff 无内容时，结果进入 visual-only history，而不是
+回到 compatibility bucket。非 slash 的 REPL 中断、会话关闭与权限 fallback 仍可使用
+既有兼容输出组件。
 
 slash 灰色用户输入块仍可留在视觉 transcript；transient result 不进入
 `ChatMessage[]`、JSONL、compact、resume 或模型输入。non-TTY、pipe、`--print` 与
