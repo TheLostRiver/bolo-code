@@ -75,6 +75,8 @@ import {
   switchSessionModel,
   formatSessionProvidersSlash,
   listSessionProviders,
+  buildProviderPickerItems,
+  activeProviderPickerIndex,
   type SwitchableProviderSession,
 } from './sessionProvider.ts'
 import { clampEffortForSession } from './effortClamp.ts'
@@ -89,6 +91,8 @@ import {
   formatEffortStatusLine,
   formatEffortCapabilityStatus,
   assertEffortChoosable,
+  buildEffortPickerItems,
+  activeEffortPickerIndex,
   detectEffortDialectId,
   listEffortChoosable,
 } from '../../providers/src/effortDialect.ts'
@@ -323,12 +327,25 @@ export type SlashOverlayItem = {
   readonly label: string
 }
 
-export type SlashOverlayViewModel = {
-  readonly kind: 'picker'
-  readonly title: string
-  readonly items: readonly SlashOverlayItem[]
-  readonly emptyMessage?: string
-}
+export type SlashOverlayViewModel =
+  | {
+      readonly kind: 'picker'
+      readonly title: string
+      readonly items: readonly SlashOverlayItem[]
+      readonly emptyMessage?: string
+    }
+  | {
+      readonly kind: 'action-picker'
+      readonly action: 'provider' | 'effort'
+      readonly title: string
+      readonly items: readonly SlashOverlayItem[]
+      readonly initialIndex?: number
+    }
+  | {
+      readonly kind: 'diff'
+      readonly mode: 'session' | 'last'
+      readonly pathFilter?: string
+    }
 
 export type SlashDisplayPolicy =
   | {
@@ -451,28 +468,6 @@ export type SlashDispatchResult = {
   overlayView?: SlashOverlayViewModel
   /** `/context` overview data; terminal renderers must not parse message text. */
   contextView?: ContextUsageViewModel
-  /**
-   * U1：TTY 下 CLI 可打开 Diff 交互面板（core 不依赖 cli）。
-   * 非 TTY / 无处理器时仅展示 message。
-   */
-  interactiveDiff?: {
-    mode: 'session' | 'last'
-    pathFilter?: string
-  }
-  /**
-   * P 轨 UX：TTY 下 CLI 打开 provider 箭头选择器（core 不依赖 cli）。
-   * 非 TTY / BOLO_PROVIDER_PANEL=0 时仅展示 message 文本列表。
-   */
-  interactiveProvider?: {
-    mode: 'pick'
-  }
-  /**
-   * E8：TTY 下 CLI 打开 effort 箭头选择器。
-   * 非 TTY / BOLO_EFFORT_PANEL=0 时仅展示 message。
-   */
-  interactiveEffort?: {
-    mode: 'pick'
-  }
 }
 
 export type ResolvedSlashDispatchResult = SlashDispatchResult & {
@@ -484,16 +479,6 @@ export type SubmitUserInputResult =
       type: 'slash'
       message: string
       display: SlashDisplayPolicy
-      interactiveDiff?: {
-        mode: 'session' | 'last'
-        pathFilter?: string
-      }
-      interactiveProvider?: {
-        mode: 'pick'
-      }
-      interactiveEffort?: {
-        mode: 'pick'
-      }
       contextView?: ContextUsageViewModel
       overlayView?: SlashOverlayViewModel
     }
@@ -2868,14 +2853,14 @@ async function cmdDiff(
     return {
       ok: true,
       message: formatDiffSlash(log),
-      interactiveDiff: { mode: 'session' },
+      overlayView: { kind: 'diff', mode: 'session' },
     }
   }
   if (raw === 'last' || raw === 'turn') {
     return {
       ok: true,
       message: formatDiffSlash(log, { lastTurn: true }),
-      interactiveDiff: { mode: 'last' },
+      overlayView: { kind: 'diff', mode: 'last' },
     }
   }
   const gitMatch = raw.match(/^git(?:\s+(.+))?$/i)
@@ -2905,7 +2890,11 @@ async function cmdDiff(
   return {
     ok: true,
     message: formatDiffSlash(log, { pathFilter: raw }),
-    interactiveDiff: { mode: 'session', pathFilter: raw },
+    overlayView: {
+      kind: 'diff',
+      mode: 'session',
+      pathFilter: raw,
+    },
   }
 }
 
@@ -2997,7 +2986,7 @@ function cmdProvider(
     return { ok: true, message: textList() }
   }
 
-  // 无参：带 interactiveProvider，CLI TTY 开箭头选；非 TTY 只看 message
+  // 无参：携带 renderer-neutral picker；非 TTY 仍只看 message。
   if (!raw) {
     const list = listSessionProviders(asSwitchableSession(session))
     if (!list.length) {
@@ -3006,7 +2995,15 @@ function cmdProvider(
     return {
       ok: true,
       message: textList(),
-      interactiveProvider: { mode: 'pick' },
+      overlayView: {
+        kind: 'action-picker',
+        action: 'provider',
+        title: 'Select provider',
+        items: buildProviderPickerItems(asSwitchableSession(session)),
+        initialIndex: activeProviderPickerIndex(
+          asSwitchableSession(session),
+        ),
+      },
     }
   }
 
@@ -3175,7 +3172,7 @@ function cmdEffort(session: SlashSession, args: string): SlashDispatchResult {
   const rawIn = args.trim()
   const raw = rawIn.toLowerCase()
 
-  // 无参：能力视图 + TTY picker 信号
+  // 无参：能力视图 + renderer-neutral picker。
   if (!raw) {
     const message = formatEffortCapabilityStatus({
       effortLevel: session.effortLevel,
@@ -3183,15 +3180,26 @@ function cmdEffort(session: SlashSession, args: string): SlashDispatchResult {
       isAgent: true,
       model,
     })
-    const choosable = listEffortChoosable(dialect as string | undefined, {
+    const pickerOptions = {
+      dialect: dialect as string | undefined,
       isAgent: true,
       model,
-    })
+      effortLevel: session.effortLevel,
+    }
+    const items = buildEffortPickerItems(pickerOptions)
     return {
       ok: true,
       message,
-      ...(choosable.length
-        ? { interactiveEffort: { mode: 'pick' as const } }
+      ...(items.length
+        ? {
+            overlayView: {
+              kind: 'action-picker' as const,
+              action: 'effort' as const,
+              title: 'Select effort',
+              items,
+              initialIndex: activeEffortPickerIndex(pickerOptions),
+            },
+          }
         : {}),
     }
   }
@@ -4198,6 +4206,13 @@ const contextDisplay: SlashCommandDef['display'] = (args, result) => {
     : panelDisplay('slash:context', { ttlMs: 12_000 })
 }
 
+const diffDisplay: SlashCommandDef['display'] = (_args, result) => {
+  if (!result.ok) return toastDisplay('slash:diff:error', 'error', 8_000)
+  return result.overlayView?.kind === 'diff'
+    ? overlayDisplay('slash:diff', 'diff')
+    : panelDisplay('slash:diff', { overflow: 'pager' })
+}
+
 const pluginsDisplay: SlashCommandDef['display'] = (args, result) => {
   if (!result.ok) return toastDisplay('slash:plugins:error', 'error', 8_000)
   const parts = args.trim().split(/\s+/u).filter(Boolean)
@@ -4238,17 +4253,46 @@ const pluginsDisplay: SlashCommandDef['display'] = (args, result) => {
 
 const providerDisplay: SlashCommandDef['display'] = (args, result) => {
   if (!result.ok) return toastDisplay('slash:provider:error', 'error', 8_000)
-  const action = args.trim().split(/\s+/u)[0]?.toLowerCase()
-  return !action || action === 'list'
-    ? overlayDisplay('slash:provider', 'picker')
+  if (
+    result.overlayView?.kind === 'action-picker' &&
+    result.overlayView.action === 'provider'
+  ) {
+    return overlayDisplay('slash:provider', 'picker')
+  }
+  const parts = args.trim().split(/\s+/u).filter(Boolean)
+  const action = parts[0]?.toLowerCase()
+  const detail = parts[1]?.toLowerCase()
+  const readOnly =
+    !action ||
+    action === 'list' ||
+    action === 'show' ||
+    action === 'ls' ||
+    action === 'help' ||
+    action === '?' ||
+    ((action === 'add' || action === 'new') &&
+      (!detail ||
+        detail === 'list' ||
+        detail === 'show' ||
+        detail === 'ls'))
+  return readOnly
+    ? panelDisplay('slash:provider', { overflow: 'pager' })
     : toastDisplay('slash:provider:update')
 }
 
 const effortDisplay: SlashCommandDef['display'] = (args, result) => {
   if (!result.ok) return toastDisplay('slash:effort:error', 'error', 8_000)
+  if (
+    result.overlayView?.kind === 'action-picker' &&
+    result.overlayView.action === 'effort'
+  ) {
+    return overlayDisplay('slash:effort', 'picker')
+  }
   const action = args.trim().toLowerCase()
-  return !action || action === 'list'
-    ? overlayDisplay('slash:effort', 'picker')
+  return !action ||
+    action === 'list' ||
+    action === 'show' ||
+    action === 'ls'
+    ? panelDisplay('slash:effort', { overflow: 'pager' })
     : toastDisplay('slash:effort:update')
 }
 
@@ -4386,10 +4430,7 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     summary:
       'File changes; TTY opens panel (U1). /diff last · git [path] · <path>',
     usage: '[last | git [path] | <path>]',
-    display: displayOnResult(
-      overlayDisplay('slash:diff', 'diff'),
-      'slash:diff:error',
-    ),
+    display: diffDisplay,
     group: 'session',
     run: cmdDiff,
   },
@@ -4870,13 +4911,6 @@ export async function submitUserInput(
       type: 'slash',
       message: r.message,
       display: r.display,
-      ...(r.interactiveDiff ? { interactiveDiff: r.interactiveDiff } : {}),
-      ...(r.interactiveProvider
-        ? { interactiveProvider: r.interactiveProvider }
-        : {}),
-      ...(r.interactiveEffort
-        ? { interactiveEffort: r.interactiveEffort }
-        : {}),
       ...(r.contextView ? { contextView: r.contextView } : {}),
       ...(r.overlayView ? { overlayView: r.overlayView } : {}),
     }

@@ -375,15 +375,17 @@ async function main() {
   const e0 = await dispatchSlashCommand(session, 'effort', '')
   assert(e0.message.includes('auto') || e0.message.includes('effort'), 'effort show')
   assert(
-    e0.interactiveEffort?.mode === 'pick' || e0.message.includes('choosable'),
-    'effort bare signals pick or lists choosable',
+    (e0.overlayView?.kind === 'action-picker' &&
+      e0.overlayView.action === 'effort') ||
+      e0.message.includes('choosable'),
+    'effort bare exposes structured picker data or lists choosable',
   )
   const e1 = await dispatchSlashCommand(session, 'effort', 'high')
   assert(e1.ok && session.effortLevel === 'high', 'effort high')
   const e2 = await dispatchSlashCommand(session, 'effort', 'auto')
   assert(e2.ok && session.effortLevel === undefined, 'effort auto clears')
   const eList = await dispatchSlashCommand(session, 'effort', 'list')
-  assert(eList.ok && eList.interactiveEffort == null, 'effort list no pick')
+  assert(eList.ok && eList.overlayView == null, 'effort list no pick')
 
   // /thinking
   const t0 = await dispatchSlashCommand(session, 'thinking', '')

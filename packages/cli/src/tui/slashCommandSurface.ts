@@ -1,6 +1,7 @@
 import type {
   SlashDisplayPolicy,
   SlashDisplayTone,
+  SlashOverlayItem,
   SlashOverlayViewModel,
 } from '../../../core/src/index.ts'
 import type {
@@ -11,6 +12,22 @@ import { doesCliCommandPanelOverflow } from './retainedCommandSurface.ts'
 import type { TextPagerContent } from './textPager.ts'
 
 export type RetainedSlashDisplayProjection =
+  | {
+      kind: 'action-picker'
+      picker: {
+        action: 'provider' | 'effort'
+        title: string
+        items: readonly { id: string; label: string }[]
+        initialIndex?: number
+      }
+    }
+  | {
+      kind: 'diff'
+      diff: {
+        mode: 'session' | 'last'
+        pathFilter?: string
+      }
+    }
   | {
       kind: 'history'
       history: {
@@ -35,7 +52,7 @@ export type RetainedSlashDisplayProjection =
       catalog: {
         key: string
         title: string
-        items: SlashOverlayViewModel['items']
+        items: readonly SlashOverlayItem[]
         emptyMessage?: string
       }
     }
@@ -130,6 +147,38 @@ export function projectRetainedSlashDisplay(options: {
         key: display.key,
         title: titleForSlashDisplayKey(display.key),
         content,
+      },
+    }
+  }
+  if (
+    display.surface === 'overlay' &&
+    display.view === 'picker' &&
+    options.overlayView?.kind === 'action-picker'
+  ) {
+    return {
+      kind: 'action-picker',
+      picker: {
+        action: options.overlayView.action,
+        title: options.overlayView.title,
+        items: options.overlayView.items,
+        ...(options.overlayView.initialIndex !== undefined
+          ? { initialIndex: options.overlayView.initialIndex }
+          : {}),
+      },
+    }
+  }
+  if (
+    display.surface === 'overlay' &&
+    display.view === 'diff' &&
+    options.overlayView?.kind === 'diff'
+  ) {
+    return {
+      kind: 'diff',
+      diff: {
+        mode: options.overlayView.mode,
+        ...(options.overlayView.pathFilter
+          ? { pathFilter: options.overlayView.pathFilter }
+          : {}),
       },
     }
   }

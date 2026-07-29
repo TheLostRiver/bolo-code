@@ -769,11 +769,11 @@ async function main(): Promise<void> {
     )
     assert(
       resumeSource.includes(
-        'return await controller.runPickerOverlay',
+        'await controller.runPickerOverlay',
       ) &&
-        resumeSource.includes("mode: 'provider'") &&
-        resumeSource.includes("mode: 'effort'"),
-      'one retained picker helper serves both provider and effort modes',
+        resumeSource.includes('mode: projection.picker.action') &&
+        resumeSource.includes('mode: result.overlayView.action'),
+      'structured provider and effort payloads drive one retained/plain picker path',
     )
     assert(
       resumeSource.includes('await runRetainedArrowPicker({'),

@@ -10,6 +10,7 @@ import {
 import {
   createRetainedTuiController,
   runOnePrompt,
+  type CliSessionEvent,
   type CliTuiController,
   type RetainedCatalogOverlayHandle,
   type RetainedCatalogOverlayOptions,
@@ -513,7 +514,18 @@ async function testRunOnePromptConsumption(): Promise<void> {
 
   const fallbackSession = await createCatalogSession()
   const fallbackCompatibility: string[] = []
+  const fallbackHistory: CliSessionEvent[] = []
   attachSessionTuiController(fallbackSession, {
+    printer: {
+      beginTurn() {},
+      onEvent(event: CliSessionEvent) {
+        fallbackHistory.push(event)
+      },
+      endTurn() {},
+      didStreamText() {
+        return false
+      },
+    },
     openCatalogOverlay() {
       throw new Error('permission overlay already owns focus')
     },
@@ -531,10 +543,14 @@ async function testRunOnePromptConsumption(): Promise<void> {
     writeErr: (text) => fallbackCompatibility.push(text),
   })
   assert(
-    fallbackCompatibility.some((text) =>
-      text.includes('Skills (catalog)'),
-    ),
-    'catalog falls back to text when another overlay owns focus',
+    fallbackCompatibility.length === 0 &&
+      fallbackHistory.some(
+        (event) =>
+          event.type === 'text' &&
+          typeof event.text === 'string' &&
+          event.text.includes('Skills (catalog)'),
+      ),
+    'catalog falls back to visual history when another overlay owns focus',
   )
 }
 

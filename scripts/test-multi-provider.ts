@@ -200,20 +200,21 @@ async function main() {
   assert(listed.length === 3, 'list 3')
   assert(listed.some((p) => p.id === 'work' && p.isActive), 'work active')
 
-  // slash /provider 无参：文本 + interactiveProvider 信号（CLI TTY 开 picker）
+  // slash /provider 无参：文本 + renderer-neutral action picker。
   const listSlash = await dispatchSlashCommand(session, 'provider', '')
   assert(listSlash.ok, 'slash provider list ok')
   assert(listSlash.message?.includes('deepseek'), 'slash lists deepseek')
   assert(listSlash.message?.includes('work'), 'slash lists work')
   assert(
-    listSlash.interactiveProvider?.mode === 'pick',
-    'bare /provider signals picker',
+    listSlash.overlayView?.kind === 'action-picker' &&
+      listSlash.overlayView.action === 'provider',
+    'bare /provider exposes structured picker data',
   )
 
   const listOnly = await dispatchSlashCommand(session, 'provider', 'list')
   assert(listOnly.ok, 'provider list ok')
   assert(
-    listOnly.interactiveProvider == null,
+    listOnly.overlayView == null,
     'list subcommand no picker signal',
   )
 
@@ -256,7 +257,7 @@ async function main() {
   )
   assert(useSlash.ok, `slash use: ${useSlash.message}`)
   assert(session.providerId === 'deepseek', 'slash switched')
-  assert(useSlash.interactiveProvider == null, 'use has no picker signal')
+  assert(useSlash.overlayView == null, 'use has no picker signal')
   // CX4：热切 tip 含 dialect / choosable
   assert(
     /dialect=/i.test(useSlash.message ?? '') ||

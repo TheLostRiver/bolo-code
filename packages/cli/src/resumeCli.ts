@@ -15,8 +15,6 @@ import {
   submitUserInput,
   switchSessionProvider,
   takeNextSessionQueued,
-  buildProviderPickerItems,
-  activeProviderPickerIndex,
   type BoloSession,
   type SessionEvent,
   type SessionListItem,
@@ -703,6 +701,62 @@ export async function runOnePrompt(
       ...(options?.signal ? { signal: options.signal } : {}),
     })
   }
+  const showRetainedHistory = (
+    content: string,
+    tone: 'info' | 'success' | 'warning' | 'error' = 'info',
+  ): void => {
+    if (!controller) return
+    const event: CliSessionEvent =
+      tone === 'error'
+        ? { type: 'error', message: content }
+        : tone === 'warning'
+          ? { type: 'warning', message: content }
+          : { type: 'text', text: content }
+    controller.printer.onEvent(event)
+  }
+  const applyActionPickerSelection = async (
+    action: 'provider' | 'effort',
+    id: string,
+  ): Promise<{ ok: boolean; message: string }> => {
+    if (action === 'provider') {
+      const switched = switchSessionProvider(session, id)
+      return switched.ok
+        ? { ok: true, message: switched.message }
+        : { ok: false, message: switched.reason }
+    }
+
+    if (id === 'auto') {
+      session.effortLevel = undefined
+    } else {
+      session.effortLevel = id
+    }
+    const {
+      detectEffortDialectId,
+      formatEffortCapabilityStatus,
+    } = await import('../../providers/src/effortDialect.ts')
+    const dialect =
+      session.effortDialect ??
+      session.providerProfile?.effortDialect ??
+      detectEffortDialectId({
+        kind: session.provider?.id,
+        baseUrl: session.providerProfile?.baseUrl,
+        model: session.model ?? session.providerProfile?.model,
+      })
+    const model = session.model ?? session.providerProfile?.model
+    return {
+      ok: true,
+      message:
+        (id === 'auto'
+          ? 'effort set to auto\n'
+          : `effort set to ${id}\n`) +
+        formatEffortCapabilityStatus({
+          effortLevel: id === 'auto' ? 'auto' : id,
+          dialect: dialect as string | undefined,
+          isAgent: true,
+          model,
+        }),
+    }
+  }
   const printer = getSessionEventPrinter(session)
   let terminalReason = 'failed'
   printer?.beginTurn({
@@ -778,16 +832,95 @@ export async function runOnePrompt(
           }
         }
         if (projection?.kind === 'history') {
-          const historyEvent: CliSessionEvent =
-            projection.history.tone === 'error'
-              ? { type: 'error', message: projection.history.content }
-              : projection.history.tone === 'warning'
-                ? { type: 'warning', message: projection.history.content }
-                : { type: 'text', text: projection.history.content }
-          controller.printer.onEvent(historyEvent)
+          showRetainedHistory(
+            projection.history.content,
+            projection.history.tone,
+          )
           return {
             terminalReason: 'slash',
             assistantText: result.message,
+          }
+        }
+        if (projection?.kind === 'action-picker') {
+          const enabled =
+            process.env.BOLO_ARROW_PICKER !== '0' &&
+            (projection.picker.action === 'provider'
+              ? process.env.BOLO_PROVIDER_PANEL !== '0'
+              : process.env.BOLO_EFFORT_PANEL !== '0')
+          if (enabled) {
+            try {
+              const picked = await controller.runPickerOverlay({
+                mode: projection.picker.action,
+                items: [...projection.picker.items],
+                title: `${projection.picker.title} (↑/↓ · Enter · q cancel)`,
+                ...(projection.picker.initialIndex !== undefined
+                  ? { initialIndex: projection.picker.initialIndex }
+                  : {}),
+                ...(options?.signal ? { signal: options.signal } : {}),
+              })
+              if (picked.ok) {
+                const applied = await applyActionPickerSelection(
+                  projection.picker.action,
+                  picked.id,
+                )
+                controller.showCommandToast({
+                  key: applied.ok
+                    ? `slash:${projection.picker.action}:update`
+                    : `slash:${projection.picker.action}:error`,
+                  content: applied.message,
+                  tone: applied.ok ? 'success' : 'error',
+                  ttlMs: applied.ok ? 5_000 : 8_000,
+                })
+                return {
+                  terminalReason: 'slash',
+                  assistantText: applied.message,
+                }
+              }
+              if (picked.reason === 'cancel') {
+                const message = `${projection.picker.action} pick cancelled`
+                controller.showCommandToast({
+                  key: `slash:${projection.picker.action}:cancel`,
+                  content: message,
+                  tone: 'info',
+                  ttlMs: 5_000,
+                })
+                return {
+                  terminalReason: 'slash',
+                  assistantText: message,
+                }
+              }
+            } catch {
+              // The fail-closed visual history fallback below remains usable.
+            }
+          }
+        }
+        if (projection?.kind === 'diff') {
+          const enabled = process.env.BOLO_DIFF_PANEL !== '0'
+          if (enabled) {
+            try {
+              const { buildDiffViewModelFromLog } = await import(
+                '../../core/src/diffViewModel.ts'
+              )
+              const vm = buildDiffViewModelFromLog(session.fileDiffLog, {
+                lastTurn: projection.diff.mode === 'last',
+                pathFilter: projection.diff.pathFilter,
+              })
+              if (vm.files.length) {
+                const pane = await controller.runDiffOverlay({
+                  mode: 'browse',
+                  model: vm,
+                  ...(options?.signal ? { signal: options.signal } : {}),
+                })
+                if (pane.ok) {
+                  return {
+                    terminalReason: 'slash',
+                    assistantText: '(diff panel closed)',
+                  }
+                }
+              }
+            } catch {
+              // The fail-closed visual history fallback below remains usable.
+            }
           }
         }
         if (projection?.kind === 'panel') {
@@ -857,6 +990,18 @@ export async function runOnePrompt(
       }
       catalogOverlay?.dismiss()
       catalogOverlay = undefined
+      if (controller) {
+        const fallbackTone =
+          result.display.surface === 'history' ||
+          result.display.surface === 'toast'
+            ? result.display.tone
+            : 'info'
+        showRetainedHistory(result.message, fallbackTone)
+        return {
+          terminalReason: 'slash',
+          assistantText: result.message,
+        }
+      }
       if (
         result.contextView &&
         isTty
@@ -875,136 +1020,40 @@ export async function runOnePrompt(
           assistantText: result.message,
         }
       }
-      // U1：TTY 且 /diff 请求面板 → 交互 diffPane；失败回落文本
       if (
-        result.interactiveDiff &&
+        result.overlayView?.kind === 'action-picker' &&
         isTty &&
-        process.env.BOLO_DIFF_PANEL !== '0'
+        process.env.BOLO_ARROW_PICKER !== '0' &&
+        (result.overlayView.action === 'provider'
+          ? process.env.BOLO_PROVIDER_PANEL !== '0'
+          : process.env.BOLO_EFFORT_PANEL !== '0')
       ) {
         try {
-          const { buildDiffViewModelFromLog } = await import(
-            '../../core/src/diffViewModel.ts'
-          )
-          const vm = buildDiffViewModelFromLog(session.fileDiffLog, {
-            lastTurn: result.interactiveDiff.mode === 'last',
-            pathFilter: result.interactiveDiff.pathFilter,
+          const picked = await runInteractivePicker({
+            mode: result.overlayView.action,
+            items: [...result.overlayView.items],
+            title: result.overlayView.title,
+            ...(result.overlayView.initialIndex !== undefined
+              ? { initialIndex: result.overlayView.initialIndex }
+              : {}),
           })
-          if (vm.files.length && controller) {
-            const pane = await controller.runDiffOverlay({
-              mode: 'browse',
-              model: vm,
-              ...(options?.signal ? { signal: options.signal } : {}),
-            })
-            if (pane.ok) {
-              return {
-                terminalReason: 'slash',
-                assistantText: '(diff panel closed)',
-              }
+          if (picked.ok) {
+            const applied = await applyActionPickerSelection(
+              result.overlayView.action,
+              picked.id,
+            )
+            writeSlashOutput(applied.message)
+            return {
+              terminalReason: 'slash',
+              assistantText: applied.message,
             }
           }
-        } catch {
-          /* fall through to text dump */
-        }
-      }
-
-      // P 轨 UX：TTY 且 /provider 无参 → 箭头选后端并热切
-      if (
-        result.interactiveProvider?.mode === 'pick' &&
-        isTty &&
-        process.env.BOLO_PROVIDER_PANEL !== '0' &&
-        process.env.BOLO_ARROW_PICKER !== '0'
-      ) {
-        try {
-          const items = buildProviderPickerItems(session)
-          if (items.length) {
-            const ar = await runInteractivePicker({
-              mode: 'provider',
-              items,
-              title: 'Select provider',
-              initialIndex: activeProviderPickerIndex(session),
-            })
-            if (ar.ok) {
-              const sw = switchSessionProvider(session, ar.id)
-              const out = sw.ok ? sw.message : sw.reason
-              writeSlashOutput(out)
-              return { terminalReason: 'slash', assistantText: out }
-            }
-            if (ar.reason === 'cancel') {
-              const msg = 'provider pick cancelled'
-              writeSlashOutput(msg)
-              return { terminalReason: 'slash', assistantText: msg }
-            }
-            // unsupported → fall through to text list
-          }
-        } catch {
-          /* fall through to text dump */
-        }
-      }
-
-      // E8：TTY 且 /effort 无参 → 箭头选推理强度
-      if (
-        result.interactiveEffort?.mode === 'pick' &&
-        isTty &&
-        process.env.BOLO_EFFORT_PANEL !== '0' &&
-        process.env.BOLO_ARROW_PICKER !== '0'
-      ) {
-        try {
-          const {
-            buildEffortPickerItems,
-            activeEffortPickerIndex,
-            detectEffortDialectId,
-            formatEffortCapabilityStatus,
-          } = await import('../../providers/src/effortDialect.ts')
-          const dialect =
-            session.effortDialect ??
-            session.providerProfile?.effortDialect ??
-            detectEffortDialectId({
-              kind: session.provider?.id,
-              baseUrl: session.providerProfile?.baseUrl,
-              model: session.model ?? session.providerProfile?.model,
-            })
-          const model = session.model ?? session.providerProfile?.model
-          const items = buildEffortPickerItems({
-            dialect: dialect as string | undefined,
-            model,
-            isAgent: true,
-            effortLevel: session.effortLevel,
-          })
-          if (items.length) {
-            const ar = await runInteractivePicker({
-              mode: 'effort',
-              items,
-              title: 'Select effort',
-              initialIndex: activeEffortPickerIndex({
-                dialect: dialect as string | undefined,
-                model,
-                isAgent: true,
-                effortLevel: session.effortLevel,
-              }),
-            })
-            if (ar.ok) {
-              if (ar.id === 'auto') {
-                session.effortLevel = undefined
-              } else {
-                session.effortLevel = ar.id
-              }
-              const out =
-                (ar.id === 'auto'
-                  ? 'effort set to auto\n'
-                  : `effort set to ${ar.id}\n`) +
-                formatEffortCapabilityStatus({
-                  effortLevel: ar.id === 'auto' ? 'auto' : ar.id,
-                  dialect: dialect as string | undefined,
-                  isAgent: true,
-                  model,
-                })
-              writeSlashOutput(out)
-              return { terminalReason: 'slash', assistantText: out }
-            }
-            if (ar.reason === 'cancel') {
-              const msg = 'effort pick cancelled'
-              writeSlashOutput(msg)
-              return { terminalReason: 'slash', assistantText: msg }
+          if (picked.reason === 'cancel') {
+            const message = `${result.overlayView.action} pick cancelled`
+            writeSlashOutput(message)
+            return {
+              terminalReason: 'slash',
+              assistantText: message,
             }
           }
         } catch {
