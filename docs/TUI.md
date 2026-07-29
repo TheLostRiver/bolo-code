@@ -9,7 +9,8 @@
 > context/doctor/status 与只读 panel/pager，OI-15D 已迁移 Skills/Plugins
 > stable-key catalog overlay，OI-15E 已迁移 toast/error，OI-15F 已完成
 > normal slash compatibility cleanup 与统一 action-picker/diff payload；
-> OI-16 已限制 embedded text pager 的物理高度并补齐 Doctor viewport 门禁；
+> OI-16 已限制 text pager 的物理高度；OI-17 已把 REPL pager 并入 Composer 邻接
+> 根布局，并保留其它交互为 modal overlay；
 > OI-H3 真人 Windows Terminal 走查继续单列。
 > **框架选择：** OI-14A 已选定精确版本的 Pi TUI direct bundle，不再继续扩展自研
 > `TerminalSurface + contentPrefixer + tiny Markdown`。分切片复用 renderer/Markdown/
@@ -62,11 +63,11 @@
 | `packages/shared/src/cliTuiViewState.ts` | **OI-14B**：有序 live blocks、稳定 id、SessionEvent/resume 投影、composer/overlay/elapsed 纯状态真源 |
 | `packages/shared/src/runtimePager.ts` | **OI-14F–H**：pager key/state/result 纯 reducer，由 retained OverlayHost 消费 |
 | `tui/boloTerminalAdapter.ts` | **OI-14C–H**：dynamic TTY 唯一原始 writer 与 stdin owner；resize/render epoch/scrollback、Pi `StdinBuffer`、raw/mode-2004 与异常 acquisition/cleanup |
-| `tui/retainedTui.ts` | **OI-14C–H**：稳定 Pi root/controller、theme/viewport/welcome、view-state、transcript/activity/composer/footer/overlay 根布局、精确 stream fallback 与 final flush |
+| `tui/retainedTui.ts` | **OI-14C–H / OI-17**：稳定 Pi root/controller、theme/viewport/welcome、view-state、transcript/activity/composer/footer、内嵌 pager/modal 双视图根布局、精确 stream fallback 与 final flush |
 | `tui/retainedTranscript.ts` | **OI-14D**：按 stable block id 缓存 User/Assistant/Thought/Tool/Search/Error/Warning/Summary 组件；Pi Markdown、整宽用户块、物理 gutter 与父级 section gap |
 | `tui/retainedComposer.ts` | **OI-14E**：稳定 Bolo Composer/Footer；复用输入 reducer、slash/hint/history，补 undo、Pi keys 与 `CURSOR_MARKER` |
 | `tui/retainedActivity.ts` | **OI-14E**：把既有分段 activity 的当前帧投影为 retained child，不直接写 stdout |
-| `tui/retainedOverlay.ts` | **OI-14F–H**：唯一 OverlayHost；承载 permission/question/picker/diff/pager，保留 Composer identity/focus 与单一 stdin/writer owner |
+| `tui/retainedOverlay.ts` | **OI-14F–H / OI-17**：唯一交互状态机；permission/question/picker/catalog/diff 走 modal，REPL pager 走根布局无状态视图，standalone runtime pager仍走全屏 modal；保留 Composer identity/focus 与单一 stdin/writer owner |
 | `tui/crystalLogo.ts` | 水晶常量、源稿归一化、整块 cell-width 居中与 ASCII 降级 |
 | `tui/inkLayout.ts` | 一次性水晶工作台；宽屏 split、中/紧凑单列，不伪装成输入框 |
 | `tui/frame.ts` | 100-cell welcome、160-cell content 与全宽 dock 三套明确宽度契约 |
@@ -165,8 +166,9 @@ value/cursor/history/undo/menu 保留在 component-local 状态，Pi `CURSOR_MAR
 定位硬件光标。composer 与 transcript/activity 之间的完整 gap 由父级 retained
 layout 负责，因此 turn 完成后最终回答不会贴框。
 
-permission/question/provider/effort/diff/pager 都挂在同一 root 的 OverlayHost；
-overlay 期间 Composer 不卸载，输入状态、focus、raw stdin 与 writer owner 不转交。
+permission/question/provider/effort/diff 由同一 modal OverlayHost 展示；REPL pager
+使用同一 host 的状态机与按键 reducer，但通过根布局代理紧邻 Composer 展示。
+交互期间 Composer 不卸载，输入状态、focus、raw stdin 与 writer owner 不转交。
 文本/非动态回落使用明确的 numbered prompt 或 fail-closed 结果，不创建局部 terminal
 surface。
 
@@ -236,7 +238,7 @@ segment elapsed 决定，不再依赖是否展示过 reasoning 文本；消费�
 - 当前已实现会话输入框内的 slash completion；尚无 PowerShell/Bash 外壳级 shell
   completion、鼠标输入或跨进程持久命令历史，它们不是 OI-10 的完成条件。
 
-### 3.7 slash 命令结果生命周期（OI-15A–F 与 OI-16 已完成）
+### 3.7 slash 命令结果生命周期（OI-15A–F、OI-16 与 OI-17 已完成）
 
 OI-15A 已让 core 为所有内建命令声明并校验四类 surface，Plugin/Skill/unknown 也有
 fail-closed fallback；plain `message` 保持不变。OI-15B `d6bd087` 已建立单 panel/
@@ -256,7 +258,8 @@ action-picker/diff view；normal slash 不再调用 compatibility writer。当�
 | history | typed transcript | 需审计动作、不可恢复错误 | 正常随 history 滚动 |
 | panel | **Composer 下方、footer 上方**的单槽 | `/context`、`/doctor`、只读 status/help | 同 key/新 panel 原位替换；编辑输入、`Esc`、reset 或显式 TTL |
 | toast | footer 单行辅助状态 | reload/set/copy 等短反馈 | 默认 5 秒；新 toast 替换旧项并取消旧 timer |
-| overlay | 现有 OverlayHost | Skills/Plugins、Provider/Effort picker、Diff、长诊断/pager | `Esc`/完成关闭并恢复 Composer focus |
+| embedded pager | Composer 下方的 retained 根布局视图 | `/context details`、长 `/doctor`、REPL runtime 查询 | `q`/`Esc`/完成关闭并恢复 Composer focus |
+| overlay | 现有 modal OverlayHost | Skills/Plugins、Provider/Effort picker、Diff、权限/问答 | `Esc`/完成关闭并恢复 Composer focus |
 
 panel 最多 10 行且不超过可用 rows 的 40%，不能因重复命令继续增加高度。默认
 `/context` 使用 12 秒 compact panel，token 百分比继续留在 footer；
@@ -266,11 +269,17 @@ loading/result 使用 stable key 原位替换，异步结果以
 18→10 行 resize 后仍保持选中项可见，支持 `PgUp`、`PgDn`、`Home`、`End`；关闭后
 恢复 Composer value、cursor、focus 与 raw input owner。
 
-OI-16 `5b22c15` 补上了 text pager 的根组件高度契约：REPL embedded pager 默认
+OI-16 `5b22c15` 补上了 text pager 的组件高度契约：REPL text pager 默认
 正文页高为 `min(18, max(1, rows - 6))`，短页不补无意义空行。24/48/80 行终端
-中的 29 行 Doctor 均为两页且组件不超过 21 行，footer 始终可见；`q`/`Esc`
-关闭后恢复 Composer。顶层 runtime pager、Diff、权限与其它 overlay 不共用这个
-18 行上限。
+中的 29 行 Doctor 均为两页且组件不超过 21 行，footer 保持在组件内。该专项直接
+渲染 host，没有覆盖 Pi composite 的绝对坐标，因此不能证明 Composer 与 pager 邻接。
+
+OI-17 `cda22fd` 补齐坐标契约：同一个 `RetainedOverlayHost` 只保留一套 session/
+Promise/Abort/按键状态机，`RetainedOverlayView` 为它提供 embedded pager 与 modal
+两个无状态渲染入口。48/80 行真实 xterm 中 Doctor 标题与 Composer 下边框最多相隔
+两行；`q` 后原草稿继续输入。Permission、Question、Picker、Catalog、Diff 仍为
+modal，`rootVisible: false` 的顶层 runtime pager仍为全屏表面。顶层 runtime pager、
+Diff、权限与其它 modal 不共用 OI-16 的 18 行上限。
 
 短动作连续执行只替换 toast；Usage/非法参数保持 error toast。插件 install/uninstall
 进入执行后失败使用 typed error history，reload merge notes 使用 8 秒 warning toast。
@@ -415,6 +424,7 @@ npm run test:slash-completion
 npm run test:slash-display-policy
 npm run test:runtime-cli-renderer
 npm run test:runtime-cli-pager
+npm run test:cli-embedded-pager-layout
 npm run test:runtime-cli-automation
 node --import tsx/esm scripts/test-full-track.ts
 node --import tsx/esm scripts/test-product-track.ts

@@ -220,10 +220,12 @@ OI-15C 起，retained TUI 的 `/context` 使用 Composer 下方 12 秒单 panel�
 替换同一槽，开始编辑、`Esc`、TTL 或 reset/restore 会清除。`details`、`detail`、
 `--details` 与超出 panel 容量的 `/doctor`/`/status`、help/memory 等只读内容使用
 text pager；`/mcp`、`/hooks` 直接进入 pager。迁移结果不会进入兼容输出区或会话消息。
-OI-16 起，REPL 内嵌 text pager 的正文每页最多 18 行；高终端不会把短 Doctor
-人为撑到近全屏，短于一页的内容只占实际行数。footer 始终显示页码与
-`q/Esc close`；关闭后恢复 Composer。这个高度策略不改变顶层 runtime pager，
-也不改变 pipe、`--print`、JSON 或非 TTY 的原始文本字节。
+OI-16 起，REPL text pager 的正文每页最多 18 行，短于一页的内容只占实际行数；
+footer 始终显示页码与 `q/Esc close`。OI-17 起，这类 pager 不再绝对锚定到终端
+底部，而是在 retained 根布局中紧邻 Composer；因此高终端不会在输入框与
+`/doctor`/`/context details` 之间留下大面积空白。`q`/`Esc` 关闭后恢复同一个
+Composer 草稿和焦点。顶层 `bolo runtime list|inspect` pager仍是独立全屏表面；
+pipe、`--print`、JSON 或非 TTY 的原始文本字节不变。
 OI-15D 起，`/skills`、`/plugins`、commands、market/search 会先在唯一 OverlayHost
 显示 loading，再用结构化目录原位替换；迟到或已取消的请求不会覆盖当前视图。长目录
 支持 `PgUp`、`PgDn`、`Home`、`End`，终端 resize 后仍保持选中项可见；`Esc`/关闭后
@@ -240,16 +242,16 @@ pipe、`--print`、JSON 与非 TTY 的 plain 文本契约不会因此改变。
 保留欢迎页结构，显式 `BOLO_THEME=plain` / `BOLO_PLAIN=1` 才简化欢迎页。
 
 OI-14H 起，双 TTY/raw-mode 会话只使用 retained renderer：transcript/Markdown、
-常驻 Composer、Thinking/Running activity、model/effort/usage footer 与唯一
-OverlayHost 位于同一 component tree；slash/hint/history/undo、多行 paste、首 token
+常驻 Composer、Thinking/Running activity、model/effort/usage footer、REPL pager
+视图与唯一 modal OverlayHost 位于同一 retained 架构；slash/hint/history/undo、多行 paste、首 token
 前输入框、每段 `Thought for`、new/resume、permission/question/provider/effort/diff/
-pager 均有真实 VT 门禁。面板期间 Composer 不卸载，输入状态、focus、raw stdin 与
+pager 均有真实 VT 门禁。交互表面期间 Composer 不卸载，输入状态、focus、raw stdin 与
 writer 不转交给第二 owner；runtime pager 也不发送整屏 `ESC[2J`。普通用户无需设置
 engine，也没有第二套 dynamic renderer 可选。
 
 retained REPL 中，模型或工具正在运行时按 `Esc` 会针对 coordinator 当前 active
 turn 请求 interrupt 并返回输入框；`Ctrl-C` 保留为运行态兼容键，空闲输入框下才
-退出 REPL。权限问答、选择器、diff 和 pager 打开时，`Esc` 先交给当前 overlay
+退出 REPL。权限问答、选择器、diff 和 pager 打开时，`Esc` 先交给当前交互表面
 取消/返回，不会被 turn 全局中断抢走；plain/readline 回落仍使用 `Ctrl-C` 中断。
 用户主动取消不会在时间线显示 durable turn id 或 `turn ended with aborted` warning。
 
@@ -697,6 +699,7 @@ npm run test:runtime-cli-renderer
 npm run test:runtime-cli-pager
 npm run test:runtime-cli-automation
 npm run test:cli-doctor-pager-viewport
+npm run test:cli-embedded-pager-layout
 npm run test:session-settings
 npm run test:desktop-session-settings
 npm run test:searxng-setup

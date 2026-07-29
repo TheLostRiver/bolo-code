@@ -17,7 +17,7 @@
 | **新用户 / 要跑起来** | **[docs/USAGE.md](docs/USAGE.md)**（含 **如何配置 Agent/Subagent**） |
 | **接手开发的 Agent / 同事** | **[docs/AGENT_HANDOFF.md](docs/AGENT_HANDOFF.md)**（架构 · 进度 · 改码规矩） |
 | **查总进度与各轨** | **[docs/ROADMAP.md](docs/ROADMAP.md)**（进度真源） |
-| **查 CLI TUI 重构** | **[docs/CLI_TUI_REFACTOR_PLAN.md](docs/CLI_TUI_REFACTOR_PLAN.md)**（OI-14 retained renderer · OI-15 slash lifecycle · OI-16 pager viewport）· [选型证据](docs/CLI_TUI_RENDERER_DECISION.md) |
+| **查 CLI TUI 重构** | **[docs/CLI_TUI_REFACTOR_PLAN.md](docs/CLI_TUI_REFACTOR_PLAN.md)**（OI-14 retained renderer · OI-15 slash lifecycle · OI-16 pager 高度 · OI-17 邻接布局）· [选型证据](docs/CLI_TUI_RENDERER_DECISION.md) |
 | **查分层边界** | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 
 ---
@@ -29,7 +29,7 @@
 | Headless 核心 | ~82–90% | queryLoop · 权限 · tools · STE；partial stream fail-closed |
 | **Agent 能力面（工具集）** | **~82–88%** | 15 个常驻/可选工具 + **Web search**（hosted、MCP、SearXNG 均已活体验证） |
 | 会话 / CLI | ~92–97% | **零步骤首次启动** · 用户级 workspace JSONL · 旧项目会话兼容 · durable runtime · query/action CLI · TTY pager · pipe/JSON automation |
-| **CLI TUI** | **~85–92%** | OI-14 retained 主体、OI-15A–F command lifecycle 与 OI-16 Doctor pager viewport 已完成；真人 Windows Terminal 主观观感仍未验 |
+| **CLI TUI** | **~85–92%** | OI-14 retained 主体、OI-15A–F command lifecycle、OI-16 pager 高度与 OI-17 REPL 邻接布局已完成；真人 Windows Terminal 主观观感仍未验 |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
 | Subagent | ~89–95% | `config.agents` + `agents/*.md` · durable task/result · overflow FIFO/cancel · safe delivery · worktree 保全 |
 | 文件 Diff 日用 | ~95%+ | D0–D7 · U0–U4 |
@@ -52,11 +52,12 @@ smoke、OI-07 上游诊断 / `search doctor` / 可选 Docker setup、OI-08B CLI 
 OverlayHost/交互面板、OI-14G 默认切换/可靠性/性能、OI-14H legacy 删除/发布审计、
 OI-15A slash display policy、OI-15B retained single-slot command surface、OI-15C
 read-only panel/pager migration、OI-15D Skills/Plugins stable-key overlay、OI-15E
-toast/error policy、OI-15F compatibility cleanup、OI-16 Doctor pager viewport**。OI-09–OI-13 的
+  toast/error policy、OI-15F compatibility cleanup、OI-16 Doctor pager height、
+  OI-17 REPL pager adjacency**。OI-09–OI-13 的
 slash/context/paste/Thought/权限/welcome 局部能力仍然有效，但不再作为整个 TUI
 renderer 稳定的证据。
 
-**当前状态：OI-15A–F 与 OI-16 自动实现已关闭；当前没有已准入的 agent 可闭环队列。**
+**当前状态：OI-15A–F、OI-16 与 OI-17 自动实现已关闭；当前没有已准入的 agent 可闭环队列。**
 OI-15A 已在 core 建立
 `history | panel | toast | overlay` display policy、运行时 fail-closed 校验和
 35 个内建命令分类，并保持 plain `message` 不变。OI-15B `d6bd087` 已在
@@ -78,10 +79,17 @@ toast；retained 结果不写 compatibility/plain writer/session messages，non-
 并在 overlay 关闭、不可用或无内容时回落 visual-only history。normal slash 结果不再
 命中 compatibility writer；plain/non-TTY/pipe 仍输出原 `message` 字节。
 
-OI-16 `5b22c15` 根据真人 Windows Terminal 截图补上了 OI-15C 漏验的物理高度：
+OI-16 `5b22c15` 根据真人 Windows Terminal 截图补上了 OI-15C 漏验的组件高度：
 embedded text pager 正文每页最多 18 行，不再随 48/80 行终端无限膨胀；29 行
 `/doctor` 稳定分成两页，单行详情只占 4 个物理行，footer 的 `q/Esc close` 始终
-可见。`q`/`Esc` 关闭后恢复 Composer，runtime pager 与 plain/non-TTY 字节不变。
+包含在组件内。该专项只测了 host 自身，没有经过 Pi composite，因此没有发现底部绝对
+锚定仍会在 Composer 与 pager 之间留下大面积空白。
+
+OI-17 `cda22fd` 修复了这个定位漏测：REPL 内 text/runtime pager 现在作为 retained
+根布局的无状态视图紧邻 Composer，仍复用唯一 `RetainedOverlayHost` 的分页状态与输入
+生命周期；Permission、Question、Picker、Catalog、Diff 继续作为 modal overlay。
+48/80 行真实 xterm composite、footer/页码、`q` 后草稿续写、modal 回归与独立
+`runtime` 顶层 pager 均已进入默认门禁。plain/non-TTY 字节和零运行时依赖不变。
 
 OI-14 的单 retained renderer、常驻 Composer、Markdown、OverlayHost、物理终端门禁
 与 plain/non-TTY fallback 保持不变；OI-15 不增加新 renderer 或其它 Agent 的运行时
@@ -95,8 +103,8 @@ doctor 与显式 Docker 管理也已落地，Docker 不是默认依赖。
 
 **人工项：** retained 正文、常驻输入区和 overlays 的碎片、空洞、续行贴左、
 cursor/raw-mode 与 owner 交接缺陷已由 OI-14 自动门禁关闭；normal slash compatibility
-路径已由 OI-15F 自动门禁关闭，Doctor pager 的近全屏空白已由 OI-16 物理高度门禁
-关闭。真人仍需检查 Windows Terminal 的字体、颜色、动画和
+路径已由 OI-15F 自动门禁关闭，Doctor pager 的高度膨胀与底部锚定空洞分别由
+OI-16/OI-17 自动门禁关闭。真人仍需检查 Windows Terminal 的字体、颜色、动画和
 按键/鼠标手感；Desktop 点击与视觉也仍需真人。SearXNG 已完成真实实例 live smoke。
 
 进度真源：[docs/ROADMAP.md](docs/ROADMAP.md)
@@ -382,7 +390,7 @@ scripts/       单测与 smoke
 | [docs/SESSIONS.md](docs/SESSIONS.md) | 会话落盘 · resume |
 | [docs/SLASH_COMMANDS.md](docs/SLASH_COMMANDS.md) | 斜杠命令 |
 | [docs/TUI.md](docs/TUI.md) | CLI TUI · 环境变量 |
-| [docs/CLI_TUI_REFACTOR_PLAN.md](docs/CLI_TUI_REFACTOR_PLAN.md) | OI-14 retained renderer · OI-15 slash surface/lifecycle · OI-16 pager viewport · 参考审计 · 迁移/回滚/验收 |
+| [docs/CLI_TUI_REFACTOR_PLAN.md](docs/CLI_TUI_REFACTOR_PLAN.md) | OI-14 retained renderer · OI-15 slash surface/lifecycle · OI-16 pager 高度 · OI-17 邻接布局 · 参考审计 · 迁移/回滚/验收 |
 | [docs/SKILLS.md](docs/SKILLS.md) · [MCP.md](docs/MCP.md) · [PLUGINS.md](docs/PLUGINS.md) | 扩展面 |
 | [docs/SUBAGENT.md](docs/SUBAGENT.md) · [SUBAGENT_SPEC.md](docs/SUBAGENT_SPEC.md) | Subagent |
 | [docs/PROMPT_CACHE.md](docs/PROMPT_CACHE.md) | Prompt cache 观测 |

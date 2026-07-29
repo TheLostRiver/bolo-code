@@ -14,6 +14,7 @@
 > OI-15E toast/error policy 关闭锚点：`1d49d53`（2026-07-29）。
 > OI-15F compatibility cleanup 关闭锚点：`d1e26bb`（2026-07-29）。
 > OI-16 Doctor pager viewport 关闭锚点：`5b22c15`（2026-07-29）。
+> OI-17 REPL pager adjacency 关闭锚点：`cda22fd`（2026-07-29）。
 > 本文只列当前仓库中有代码、测试、实测或互相矛盾文档支撑的问题。
 > 历史 TODO、已关闭的候选和仅凭印象提出的功能不算开放问题。
 
@@ -29,10 +30,10 @@
 ## 1. Agent 可直接解决
 
 当前没有已准入的 agent 可闭环队列。OI-14 只剩明确的 OI-H3 真人走查；
-OI-16 已按真人截图提供的新证据自动闭环；OI-09–OI-13 的局部关闭不再作为
+OI-16/OI-17 已按两次真人截图提供的新证据自动闭环；OI-09–OI-13 的局部关闭不再作为
 “整个 TUI renderer 已稳定”的证据。
 
-### OI-16 · `/doctor` pager 占满真实终端 viewport
+### OI-16 · `/doctor` pager 组件高度膨胀
 
 **状态：CLOSED · `5b22c15`**
 
@@ -51,11 +52,36 @@ OI-16 已按真人截图提供的新证据自动闭环；OI-09–OI-13 的局部
 - embedded text pager 默认正文页高固定为 `min(18, max(1, rows - 6))`；短页只渲染
   实际正文，不再用空行占满高终端。
 - 独立 `test:cli-doctor-pager-viewport` 在 24/48/80 行终端验证 29 行 Doctor
-  稳定分成两页、组件最多 21 行、footer 可见、第二页可达，`q`/`Esc` 后 overlay
-  关闭并恢复 Composer 输入所有权。
+  稳定分成两页、组件最多 21 行、footer 位于组件内、第二页可达，并验证 host
+  的关闭与输入所有权恢复。
 - runtime pager、Diff、权限与其它 overlay 策略不变；plain/non-TTY `/doctor`
   `message` 字节不变。完整 `npm test`、dist/install、CLI 预算和 Electron smoke
   退出 0，`dependencies` 仍为 `{}`。
+- 后续真人截图显示 `1/2` footer 与 18 行正文已经生效，但 pager 仍绝对锚定在
+  终端底部。该坐标缺陷作为 OI-17 继续修复，不推翻 OI-16 的高度关闭证据。
+
+### OI-17 · REPL pager 与 Composer 之间出现大面积空白
+
+**状态：CLOSED · `cda22fd`**
+
+准入证据：
+
+- 第二张真人 Windows Terminal 截图中，Doctor 已限制为 18 行正文并显示 `1/2`，
+  但 Composer 在顶部、pager 在终端底部，中间仍有整片空白。
+- 根因是唯一 OverlayHost 使用 `anchor: bottom-center`；Pi composite 会把基础布局
+  补到完整终端高度，再把 pager 放在 `terminalHeight - pagerHeight`，未占用行全部
+  成为空白。OI-16 只调用 `host.render()`，没有覆盖这条坐标链。
+
+关闭证据：
+
+- 同一个 `RetainedOverlayHost` 保留唯一 session/Promise/Abort/按键状态机；
+  两个无状态 view 分别把 REPL pager 渲染进 retained 根布局、把其它交互渲染为 modal。
+- `test:cli-embedded-pager-layout` 在 48/80 行真实 xterm composite 中验证 Doctor
+  标题与 Composer 下边框最多相隔两行、footer/`1/2` 可见，`q` 后原草稿继续输入。
+- Permission、Question、Picker、Catalog、Diff 仍为 modal；`rootVisible: false`
+  的顶层 runtime pager仍全屏。modal/runtime/ownership/reliability、typecheck 和完整
+  `npm test` 全绿；dist/install、CLI 预算、Desktop bundle/launch 与
+  `dependencies: {}` 均保持通过。
 
 ### OI-15 · slash 命令临时结果与 Composer 空间治理
 

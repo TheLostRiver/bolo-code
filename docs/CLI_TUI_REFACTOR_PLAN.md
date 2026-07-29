@@ -689,8 +689,9 @@ request generation，并记录 session id、cwd 和 command key；异步完成�
 - non-TTY、pipe、`--print`、JSON 输出无 ANSI、无 timer 副作用且文本兼容；
 - transient 不进入 `ChatMessage[]`、JSONL、compact、resume 或模型输入；
 - normal slash output 不再命中 `appendCompatibilityOutput()` 的静态 guard。
-- embedded text pager 在 24/48/80 行终端的物理高度、footer、分页导航与关闭后
-  Composer 恢复，不得只测试 display projection。
+- text pager 在 24/48/80 行终端的组件高度、footer 与分页导航；REPL pager 在
+  48/80 行真实 Pi composite 中与 Composer 邻接、关闭后原草稿恢复。不得只测试
+  display projection 或单独的 host render。
 
 OI-H3 真人补充检查 panel 在 Composer 下方的阅读节奏、12 秒 Context 时长、动画/
 输入手感和窄窗口可读性。若真人发现可由 xterm 复现的布局或按键缺陷，必须回到
@@ -704,10 +705,24 @@ OI-15C 关闭后，真人 Windows Terminal 截图仍显示约 29 行 `/doctor` �
 48 行终端最终得到 45 行组件。这个缺陷可由真实 `RetainedOverlayHost` 自动复现，
 因此不归 OI-H3。
 
-OI-16 `5b22c15` 把 embedded text pager 正文限制为
+OI-16 `5b22c15` 把 text pager 正文限制为
 `min(18, max(1, rows - 6))`，并让短页按实际行数渲染。独立默认门禁覆盖
-24/48/80 行 Doctor、两页 footer/导航、`q`/`Esc` 关闭和 Composer 恢复；runtime
-pager、Diff、权限、plain/non-TTY 字节与 `dependencies: {}` 保持不变。
+24/48/80 行 Doctor host 组件、两页 footer/导航与关闭生命周期；runtime pager、
+Diff、权限、plain/non-TTY 字节与 `dependencies: {}` 保持不变。该门禁没有经过
+Pi `compositeOverlays()`，因此没有证明 pager 的最终终端坐标。
+
+#### OI-17 · REPL pager 邻接布局
+
+OI-16 后的第二张真人截图显示正文上限和 `1/2` footer 已生效，但唯一 OverlayHost
+仍以 `bottom-center` 定位。Pi composite 把基础布局补到完整终端高度，再将 pager
+放到底部，Composer 与 pager 之间的未占用行全部成为空白。
+
+OI-17 `cda22fd` 保留一个 `RetainedOverlayHost` 作为 session/Promise/Abort/按键
+owner，并增加 embedded pager/modal 两个无状态 view。REPL text/runtime pager
+进入 retained 根布局并紧邻 Composer；Permission、Question、Picker、Catalog、Diff
+继续使用 Pi overlay，`rootVisible: false` 的 standalone runtime pager仍全屏。
+`test:cli-embedded-pager-layout` 在 48/80 行真实 xterm composite 覆盖邻接坐标、
+footer/页码、`q` 后草稿续写；modal/runtime/ownership/reliability 与完整门禁全绿。
 
 ### 14.9 回滚边界
 

@@ -32,8 +32,9 @@ agent 独立解决的问题。** 不要越过外部/人工阻塞项，也不要�
 | 8 | OI-14B · live view-state | ✅ 已收口（`269b39c`） |
 | 9 | OI-14H · 删除 legacy/静态 owner guard/发布审计 | ✅ 自动部分已收口（`39e66b4`–`d4eaed0`） |
 | 10 | OI-15A–F · slash command surface/lifecycle | ✅ A core policy `d681734`、B single-slot panel/toast `d6bd087`、C read-only panel/pager `26f796f`、D Skills/Plugins overlay `21ee1e2` / `87054df`、E toast/error `1d49d53`、F compatibility cleanup `d1e26bb` 已关闭 |
-| 11 | OI-16 · Doctor pager viewport | ✅ 真人截图准入、自动闭环（`5b22c15`） |
-| 12 | OI-H1/H2/H3 · 真 TTY、真人点击与视觉走查 | 人工阻塞；不得用它们掩盖可自动复现的新缺陷 |
+| 11 | OI-16 · Doctor pager height | ✅ 第一张真人截图准入、自动闭环（`5b22c15`） |
+| 12 | OI-17 · REPL pager adjacency | ✅ 第二张真人截图准入、自动闭环（`cda22fd`） |
+| 13 | OI-H1/H2/H3 · 真 TTY、真人点击与视觉走查 | 人工阻塞；不得用它们掩盖可自动复现的新缺陷 |
 
 OI-04 已完成零依赖、显式配置、fail-closed 的 SearXNG JSON 搜索契约、fixture、
 CLI/Desktop warning 与文档收口；OI-X1 已补齐真实 Docker 实例和上游搜索证据；
@@ -51,8 +52,9 @@ slot、generation、timer 与清理生命周期；OI-15C 已迁移 context/docto
 Skills/Plugins 结构化 catalog、loading→result 原位替换、stale guard、Composer 恢复和
 有界分页；OI-15E 已迁移 retained toast/history、显式 durable error 与 plain/session
 隔离；OI-15F 已统一 action-picker/diff payload、关闭 normal slash compatibility
-writer 并保持 plain fallback。OI-16 又将 embedded text pager 正文限制为 18 行，
-补齐 24/48/80 行 Doctor 物理高度、footer、导航和 Composer 恢复门禁。后续只按
+writer 并保持 plain fallback。OI-16 将 text pager 正文限制为 18 行，但其 host-only
+门禁漏掉了 Pi composite 坐标；OI-17 又把 REPL pager 并入 Composer 邻接根布局，
+并以 48/80 行 xterm 证明 modal/standalone runtime pager不变和关闭后草稿恢复。后续只按
 ROADMAP §0、§13.11 与 OPEN_ISSUES 中有
 准入证据的新切片推进；三处都为空时停止，不得为保持自治发明任务。每刀仍须先红灯、
 packages-first，代码/测试与文档分批中文 commit/push。
@@ -64,8 +66,8 @@ OI-H1/H2/H3 只能由真人验收；任何新发现且可由 headless terminal �
 控件测试注入 `readKey`，覆盖不到真实 raw-mode 与 REPL 抢 stdin 的问题。
 文档与 ROADMAP 已如实标注「真 TTY 交互未验」。**不要在没有真正验证的情况下把这个标注抹掉。**
 CLI TUI 的字体、颜色和真人按键手感仍由 OI-H3 人工验；正文碎片、巨大空洞、续行贴左、
-cursor/resize 等缺陷已由 OI-14 自动门禁关闭，Doctor pager 近全屏空白已由 OI-16
-关闭，不得重新塞进人工 blocker。其余
+cursor/resize 等缺陷已由 OI-14 自动门禁关闭，Doctor pager 的高度膨胀与底部锚定
+空洞分别由 OI-16/OI-17 关闭，不得重新塞进人工 blocker。其余
 能力面候选已经落地、书面关闭或写明重开条件，不再作为隐含队列。
 
 ### 关于 Electron / GUI（OI-06，已关闭）
