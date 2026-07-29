@@ -7,7 +7,6 @@ import {
 } from '../packages/core/src/index.ts'
 import {
   measureTerminalText,
-  resolveTuiContentGutter,
   renderContextDashboard,
   resolveTuiFrameWidth,
   runOnePrompt,
@@ -137,13 +136,12 @@ async function main(): Promise<void> {
   assert(tty.terminalReason === 'slash', 'TTY context remains a slash result')
   assert(ttyText.includes('█') || ttyText.includes('░'), 'TTY uses dashboard')
   assert(!ttyText.includes('prepare order:'), 'TTY hides diagnostics by default')
-  const ttyGutter = ' '.repeat(resolveTuiContentGutter(80))
   assert(
     ttyText
       .split('\n')
       .filter((line) => /[╭│╰]/u.test(line))
-      .every((line) => line.startsWith(ttyGutter)),
-    'TTY dashboard uses the shared content gutter',
+      .every((line) => line === line.trimStart()),
+    'plain TTY dashboard starts at column zero',
   )
 
   const plainOut: string[] = []
@@ -171,12 +169,12 @@ async function main(): Promise<void> {
   const detailsText = detailsOut.join('')
   assert(detailsText.includes('prepare order:'), 'details keeps diagnostics')
   assert(!detailsText.includes('╭─ Context'), 'details bypasses dashboard')
+  const firstDetailsLine = detailsText
+    .split('\n')
+    .find((line) => line.length > 0)
   assert(
-    detailsText
-      .split('\n')
-      .filter(Boolean)
-      .every((line) => line.startsWith(ttyGutter)),
-    'TTY slash diagnostics use the shared content gutter',
+    firstDetailsLine === firstDetailsLine?.trimStart(),
+    'plain TTY slash diagnostics start at column zero',
   )
 
   console.log('PASS: context dashboard')

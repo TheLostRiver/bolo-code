@@ -55,10 +55,6 @@ import type {
   BoloTerminalOutput,
 } from './tui/boloTerminalAdapter.ts'
 import { renderContextDashboard } from './tui/contextDashboard.ts'
-import {
-  prefixTuiContentBlock,
-  resolveTuiContentColumns,
-} from './tui/contentLayout.ts'
 
 export type ResumeCliOptions = {
   /** session id / 路径；省略或 true 时进入项目列表选择 */
@@ -514,9 +510,7 @@ export function createCliOnEvent(opts: {
       writeOut: opts.writeOut,
       writeErr: opts.writeErr,
       showThinking: opts.showThinking,
-      timeline: false,
       color: opts.color,
-      columns: opts.columns,
       ...(opts.explainError ? { explainError: opts.explainError } : {}),
     })
   return {
@@ -674,13 +668,9 @@ export async function runOnePrompt(
   const isTty = options?.isTty ?? process.stdin.isTTY === true
   const columns = options?.columns ?? process.stdout.columns ?? 80
   const controller = getSessionTuiController(session)
-  const withContentLayout = (text: string): string =>
-    isTty && !controller
-      ? prefixTuiContentBlock(text, { columns })
-      : text
   const writeSlashOutput = (text: string) => {
     const line = text.endsWith('\n') ? text : `${text}\n`
-    writeOut(withContentLayout(line))
+    writeOut(line)
   }
   const runInteractivePicker = async (picker: {
     mode: 'provider' | 'effort'
@@ -732,7 +722,7 @@ export async function runOnePrompt(
       ) {
         const rendered = renderContextDashboard({
           view: result.contextView,
-          columns: resolveTuiContentColumns(columns),
+          columns,
           color:
             options?.color ??
             (process.env.NO_COLOR === undefined &&
@@ -894,15 +884,11 @@ export async function runOnePrompt(
       const output = assistantText.endsWith('\n')
         ? assistantText
         : `${assistantText}\n`
-      writeOut(withContentLayout(output))
+      writeOut(output)
     }
     if (terminal.reason !== 'completed') {
       const detail = terminal.detail ? `: ${terminal.detail}` : ''
-      writeErr(
-        withContentLayout(
-          `warn: turn ended with ${terminal.reason}${detail}\n`,
-        ),
-      )
+      writeErr(`warn: turn ended with ${terminal.reason}${detail}\n`)
     }
     return { terminalReason: terminal.reason, assistantText }
   } finally {

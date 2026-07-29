@@ -175,6 +175,35 @@ async function main() {
     'no fake thinking when absent',
   )
 
+  const byteOut: string[] = []
+  const byteErr: string[] = []
+  const bytePrinter = createSessionEventPrinter({
+    writeOut: (text) => byteOut.push(text),
+    writeErr: (text) => byteErr.push(text),
+    color: false,
+  })
+  bytePrinter.beginTurn({
+    prompt: 'must stay invisible',
+    echoUser: true,
+    activity: true,
+  })
+  bytePrinter.onEvent({ type: 'text', text: '**raw markdown**' })
+  bytePrinter.onEvent({
+    type: 'tool_start',
+    id: 'plain_tool',
+    name: 'Bash',
+  })
+  bytePrinter.onEvent({ type: 'warning', message: 'plain warning' })
+  bytePrinter.endTurn({ terminalReason: 'completed' })
+  assert(
+    byteOut.join('') === '**raw markdown**\n→ Bash\n',
+    `plain stdout bytes stay append-only: ${JSON.stringify(byteOut.join(''))}`,
+  )
+  assert(
+    byteErr.join('') === 'warn: plain warning\n',
+    `plain stderr bytes stay append-only: ${JSON.stringify(byteErr.join(''))}`,
+  )
+
   // showThinking=false：不渲染 reasoning，正文仍出
   const outOff: string[] = []
   const pOff = createSessionEventPrinter({

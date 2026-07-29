@@ -2,11 +2,9 @@
  * OI-11B: timeline hierarchy, user block, and structured composer footer.
  */
 import {
-  createSessionEventPrinter,
   createTuiInputState,
   formatTuiTokenCount,
   measureTerminalText,
-  prefixTuiContentBlock,
   renderTuiInputBox,
   renderUserMessage,
   resolveTuiContentGutter,
@@ -19,22 +17,11 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(`FAIL: ${message}`)
 }
 
-function plainLines(text: string): string[] {
-  return stripTerminalAnsi(text).split('\n')
-}
-
 async function main() {
   assert(resolveTuiContentGutter(24) === 0, '24 columns preserve content width')
   assert(resolveTuiContentGutter(38) === 2, '38 columns use a compact gutter')
   assert(resolveTuiContentGutter(80) === 4, '80 columns use the full gutter')
   assert(resolveTuiContentGutter(160) === 4, 'wide terminals keep stable rhythm')
-  const prefixedCjk = plainLines(
-    prefixTuiContentBlock('中文🙂\nnext', { columns: 38 }),
-  )
-  assert(
-    prefixedCjk.every((line) => line.startsWith('  ')),
-    'block gutter preserves CJK and emoji lines',
-  )
 
   assert(formatTuiTokenCount(0) === '0', 'zero token format')
   assert(formatTuiTokenCount(999) === '999', 'sub-thousand token format')
@@ -102,49 +89,6 @@ async function main() {
       `${columns}-column user history keeps dock geometry`,
     )
   }
-
-  const out: string[] = []
-  const printer = createSessionEventPrinter({
-    writeOut: (text) => out.push(text),
-    writeErr: (text) => out.push(text),
-    timeline: true,
-    color: false,
-  })
-  printer.beginTurn({
-    prompt: 'timeline hierarchy',
-    echoUser: true,
-    activity: false,
-  })
-  printer.onEvent({ type: 'text', text: 'first line\nsec' })
-  printer.onEvent({ type: 'text', text: 'ond line' })
-  printer.onEvent({
-    type: 'tool_end',
-    id: 'tool_1',
-    name: 'Read',
-    ok: true,
-  })
-  printer.onEvent({ type: 'text', text: 'after tool' })
-  printer.endTurn({ terminalReason: 'completed' })
-  const timeline = plainLines(out.join(''))
-  const expectedGutter = ' '.repeat(resolveTuiContentGutter(80))
-  for (const expected of ['● Bolo', 'first line', 'second line', '✓ Read', 'after tool']) {
-    const line = timeline.find((candidate) => candidate.includes(expected))
-    assert(line !== undefined, `timeline contains ${expected}`)
-    assert(
-      line.startsWith(expectedGutter) &&
-        !line.startsWith(`${expectedGutter} `),
-      `${expected} uses exactly the shared gutter: ${line}`,
-    )
-  }
-  assert(
-    !timeline.some(
-      (line) =>
-        line.startsWith('● Bolo') ||
-        line.startsWith('first line') ||
-        line.startsWith('second line'),
-    ),
-    'assistant content never starts in column zero',
-  )
 
   const footer = renderTuiInputBox({
     state: createTuiInputState(),

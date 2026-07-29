@@ -12,13 +12,14 @@ async function main(): Promise<void> {
   for (const relative of [
     'packages/cli/src/tui/terminalSurface.ts',
     'packages/cli/src/tui/composerSpacing.ts',
+    'packages/cli/src/tui/terminalMarkdown.ts',
   ]) {
     await assert.rejects(
       access(path.resolve(relative)),
       `${relative} must be physically deleted`,
     )
   }
-  console.log('PASS: legacy terminal surface and spacer removed')
+  console.log('PASS: legacy terminal surface, spacer and Markdown removed')
 }
 
 await main()

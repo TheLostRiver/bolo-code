@@ -2,7 +2,6 @@
  * OI-11C: reasoning segments own their timers and leave durable completion rows.
  */
 import {
-  createSessionEventPrinter,
   createTurnActivityIndicator,
   runOnePrompt,
 } from '../packages/cli/src/index.ts'
@@ -84,92 +83,6 @@ async function main(): Promise<void> {
     'thinking after a tool starts a fresh segment clock',
   )
   activity.finish('completed')
-
-  nowMs = 0
-  const timeline: string[] = []
-  const timelineActivity = createTurnActivityIndicator({
-    writeOut: (text) => timeline.push(text),
-    color: false,
-    now: () => nowMs,
-    intervalMs: 60_000,
-    renderFrame: () => true,
-    clearFrame: () => true,
-  })
-  const printer = createSessionEventPrinter({
-    writeOut: (text) => timeline.push(text),
-    writeErr: (text) => timeline.push(text),
-    color: false,
-    timeline: true,
-    activity: timelineActivity,
-  })
-  printer.beginTurn({ prompt: 'two thought segments', activity: true })
-  nowMs = 1_200
-  printer.onEvent({ type: 'reasoning', text: 'first thought' })
-  nowMs = 4_200
-  printer.onEvent({ type: 'reasoning_end' })
-  nowMs = 5_000
-  printer.onEvent({ type: 'tool_start', id: 'tool_1', name: 'Read' })
-  nowMs = 7_000
-  printer.onEvent({
-    type: 'tool_end',
-    id: 'tool_1',
-    name: 'Read',
-    ok: true,
-  })
-  nowMs = 8_000
-  printer.onEvent({ type: 'reasoning', text: 'second thought' })
-  nowMs = 11_200
-  printer.onEvent({ type: 'reasoning_end' })
-  printer.onEvent({ type: 'text', text: 'final answer' })
-  printer.endTurn({ terminalReason: 'completed' })
-
-  const rendered = timeline.join('')
-  const completions = rendered.match(/Thought for 4\.2s/g) ?? []
-  assert(completions.length === 2, 'each thought keeps its own completion row')
-  assert(
-    !rendered.includes('Done ·'),
-    'timeline no longer labels total turn time as thinking time',
-  )
-  assert(
-    rendered.indexOf('first thought') < rendered.indexOf('Thought for 4.2s') &&
-      rendered.indexOf('Thought for 4.2s') < rendered.indexOf('second thought'),
-    'completion rows stay attached to their reasoning segments',
-  )
-
-  nowMs = 0
-  const silentTimeline: string[] = []
-  const silentActivity = createTurnActivityIndicator({
-    writeOut: (text) => silentTimeline.push(text),
-    color: false,
-    now: () => nowMs,
-    intervalMs: 60_000,
-    renderFrame: () => true,
-    clearFrame: () => true,
-  })
-  const silentPrinter = createSessionEventPrinter({
-    writeOut: (text) => silentTimeline.push(text),
-    writeErr: (text) => silentTimeline.push(text),
-    color: false,
-    timeline: true,
-    activity: silentActivity,
-  })
-  silentPrinter.beginTurn({ prompt: 'silent thought segment', activity: true })
-  nowMs = 4_200
-  silentPrinter.onEvent({ type: 'text', text: 'direct answer' })
-  silentPrinter.endTurn({ terminalReason: 'completed' })
-
-  const silentRendered = silentTimeline.join('')
-  const silentCompletions =
-    silentRendered.match(/Thought for 4\.2s/g) ?? []
-  assert(
-    silentCompletions.length === 1,
-    'silent thinking leaves exactly one durable completion row',
-  )
-  assert(
-    silentRendered.indexOf('Thought for 4.2s') <
-      silentRendered.indexOf('● Bolo'),
-    'silent thought completion stays before the direct answer',
-  )
 
   console.log('PASS: CLI thinking segments')
 }

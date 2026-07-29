@@ -3,11 +3,7 @@
  * 对照 HC 时间线：text 增量；thinking dim；tool 起止；写后 history cell（可折叠）。
  */
 
-import { renderUserMessage } from './inputBox.ts'
-import { createTerminalMarkdownStream } from './terminalMarkdown.ts'
 import { stripTerminalAnsi } from './terminalText.ts'
-import { createTuiContentPrefixer } from './contentLayout.ts'
-import type { TurnActivityIndicator } from './turnActivity.ts'
 
 /** 与 core SessionEvent 对齐的最小形状（避免 cli↔core 环依赖过重） */
 export type CliSessionEvent =
@@ -183,13 +179,8 @@ export function createSessionEventPrinter(opts: {
   writeOut: (s: string) => void
   writeErr?: (s: string) => void
   showThinking?: boolean | (() => boolean)
-  /** TTY timeline mode; absent keeps append-only/non-TTY output stable. */
-  timeline?: boolean
-  /** ANSI color in timeline mode. */
+  /** ANSI color for formatted diagnostic lines. */
   color?: boolean
-  columns?: number
-  /** Visible status for the silent gap before/among provider events. */
-  activity?: TurnActivityIndicator
   /**
    * 把 provider 原始错误变成「怎么了 + 下一步」。
    * 由 CLI 绑定当前 provider 上下文后注入；不注入则原样打印。
@@ -198,12 +189,9 @@ export function createSessionEventPrinter(opts: {
 }): SessionEventPrinter {
   const writeOut = opts.writeOut
   const writeErr = opts.writeErr ?? ((s: string) => process.stderr.write(s))
-  const timeline = opts.timeline === true
   const color = opts.color !== false
   const dim = color ? DIM : ''
   const reset = color ? RESET : ''
-  const accent = color ? '\x1b[38;5;81m' : ''
-  const markdown = createTerminalMarkdownStream({ color })
   const isShowThinking = (): boolean => {
     if (opts.showThinking === undefined) return true
     if (typeof opts.showThinking === 'function') return opts.showThinking() !== false
@@ -221,38 +209,17 @@ export function createSessionEventPrinter(opts: {
   let citedUrls = new Set<string>()
   let streamedText = false
   let reasoningPrefixDone = false
-  let assistantHeaderDone = false
-  const contentPrefixer = createTuiContentPrefixer({ columns: opts.columns })
-
-  const withTimelineGutter = (text: string): string => {
-    if (!timeline || !text) return text
-    return contentPrefixer.format(text)
-  }
-  const emitOut = (text: string) => writeOut(withTimelineGutter(text))
-  const emitErr = (text: string) => writeErr(withTimelineGutter(text))
-  const formatThoughtDuration = (elapsedMs: number): string =>
-    elapsedMs < 10_000
-      ? `${(Math.max(0, elapsedMs) / 1_000).toFixed(1)}s`
-      : `${Math.round(Math.max(0, elapsedMs) / 1_000)}s`
+  const emitOut = (text: string) => writeOut(text)
+  const emitErr = (text: string) => writeErr(text)
 
   const finishReasoningSegment = () => {
-    const elapsedMs = opts.activity?.finishThinkingSegment()
     if (reasoningPrefixDone && openReasoningLine) emitOut('\n')
     openReasoningLine = false
     reasoningPrefixDone = false
-    if (timeline && elapsedMs != null) {
-      emitOut(
-        `${dim}Thought for ${formatThoughtDuration(elapsedMs)}${reset}\n`,
-      )
-    }
   }
 
   const ensureLineBreak = () => {
     if (openTextLine || openReasoningLine) {
-      if (openTextLine && timeline) {
-        const tail = markdown.finish()
-        if (tail) emitOut(tail)
-      }
       emitOut('\n')
       openTextLine = false
       openReasoningLine = false
@@ -260,166 +227,116 @@ export function createSessionEventPrinter(opts: {
   }
 
   return {
-    beginTurn(options) {
+    beginTurn() {
       // 新一轮重新计数：换个问题时同一来源应当再次显示
       citedUrls = new Set<string>()
       streamedText = false
       openTextLine = false
       openReasoningLine = false
       reasoningPrefixDone = false
-      assistantHeaderDone = false
-      contentPrefixer.reset()
-      markdown.reset()
-      if (
-        timeline &&
-        options?.echoUser === true &&
-        typeof options.prompt === 'string' &&
-        options.prompt.trim()
-      ) {
-        writeOut(
-          `${renderUserMessage(options.prompt, {
-            columns: opts.columns,
-            color,
-          })}\n\n`,
-        )
-        contentPrefixer.reset()
-      }
-      if (timeline && options?.activity !== false) {
-        opts.activity?.start('Thinking')
-      }
     },
-    endTurn(options) {
+    endTurn() {
       finishReasoningSegment()
-      if (openTextLine && timeline) {
-        const tail = markdown.finish()
-        if (tail) emitOut(tail)
-      }
       if (openTextLine || openReasoningLine) {
         emitOut('\n')
         openTextLine = false
         openReasoningLine = false
-      }
-      if (timeline) {
-        opts.activity?.finish(options?.terminalReason ?? 'completed')
       }
     },
     didStreamText() {
       return streamedText
     },
     onEvent(e) {
-      opts.activity?.beforeEvent(e)
-      try {
-        if (
-          e.type === 'reasoning' &&
-          typeof e.text === 'string' &&
-          e.text.length > 0
+      if (
+        e.type === 'reasoning' &&
+        typeof e.text === 'string' &&
+        e.text.length > 0
+      ) {
+        if (!isShowThinking()) return
+        if (openTextLine) {
+          emitOut('\n')
+          openTextLine = false
+        }
+        if (!reasoningPrefixDone) {
+          emitOut(`${DIM}thinking ${RESET}`)
+          reasoningPrefixDone = true
+        }
+        emitOut(`${dim}${e.text}${reset}`)
+        openReasoningLine = !e.text.endsWith('\n')
+        return
+      }
+      if (e.type === 'reasoning_end') {
+        finishReasoningSegment()
+        return
+      }
+      if (
+        e.type === 'text' &&
+        typeof e.text === 'string' &&
+        e.text.length > 0
+      ) {
+        finishReasoningSegment()
+        emitOut(e.text)
+        streamedText = true
+        openTextLine = !e.text.endsWith('\n')
+        return
+      }
+      const toolLine = formatToolEventLine(e)
+      if (toolLine) {
+        finishReasoningSegment()
+        ensureLineBreak()
+        const renderedToolLine = color
+          ? toolLine
+          : stripTerminalAnsi(toolLine)
+        emitOut(`${renderedToolLine}\n`)
+        return
+      }
+      if (e.type === 'error' && typeof e.message === 'string') {
+        finishReasoningSegment()
+        ensureLineBreak()
+        const explained = opts.explainError
+          ? opts.explainError(e.message)
+          : e.message
+        emitErr(`error: ${explained}\n`)
+        return
+      }
+      if (e.type === 'warning' && typeof e.message === 'string') {
+        finishReasoningSegment()
+        ensureLineBreak()
+        emitErr(`warn: ${e.message}\n`)
+        return
+      }
+      // provider 侧搜索：写 stdout（是内容不是诊断），但用不同前缀标明
+      // 它不是本地工具调用。不显示就等于让用户为看不见的搜索买单。
+      if (e.type === 'web_search') {
+        finishReasoningSegment()
+        ensureLineBreak()
+        if (e.phase === 'query') {
+          const q =
+            typeof e.query === 'string' && e.query ? ` "${e.query}"` : ''
+          emitOut(`${dim}⌕ web search${q}${reset}\n`)
+        } else if (e.phase === 'results') {
+          const n = typeof e.resultCount === 'number' ? e.resultCount : '?'
+          emitOut(`${dim}⌕ ${n} result(s)${reset}\n`)
+        } else if (
+          e.phase === 'citation' &&
+          typeof e.url === 'string'
         ) {
-          if (!isShowThinking()) return
-          if (openTextLine) {
-            if (timeline) {
-              const tail = markdown.finish()
-              if (tail) emitOut(tail)
-            }
-            emitOut('\n')
-            openTextLine = false
+          if (!citedUrls.has(e.url)) {
+            citedUrls.add(e.url)
+            const t =
+              typeof e.title === 'string' && e.title ? `${e.title} — ` : ''
+            emitOut(`${dim}  ↳ ${t}${e.url}${reset}\n`)
           }
-          if (!reasoningPrefixDone) {
-            emitOut(
-              timeline
-                ? `${dim}◇ Thinking${reset}\n`
-                : `${DIM}thinking ${RESET}`,
-            )
-            reasoningPrefixDone = true
-          }
-          emitOut(`${dim}${e.text}${reset}`)
-          openReasoningLine = !e.text.endsWith('\n')
-          return
         }
-        if (e.type === 'reasoning_end') {
-          finishReasoningSegment()
-          return
-        }
-        if (
-          e.type === 'text' &&
-          typeof e.text === 'string' &&
-          e.text.length > 0
-        ) {
-          finishReasoningSegment()
-          if (timeline && !assistantHeaderDone) {
-            emitOut(`${accent}●${reset} Bolo\n`)
-            assistantHeaderDone = true
-          }
-          const text = timeline ? markdown.push(e.text) : e.text
-          if (text) emitOut(text)
-          streamedText = true
-          openTextLine = !e.text.endsWith('\n')
-          return
-        }
-        if (timeline && e.type === 'tool_progress') {
-          finishReasoningSegment()
-          ensureLineBreak()
-          return
-        }
-        const toolLine = formatToolEventLine(e)
-        if (toolLine) {
-          finishReasoningSegment()
-          ensureLineBreak()
-          const renderedToolLine = color
-            ? toolLine
-            : stripTerminalAnsi(toolLine)
-          emitOut(`${renderedToolLine}\n`)
-          return
-        }
-        if (e.type === 'error' && typeof e.message === 'string') {
-          finishReasoningSegment()
-          ensureLineBreak()
-          const explained = opts.explainError
-            ? opts.explainError(e.message)
-            : e.message
-          emitErr(`error: ${explained}\n`)
-          return
-        }
-        if (e.type === 'warning' && typeof e.message === 'string') {
-          finishReasoningSegment()
-          ensureLineBreak()
-          emitErr(`warn: ${e.message}\n`)
-          return
-        }
-        // provider 侧搜索：写 stdout（是内容不是诊断），但用不同前缀标明
-        // 它不是本地工具调用。不显示就等于让用户为看不见的搜索买单。
-        if (e.type === 'web_search') {
-          finishReasoningSegment()
-          ensureLineBreak()
-          if (e.phase === 'query') {
-            const q =
-              typeof e.query === 'string' && e.query ? ` "${e.query}"` : ''
-            emitOut(`${dim}⌕ web search${q}${reset}\n`)
-          } else if (e.phase === 'results') {
-            const n = typeof e.resultCount === 'number' ? e.resultCount : '?'
-            emitOut(`${dim}⌕ ${n} result(s)${reset}\n`)
-          } else if (
-            e.phase === 'citation' &&
-            typeof e.url === 'string'
-          ) {
-            if (!citedUrls.has(e.url)) {
-              citedUrls.add(e.url)
-              const t =
-                typeof e.title === 'string' && e.title ? `${e.title} — ` : ''
-              emitOut(`${dim}  ↳ ${t}${e.url}${reset}\n`)
-            }
-          }
-          return
-        }
-        if (e.type === 'model_retry') {
-          finishReasoningSegment()
-          ensureLineBreak()
-          const attempt = typeof e.attempt === 'number' ? e.attempt : '?'
-          const max = typeof e.maxRetries === 'number' ? e.maxRetries : '?'
-          const reason = typeof e.reason === 'string' ? e.reason : 'retry'
-          emitErr(`retry ${attempt}/${max} (${reason})\n`)
-        }
-      } finally {
-        opts.activity?.afterEvent(e)
+        return
+      }
+      if (e.type === 'model_retry') {
+        finishReasoningSegment()
+        ensureLineBreak()
+        const attempt = typeof e.attempt === 'number' ? e.attempt : '?'
+        const max = typeof e.maxRetries === 'number' ? e.maxRetries : '?'
+        const reason = typeof e.reason === 'string' ? e.reason : 'retry'
+        emitErr(`retry ${attempt}/${max} (${reason})\n`)
       }
     },
   }

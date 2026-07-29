@@ -51,6 +51,8 @@ async function main(): Promise<void> {
     permissionPanelSource,
     questionPickerSource,
     inputBoxSource,
+    formatSessionEventSource,
+    contentLayoutSource,
   ] =
     await Promise.all([
       readSource('packages/cli/src/newSessionCli.ts'),
@@ -65,6 +67,8 @@ async function main(): Promise<void> {
       readSource('packages/cli/src/tui/permissionPanel.ts'),
       readSource('packages/cli/src/tui/questionPicker.ts'),
       readSource('packages/cli/src/tui/inputBox.ts'),
+      readSource('packages/cli/src/tui/formatSessionEvent.ts'),
+      readSource('packages/cli/src/tui/contentLayout.ts'),
     ])
 
   assertOmits(newSessionSource, 'new-session composition', [
@@ -81,6 +85,9 @@ async function main(): Promise<void> {
     'getSessionTerminalSurface',
     'readTuiInput',
     'TERMINAL_SURFACE',
+    'createTuiContentPrefixer',
+    'prefixTuiContentBlock',
+    'resolveTuiContentColumns',
   ])
   assertOmits(runtimeSource, 'runtime query composition', [
     'resolveCliTuiEngine',
@@ -110,6 +117,10 @@ async function main(): Promise<void> {
   assertOmits(cliIndexSource, 'CLI public index', [
     'createTerminalSurface',
     'TerminalSurface',
+    'createTuiContentPrefixer',
+    'prefixTuiContentBlock',
+    'resolveTuiContentColumns',
+    'TuiContentPrefixer',
     'readTuiInput',
     'runArrowPicker',
     'runDiffPane',
@@ -140,6 +151,21 @@ async function main(): Promise<void> {
     'BRACKETED_PASTE_ENABLE',
     'readTuiInput',
   ])
+  assertOmits(formatSessionEventSource, 'plain event formatter', [
+    'terminalMarkdown',
+    'createTerminalMarkdownStream',
+    'createTuiContentPrefixer',
+    'renderUserMessage',
+    'timeline?:',
+    'TurnActivityIndicator',
+  ])
+  assertOmits(contentLayoutSource, 'retained content layout', [
+    'TuiContentPrefixer',
+    'createTuiContentPrefixer',
+    'prefixTuiContentBlock',
+    'resolveTuiContentColumns',
+  ])
+  await assertFileMissing('packages/cli/src/tui/terminalMarkdown.ts')
   await assertFileMissing('packages/cli/src/tui/composerSpacing.ts')
   await assertFileMissing('packages/cli/src/tui/terminalSurface.ts')
   await assertFileMissing('packages/cli/src/tui/localPanel.ts')

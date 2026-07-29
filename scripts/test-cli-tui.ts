@@ -5,7 +5,6 @@
  */
 import {
   applyTuiInputKey,
-  attachSessionEventPrinter,
   createSessionEventPrinter,
   createTuiInputState,
   createTurnActivityIndicator,
@@ -18,10 +17,7 @@ import {
   renderInkLayout,
   renderTuiInputBox,
   renderUserMessage,
-  runOnePrompt,
 } from '../packages/cli/src/index.ts'
-import { createSession } from '../packages/core/src/index.ts'
-import type { LlmProvider } from '../packages/providers/src/index.ts'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
@@ -562,92 +558,6 @@ async function main(): Promise<void> {
   activity.finish('completed')
   assert(!activity.isActive(), 'finish stops timer')
 
-  // TTY printer：提交就回显 user + Thinking；正文到达后显示 Bolo 角色。
-  const out: string[] = []
-  const printerActivity = createTurnActivityIndicator({
-    writeOut: (text) => out.push(text),
-    color: false,
-    now: () => 2_000,
-  })
-  const printer = createSessionEventPrinter({
-    writeOut: (text) => out.push(text),
-    writeErr: (text) => out.push(text),
-    color: false,
-    activity: printerActivity,
-    timeline: true,
-  })
-  printer.beginTurn({
-    prompt: '分析当前项目',
-    echoUser: true,
-    activity: true,
-  })
-  const immediate = out.join('')
-  assert(immediate.includes('❯ 分析当前项目'), 'submitted user message echoes')
-  assert(immediate.includes('Thinking'), 'turn is visibly active before events')
-  printer.onEvent({ type: 'text', text: '**开始分析**' })
-  printer.endTurn({ terminalReason: 'completed' })
-  const completed = out.join('')
-  assert(completed.includes('Bolo'), 'assistant has a role header')
-  assert(completed.includes('开始分析'), 'assistant text still streams')
-  assert(!completed.includes('**'), 'interactive timeline renders markdown')
-
-  // NO_COLOR keeps cursor-control for the live line, but must not leak SGR
-  // styling through legacy tool formatters.
-  const noColorOut: string[] = []
-  const noColorActivity = createTurnActivityIndicator({
-    writeOut: (text) => noColorOut.push(text),
-    color: false,
-  })
-  const noColorPrinter = createSessionEventPrinter({
-    writeOut: (text) => noColorOut.push(text),
-    writeErr: (text) => noColorOut.push(text),
-    color: false,
-    activity: noColorActivity,
-    timeline: true,
-  })
-  noColorPrinter.beginTurn({ prompt: 'run tool', activity: true })
-  noColorPrinter.onEvent({
-    type: 'tool_progress',
-    id: 'tool_1',
-    name: 'Read',
-    message: 'loading',
-  })
-  assert(
-    !noColorOut.join('').includes('… Read loading\n'),
-    'tool progress updates the activity line instead of appending ticks',
-  )
-  assert(
-    noColorOut.join('').includes('Read · loading'),
-    'tool activity keeps tool name and progress detail',
-  )
-  assert(
-    !/\u001b\[[0-9;]*m/.test(noColorOut.join('')),
-    'NO_COLOR timeline does not emit SGR styles',
-  )
-  noColorPrinter.endTurn({ terminalReason: 'completed' })
-
-  // A visible warning is useful, but a slow provider must return to an active
-  // state after the warning instead of looking frozen.
-  const warningOut: string[] = []
-  const warningActivity = createTurnActivityIndicator({
-    writeOut: (text) => warningOut.push(text),
-    color: false,
-  })
-  const warningPrinter = createSessionEventPrinter({
-    writeOut: (text) => warningOut.push(text),
-    writeErr: (text) => warningOut.push(text),
-    color: false,
-    activity: warningActivity,
-    timeline: true,
-  })
-  warningPrinter.beginTurn({ prompt: 'wait after warning', activity: true })
-  warningPrinter.onEvent({ type: 'warning', message: 'provider notice' })
-  assert(
-    warningActivity.isActive(),
-    'warning returns to Thinking while the turn is still running',
-  )
-  warningPrinter.endTurn({ terminalReason: 'completed' })
-
   // 默认（非动态/非 TTY）printer 保持旧的追加式协议，不凭空打印 ANSI/UI。
   const plainOut: string[] = []
   const plain = createSessionEventPrinter({
@@ -657,66 +567,6 @@ async function main(): Promise<void> {
   plain.onEvent({ type: 'text', text: 'pipe output' })
   plain.endTurn({ terminalReason: 'completed' })
   assert(plainOut.join('') === 'pipe output\n', 'plain printer stays append-only')
-
-  // Full queryLoop wiring: the first token is deliberately blocked, but the
-  // user echo and Thinking state must already be visible.
-  let releaseFirstToken: (() => void) | undefined
-  const firstTokenGate = new Promise<void>((resolve) => {
-    releaseFirstToken = resolve
-  })
-  const delayedProvider: LlmProvider = {
-    id: 'mock',
-    async *completeStream() {
-      await firstTokenGate
-      yield { type: 'text_delta', text: 'delayed answer' }
-      yield { type: 'done' }
-    },
-  }
-  const delayedOut: string[] = []
-  const delayedActivity = createTurnActivityIndicator({
-    writeOut: (text) => delayedOut.push(text),
-    color: false,
-  })
-  const delayedPrinter = createSessionEventPrinter({
-    writeOut: (text) => delayedOut.push(text),
-    writeErr: (text) => delayedOut.push(text),
-    timeline: true,
-    color: false,
-    activity: delayedActivity,
-  })
-  const delayedSession = await createSession({
-    cwd: process.cwd(),
-    provider: delayedProvider,
-    systemPrompt: false,
-    onEvent: delayedPrinter.onEvent,
-    askPermission: async () => 'deny',
-  })
-  attachSessionEventPrinter(delayedSession, delayedPrinter)
-  const pendingTurn = runOnePrompt(delayedSession, 'wait for first token', {
-    writeOut: (text) => delayedOut.push(text),
-    writeErr: (text) => delayedOut.push(text),
-  })
-  await Promise.resolve()
-  const beforeFirstToken = delayedOut.join('')
-  assert(
-    beforeFirstToken.includes('❯ wait for first token'),
-    'queryLoop echoes user before first token',
-  )
-  assert(
-    beforeFirstToken.includes('Thinking'),
-    'queryLoop shows activity before first token',
-  )
-  assert(
-    delayedActivity.isActive(),
-    'queryLoop keeps activity visible after running phase',
-  )
-  assert(
-    !beforeFirstToken.includes('delayed answer'),
-    'provider token is still blocked',
-  )
-  releaseFirstToken?.()
-  await pendingTurn
-  assert(delayedOut.join('').includes('delayed answer'), 'delayed text streams')
 
   console.log('ok: test-cli-tui')
 }
