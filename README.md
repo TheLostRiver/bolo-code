@@ -29,7 +29,7 @@
 | Headless 核心 | ~82–90% | queryLoop · 权限 · tools · STE；partial stream fail-closed |
 | **Agent 能力面（工具集）** | **~82–88%** | 15 个常驻/可选工具 + **Web search**（hosted、MCP、SearXNG 均已活体验证） |
 | 会话 / CLI | ~92–97% | **零步骤首次启动** · 用户级 workspace JSONL · 旧项目会话兼容 · durable runtime · query/action CLI · TTY pager · pipe/JSON automation |
-| **CLI TUI** | **~82–90%** | OI-14 retained 主体与 OI-15A–B display policy/单槽 command surface 已完成；OI-15C–F 继续迁移具体 panel/toast/overlay/history 生命周期；真人 Windows Terminal 观感仍未验 |
+| **CLI TUI** | **~83–91%** | OI-14 retained 主体与 OI-15A–C display policy/单槽 command surface/只读 panel-pager 已完成；OI-15D–F 继续 Skills/Plugins、toast/error 与 compatibility cleanup；真人 Windows Terminal 观感仍未验 |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
 | Subagent | ~89–95% | `config.agents` + `agents/*.md` · durable task/result · overflow FIFO/cancel · safe delivery · worktree 保全 |
 | 文件 Diff 日用 | ~95%+ | D0–D7 · U0–U4 |
@@ -50,21 +50,20 @@ smoke、OI-07 上游诊断 / `search doctor` / 可选 Docker setup、OI-08B CLI 
 首次启动、OI-14A 真实 VT/选型、OI-14B live view-state、OI-14C retained renderer
 基座、OI-14D transcript/Markdown、OI-14E Composer/activity/footer、OI-14F
 OverlayHost/交互面板、OI-14G 默认切换/可靠性/性能、OI-14H legacy 删除/发布审计、
-OI-15A slash display policy、OI-15B retained single-slot command surface**。OI-09–OI-13 的
+OI-15A slash display policy、OI-15B retained single-slot command surface、OI-15C
+read-only panel/pager migration**。OI-09–OI-13 的
 slash/context/paste/Thought/权限/welcome 局部能力仍然有效，但不再作为整个 TUI
 renderer 稳定的证据。
 
-**当前状态：OI-15C–F 是默认 agent 队列。** OI-15A 已在 core 建立
+**当前状态：OI-15D–F 是默认 agent 队列。** OI-15A 已在 core 建立
 `history | panel | toast | overlay` display policy、运行时 fail-closed 校验和
 35 个内建命令分类，并保持 plain `message` 不变。OI-15B `d6bd087` 已在
 `packages/shared`/CLI 建立单 panel/toast、单调 generation、可注入 TTL effect、
-Composer 下方有界组件以及 input/Esc/reset/restore/stop 清理。具体 slash handler
-尚未映射到这些 primitive，所以当前普通 slash 结果仍通过
-`appendCompatibilityOutput()` 永久拼在 transcript 与 Composer 之间，所以重复
-`/context`、`/skills`、`/plugins`、`/doctor` 会挤满屏幕。OI-15C 起让
-Context/Doctor 使用 Composer
-下方单 panel，短反馈使用 footer toast，Skills/Plugins 和长内容复用 OverlayHost，
-并用 TTL、输入清除、stable key 与 generation 防止累积和迟到结果覆盖。
+Composer 下方有界组件以及 input/Esc/reset/restore/stop 清理。OI-15C `26f796f`
+已让 `/context`、`/doctor`、`/status` 与 help/cost/memory/mcp/hooks 等只读命令消费
+panel/pager policy：重复查询替换同一 panel，详情和长内容复用 OverlayHost text pager，
+迁移结果不再进入 compatibility 或 session messages。`/skills`、`/plugins` 与动作
+toast/error 仍按 OI-15D–E 迁移，OI-15F 最终清理 normal slash compatibility 路径。
 
 OI-14 的单 retained renderer、常驻 Composer、Markdown、OverlayHost、物理终端门禁
 与 plain/non-TTY fallback 保持不变；OI-15 不增加新 renderer 或其它 Agent 的运行时
@@ -202,7 +201,8 @@ slash 正文按终端宽度保留稳定左侧 gutter。当前思考段显示动�
 与 composer 之间由 idle/running 共享 gap 保留完整空行。底栏按宽度展示 model/mode、高亮快捷键与
 `↓input ↑output` token。Bash 等非文件权限会显示关键参数，并用 `↑/↓` 或快捷键选择
 allow once、always 或 deny；嵌入式 picker/diff 不再清除整屏历史。TTY `/context`
-显示响应式使用率仪表盘，`/context details` 保留完整诊断；非 TTY 使用紧凑文本。
+在 Composer 下方显示 12 秒响应式使用率 panel，编辑或 `Esc` 可清除；`/context details`
+与长诊断打开可翻页 overlay。非 TTY 使用紧凑文本。
 pipe、`-p`/`--print` 和 JSON 路径保持追加式输出，不发送动态光标控制。完整键位、
 欢迎页宽度档位和回落开关见
 [docs/TUI.md](docs/TUI.md)。

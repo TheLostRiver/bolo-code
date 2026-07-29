@@ -216,10 +216,12 @@ Agent/slash 正文按终端宽度保留稳定 gutter，底栏显示 model/mode�
 `/context details`（或 `--details`）才输出 sections、skills、memory、cache 和
 prepare/compact 的完整诊断。
 
-当前 OI-15B 已在 retained TUI 内建立 Composer 下方单 panel、footer toast、
-generation/TTL 与输入/`Esc`/reset 清理 primitive，但 `/context`、`/doctor`、
-`/skills`、`/plugins` 等具体命令尚未迁移，仍会进入 Composer 上方的兼容输出区。
-重复执行仍可能累积；迁移顺序以 [ROADMAP.md](./ROADMAP.md) 的 OI-15C–F 为准。
+OI-15C 起，retained TUI 的 `/context` 使用 Composer 下方 12 秒单 panel；重复执行只
+替换同一槽，开始编辑、`Esc`、TTL 或 reset/restore 会清除。`details`、`detail`、
+`--details` 与超出 panel 容量的 `/doctor`/`/status`、help/memory 等只读内容使用
+text pager；`/mcp`、`/hooks` 直接进入 pager。迁移结果不会进入兼容输出区或会话消息。
+`/skills`、`/plugins` 与动作 toast/error 仍按 [ROADMAP.md](./ROADMAP.md) 的
+OI-15D–F 顺序迁移。
 pipe、`--print`、JSON 与非 TTY 的 plain 文本契约不会因此改变。
 
 `BOLO_MASCOT=0` 可隐藏水晶；`BOLO_ASCII=1` 使用 ASCII 水晶；`NO_COLOR` 只去颜色并

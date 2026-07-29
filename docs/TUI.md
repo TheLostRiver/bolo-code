@@ -5,8 +5,9 @@
 > 事务、分段 Thinking/Thought、权限详情与非 TTY fallback 等业务能力，已在
 > OI-14A–H 迁入单一 retained TTY 架构。旧 direct-write surface、字符串布局补丁、
 > 局部 raw owner 与 engine selector 均已删除。OI-15A 已补齐 core slash display
-> policy；OI-15B 已接入 retained 单 panel/toast primitive，OI-15C–F 继续迁移具体
-> panel/toast/overlay/history 生命周期；
+> policy；OI-15B 已接入 retained 单 panel/toast primitive，OI-15C 已迁移
+> context/doctor/status 与只读 panel/pager；OI-15D–F 继续处理 Skills/Plugins、
+> toast/error 与 compatibility cleanup；
 > OI-H3 真人 Windows Terminal 走查继续单列。
 > **框架选择：** OI-14A 已选定精确版本的 Pi TUI direct bundle，不再继续扩展自研
 > `TerminalSurface + contentPrefixer + tiny Markdown`。分切片复用 renderer/Markdown/
@@ -108,7 +109,8 @@ Windows Terminal 字体、颜色、动画主观流畅度和真人按键/鼠标�
 
 以下交互由 retained dynamic TTY 与独立 plain fallback 共同守护。slash discovery、
 context 内容、paste、Thought、权限与非 TTY 行为都进入默认门禁；slash **结果的
-surface/lifecycle** 仍是 OI-15 开放项，不能把现有永久追加行为当成完成契约。
+surface/lifecycle** 的 Skills/Plugins、toast/error 与最终 compatibility cleanup
+仍是 OI-15D–F 开放项，不能把尚未迁移的永久追加行为当成完成契约。
 
 ### 3.1 欢迎首页
 
@@ -204,12 +206,11 @@ segment elapsed 决定，不再依赖是否展示过 reasoning 文本；消费�
 - 非 TTY 输出同一 view-model 的紧凑纯文本。`/context details` 与
   `/context --details` 保留 sections、skills、memory、cache、prepare/compact 等
   完整诊断，不把诊断 dump 塞回默认概览。
-- **当前已知缺陷（OI-15C）：** dashboard 内容虽然结构化，core 也已在 OI-15A
-  声明 `slash:context` panel policy，OI-15B 也已提供 retained panel primitive；
-  但 `/context` consumer 尚未迁移，仍通过
-  `writeSlashOutput()` 进入 retained `compatibilityOutput`，没有 replacement key、
-  TTL 或 clear action；重复 `/context` 会永久扩大 Composer 上方区域。内容 renderer
-  已完成不等于结果生命周期已完成。
+- **OI-15C 已关闭（`26f796f`）：** retained `/context` 使用 key
+  `slash:context` 的 12 秒单 panel，并采用 7 行无外框 dashboard variant，避免框中框；
+  真实编辑、`Esc`、TTL、reset/restore 会按 OI-15B lifecycle 清除。`details`、`detail`
+  与 `--details` 统一打开 text pager。20 次重复调用只替换 generation，不调用
+  `writeSlashOutput()`/compatibility writer，也不进入 session messages。
 
 ### 3.5 权限与临时面板
 
@@ -233,12 +234,14 @@ segment elapsed 决定，不再依赖是否展示过 reasoning 文本；消费�
 - 当前已实现会话输入框内的 slash completion；尚无 PowerShell/Bash 外壳级 shell
   completion、鼠标输入或跨进程持久命令历史，它们不是 OI-10 的完成条件。
 
-### 3.7 slash 命令结果生命周期（OI-15A–B 已完成，C–F 待实现）
+### 3.7 slash 命令结果生命周期（OI-15A–C 已完成，D–F 待实现）
 
 OI-15A 已让 core 为所有内建命令声明并校验四类 surface，Plugin/Skill/unknown 也有
 fail-closed fallback；plain `message` 保持不变。OI-15B `d6bd087` 已建立单 panel/
 toast、单调 generation、timer effect 与 input/Esc/reset/restore/stop 清理，并把
-固定组件放在 Composer 下方、footer 上方。具体命令从 OI-15C 起按下表映射：
+固定组件放在 Composer 下方、footer 上方。OI-15C `26f796f` 已消费 panel/pager：
+短内容使用有界 panel，`overflow: pager` 按真实宽高升级，显式 text pager 单页也可见；
+runtime pager 的既有单页短路未改变。剩余命令按下表继续映射：
 
 | 类别 | 位置 | 适用 | 清除 |
 |------|------|------|------|
