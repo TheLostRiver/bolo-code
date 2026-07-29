@@ -17,6 +17,10 @@ import {
   ensureProjectLayout,
 } from '../../config/src/ensure.ts'
 import {
+  formatModelMetadataLines,
+  type ModelMetadataView,
+} from '../../config/src/modelMetadataView.ts'
+import {
   addAlwaysAllowBashPrefix,
   addAlwaysAllowPathGlob,
   addAlwaysAllowToolName,
@@ -77,6 +81,7 @@ import {
   listSessionProviders,
   buildProviderPickerItems,
   activeProviderPickerIndex,
+  getSessionModelMetadataView,
   type SwitchableProviderSession,
 } from './sessionProvider.ts'
 import { clampEffortForSession } from './effortClamp.ts'
@@ -273,6 +278,7 @@ export type ContextUsageSection = {
 }
 
 export type ContextUsageViewModel = {
+  modelMetadata: ModelMetadataView
   session: {
     id: string
     cwd: string
@@ -1024,14 +1030,10 @@ export function buildContextUsageViewModel(
 ): ContextUsageViewModel {
   const chars = approxChars(session)
   const est = estimateSessionContextTokens(session)
-  const window =
-    typeof session.resolvedModel?.contextWindowTokens === 'number' &&
-    session.resolvedModel.contextWindowTokens > 0
-      ? session.resolvedModel.contextWindowTokens
-      : typeof session.contextWindowTokens === 'number' &&
-          session.contextWindowTokens > 0
-        ? session.contextWindowTokens
-      : 128_000
+  const modelMetadata = getSessionModelMetadataView(
+    asSwitchableSession(session),
+  )
+  const window = modelMetadata.context.tokens
   // C5：pressure 计数优先 usage；AR2A0a：有锚（真实 usage + 消息数快照）走混合
   const lastCall = session.usage?.lastCall
   const anchor =
@@ -1081,6 +1083,7 @@ export function buildContextUsageViewModel(
   const freeTokens = Math.max(0, window - resolved.tokenCount)
 
   return {
+    modelMetadata,
     session: {
       id: session.id,
       cwd: session.cwd,
@@ -1158,11 +1161,18 @@ export function formatContextUsagePlain(view: ContextUsageViewModel): string {
         ? 'on (threshold reached)'
         : 'on'
     : 'off'
+  const metadataLines = formatModelMetadataLines(
+    view.modelMetadata,
+  ).filter(
+    (line) =>
+      line.startsWith('context:') || line.startsWith('max output:'),
+  )
   return [
     `Context usage: ${view.usage.tokenCount} / ${view.usage.windowTokens} tokens (${view.usage.percentOfWindow}%; ${view.usage.source})`,
     `Breakdown (estimated): messages ~${view.estimate.messagesTokens} · system ~${view.estimate.systemTokens} · free ~${view.usage.freeTokens}`,
     `Pressure: ${view.usage.level} · auto threshold ~${view.usage.autoThresholdTokens} (${view.usage.percentOfThreshold}%)`,
     `Model: ${view.session.model ?? '(unset)'} · effort ${view.session.effort} · auto compact ${autoCompact}`,
+    ...metadataLines,
     `Session: ${view.session.messageCount} messages · ${view.sections.length} system sections · ${view.skills.totalSkills} skills`,
     'Use /context details for sections, cache, memory, and compact diagnostics.',
   ].join('\n')
@@ -1191,6 +1201,7 @@ export function formatContextUsageDetails(view: ContextUsageViewModel): string {
     `keep policy:     user-turns (default smart; keepRecentUserTurns / keepRecentMessageCount)`,
     `permissionMode:  ${view.session.permissionMode}`,
     `model:           ${view.session.model ?? '(unset)'}`,
+    ...formatModelMetadataLines(view.modelMetadata),
     `effort:          ${view.session.effort}`,
     `thinking:        ${view.session.thinking ? 'on' : 'off'}  (/thinking; persist=${view.session.persistReasoning ? 'on' : 'off'})`,
     `system sections: ${view.sections.length}`,
@@ -1866,6 +1877,9 @@ function cmdDoctor(session: SlashSession, _args: string): SlashDispatchResult {
     session.maxPtlRetries === undefined
       ? '(unset)'
       : String(session.maxPtlRetries)
+  const modelMetadata = getSessionModelMetadataView(
+    asSwitchableSession(session),
+  )
 
   const memDisable = process.env.BOLO_DISABLE_MEMORY?.trim().toLowerCase()
   const memOff =
@@ -1888,6 +1902,12 @@ function cmdDoctor(session: SlashSession, _args: string): SlashDispatchResult {
     `provider:        ${session.providerId ? `${session.providerId} (kind=${session.provider?.id ?? '?'})` : (session.provider?.id ?? '(unset)')}`,
     `permissionMode:  ${session.permissionMode}`,
     `model:           ${session.model ?? '(unset)'}`,
+    `context window:  ${modelMetadata.context.displayTokens} tokens (${modelMetadata.context.sourceLabel})`,
+    `max output:      ${modelMetadata.maxOutput.displayTokens} tokens (${modelMetadata.maxOutput.sourceLabel})`,
+    `metadata:        ${modelMetadata.status === 'warning' ? 'WARNING' : 'OK'}`,
+    ...modelMetadata.warnings.map(
+      (warning) => `metadata warning: ${warning}`,
+    ),
     `effort:          ${session.effortLevel ?? 'auto'}`,
     `ultrathink:      ${resolveUltrathinkMode({ sessionMode: session.ultrathinkMode })}`,
     `thinking:        ${session.showThinking === false ? 'off' : 'on'}`,
@@ -2916,7 +2936,19 @@ function cmdModel(session: SlashSession, args: string): SlashDispatchResult {
 
     // CX5：建议模型列表（profile / preset）
     const suggestions = suggestModelsForSession(session)
-    const lines = [bits.join('  |  ')]
+    const modelMetadata = getSessionModelMetadataView(
+      asSwitchableSession(session),
+    )
+    const lines = [
+      bits.join('  |  '),
+      ...formatModelMetadataLines(modelMetadata).filter(
+        (line) =>
+          line.startsWith('context:') ||
+          line.startsWith('max output:') ||
+          line.startsWith('metadata:') ||
+          line.startsWith('warning:'),
+      ),
+    ]
     if (suggestions.length) {
       lines.push(`suggested: ${suggestions.join(', ')}`)
       lines.push('usage: /model <name>  ·  /model <providerId>/<name>')

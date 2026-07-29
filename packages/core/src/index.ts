@@ -459,6 +459,7 @@ export {
   formatProviderPickerLabel,
   activeProviderPickerIndex,
   attachProviderRegistry,
+  getSessionModelMetadataView,
   type SwitchSessionProviderResult,
   type SwitchSessionModelResult,
   type SwitchableProviderSession,

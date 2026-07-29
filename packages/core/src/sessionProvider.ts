@@ -25,6 +25,11 @@ import {
   type ResolvedModelMetadata,
 } from '../../config/src/modelMetadata.ts'
 import {
+  formatModelMetadataSummary,
+  toModelMetadataView,
+  type ModelMetadataView,
+} from '../../config/src/modelMetadataView.ts'
+import {
   formatSkillCatalog,
   type LoadedSkill,
 } from '../../skills/src/index.ts'
@@ -75,13 +80,84 @@ export type SwitchSessionProviderResult =
       model?: string
       baseUrl?: string
       previousId?: string
+      modelMetadata: ModelMetadataView
       message: string
     }
   | { ok: false; reason: string }
 
 export type SwitchSessionModelResult =
-  | { ok: true; model: string; providerId?: string; message: string; cacheBreak?: boolean }
+  | {
+      ok: true
+      model: string
+      providerId?: string
+      modelMetadata: ModelMetadataView
+      message: string
+      cacheBreak?: boolean
+    }
   | { ok: false; reason: string }
+
+function sessionProviderProfile(
+  session: SwitchableProviderSession,
+): ProviderProfile | undefined {
+  return (
+    session.providerProfile ??
+    (session.providerRegistry && session.providerId
+      ? getProviderProfile(session.providerRegistry, session.providerId)
+      : undefined)
+  )
+}
+
+function legacySessionSnapshot(
+  session: SwitchableProviderSession,
+  providerId: string,
+): ResolvedModelMetadata | undefined {
+  const contextWindowTokens = session.contextWindowTokens
+  const maxOutputTokens = session.maxOutputTokens
+  if (
+    typeof contextWindowTokens !== 'number' ||
+    contextWindowTokens <= 0 ||
+    typeof maxOutputTokens !== 'number' ||
+    maxOutputTokens <= 0 ||
+    maxOutputTokens > contextWindowTokens
+  ) {
+    return undefined
+  }
+  return {
+    providerId,
+    ...(session.model ? { model: session.model } : {}),
+    contextWindowTokens,
+    maxOutputTokens,
+    sources: {
+      contextWindow: 'snapshot',
+      maxOutput: 'snapshot',
+    },
+    usedFallback: false,
+    warnings: [],
+  }
+}
+
+export function getSessionModelMetadataView(
+  session: SwitchableProviderSession,
+): ModelMetadataView {
+  if (session.resolvedModel) {
+    return toModelMetadataView(session.resolvedModel)
+  }
+  const profile = sessionProviderProfile(session)
+  const providerId =
+    session.providerId?.trim() ||
+    profile?.id?.trim() ||
+    String(session.provider?.id || 'default')
+  return toModelMetadataView(
+    resolveModelMetadata({
+      providerId,
+      model: session.model ?? profile?.model,
+      profile,
+      legacyContextWindowTokens:
+        session.legacyContextWindowTokens ?? session.contextWindowTokens,
+      snapshot: legacySessionSnapshot(session, providerId),
+    }),
+  )
+}
 
 function forcePromptCacheBreak(
   session: SwitchableProviderSession,
@@ -294,6 +370,8 @@ export function switchSessionProvider(
   if (clamp.warning) {
     message += `\n${clamp.warning}`
   }
+  const modelMetadata = getSessionModelMetadataView(session)
+  message += `\n${formatModelMetadataSummary(modelMetadata)}`
 
   return {
     ok: true,
@@ -302,6 +380,7 @@ export function switchSessionProvider(
     model: session.model,
     baseUrl: built.baseUrl ?? profile.baseUrl,
     previousId,
+    modelMetadata,
     message,
   }
 }
@@ -396,10 +475,13 @@ export function switchSessionModel(
     ? `model set to ${name} (provider ${session.providerId})`
     : `model set to ${name}`
   if (clamp.warning) message += `\n${clamp.warning}`
+  const modelMetadata = getSessionModelMetadataView(session)
+  message += `\n${formatModelMetadataSummary(modelMetadata)}`
   return {
     ok: true,
     model: name,
     providerId: session.providerId,
+    modelMetadata,
     cacheBreak,
     message,
   }
@@ -411,6 +493,15 @@ export function listSessionProviders(session: SwitchableProviderSession) {
   return listProviderProfileSummaries(reg, session.providerId).map((p) => ({
     ...p,
     isActive: p.isActive === true,
+    modelMetadata: toModelMetadataView(
+      resolveModelMetadata({
+        providerId: p.id,
+        model: p.model,
+        profile: getProviderProfile(reg, p.id),
+        legacyContextWindowTokens: session.legacyContextWindowTokens,
+        snapshot: session.resolvedModel,
+      }),
+    ),
   }))
 }
 
@@ -419,17 +510,23 @@ export function formatSessionProvidersSlash(
 ): string {
   const list = listSessionProviders(session)
   if (!list.length) {
+    const metadata = getSessionModelMetadataView(session)
     return [
       `active: kind=${session.provider?.id ?? '(unset)'} model=${session.model ?? '(unset)'}`,
+      `metadata: ${formatModelMetadataSummary(metadata)}`,
       '(no providers map — only legacy single provider; add config.providers to enable /provider use)',
     ].join('\n')
   }
   const lines = [
     `active: ${session.providerId ?? '(unset)'}  kind=${session.provider?.id ?? '?'}  model=${session.model ?? '(unset)'}`,
     'providers (* = active, · = default):',
-    ...list.map((p) => formatProviderProfileLine(p)),
-    'usage: /provider  (TTY picker)  ·  /provider use <id> [model]',
-    '       /provider list  ·  /provider add <preset> [as <id>]  ·  /provider add list',
+    ...list.map(
+      (p) =>
+        `${formatProviderProfileLine(p)} · ${formatModelMetadataSummary(
+          p.modelMetadata,
+        )}`,
+    ),
+    'usage: /provider use <id> [model] · /provider help',
   ]
   return lines.join('\n')
 }

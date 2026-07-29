@@ -79,6 +79,7 @@ export function renderContextDashboard(options: {
         : color
           ? '\u001b[38;5;114m'
           : ''
+  const metadataWarning = color ? '\u001b[38;5;221m' : ''
   const reset = color ? '\u001b[0m' : ''
   const lines: string[] = []
 
@@ -131,6 +132,16 @@ export function renderContextDashboard(options: {
     row(
       `Model ${view.session.model ?? '(unset)'} · effort ${view.session.effort}`,
     )
+    row(
+      `Limits ctx ${view.modelMetadata.context.displayTokens} (${view.modelMetadata.context.sourceLabel}) · out ${view.modelMetadata.maxOutput.displayTokens} (${view.modelMetadata.maxOutput.sourceLabel})`,
+      view.modelMetadata.status === 'warning' ? metadataWarning : dim,
+    )
+    if (view.modelMetadata.status === 'warning') {
+      row(
+        `Metadata warning${view.modelMetadata.warnings.length ? ` · ${view.modelMetadata.warnings.length} issue${view.modelMetadata.warnings.length === 1 ? '' : 's'}` : ''}`,
+        metadataWarning,
+      )
+    }
     row(
       `Auto compact ${autoCompact} · ${view.session.messageCount} messages`,
     )
@@ -188,6 +199,16 @@ export function renderContextDashboard(options: {
   row(
     `Model ${view.session.model ?? '(unset)'} · effort ${view.session.effort}`,
   )
+  row(
+    `Limits ctx ${view.modelMetadata.context.displayTokens} (${view.modelMetadata.context.sourceLabel}) · out ${view.modelMetadata.maxOutput.displayTokens} (${view.modelMetadata.maxOutput.sourceLabel})`,
+    view.modelMetadata.status === 'warning' ? metadataWarning : dim,
+  )
+  if (view.modelMetadata.status === 'warning') {
+    row(
+      `Metadata warning${view.modelMetadata.warnings.length ? ` · ${view.modelMetadata.warnings.length} issue${view.modelMetadata.warnings.length === 1 ? '' : 's'}` : ''}`,
+      metadataWarning,
+    )
+  }
   row(
     `${view.session.messageCount} messages · ${view.sections.length} sections · ${view.skills.totalSkills} skills`,
   )

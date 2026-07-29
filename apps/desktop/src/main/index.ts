@@ -41,6 +41,7 @@ import {
   requestSessionComposerControl,
   takeNextSessionQueued,
   getSessionModelEffortSettings,
+  getSessionModelMetadataView,
   updateSessionModelEffort,
   projectSessionRuntimeEventView,
   type SessionEvent,
@@ -222,6 +223,7 @@ function sessionStatusPayload(s: DesktopSession) {
     effortLevel: modelEffort.effortLevel,
     effortDialect: modelEffort.dialectId,
     effortChoosable: modelEffort.choosable,
+    modelMetadata: getSessionModelMetadataView(s),
     settings: redactSecretsDeep({ ...desktopSettings }),
   }
 }
@@ -403,6 +405,8 @@ function createWindow() {
              let settingsError = null
              let modelAfterSettings = null
              let effortAfterSettings = null
+             let metadataVisible = false
+             let metadataStatus = null
              if (selectionTarget) {
                const before = await window.bolo.getStatus()
                beforeSessionId = before && before.id
@@ -442,9 +446,33 @@ function createWindow() {
                  const status = await window.bolo.getStatus()
                  modelAfterSettings = status && status.model
                  effortAfterSettings = status && status.effortLevel
+                 metadataStatus =
+                   status && status.modelMetadata && status.modelMetadata.status
                  settingsApplied =
                    modelAfterSettings === 'desktop-smoke-model' &&
                    effortAfterSettings === 'high'
+                 const settingsButton = document.getElementById('btn-settings')
+                 if (settingsButton) settingsButton.click()
+                 const metadataStarted = Date.now()
+                 let metadataLine = document.getElementById('set-model-metadata')
+                 while (
+                   metadataLine &&
+                   metadataLine.dataset.status !== metadataStatus &&
+                   Date.now() - metadataStarted < 10000
+                 ) {
+                   await wait(25)
+                   metadataLine = document.getElementById('set-model-metadata')
+                 }
+                 const metadata = status && status.modelMetadata
+                 metadataVisible =
+                   !!metadataLine &&
+                   metadataLine.hidden !== true &&
+                   metadataLine.dataset.status === metadataStatus &&
+                   !!metadata &&
+                   metadataLine.textContent.includes(metadata.context.displayTokens) &&
+                   metadataLine.textContent.includes(metadata.context.sourceLabel) &&
+                   metadataLine.textContent.includes(metadata.maxOutput.displayTokens) &&
+                   metadataLine.textContent.includes(metadata.maxOutput.sourceLabel)
                }
              }
              return JSON.stringify({
@@ -463,6 +491,8 @@ function createWindow() {
                settingsError,
                modelAfterSettings,
                effortAfterSettings,
+               metadataVisible,
+               metadataStatus,
              })
            })()`,
         )
@@ -491,6 +521,14 @@ function createWindow() {
           ) {
             missing.push(
               `model/effort(${String(r.settingsError ?? 'status mismatch')})`,
+            )
+          }
+          if (
+            r.metadataVisible !== true ||
+            r.metadataStatus !== 'warning'
+          ) {
+            missing.push(
+              `model-metadata(${String(r.metadataStatus ?? 'not visible')})`,
             )
           }
           if (missing.length) return fail(`renderer incomplete: ${missing.join(', ')}`)
@@ -601,6 +639,7 @@ function registerIpc() {
       activeId: s.providerId ?? null,
       providerKind: s.provider?.id ?? null,
       ...modelEffort,
+      modelMetadata: getSessionModelMetadataView(s),
       providers: list.map((p) => ({
         id: p.id,
         kind: p.kind ?? null,
@@ -610,6 +649,7 @@ function registerIpc() {
         hasKeyConfig: p.hasKeyConfig === true,
         isDefault: p.isDefault === true,
         isActive: p.isActive === true,
+        modelMetadata: p.modelMetadata,
       })),
       presets: listProviderPresets().map((p) => ({
         id: p.id,

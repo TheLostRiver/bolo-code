@@ -50,6 +50,7 @@ async function main() {
 
   for (const symbol of [
     'getSessionModelEffortSettings',
+    'getSessionModelMetadataView',
     'updateSessionModelEffort',
   ]) {
     assert(
@@ -60,6 +61,14 @@ async function main() {
   assert(
     !mainSource.includes('function effortSnapshot'),
     'Desktop removes its duplicate effort snapshot implementation',
+  )
+  const statusPayload = functionBlock(
+    mainSource,
+    'function sessionStatusPayload',
+  )
+  assert(
+    statusPayload.includes('modelMetadata: getSessionModelMetadataView'),
+    'Desktop status exposes the packages-first metadata view',
   )
 
   const channel = 'bolo:setModelEffort'
@@ -98,19 +107,35 @@ async function main() {
     htmlSource.includes('id="set-settings-error"'),
     'settings has an inline mutation error surface',
   )
+  assert(
+    htmlSource.includes('id="set-model-metadata"'),
+    'settings has a visible model metadata status line',
+  )
 
   const refresh = functionBlock(rendererSource, 'async function refreshProviders')
   for (const field of [
     'modelSuggestions',
+    'modelMetadata',
     'choosable',
     'setModel',
     'fillEffortChoices',
+    'updateModelMetadataHint',
   ]) {
     assert(
       refresh.includes(field),
       `provider refresh projects ${field} into the settings controls`,
     )
   }
+  const formatStatus = functionBlock(
+    rendererSource,
+    'function formatStatusLine',
+  )
+  assert(
+    formatStatus.includes('modelMetadata') &&
+      formatStatus.includes('displayTokens') &&
+      formatStatus.includes('sourceLabel'),
+    'Desktop header renders model limits and provenance from the shared view',
+  )
 
   const apply = functionBlock(
     rendererSource,

@@ -150,6 +150,11 @@ async function main() {
         report.effortAfterSettings === 'high',
       `a real model/effort IPC mutation is visible in status: ${JSON.stringify(report)}`,
     )
+    assert(
+      report.metadataVisible === true &&
+        report.metadataStatus === 'warning',
+      `model metadata and fallback health are visible after mutation: ${JSON.stringify(report)}`,
+    )
 
     console.log(`  launched, renderer mounted: ${JSON.stringify(report)}`)
     console.log('PASS: desktop launch')

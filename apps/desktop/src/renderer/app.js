@@ -24,6 +24,7 @@ const setProvider = document.getElementById('set-provider')
 const setPreset = document.getElementById('set-preset')
 const setModel = document.getElementById('set-model')
 const setModelSuggestions = document.getElementById('set-model-suggestions')
+const setModelMetadata = document.getElementById('set-model-metadata')
 const setEffort = document.getElementById('set-effort')
 const setEffortDetail = document.getElementById('set-effort-detail')
 const settingsError = document.getElementById('set-settings-error')
@@ -389,7 +390,11 @@ function formatStatusLine(s) {
   const pid = s.providerId || s.providerKind || '?'
   const kind = s.providerKind ? `/${s.providerKind}` : ''
   const effort = s.effortLevel ? ` · e=${s.effortLevel}` : ''
-  return `id=${String(s.id || '').slice(0, 8)} · mode=${s.permissionMode} · model=${s.model ?? 'unset'} · msgs=${s.messageCount} · ${pid}${kind === `/${pid}` ? '' : kind}${effort}`
+  const modelMetadata = s.modelMetadata
+  const limits = modelMetadata
+    ? ` · ctx=${modelMetadata.context.displayTokens} (${modelMetadata.context.sourceLabel}) · out=${modelMetadata.maxOutput.displayTokens} (${modelMetadata.maxOutput.sourceLabel})`
+    : ''
+  return `id=${String(s.id || '').slice(0, 8)} · mode=${s.permissionMode} · model=${s.model ?? 'unset'} · msgs=${s.messageCount} · ${pid}${kind === `/${pid}` ? '' : kind}${effort}${limits}`
 }
 
 function fillSelect(sel, items, activeId, mapLabel) {
@@ -430,6 +435,22 @@ function updateEffortHint(data) {
   setEffortDetail.textContent = ch
     ? `effort=${level} · dialect=${dialect} · choosable: ${ch}`
     : `effort=${level} · dialect=${dialect}`
+}
+
+function updateModelMetadataHint(modelMetadata) {
+  if (!setModelMetadata) return
+  if (!modelMetadata?.context || !modelMetadata?.maxOutput) {
+    setModelMetadata.textContent = ''
+    setModelMetadata.hidden = true
+    delete setModelMetadata.dataset.status
+    return
+  }
+  setModelMetadata.hidden = false
+  setModelMetadata.dataset.status = modelMetadata.status || 'ok'
+  setModelMetadata.textContent =
+    `ctx ${modelMetadata.context.displayTokens} (${modelMetadata.context.sourceLabel})` +
+    ` · out ${modelMetadata.maxOutput.displayTokens} (${modelMetadata.maxOutput.sourceLabel})` +
+    ` · metadata ${modelMetadata.status || 'ok'}`
 }
 
 function fillModelSuggestions(models) {
@@ -500,6 +521,7 @@ async function refreshProviders() {
     if (setModel) setModel.value = data.model || ''
     fillModelSuggestions(data.modelSuggestions || [])
     fillEffortChoices(data.choosable || [], data.effortLevel || 'auto')
+    updateModelMetadataHint(data.modelMetadata)
     updateEffortHint(data)
   } catch (e) {
     /* ignore list errors in header */
@@ -510,6 +532,7 @@ async function refreshStatus() {
   try {
     const s = await window.bolo.getStatus()
     statusEl.textContent = formatStatusLine(s)
+    updateModelMetadataHint(s.modelMetadata)
     updateEffortHint(s)
   } catch (e) {
     statusEl.textContent = `error: ${e?.message ?? e}`
@@ -537,6 +560,7 @@ async function switchProvider(id, { fromHeader } = {}) {
       if (r.message) appendMsg('system', r.message)
       if (r.status) {
         statusEl.textContent = formatStatusLine(r.status)
+        updateModelMetadataHint(r.status.modelMetadata)
         updateEffortHint(r.status)
       }
       await refreshProviders()

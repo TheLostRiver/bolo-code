@@ -407,6 +407,8 @@ select, input[type='text'] {
 
 .hint { color: var(--muted); font-size: 12px; margin: 8px 0; }
 .effort-line { font-family: var(--mono); }
+.metadata-line { font-family: var(--mono); }
+.metadata-line[data-status="warning"] { color: var(--warning, #b7791f); }
 .settings-error {
   color: var(--danger);
   font-size: 12px;

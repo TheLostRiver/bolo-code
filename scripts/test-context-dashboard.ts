@@ -86,6 +86,20 @@ async function main(): Promise<void> {
   assert(overview.includes('Free'), 'overview shows free tokens')
   assert(overview.includes('estimated'), 'overview labels estimated usage')
   assert(
+    overview.includes(
+      `Limits ctx ${view.modelMetadata.context.displayTokens}`,
+    ) &&
+      overview.includes(view.modelMetadata.context.sourceLabel) &&
+      overview.includes(view.modelMetadata.maxOutput.sourceLabel),
+    'overview shows resolved model limits and provenance',
+  )
+  if (view.modelMetadata.status === 'warning') {
+    assert(
+      overview.includes('Metadata warning'),
+      'overview makes fallback or warning metadata visible',
+    )
+  }
+  assert(
     overview.includes('/context details'),
     'overview points to the diagnostic view',
   )

@@ -91,6 +91,14 @@ export {
 } from './modelMetadata.ts'
 
 export {
+  formatModelMetadataLines,
+  formatModelMetadataSummary,
+  toModelMetadataView,
+  type ModelMetadataLimitView,
+  type ModelMetadataView,
+} from './modelMetadataView.ts'
+
+export {
   BUILTIN_PROVIDER_PRESETS,
   listProviderPresets,
   getProviderPreset,
