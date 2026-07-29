@@ -183,6 +183,94 @@ export function formatQuestionPickerScreen(s: QuestionPickerState): string {
   return lines.join('\n')
 }
 
+export async function runTextQuestionPicker(opts: {
+  questions: readonly AskQuestion[]
+  readLine: (prompt: string) => Promise<string | null>
+  writeOut?: (text: string) => void
+  signal?: AbortSignal
+}): Promise<QuestionPickerOutcome> {
+  if (!opts.questions.length) return { kind: 'cancelled' }
+  const writeOut =
+    opts.writeOut ?? ((text: string) => process.stdout.write(text))
+  const selections: AskUserQuestionSelection[] = []
+
+  for (let index = 0; index < opts.questions.length; index += 1) {
+    const question = opts.questions[index]!
+    writeOut(`[${question.header}] ${index + 1}/${opts.questions.length}\n`)
+    writeOut(`${question.question}\n`)
+    question.options.forEach((option, optionIndex) => {
+      writeOut(`${optionIndex + 1}. ${option.label}\n`)
+      if (option.description) writeOut(`   ${option.description}\n`)
+    })
+    writeOut('other. Answer in your own words\n')
+
+    for (;;) {
+      if (opts.signal?.aborted) return { kind: 'cancelled' }
+      const prompt = question.multiSelect
+        ? `Choose comma-separated numbers [1-${question.options.length}], other, or q: `
+        : `Choose one number [1-${question.options.length}], other, or q: `
+      const answer = await opts.readLine(prompt)
+      if (answer == null || opts.signal?.aborted) {
+        return { kind: 'cancelled' }
+      }
+      const value = answer.trim()
+      const lower = value.toLowerCase()
+      if (lower === 'q' || lower === 'quit' || lower === 'cancel') {
+        return { kind: 'cancelled' }
+      }
+      if (lower === 'o' || lower === 'other') {
+        const custom = await opts.readLine('Your answer: ')
+        if (custom == null || opts.signal?.aborted) {
+          return { kind: 'cancelled' }
+        }
+        const text = custom.trim()
+        if (!text) {
+          writeOut('Custom answer cannot be empty.\n')
+          continue
+        }
+        selections.push({ selected: [text], custom: true })
+        break
+      }
+
+      const rawSelections = question.multiSelect
+        ? value.split(/[\s,]+/u).filter(Boolean)
+        : [value]
+      const numbers = rawSelections.map(Number)
+      const valid =
+        rawSelections.length > 0 &&
+        numbers.every(
+          (candidate) =>
+            Number.isInteger(candidate) &&
+            candidate >= 1 &&
+            candidate <= question.options.length,
+        )
+      if (valid) {
+        const unique = [...new Set(numbers)].sort((a, b) => a - b)
+        if (!question.multiSelect && unique.length !== 1) {
+          writeOut(
+            `Choose one number from 1-${question.options.length}, type other, or q to cancel.\n`,
+          )
+          continue
+        }
+        selections.push({
+          selected: unique.map(
+            (candidate) => question.options[candidate - 1]!.label,
+          ),
+        })
+        break
+      }
+
+      writeOut(
+        question.multiSelect
+          ? `Choose one or more comma-separated numbers from 1-${question.options.length}, type other, or q to cancel.\n`
+          : `Choose one number from 1-${question.options.length}, type other, or q to cancel.\n`,
+      )
+    }
+  }
+
+  return { kind: 'answered', selections }
+}
+
 export async function runQuestionPicker(opts: {
   questions: readonly AskQuestion[]
   writeOut?: (s: string) => void

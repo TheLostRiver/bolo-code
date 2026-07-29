@@ -19,11 +19,14 @@
  *
  * 运行：npx tsx scripts/test-question-picker.ts
  */
+import { readFile } from 'node:fs/promises'
+import path from 'node:path'
 import {
   applyQuestionPickerKey,
   createQuestionPickerState,
   formatQuestionPickerScreen,
   runQuestionPicker,
+  runTextQuestionPicker,
   type QuestionPickerState,
 } from '../packages/cli/src/tui/questionPicker.ts'
 import { createTtyAskUserQuestion } from '../packages/cli/src/tui/askUserQuestionTty.ts'
@@ -264,10 +267,69 @@ async function main() {
     assert(sel[0]!.custom !== true, 'blank input is not a custom answer')
   }
 
-  // ── 15) retained adapter 不暂停 root，也不创建第二个 stdin owner ──
+  // ── 15) plain text：编号单选 + 逗号多选，不替用户补答案 ──
+  {
+    const answers = ['invalid', '2', '1,3']
+    const writes: string[] = []
+    const result = await runTextQuestionPicker({
+      questions: [SINGLE, MULTI],
+      readLine: async (prompt) => {
+        writes.push(prompt)
+        return answers.shift() ?? 'q'
+      },
+      writeOut: (text) => writes.push(text),
+    })
+    assert(result.kind === 'answered', `plain answers: ${JSON.stringify(result)}`)
+    if (result.kind !== 'answered') throw new Error('plain picker did not answer')
+    assert(
+      JSON.stringify(result.selections[0]?.selected) === JSON.stringify(['SQLite']) &&
+        JSON.stringify(result.selections[1]?.selected) ===
+          JSON.stringify(['Auth', 'Search']),
+      `plain picker preserves model option order: ${JSON.stringify(result.selections)}`,
+    )
+    assert(
+      writes.join('').includes('Choose one number') &&
+        writes.join('').includes('comma-separated'),
+      'plain picker gives actionable retry and multi-select guidance',
+    )
+  }
+
+  // ── 16) plain text Other：自由文本明确标记 custom ──
+  {
+    const answers = ['other', 'DuckDB']
+    const result = await runTextQuestionPicker({
+      questions: [SINGLE],
+      readLine: async () => answers.shift() ?? 'q',
+      writeOut: () => {},
+    })
+    assert(result.kind === 'answered', 'plain custom answer completes')
+    if (result.kind !== 'answered') throw new Error('custom answer missing')
+    assert(
+      result.selections[0]?.custom === true &&
+        result.selections[0]?.selected[0] === 'DuckDB',
+      'plain custom answer is not disguised as a model option',
+    )
+  }
+
+  // ── 17) plain production adapter 复用注入的 readline ──
+  {
+    const answers = ['2']
+    const asker = createTtyAskUserQuestion({
+      isTty: true,
+      readLine: async () => answers.shift() ?? 'q',
+      writeOut: () => {},
+    })
+    const result = await asker.ask([SINGLE])
+    assert(
+      result.kind === 'answered' &&
+        result.selections[0]?.selected[0] === 'SQLite',
+      'plain production adapter returns the explicit numbered answer',
+    )
+  }
+
+  // ── 18) retained adapter 不创建第二个 stdin owner ──
   {
     let overlayCalls = 0
-    let ownershipTransfers = 0
     const asker = createTtyAskUserQuestion({
       isTty: true,
       runQuestionOverlay: async ({ questions }) => {
@@ -278,8 +340,6 @@ async function main() {
           selections: [{ selected: ['SQLite'] }],
         }
       },
-      pauseInput: () => ownershipTransfers++,
-      resumeInput: () => ownershipTransfers++,
     })
     const result = await asker.ask([SINGLE])
     assert(
@@ -288,10 +348,30 @@ async function main() {
       'retained adapter returns the OverlayHost result',
     )
     assert(
-      overlayCalls === 1 && ownershipTransfers === 0,
-      'retained question never pauses or transfers stdin ownership',
+      overlayCalls === 1,
+      'retained question stays inside the existing OverlayHost',
     )
   }
+
+  const askerSource = await readFile(
+    path.resolve('packages/cli/src/tui/askUserQuestionTty.ts'),
+    'utf8',
+  )
+  const resumeSource = await readFile(
+    path.resolve('packages/cli/src/resumeCli.ts'),
+    'utf8',
+  )
+  assert(
+    !askerSource.includes('runQuestionPicker'),
+    'production AskUserQuestion adapter has no legacy raw picker fallback',
+  )
+  assert(
+    resumeSource.includes(
+      'session.askUserQuestion = createTtyAskUserQuestion({',
+    ) &&
+      resumeSource.includes('question(prompt, turnController.signal)'),
+    'plain REPL injects its existing readline into each turn question adapter',
+  )
 
   console.log('PASS: question picker')
 }

@@ -1130,6 +1130,20 @@ export async function runRepl(
         signal: turnController.signal,
         onInterrupt: () => turnController.abort('interrupt'),
       })
+      session.askUserQuestion = createTtyAskUserQuestion({
+        isTty,
+        writeOut: runtimeOut,
+        ...(dynamicTui
+          ? {}
+          : {
+              readLine: (prompt: string) =>
+                question(prompt, turnController.signal),
+            }),
+        ...(controller
+          ? { runQuestionOverlay: controller.runQuestionOverlay }
+          : {}),
+        signal: turnController.signal,
+      })
       try {
         await runOnePrompt(session, text, {
           writeOut: runtimeOut,
