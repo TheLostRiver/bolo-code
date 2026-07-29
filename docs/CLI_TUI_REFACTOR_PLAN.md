@@ -1,7 +1,7 @@
 # CLI TUI retained renderer 重构方案
 
 > **状态：** OI-14 `BLOCKED: HUMAN`（OI-14A–H 自动实现已关闭；只剩 OI-H3）；
-> OI-15 `IN PROGRESS`（OI-15A–C 已完成；OI-15D 下一刀）
+> OI-15 `IN PROGRESS`（OI-15A–D 已完成；OI-15E 下一刀）
 > **方案锚点：** Bolo `c2e6a98`；Pi `c820aa26fe09`；oh-my-pi
 > `d16c6168c86f`；Codex `f61b51ddd924`；OpenCode `66495a2a22cd`；
 > HelsincyCode `e6dd86ef990e`。
@@ -23,6 +23,9 @@
 > compact panel/details text pager，doctor/status/help/memory 等按 viewport 升级 pager，
 > mcp/hooks 直接进入 pager；单页可见、CJK/resize、20× replace、compatibility/persistence
 > 隔离与 plain fallback 已进门禁。
+> **OI-15D 交付：** `21ee1e2` / `87054df` · core pre-dispatch preview 与结构化
+> Skills/Plugins catalog；唯一 OverlayHost 内 loading→result 原位替换，
+> `key/generation/session/cwd` stale guard、Composer 恢复、有界目录与分页键已进门禁。
 > **范围：** 本文定义 CLI TTY 路径的重构方案。非 TTY、`--print`、pipe、JSON 和
 > Desktop 的既有输出契约必须保持兼容。
 > **结论先行：** 停止继续扩展自研 `TerminalSurface + 字符串 prefix + tiny
@@ -600,8 +603,11 @@ OI-15A 已让 `SlashCommandDef.display` 成为内建注册表必填字段，并�
 history，unknown/非法参数使用 error toast。OI-15B 已建立 retained consumer
 primitive。OI-15C 已迁移 panel 与 pager policy：短查询进入单 panel，声明
 `overflow: pager` 的长内容按真实 viewport 升级，显式 pager 即使单页也打开；迁移命令
-不再进入 compatibility。Skills/Plugins、toast/history 仍留给 OI-15D–E，OI-15F
-再用定向门禁禁止所有 normal slash result 调用 `appendCompatibilityOutput()`。
+不再进入 compatibility。OI-15D 已迁移 Skills/Plugins catalog：执行前 preview 打开
+loading，结构化结果按 stable key 原位替换，迟到的 generation/session/cwd 结果 no-op；
+catalog 关闭后恢复 Composer value/cursor/focus，长目录分页且 resize 后保持选中项可见。
+toast/history 仍留给 OI-15E，OI-15F 再用定向门禁禁止所有 normal slash result 调用
+`appendCompatibilityOutput()`。
 
 `packages/shared`/CLI retained state 新增单槽状态和纯 action：
 
@@ -654,7 +660,7 @@ request generation，并记录 session id、cwd 和 command key；异步完成�
 | **OI-15A ✅ · `d681734`** | core display policy + 红灯 | discriminated union、运行时校验/归一化、35 个内建分类、Plugin/Skill/unknown fallback；独立 script + 默认门禁 | 非法 policy fail-closed；plain `message` byte-stable；完整 `npm test` 通过 |
 | **OI-15B ✅ · `d6bd087`** | retained single-slot state | panel/toast state、generation、effect timer、Composer 下方组件、input/Esc/reset/restore/stop 清除 | 连续 20 次 replace 高度不增长；TTL/replace/timer race/resize 全绿 |
 | **OI-15C ✅ · `26f796f`** | context/doctor/status 迁移 | context compact panel/details text pager；doctor/status/help/memory/mcp/hooks 等只读诊断映射 | 20× replace；单页/multi-page/resize/CJK；compatibility/plain writer 为 0；不进入 session messages |
-| **OI-15D** | Skills/Plugins overlay | picker/pager、loading→result 原位 replace、focus restore、stale async guard | cwd/session/request 变化忽略迟到结果；取消后输入原值与光标恢复 |
+| **OI-15D ✅ · `21ee1e2` / `87054df`** | Skills/Plugins overlay | core preview、结构化 catalog、picker/pager、loading→result 原位 replace、focus restore、stale async guard、有界分页 | 20× stable-key；cwd/session/request 变化忽略迟到结果；40 项在 18→10 行 resize 下保持选中项可见；PgUp/PgDn/Home/End；取消后输入原值与光标恢复 |
 | **OI-15E** | toast 与错误分级 | action feedback、priority/tone、durable error 显式策略 | 新 toast 取消旧 timer；短反馈不改变 transcript 高度；不可恢复错误可审计 |
 | **OI-15F** | 清理兼容桶与发布收口 | normal slash 不再走 compatibilityOutput；旧 `interactive*` 字段迁移/删除；docs/dist 审计 | 真实 VT、plain/JSON、full test、pack/install、owner guard 全绿 |
 
@@ -684,7 +690,7 @@ OI-15 自动队列，不能只记为主观验收。
 
 - `message` 始终保留为 plain fallback；回滚某个命令的 UI 映射时改回显式
   visual-only history policy，不回滚 core 命令行为、session 数据或 renderer。
-- OI-15D–E 期间允许未分类命令走有界兼容 history，但已迁移命令不得双写
+- OI-15E 期间允许未分类命令走有界兼容 history，但已迁移命令不得双写
   history + panel/toast。
 - 不恢复 OI-14 已删除的 `TerminalSurface`、engine selector、局部 raw input owner
   或第二 stdout writer。

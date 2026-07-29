@@ -220,8 +220,11 @@ OI-15C 起，retained TUI 的 `/context` 使用 Composer 下方 12 秒单 panel�
 替换同一槽，开始编辑、`Esc`、TTL 或 reset/restore 会清除。`details`、`detail`、
 `--details` 与超出 panel 容量的 `/doctor`/`/status`、help/memory 等只读内容使用
 text pager；`/mcp`、`/hooks` 直接进入 pager。迁移结果不会进入兼容输出区或会话消息。
-`/skills`、`/plugins` 与动作 toast/error 仍按 [ROADMAP.md](./ROADMAP.md) 的
-OI-15D–F 顺序迁移。
+OI-15D 起，`/skills`、`/plugins`、commands、market/search 会先在唯一 OverlayHost
+显示 loading，再用结构化目录原位替换；迟到或已取消的请求不会覆盖当前视图。长目录
+支持 `PgUp`、`PgDn`、`Home`、`End`，终端 resize 后仍保持选中项可见；`Esc`/关闭后
+恢复输入内容、光标与焦点。动作 toast/error 与 compatibility cleanup 仍按
+[ROADMAP.md](./ROADMAP.md) 的 OI-15E–F 顺序迁移。
 pipe、`--print`、JSON 与非 TTY 的 plain 文本契约不会因此改变。
 
 `BOLO_MASCOT=0` 可隐藏水晶；`BOLO_ASCII=1` 使用 ASCII 水晶；`NO_COLOR` 只去颜色并

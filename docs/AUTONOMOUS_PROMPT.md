@@ -31,7 +31,7 @@ agent 独立解决的问题。** 不要越过外部/人工阻塞项，也不要�
 | 7 | OI-14A · CLI TUI 真实 VT 红灯与 retained renderer 选型 | ✅ 已收口（`1ae9f53` · `f04f8de`） |
 | 8 | OI-14B · live view-state | ✅ 已收口（`269b39c`） |
 | 9 | OI-14H · 删除 legacy/静态 owner guard/发布审计 | ✅ 自动部分已收口（`39e66b4`–`d4eaed0`） |
-| 10 | OI-15A–F · slash command surface/lifecycle | 🚧 A core policy `d681734`、B single-slot panel/toast `d6bd087`、C read-only panel/pager `26f796f` 已关闭；当前队列 D Skills/Plugins → E toast/error → F cleanup |
+| 10 | OI-15A–F · slash command surface/lifecycle | 🚧 A core policy `d681734`、B single-slot panel/toast `d6bd087`、C read-only panel/pager `26f796f`、D Skills/Plugins overlay `21ee1e2` / `87054df` 已关闭；当前队列 E toast/error → F cleanup |
 | 11 | OI-H1/H2/H3 · 真 TTY、真人点击与视觉走查 | 人工阻塞；不得用它们掩盖可自动复现的新缺陷 |
 
 OI-04 已完成零依赖、显式配置、fail-closed 的 SearXNG JSON 搜索契约、fixture、
@@ -43,11 +43,12 @@ OI-08B 已完成安装后直接 `bolo`、用户级 workspace session store、旧
 Composer/activity/footer、OverlayHost、默认切换、可靠性/性能与 legacy 删除；
 dynamic TTY 只剩 retained，non-TTY/plain/pipe/JSON/`--print` 永久保留。
 
-**当前默认 agent 队列是 OI-15D → OI-15F。** OI-15A 已在 core 建立完整 display
+**当前默认 agent 队列是 OI-15E → OI-15F。** OI-15A 已在 core 建立完整 display
 policy、内建命令分类和 fail-closed fallback；OI-15B 已建立 retained 单 panel/toast
 slot、generation、timer 与清理生命周期；OI-15C 已迁移 context/doctor/status 与
-只读 panel/text pager，并隔离 compatibility/session messages。继续以 ROADMAP §0、
-§13.11 与 OPEN_ISSUES 的切片顺序推进：Skills/Plugins overlay、toast/error policy、compatibility
+只读 panel/text pager，并隔离 compatibility/session messages；OI-15D 已完成
+Skills/Plugins 结构化 catalog、loading→result 原位替换、stale guard、Composer 恢复和
+有界分页。继续以 ROADMAP §0、§13.11 与 OPEN_ISSUES 的切片顺序推进：toast/error policy、compatibility
 cleanup。每刀先红灯，packages-first，代码/测试与文档分批中文 commit/push。
 OI-H1/H2/H3 只能由真人验收；任何新发现且可由 headless terminal 复现的缺陷不能
 塞进人工 blocker。OI-14/OI-15 完成边界见
