@@ -4,7 +4,7 @@
 > Bolo：**T3 默认只写 `.jsonl`**（`sessionTranscript.ts`）；OI-08B 起新会话默认写
 > 用户级 workspace 分桶，旧项目/用户路径只读兼容；旧 `.json` **只读兼容**；
 > `writeJsonSnapshot: true` 可双写。
-> **`loadSession` / `resumeSession`（J-C+ / J-D）**：同 id 同时存在 `.json` 与 `.jsonl` 时，**messages 优先 jsonl**（须有至少一条有效 message；空/全坏行回退 JSON）；配置切片优先 JSON，仅 jsonl 时从 **meta 扩展字段**恢复。仅有其一则用其一。  
+> **`loadSession` / `resumeSession`（J-C+ / J-D）**：同 id 同时存在 `.json` 与 `.jsonl` 时，**messages 优先 jsonl**（须有至少一条有效 message；空/全坏行回退 JSON）；普通配置切片优先 JSON，但 JSONL 首行 `meta` / 最新有效 `session_state` 的 provider/model/context/output resolved metadata 会覆盖 stale JSON runtime metadata。仅 jsonl 时从 **meta 扩展字段**恢复。仅有其一则用其一。
 > **compact R1：** `loadTranscriptMessages` 只重建**最后一个** `compact_boundary` 之后的 message 链。
 
 ## 1. 路径约定
@@ -30,8 +30,9 @@
 
 | type | 用途 |
 |------|------|
-| `meta` | 文件首行：id / cwd / permissionMode / model / createdAt + **配置切片**（systemPromptSections、autoCompact、contextWindow、maxPtlRetries、permissionRules、effortLevel、**providerId**、usage…） |
+| `meta` | 文件首行：id / cwd / permissionMode / model / createdAt + **配置切片**（systemPromptSections、autoCompact、contextWindow、**maxOutputTokens、resolvedModel**、maxPtlRetries、permissionRules、effortLevel、**providerId**、usage…） |
 | `message` | 包裹现有 `ChatMessage` |
+| `session_state` | provider/model/context/output resolved metadata 变化时追加；按最新有效条目 **last-wins**，无变化不重复写；**不进**模型 messages |
 | `compact_boundary` | full compact 边界（`compactSession` 成功后 rewrite jsonl 写入） |
 | `title` | 会话标题（**last-wins**；**不进**模型 messages；rewrite 时保留最后一条） |
 | `turn` | Durable Turn 生命周期（`turnId` + `state`；**不进**模型 messages；rewrite 时保留） |
@@ -39,7 +40,13 @@
 | `task` | Durable background/subagent 生命周期（独立 `taskId` + `parentTurnId?`；**不进**模型 messages；rewrite 时保留） |
 | `task_result` | Durable task 结果摘要/usage/worktree 路径；必须先于 completed/error/aborted terminal；**不进**模型 messages |
 
-`saveSession` **默认**只增量 append / rewrite `.jsonl`；不再默认原子写 JSON。`migrateSessionToJsonl` 可将旧 JSON 旁路写出 jsonl（默认不删 JSON）。`setSessionTitle` / `/title` 追加 `title` 行；`appendSessionSystemNote` / `/note` 追加 `system_note`（不进模型链）。list 对 jsonl 走 `scanTranscriptLite`（轻量计数字段 + 近况 preview）。详见 `docs/TODO_SESSION_JSONL.md`。
+`saveSession` **默认**只增量 append / rewrite `.jsonl`；不再默认原子写 JSON。runtime
+metadata 改变时先追加一条去重的 `session_state`，load 时以最后一条有效 state 投影回
+meta；compact rewrite 会把最新 state 折叠进首行 meta，不保留冗余 state。
+`migrateSessionToJsonl` 可将旧 JSON 旁路写出 jsonl（默认不删 JSON）。`setSessionTitle` /
+`/title` 追加 `title` 行；`appendSessionSystemNote` / `/note` 追加 `system_note`（不进模型
+链）。list 对 jsonl 走 `scanTranscriptLite`（轻量计数字段 + 近况 preview）。详见
+`docs/TODO_SESSION_JSONL.md`。
 
 ### 1.2 Durable Turn v1（DR0–DR1）
 
@@ -224,7 +231,7 @@ DR0–DR4 与 AR1 全段已收口；全局当前主线只以 [ROADMAP.md](./ROAD
 | `permissionMode` | 权限模式 |
 | `messages` | `ChatMessage[]`（含 `tool_calls` / `tool_call_id`） |
 | `systemPromptSections` | system 段快照（resume 可重建或回退） |
-| `model` / `autoCompactEnabled` / `contextWindowTokens` / `maxPtlRetries` | 会话配置切片 |
+| `model` / `autoCompactEnabled` / `contextWindowTokens` / `maxOutputTokens` / `resolvedModel` / `maxPtlRetries` | 会话配置切片；`resolvedModel` 含 provider/model、窗口、输出上限、逐字段来源、fallback 与 warnings |
 | `permissionRules` / `effortLevel` / **`providerId`** / `usage`（可选） | Always-allow + always-deny；effort；**命名后端 id（CX6 resume）**；本地 token 累计；resume 恢复；无遥测 |
 | `createdAt` / `updatedAt` | ISO 时间 |
 
@@ -277,7 +284,7 @@ const session = await createSession({
 |-----|------|
 | `toSnapshot` / `parseSessionSnapshot` | 序列化 / 校验（JSON 形状） |
 | `saveSession` / `persistSession` | **默认只写 jsonl**；`writeJsonSnapshot` 可选 JSON |
-| `loadSession` | 读 JSON+旁路 jsonl → `SessionSnapshot`（双文件：jsonl messages 非空则优先；否则 JSON） |
+| `loadSession` | 读 JSON+旁路 jsonl → `SessionSnapshot`（双文件：jsonl messages 非空则优先；JSONL runtime metadata 覆盖 stale JSON runtime metadata；否则 JSON） |
 | `loadTranscriptFile` / `loadTranscriptMessages` | 读 jsonl → entries / **R1** 线性 messages（最后 boundary 之后） |
 | `migrateSessionToJsonl` | 旧 JSON 旁路写出 jsonl（D2；可选 `deleteJson` / `force`） |
 | `setSessionTitle` | 追加 `title` entry（last-wins；不进模型链） |
@@ -292,9 +299,12 @@ const session = await createSession({
 |--------------|------------|
 | JSONL 追加 transcript | **默认只写** `.jsonl` 增量 append；旧 JSON 只读 |
 | 项目哈希目录 + 多类 entry | 用户级 `sessions/workspaces/<hash>/<id>.jsonl`；旧项目/用户路径兼容读 |
-| 丰富元数据 / 侧链 agent | 主会话 messages + meta 配置切片；entry 最小集 meta/message/boundary/**title** |
+| 丰富元数据 / 侧链 agent | 主会话 messages + meta 配置切片；runtime 变化追加去重的 **session_state**，另有 boundary/title/durable lifecycle entries |
 
-Resume 主路径：`loadSessionPair` — **messages 以 jsonl 为准**（有效 message 非空时），JSON 提供 meta/配置；仅 jsonl 时 meta 扩展字段恢复配置；jsonl 仅 meta/坏行时回退 JSON messages。
+Resume 主路径：`loadSessionPair` — **messages 以 jsonl 为准**（有效 message 非空时）；
+JSON 提供普通配置，JSONL 首行 meta 与最新有效 `session_state` 提供 last-wins runtime
+metadata 并覆盖 stale JSON；仅 jsonl 时由 meta 扩展字段恢复配置；jsonl 仅 meta/坏行时
+回退 JSON messages。
 
 ```bash
 npx tsx scripts/test-transcript-append.ts

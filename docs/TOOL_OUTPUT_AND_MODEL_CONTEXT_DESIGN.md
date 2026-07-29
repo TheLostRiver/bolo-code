@@ -1,7 +1,7 @@
 # 长工具输出折叠与模型上下文元数据设计
 
-> **状态：** CTX-1 `27a2506` 已完成；CTX-2 是下一刀；CTX-3 与 OUT-1..5 尚未实现。
-> **设计基线：** `dc20807`；当前实施基线：`27a2506`。
+> **状态：** CTX-1 `27a2506`、CTX-2 `6ea3a4f` 已完成；CTX-3 是下一刀；OUT-1..5 尚未实现。
+> **设计基线：** `dc20807`；当前实施基线：`6ea3a4f`。
 > **路线标识：** `CTX-1..3`、`OUT-1..5`。
 > **进度真源：** [ROADMAP.md](./ROADMAP.md) §0、§13.11。
 > **相关实现：** [COMPACTION.md](./COMPACTION.md) ·
@@ -11,8 +11,9 @@
 
 1. Read、Bash、MCP 等长工具结果会把 retained transcript 填满；当前没有通用折叠、
    单块展开或全文查看契约。
-2. `contextWindowTokens` 是 workspace 顶层单值；它不会随 provider/model 热切更新，
-   写进 provider profile 还会被静默忽略。
+2. provider/model 上下文窗口与输出上限需要统一解析、随热切更新并可解释来源；旧实现
+   只有 workspace 顶层 `contextWindowTokens`。CTX-1/2 已关闭解析与 runtime 消费缺口，
+   CTX-3 继续补齐可观测性和最终用户文档。
 
 本方案只借鉴 Pi、oh-my-pi、HelsincyCode、Codex、OpenCode 的职责边界与交互语义，
 不引入这些项目的运行时依赖，不复制未授权实现。
@@ -22,12 +23,12 @@
 | 切片 | 状态 | 当前边界 |
 |------|------|----------|
 | CTX-1 | ✅ `27a2506` | config/schema/validator/resolver、深合并、warning、exact catalog 与 source 已落地 |
-| CTX-2 | **▶ NEXT** | create/resume/hot-switch、dynamic compact、skills/dashboard/provider request 待接线 |
-| CTX-3 | PENDING | `/provider`、`/model`、`/context`、`/doctor`、Desktop 与最终用户文档 |
+| CTX-2 | ✅ `6ea3a4f` | create/resume/hot-switch、dynamic compact、skills/dashboard/provider request 已统一接线 |
+| CTX-3 | **▶ NEXT** | `/provider`、`/model`、`/context`、`/doctor`、Desktop 与最终用户文档 |
 | OUT-1..5 | PENDING | 通用 Tool presentation、折叠、全文 pager、鼠标与只读调用聚合 |
 
-CTX-2 完成前，runtime 仍沿用旧顶层 `contextWindowTokens`，不能把 CTX-1 的配置与
-resolver 宣称为端到端生效。OUT 完成前，长工具结果仍可能占满 retained transcript。
+runtime 已统一消费 resolved metadata；CTX-3 完成前，来源展示与最终用户配置口径仍未
+收口。OUT 完成前，长工具结果仍可能占满 retained transcript。
 
 ---
 
@@ -90,7 +91,7 @@ Read/Bash/MCP tool
 
 ### 2.2 上下文窗口链路
 
-CTX-1 前、当前 runtime 仍在使用的真实数据流：
+CTX-1/2 前的旧 runtime 数据流：
 
 ```text
 config.contextWindowTokens（默认 128000）
@@ -111,15 +112,19 @@ CTX-1 已关闭的配置/解析缺口：
 - `resolveModelMetadata()` 已按 model/provider/catalog/legacy/snapshot/fallback
   逐字段解析并记录 source；超窗 output 会被拒绝并向低优先级降级。
 
-CTX-2 仍需关闭的 runtime 缺口：
+CTX-2 已关闭的 runtime 缺口：
 
-- `ResolvedWorkspace` 没有 resolved model metadata 或 value source。
-- `/provider use` 与 `/model` 更新 client/model/effort/cache，但不更新 context。
-- auto-compact prepare 捕获装配时的固定窗口；后来只改 session 字段仍可能继续用旧阈值。
-- resume 优先使用 snapshot window；用户修正当前配置后，旧会话仍可能保留旧值。
+- `ResolvedWorkspace`、session 与 snapshot 携带 resolved model metadata 和 value source。
+- `/provider use` 与 `/model` 原子准备 provider、metadata、summarizer/classifier、skill
+  catalog 与 cache break，再一次性提交 runtime 投影；失败保留原状态。
+- auto-compact 每次通过 getter 读取 active model window；skills、dashboard、plugin
+  reload 与 provider output baseline 消费同一 metadata。
+- resume 以当前配置优先重新解析；当前链无来源且 snapshot 身份一致时才回退 snapshot。
+- JSON/JSONL 持久化 resolved metadata；JSONL `session_state` 去重、last-wins，compact
+  rewrite 把最新 metadata 折回首行 meta。
 
-所以 CTX-1 只建立了可复用的配置与解析真源；在 CTX-2 接入消费者前，作用域和生命周期
-问题仍未端到端解决。
+CTX-1 建立可复用的配置与解析真源，CTX-2 完成作用域和生命周期接线。当前剩余缺口属于
+CTX-3：让 slash/doctor/Desktop 明确展示数值与来源，并发布最终用户配置口径。
 
 ---
 
@@ -600,7 +605,7 @@ packages-first：
 非法值、unknown model。新增 `test:model-metadata-config` 已进入默认 `npm test`；
 专项、typecheck、既有 config/provider 回归与完整门禁已通过。
 
-### CTX-2 · create/resume/hot-switch 接线 ▶ NEXT
+### CTX-2 · create/resume/hot-switch 接线 ✅ `6ea3a4f`
 
 - `ResolvedWorkspace.resolvedModel`。
 - create/resume/provider/model 原子更新。
@@ -610,10 +615,12 @@ packages-first：
 
 验收：32k/128k/200k/1m 切换；旧 session；热切失败回滚；auto/mid-turn compact 阈值。
 
-本切片完成前，session、compact、skills、dashboard 与 provider request 仍使用旧顶层
-窗口或既有输出配置，不能把 provider/model limits 写进最终用户用法并宣称已生效。
+专项、typecheck、既有 config/provider/session/compact/runtime/TUI/Desktop 回归与完整
+`npm test` 已通过。JSON/JSONL roundtrip、`session_state` 去重与 compact fold、
+current-config-first、matching snapshot fallback、热切失败回滚及 prompt-cache break
+均有门禁。最终用户用法与来源展示仍由 CTX-3 收口。
 
-### CTX-3 · 可观测性与用户文档
+### CTX-3 · 可观测性与用户文档 ▶ NEXT
 
 - `/provider`、`/model`、`/context`、`/doctor`、Desktop projection。
 - CONFIG/PROVIDERS/USAGE/ROADMAP/AGENT_HANDOFF。
