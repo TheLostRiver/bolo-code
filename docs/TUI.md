@@ -5,7 +5,8 @@
 > 事务、分段 Thinking/Thought、权限详情与非 TTY fallback 等业务能力，已在
 > OI-14A–H 迁入单一 retained TTY 架构。旧 direct-write surface、字符串布局补丁、
 > 局部 raw owner 与 engine selector 均已删除。OI-15A 已补齐 core slash display
-> policy；OI-15B–F 仍需让 retained CLI 消费 panel/toast/overlay/history 生命周期；
+> policy；OI-15B 已接入 retained 单 panel/toast primitive，OI-15C–F 继续迁移具体
+> panel/toast/overlay/history 生命周期；
 > OI-H3 真人 Windows Terminal 走查继续单列。
 > **框架选择：** OI-14A 已选定精确版本的 Pi TUI direct bundle，不再继续扩展自研
 > `TerminalSurface + contentPrefixer + tiny Markdown`。分切片复用 renderer/Markdown/
@@ -203,8 +204,9 @@ segment elapsed 决定，不再依赖是否展示过 reasoning 文本；消费�
 - 非 TTY 输出同一 view-model 的紧凑纯文本。`/context details` 与
   `/context --details` 保留 sections、skills、memory、cache、prepare/compact 等
   完整诊断，不把诊断 dump 塞回默认概览。
-- **当前已知缺陷（OI-15B–F）：** dashboard 内容虽然结构化，core 也已在 OI-15A
-  声明 `slash:context` panel policy，但 retained CLI 尚未消费，仍通过
+- **当前已知缺陷（OI-15C）：** dashboard 内容虽然结构化，core 也已在 OI-15A
+  声明 `slash:context` panel policy，OI-15B 也已提供 retained panel primitive；
+  但 `/context` consumer 尚未迁移，仍通过
   `writeSlashOutput()` 进入 retained `compatibilityOutput`，没有 replacement key、
   TTL 或 clear action；重复 `/context` 会永久扩大 Composer 上方区域。内容 renderer
   已完成不等于结果生命周期已完成。
@@ -231,11 +233,12 @@ segment elapsed 决定，不再依赖是否展示过 reasoning 文本；消费�
 - 当前已实现会话输入框内的 slash completion；尚无 PowerShell/Bash 外壳级 shell
   completion、鼠标输入或跨进程持久命令历史，它们不是 OI-10 的完成条件。
 
-### 3.7 slash 命令结果生命周期（OI-15A 已完成，B–F 待实现）
+### 3.7 slash 命令结果生命周期（OI-15A–B 已完成，C–F 待实现）
 
 OI-15A 已让 core 为所有内建命令声明并校验四类 surface，Plugin/Skill/unknown 也有
-fail-closed fallback；plain `message` 保持不变。retained CLI 尚未消费这些 policy，
-OI-15B 起按下表映射：
+fail-closed fallback；plain `message` 保持不变。OI-15B `d6bd087` 已建立单 panel/
+toast、单调 generation、timer effect 与 input/Esc/reset/restore/stop 清理，并把
+固定组件放在 Composer 下方、footer 上方。具体命令从 OI-15C 起按下表映射：
 
 | 类别 | 位置 | 适用 | 清除 |
 |------|------|------|------|

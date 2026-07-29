@@ -7,6 +7,7 @@
 > `31384d4`，OI-14G 关闭锚点：`accc22c`，OI-14H 代码关闭锚点：
 > `d4eaed0`（2026-07-29）；OI-15 准入锚点：`85c5c48`（2026-07-29）。
 > OI-15A core display policy 关闭锚点：`d681734`（2026-07-29）。
+> OI-15B retained single-slot 关闭锚点：`d6bd087`（2026-07-29）。
 > 本文只列当前仓库中有代码、测试、实测或互相矛盾文档支撑的问题。
 > 历史 TODO、已关闭的候选和仅凭印象提出的功能不算开放问题。
 
@@ -21,12 +22,12 @@
 
 ## 1. Agent 可直接解决
 
-当前默认 agent 可闭环队列为 **OI-15B → OI-15F**。OI-14 只剩明确的 OI-H3
+当前默认 agent 可闭环队列为 **OI-15C → OI-15F**。OI-14 只剩明确的 OI-H3
 真人走查；OI-09–OI-13 的局部关闭不再作为“整个 TUI renderer 已稳定”的证据。
 
 ### OI-15 · slash 命令临时结果与 Composer 空间治理
 
-**状态：IN PROGRESS（OI-15A 已关闭；OI-15B 下一刀，当前 TUI 行为尚未改变）**
+**状态：IN PROGRESS（OI-15A–B 已关闭；OI-15C 下一刀，具体 slash 行为尚未迁移）**
 
 完整方案：[CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md) §14
 
@@ -36,8 +37,9 @@
   重复执行会持续占用 Composer 上方空间，最终把可见屏幕挤满。
 - 准入时 `SlashDispatchResult` 只有 `ok`、`message` 和少数
   `contextView`/`interactive*` payload，没有 surface、replacement key、TTL、
-  dismiss、overflow 或 persistence policy。OI-15A 已在 core 补齐该契约，但 retained
-  consumer 尚未接入，所以该准入症状仍会出现在 UI。
+  dismiss、overflow 或 persistence policy。OI-15A 已在 core 补齐该契约，OI-15B
+  已接入 retained 单槽 primitive；具体命令 consumer 尚未迁移，所以该准入症状仍会
+  出现在 UI。
 - `runOnePrompt()` 会把 slash 输入作为 typed user block 回显，但所有普通 slash 输出
   仍经 `writeSlashOutput()` 进入 `RetainedRoot.appendCompatibilityOutput()`。
   该方法把文本持续拼入最多 65,536 字符的单一 `Text` component；根布局把它固定在
@@ -77,7 +79,7 @@ packages/core SlashDisplayPolicy
 | 切片 | packages-first 交付 | 关闭证据 | 状态 |
 |------|---------------------|----------|------|
 | **OI-15A · display policy** | core discriminated union、默认策略、命令分类、红灯 | exhaustive/fail-closed；plain message byte-stable；测试进入独立 script + 默认门禁 | **CLOSED · `d681734`** |
-| **OI-15B · single-slot state** | panel/toast reducer、generation、effect timer、Composer 下方组件 | 连续 20 次查询高度不增长；TTL/replace/timer race/resize | OPEN |
+| **OI-15B · single-slot state** | panel/toast reducer、generation、effect timer、Composer 下方组件 | 连续 20 次 replace 高度不增长；TTL/replace/timer race/resize/input/Esc/restore/stop | **CLOSED · `d6bd087`** |
 | **OI-15C · context/doctor/status** | context compact/details、doctor/只读诊断映射 | footer/panel/pager 分层；transient 不进 persistence/resume/model | OPEN |
 | **OI-15D · Skills/Plugins overlay** | picker/pager、loading→result replace、stale async guard | session/cwd/request 变化忽略迟到结果；focus/value/cursor 恢复 | OPEN |
 | **OI-15E · toast/error policy** | action feedback、tone/priority、显式 durable error | 新 toast 取消旧 timer；短反馈不改变 transcript 高度 | OPEN |

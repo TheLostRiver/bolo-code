@@ -1,7 +1,7 @@
 # CLI TUI retained renderer 重构方案
 
 > **状态：** OI-14 `BLOCKED: HUMAN`（OI-14A–H 自动实现已关闭；只剩 OI-H3）；
-> OI-15 `IN PROGRESS`（OI-15A core display policy 已完成；OI-15B 下一刀）
+> OI-15 `IN PROGRESS`（OI-15A–B 已完成；OI-15C 下一刀）
 > **方案锚点：** Bolo `c2e6a98`；Pi `c820aa26fe09`；oh-my-pi
 > `d16c6168c86f`；Codex `f61b51ddd924`；OpenCode `66495a2a22cd`；
 > HelsincyCode `e6dd86ef990e`。
@@ -17,6 +17,8 @@
 > **OI-14H 交付：** `39e66b4`–`d4eaed0` · legacy 删除、单 owner guard 与发布审计。
 > **可靠性 follow-up：** `e6ec6cb` · durable SIGINT handler/Composer 输入串行化。
 > **OI-15A 交付：** `d681734` · core display policy、完整内建分类与 fail-closed。
+> **OI-15B 交付：** `d6bd087` · retained 单 panel/toast、generation、timer effect、
+> Composer 下方有界组件与 input/Esc/reset/restore/stop 生命周期。
 > **范围：** 本文定义 CLI TTY 路径的重构方案。非 TTY、`--print`、pipe、JSON 和
 > Desktop 的既有输出契约必须保持兼容。
 > **结论先行：** 停止继续扩展自研 `TerminalSurface + 字符串 prefix + tiny
@@ -591,8 +593,9 @@ type ResolvedSlashDispatchResult = SlashDispatchResult & {
 禁止把 Pi `Component`、terminal columns、timer handle 或 CLI callback 放进 core。
 OI-15A 已让 `SlashCommandDef.display` 成为内建注册表必填字段，并在中央 dispatch
 完成校验/归一化；35 个内建命令全部分类，未分类 Plugin/Skill 使用 visual-only
-history，unknown/非法参数使用 error toast。retained consumer 尚未接入，OI-15B–E
-迁移期 UI 仍走现有 compatibility 行为；OI-15F 再用定向门禁禁止 normal slash result
+history，unknown/非法参数使用 error toast。OI-15B 已建立 retained consumer
+primitive，但具体 slash 映射留在 OI-15C–E；迁移期 UI 仍走现有 compatibility
+行为，OI-15F 再用定向门禁禁止 normal slash result
 调用 `appendCompatibilityOutput()`。
 
 `packages/shared`/CLI retained state 新增单槽状态和纯 action：
@@ -600,13 +603,12 @@ history，unknown/非法参数使用 error toast。retained consumer 尚未接�
 ```text
 commandSurface
   panel?: { key, generation, content, policy }
-  toast?: { key, generation, content, tone, expiresAt }
-  overlay?: { key, generation, view }
+  toast?: { key, generation, content, tone, ttlMs }
+  nextGeneration: number
 
 show/replace_panel · dismiss_panel
 show/replace_toast · expire_toast
-open/replace_overlay · close_overlay
-accepted_input · session_reset
+accepted_input · escape · reset
 ```
 
 reducer 不持有 timer。CLI effect 层创建 timer，并在回调中携带
@@ -645,7 +647,7 @@ request generation，并记录 session id、cwd 和 command key；异步完成�
 | 顺序 | 切片 | 交付 | 关闭条件 |
 |------|------|------|----------|
 | **OI-15A ✅ · `d681734`** | core display policy + 红灯 | discriminated union、运行时校验/归一化、35 个内建分类、Plugin/Skill/unknown fallback；独立 script + 默认门禁 | 非法 policy fail-closed；plain `message` byte-stable；完整 `npm test` 通过 |
-| **OI-15B** | retained single-slot state | panel/toast state、generation、effect timer、Composer 下方组件、input/Esc/reset 清除 | 连续 20 次 `/context` 高度不增长；TTL/replace/timer race/resize 全绿 |
+| **OI-15B ✅ · `d6bd087`** | retained single-slot state | panel/toast state、generation、effect timer、Composer 下方组件、input/Esc/reset/restore/stop 清除 | 连续 20 次 replace 高度不增长；TTL/replace/timer race/resize 全绿 |
 | **OI-15C** | context/doctor/status 迁移 | context compact panel/details pager；doctor 与只读诊断映射 | footer/panel 分层；长内容 pager；不进入 resume/model messages |
 | **OI-15D** | Skills/Plugins overlay | picker/pager、loading→result 原位 replace、focus restore、stale async guard | cwd/session/request 变化忽略迟到结果；取消后输入原值与光标恢复 |
 | **OI-15E** | toast 与错误分级 | action feedback、priority/tone、durable error 显式策略 | 新 toast 取消旧 timer；短反馈不改变 transcript 高度；不可恢复错误可审计 |

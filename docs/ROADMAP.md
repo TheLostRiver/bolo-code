@@ -21,8 +21,8 @@
 | **成本与缓存** | **~94–97%** | /cost 日用近满 |
 | **文件 Diff · 日用契约** | **~95%+** | **D0–D7 已收口**；见 [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) |
 | **文件 Diff · 交互 UI** | **~90–95%** | **U0–U4 已落地**；U5 真·Ink/IDE 可选（AR4 证据门控） |
-| **斜杠** | **~84–90%** | OI-10 命令级发现/补全 + OI-12A argument hint 已完成；OI-15A 已建立完整 display policy，OI-15B–F 继续接入 panel/toast/overlay/history 生命周期 |
-| **CLI TUI** | **~82–90%** | OI-14 retained renderer 主体已完成；OI-15A core 契约已完成，retained renderer 尚未消费，下一步实施 command surface 单槽、替换/清除/TTL/pager 与 stale guard；OI-H3 真人 Windows Terminal 仍未验 |
+| **斜杠** | **~84–90%** | OI-10 命令级发现/补全 + OI-12A argument hint 已完成；OI-15A–B 已建立完整 display policy 与 retained 单槽 primitive，OI-15C–F 继续迁移具体命令 |
+| **CLI TUI** | **~82–90%** | OI-14 retained renderer 主体与 OI-15B 单 panel/toast、替换/清除/TTL/generation 已完成；下一步迁移 context/doctor/status，随后 Skills/Plugins、toast/error 与 compatibility cleanup；OI-H3 真人 Windows Terminal 仍未验 |
 | **Electron GUI** | **~80–88%** | 壳 + 流式 + 权限 + 多 provider（CX7）+ runtime v1 + **会话切换/恢复 + composer controls + model/effort 设置 + control/tool progress 投影** + AskUserQuestion；真人点击/视觉仍未验 |
 | **Hooks · 日用契约** | **~96–98%** | **H0–H5 已落地**（SessionEnd · exit 语义 · updatedInput · `/hooks recent`） |
 | **Compact · 日用管道** | **~96–98%** | **C0–C5 + AR2 全段已落地**（hybrid 计数 · 中段截断 · 防重摘要 · range/watermark 契约 · 切分不拆对穷举验证 · 写失败完整回退 · durable 条目不丢 · **估算按字符类别分档**（CJK 1.3 / 散文 4.5 / 其余 3.5；实测推翻了「密文 = token 密」的旧前提，最差高估 109% → 19.5%）· 管道基准）；中段压缩与远端压缩均**显式关闭**（§13.10.2 · [ADR](./ADR_COMPACT_REMOTE.md)） |
@@ -33,14 +33,15 @@
 
 **已闭环主线：** headless 日用 → Diff（D0–D7 / U0–U4）· Hooks（H0–H5）· Compact（C0–C5）· Provider（P0–P4.1）· Effort（E0–E9）· Provider UX（CX0–CX8）· 可靠性（R0–R4）· **Durable Runtime（DR0–DR4）** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR3 Desktop 产品接线** · **OI-07 SearXNG 上游诊断、`search doctor` 与可选 Docker setup** · **OI-08B CLI 零步骤首次启动** · **OI-14A–H retained renderer 重构**。OI-09–OI-13 的 slash/context/paste/Thought/权限/welcome 等局部切片保留为完成历史，但不再作为整个 renderer 稳定的独立证据。新准入的 **OI-15** 处理 slash 命令结果的 surface/lifecycle；OI-H3 继续独立保持 `BLOCKED: HUMAN`。切片明细 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
 
-**当前默认 agent 队列：OI-15B → OI-15F。** OI-14 已建立单 retained
+**当前默认 agent 队列：OI-15C → OI-15F。** OI-14 已建立单 retained
 renderer/OverlayHost，却仍保留一个 `compatibilityOutput` 字符串桶：普通 slash
 结果通过 `appendCompatibilityOutput()` 持续拼接并固定在 transcript 与 Composer
 之间。OI-15A 已在 core 定义并运行时校验
 `history | panel | toast | overlay` display policy，35 个内建命令均有显式分类，
-Plugin/Skill/unknown 也有 fail-closed 兜底。OI-15B 起接 retained 单槽 state、
-generation/TTL/input-clear、Composer 下方 panel、
-footer toast、long-content pager 和异步 stale guard；最后禁止 normal slash 输出
+Plugin/Skill/unknown 也有 fail-closed 兜底。OI-15B `d6bd087` 已接 retained
+单 panel/toast state、generation/TTL/input-clear、Composer 下方有界 panel 与
+footer toast primitive；OI-15C 起迁移 context/doctor/status、long-content pager，
+随后处理 Skills/Plugins 与异步 stale guard；最后禁止 normal slash 输出
 再次命中 compatibility bucket。非 TTY、pipe、JSON、`--print` 的 plain `message`
 契约保持不变，不引入新 renderer 或其它 Agent 的运行时依赖。完整方案见
 [CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md) §14。
@@ -58,7 +59,7 @@ footer toast、long-content pager 和异步 stale guard；最后禁止 normal sl
 
 **已插队并收口：** **AR-T · Agent 能力面**（§14）。准入证据：基础设施深度（DR0–DR4 + AR1）已远超能力广度——彼时 agent 无法跨步骤记住计划，也无法启动任何活过一次工具调用的进程。AR2 压缩深化顺延，A0a/A0b 成果不受影响。
 
-**agent 可闭环开放项：OI-15B–F。** OI-H1/H2/H3 是明确真人项，LSP 继续由证据
+**agent 可闭环开放项：OI-15C–F。** OI-H1/H2/H3 是明确真人项，LSP 继续由证据
 门控。OI-15 是由真人走查和当前代码路径共同证明的真实缺口，不是为保持自治而发明
 任务；后续可由 headless terminal 复现的缺陷也不得塞回 `BLOCKED: HUMAN`。CLI init
 不再是默认安装步骤，SearXNG Docker 管理也只是显式可选能力。
@@ -130,7 +131,7 @@ footer toast、long-content pager 和异步 stale guard；最后禁止 normal sl
 | **OI-12 · CLI TUI 信息架构与多行输入稳定性** | ✅ argument hint、context dashboard、统一内容 gutter、全宽用户块与 paste transaction 已进入默认门禁；真人项见 OI-H3 |
 | **OI-13 · CLI TUI 垂直节奏与水晶工作台** | ✅ 局部切片完成；后续物理 wrap/cursor/layout 证据转入 OI-14，不再以本项门禁证明整个 renderer |
 | **OI-14 · CLI TUI retained renderer 重构** | ⏸ A–H 自动实现已关闭：真实 VT/选型、live view-state、retained renderer/Markdown/Composer/OverlayHost、默认切换、可靠性/性能与 legacy 删除；只剩 OI-H3 真人核心场景 |
-| **OI-15 · slash 命令 surface/lifecycle** | 🚧 A core display policy ✅（`d681734`）；下一步 B retained 单 panel/toast slot → C context/doctor/status → D Skills/Plugins → E toast/error → F compatibility bucket 清理 |
+| **OI-15 · slash 命令 surface/lifecycle** | 🚧 A core display policy ✅（`d681734`）→ B retained 单 panel/toast slot ✅（`d6bd087`）；下一步 C context/doctor/status → D Skills/Plugins → E toast/error → F compatibility bucket 清理 |
 | **AR-T3+ 能力面续刀**（WebSearch · plan 工具流 · AskUserQuestion） | ✅ 三项均已落地（AskUserQuestion 的真 TTY 交互未验，见 §14.5） |
 | **AR2 Compact depth（A0a/A0b/A1/A2/B1/B2/C 全段）** | ✅ |
 | AR3 Desktop shell | ✅ runtime 生产桥/会话切换恢复/视图模型/composer/model-effort/control-tool progress/NSIS 已收口；真人点击/视觉仍未验 |
@@ -148,12 +149,12 @@ footer toast、long-content pager 和异步 stale guard；最后禁止 normal sl
 packages-first 补齐 panel/toast/overlay/history、替换/清除/TTL/pager 和 stale guard；
 外部资源与真人验收继续单列。
 
-**当前推进：** OI-15B。core 已能用必有的 resolved display policy 表达显示位置与
-寿命，并保持 plain/non-TTY `message` 不变；但 retained CLI 尚未消费该字段，普通
-slash 结果仍被永久拼进最多 65,536 字符的 compatibility component。下一刀在
-retained root 增加
-Composer 下方单 panel、footer toast 与 OverlayHost stable-key replacement，并以
-generation 防止旧 timer/异步结果覆盖新视图。真人 Windows Terminal 验收仍单列，
+**当前推进：** OI-15C。core 已能用必有的 resolved display policy 表达显示位置与
+寿命，并保持 plain/non-TTY `message` 不变；OI-15B 又在 retained root 建立
+Composer 下方单 panel、footer toast、单调 generation 与 timer race guard。
+但具体 slash consumer 尚未调用这些 primitive，普通结果仍被永久拼进最多
+65,536 字符的 compatibility component。下一刀迁移 `/context`、`/doctor` 与只读
+status，并让长内容升级到 pager。真人 Windows Terminal 验收仍单列，
 不用自动门禁冒充主观观感。
 中段压缩与远端压缩按证据门控**显式关闭**
 （后者见 [ADR_COMPACT_REMOTE.md](./ADR_COMPACT_REMOTE.md)）。
@@ -437,7 +438,7 @@ AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 regis
 | 27 | **OI-12 · CLI TUI 信息架构与多行输入稳定性** | A argument hint · B context view-model/dashboard · C shared gutter · D dock-width user block · E paste transaction · F docs | `/effort ` 可见合法档位 · `/context` 图形概览/明细分层 · 正文不贴墙 · 用户块全宽 · 多行 paste 不误提交/滚屏 | OI-12 专项 + slash/TUI/compact/usage 回归 + typecheck + 123 项完整门禁 + dist smoke | ✅ A `1696127` · B `15b37ed` · C `40a5d41` · D `8d2a7a5` · E `7f76093` · F 本文档批；真人字体/鼠标粘贴/resize/按键仍归 OI-H3 |
 | 28 | **OI-13 · CLI TUI 垂直节奏与水晶工作台** | A silent Thought completion · B running surface breathing row · B2 idle/running shared gap · C responsive crystal workbench · D docs | 直接正文前仍有本段 `Thought for` · activity/final answer 与 composer 间有稳定完整空行 · 欢迎页最大 100 cells、宽屏双列/中紧凑单列并保留水晶 | thinking/surface/owner-handoff VT/crystal/TUI 专项 + typecheck + 完整门禁 + dist smoke | ✅ A `fe2d39a` · B `bf25077` · B2 `2b9d008` · C `4c4fb08` · D 文档批 |
 | 29 | **OI-14 · CLI TUI retained renderer 重构** | A 真实 VT/选型 ✅ · B live view-state ✅ · C retained 基座 ✅ · D transcript/Markdown ✅ · E Composer/activity/footer ✅ · F overlays ✅ · G 默认切换/可靠性/性能 ✅ · H legacy 删除/发布审计 ✅ | 正文不再碎裂或产生巨大空洞；物理续行 gutter 一致；user/agent/composer 有稳定间距；stream/resize/paste/permission 不破坏屏幕 | `@xterm/headless` auto-wrap/resize + chunk property + Markdown/Unicode/ANSI/OSC 8 + editor/overlay + perf + dist/pack/install + 真人 Windows Terminal | **✅ H 自动闭环 `39e66b4`–`d4eaed0` · follow-up `e6ec6cb` · ⚠️ OI-H3 BLOCKED: HUMAN**；A `1ae9f53` / `f04f8de`，B `269b39c`，C `1798a7c`，D `8b060e5`，E `d0fb822`，F `31384d4`，G `6f4764f`–`accc22c`；完整方案 [CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md) |
-| 30 | **OI-15 · slash 命令 surface/lifecycle** | A core display policy ✅ `d681734` · B retained panel/toast 单槽 · C context/doctor/status · D Skills/Plugins overlay · E toast/error policy · F compatibility cleanup | `/context` 位于 Composer 下方并自动清除；重复查询 replace；长内容 pager；短动作 toast；迟到结果不覆盖当前视图 | core exhaustive + 20×重复查询真实 VT + fake clock/generation + focus/resize/reset + persistence/plain/JSON + full/dist/pack/install | 🚧 A 已关闭；下一刀 OI-15B |
+| 30 | **OI-15 · slash 命令 surface/lifecycle** | A core display policy ✅ `d681734` · B retained panel/toast 单槽 ✅ `d6bd087` · C context/doctor/status · D Skills/Plugins overlay · E toast/error policy · F compatibility cleanup | `/context` 位于 Composer 下方并自动清除；重复查询 replace；长内容 pager；短动作 toast；迟到结果不覆盖当前视图 | core exhaustive + 20×重复查询真实 VT + fake clock/generation + focus/resize/reset + persistence/plain/JSON + full/dist/pack/install | 🚧 A/B 已关闭；下一刀 OI-15C |
 
 固定 checkpoint：
 
