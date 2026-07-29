@@ -134,7 +134,6 @@ export {
   createTuiInputState,
   formatTuiTokenCount,
   insertTuiInputText,
-  readTuiInput,
   renderTuiInputBox,
   renderTuiInputFooter,
   renderUserMessage,

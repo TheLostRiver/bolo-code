@@ -50,6 +50,7 @@ async function main(): Promise<void> {
     diffPaneSource,
     permissionPanelSource,
     questionPickerSource,
+    inputBoxSource,
   ] =
     await Promise.all([
       readSource('packages/cli/src/newSessionCli.ts'),
@@ -63,6 +64,7 @@ async function main(): Promise<void> {
       readSource('packages/cli/src/tui/diffPane.ts'),
       readSource('packages/cli/src/tui/permissionPanel.ts'),
       readSource('packages/cli/src/tui/questionPicker.ts'),
+      readSource('packages/cli/src/tui/inputBox.ts'),
     ])
 
   assertOmits(newSessionSource, 'new-session composition', [
@@ -108,6 +110,7 @@ async function main(): Promise<void> {
   assertOmits(cliIndexSource, 'CLI public index', [
     'createTerminalSurface',
     'TerminalSurface',
+    'readTuiInput',
     'runArrowPicker',
     'runDiffPane',
     'runDiffApprovePane',
@@ -131,6 +134,13 @@ async function main(): Promise<void> {
     'createLocalPanelPainter',
     'runQuestionPicker',
   ])
+  assertOmits(inputBoxSource, 'input reducer/renderer module', [
+    'node:readline',
+    'addTuiComposerTopGap',
+    'BRACKETED_PASTE_ENABLE',
+    'readTuiInput',
+  ])
+  await assertFileMissing('packages/cli/src/tui/composerSpacing.ts')
   await assertFileMissing('packages/cli/src/tui/terminalSurface.ts')
   await assertFileMissing('packages/cli/src/tui/localPanel.ts')
 

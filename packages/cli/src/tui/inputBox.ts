@@ -2,7 +2,6 @@
  * Interactive CLI input: pure reducer/renderer plus a thin raw-mode driver.
  */
 
-import * as readline from 'node:readline'
 import {
   filterSlashCommandCandidates,
   type SlashCommandCandidate,
@@ -16,7 +15,6 @@ import {
   terminalGraphemeWidth,
   wrapTerminalText,
 } from './terminalText.ts'
-import { addTuiComposerTopGap } from './composerSpacing.ts'
 import { resolveTuiDockWidth } from './frame.ts'
 
 export type TuiInputState = {
@@ -921,9 +919,6 @@ type RawInput = NodeJS.ReadStream & {
   setRawMode?: (mode: boolean) => unknown
 }
 
-const BRACKETED_PASTE_ENABLE = '\u001b[?2004h'
-const BRACKETED_PASTE_DISABLE = '\u001b[?2004l'
-
 export type ReadTuiInputResult =
   | { type: 'submit'; value: string }
   | { type: 'exit' }
@@ -952,144 +947,4 @@ export function shouldUseDynamicTui(options?: {
     canUseTuiInput(options?.input ?? process.stdin) &&
     (options?.stdoutIsTty ?? process.stdout.isTTY === true)
   )
-}
-
-/**
- * Short-lived raw editor. It exists only while the agent is idle; once a turn
- * starts stdin returns to normal signal handling and permission/picker panels
- * can own it without competing listeners.
- */
-export async function readTuiInput(options: {
-  input?: RawInput
-  writeOut?: (text: string) => void
-  columns?: number
-  status?: TuiInputStatus
-  history?: string[]
-  slashCandidates?: readonly SlashCommandCandidate[]
-  signal?: AbortSignal
-  color?: boolean
-}): Promise<ReadTuiInputResult> {
-  const input = options.input ?? process.stdin
-  if (!canUseTuiInput(input)) {
-    throw new Error('interactive TUI input requires a raw-mode TTY')
-  }
-  const writeOut = options.writeOut ?? ((text) => process.stdout.write(text))
-  const wasRaw = input.isRaw === true
-  let state = createTuiInputState({
-    history: options.history,
-    slashCandidates: options.slashCandidates,
-  })
-  let rendered: RenderedTuiInputBox | null = null
-  let pasteBuffer: string | null = null
-  let settled = false
-
-  const clearRendered = () => {
-    if (!rendered) return
-    writeOut('\u001b[?25l\r')
-    if (rendered.cursorRow > 0) {
-      writeOut(`\u001b[${rendered.cursorRow}A`)
-    }
-    for (let index = 0; index < rendered.lines.length; index++) {
-      writeOut('\u001b[2K')
-      if (index < rendered.lines.length - 1) writeOut('\u001b[1B\r')
-    }
-    if (rendered.lines.length > 1) {
-      writeOut(`\u001b[${rendered.lines.length - 1}A`)
-    }
-    writeOut('\r\u001b[?25h')
-    rendered = null
-  }
-
-  const draw = () => {
-    clearRendered()
-    const inputBox = renderTuiInputBox({
-      state,
-      columns: options.columns ?? process.stdout.columns ?? 80,
-      status: options.status,
-      color: options.color,
-    })
-    const spaced = addTuiComposerTopGap(inputBox)
-    rendered = {
-      ...inputBox,
-      text: spaced.lines.join('\n'),
-      lines: spaced.lines,
-      cursorRow: spaced.cursorRow,
-    }
-    writeOut('\u001b[?25l')
-    writeOut(rendered.text)
-    const rowsUp = rendered.lines.length - 1 - rendered.cursorRow
-    if (rowsUp > 0) writeOut(`\u001b[${rowsUp}A`)
-    writeOut('\r')
-    if (rendered.cursorColumn > 0) {
-      writeOut(`\u001b[${rendered.cursorColumn}C`)
-    }
-    writeOut('\u001b[?25h')
-  }
-
-  readline.emitKeypressEvents(input)
-  input.setRawMode?.(true)
-  input.resume()
-  writeOut(BRACKETED_PASTE_ENABLE)
-  draw()
-
-  return await new Promise<ReadTuiInputResult>((resolve) => {
-    const cleanup = () => {
-      input.removeListener('keypress', onKeypress)
-      options.signal?.removeEventListener('abort', onAbort)
-      pasteBuffer = null
-      writeOut(BRACKETED_PASTE_DISABLE)
-      clearRendered()
-      if (!wasRaw) input.setRawMode?.(false)
-      input.pause()
-    }
-    const finish = (result: ReadTuiInputResult) => {
-      if (settled) return
-      settled = true
-      cleanup()
-      resolve(result)
-    }
-    const onAbort = () => finish({ type: 'aborted' })
-    const onKeypress = (sequence: string, key: readline.Key) => {
-      if (key.name === 'paste-start') {
-        pasteBuffer = ''
-        return
-      }
-      if (key.name === 'paste-end') {
-        if (pasteBuffer === null) return
-        const pastedText = pasteBuffer
-        pasteBuffer = null
-        state = insertText(state, pastedText)
-        draw()
-        return
-      }
-      if (pasteBuffer !== null) {
-        pasteBuffer += sequence || key.sequence || ''
-        return
-      }
-      const result = applyTuiInputKey(state, {
-        name: key.name,
-        sequence: sequence || key.sequence,
-        ctrl: key.ctrl,
-        meta: key.meta,
-        shift: key.shift,
-      })
-      state = result.state
-      if (result.action === 'submit') {
-        finish({ type: 'submit', value: result.value ?? state.value })
-        return
-      }
-      if (result.action === 'exit') {
-        finish({ type: 'exit' })
-        return
-      }
-      if (result.action === 'clear_screen') {
-        clearRendered()
-        writeOut('\u001b[2J\u001b[H')
-      }
-      draw()
-    }
-    input.on('keypress', onKeypress)
-    options.signal?.addEventListener('abort', onAbort, { once: true })
-    if (options.signal?.aborted) onAbort()
-  })
 }

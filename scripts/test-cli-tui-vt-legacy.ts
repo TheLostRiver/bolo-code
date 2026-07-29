@@ -9,11 +9,16 @@ import { access } from 'node:fs/promises'
 import path from 'node:path'
 
 async function main(): Promise<void> {
-  await assert.rejects(
-    access(path.resolve('packages/cli/src/tui/terminalSurface.ts')),
-    'legacy terminal surface must be physically deleted',
-  )
-  console.log('PASS: legacy terminal surface removed')
+  for (const relative of [
+    'packages/cli/src/tui/terminalSurface.ts',
+    'packages/cli/src/tui/composerSpacing.ts',
+  ]) {
+    await assert.rejects(
+      access(path.resolve(relative)),
+      `${relative} must be physically deleted`,
+    )
+  }
+  console.log('PASS: legacy terminal surface and spacer removed')
 }
 
 await main()

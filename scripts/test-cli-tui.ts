@@ -12,7 +12,6 @@ import {
   formatTurnActivityLine,
   getCliSlashCommandCandidates,
   measureTerminalText,
-  readTuiInput,
   resolveTuiDockWidth,
   resolveTuiFrameWidth,
   resolveTuiWelcomeWidth,
@@ -21,7 +20,6 @@ import {
   renderUserMessage,
   runOnePrompt,
 } from '../packages/cli/src/index.ts'
-import { EventEmitter } from 'node:events'
 import { createSession } from '../packages/core/src/index.ts'
 import type { LlmProvider } from '../packages/providers/src/index.ts'
 
@@ -362,173 +360,6 @@ async function main(): Promise<void> {
   assert(user.includes('❯ 你是谁'), 'user message has role marker')
   assert(user.includes('  第二行'), 'user continuation is indented')
   assert(!user.includes('bolo>'), 'legacy prompt is gone')
-
-  // Raw driver must restore mode and remove listeners after every submitted line.
-  class FakeRawInput extends EventEmitter {
-    isTTY = true
-    isRaw = false
-    rawModes: boolean[] = []
-    paused = false
-
-    setRawMode(mode: boolean): void {
-      this.isRaw = mode
-      this.rawModes.push(mode)
-    }
-
-    resume(): this {
-      this.paused = false
-      return this
-    }
-
-    pause(): this {
-      this.paused = true
-      return this
-    }
-
-    setEncoding(): this {
-      return this
-    }
-  }
-  const fakeInput = new FakeRawInput()
-  const driverOut: string[] = []
-  const pendingInput = readTuiInput({
-    input: fakeInput as never,
-    writeOut: (text) => driverOut.push(text),
-    columns: 50,
-    color: false,
-  })
-  fakeInput.emit('keypress', 'h', { name: 'h', sequence: 'h' })
-  fakeInput.emit('keypress', 'i', { name: 'i', sequence: 'i' })
-  fakeInput.emit('keypress', '\r', { name: 'return', sequence: '\r' })
-  const driverResult = await pendingInput
-  assert(
-    driverResult.type === 'submit' && driverResult.value === 'hi',
-    'raw driver submits edited value',
-  )
-  assert(
-    fakeInput.rawModes.join(',') === 'true,false',
-    `raw mode restored: ${fakeInput.rawModes.join(',')}`,
-  )
-  assert(fakeInput.listenerCount('keypress') === 0, 'keypress listener removed')
-  assert(fakeInput.paused, 'stdin paused after idle editor exits')
-
-  const pasteInput = new FakeRawInput()
-  const pasteOut: string[] = []
-  const pasted = readTuiInput({
-    input: pasteInput as never,
-    writeOut: (text) => pasteOut.push(text),
-    columns: 50,
-    color: false,
-  })
-  assert(
-    pasteOut.includes('\u001b[?2004h'),
-    'raw driver enables terminal bracketed paste mode',
-  )
-  pasteInput.emit(
-    'data',
-    '\u001b[200~first line\r\n第二行🙂\u001b[201~',
-  )
-  assert(
-    pasteOut.filter((chunk) => chunk.includes('╭')).length === 2,
-    'one complete paste adds exactly one rendered frame',
-  )
-  pasteInput.emit('keypress', '\r', { name: 'return', sequence: '\r' })
-  const pastedResult = await pasted
-  assert(
-    pastedResult.type === 'submit' &&
-      pastedResult.value === 'first line\n第二行🙂',
-    `single-chunk paste is normalized without early submit: ${
-      pastedResult.type === 'submit'
-        ? JSON.stringify(pastedResult.value)
-        : pastedResult.type
-    }`,
-  )
-  assert(
-    pastedResult.type !== 'submit' ||
-      (!pastedResult.value.includes('\u001b[200~') &&
-        !pastedResult.value.includes('\u001b[201~')),
-    'bracketed paste markers never enter input state',
-  )
-  assert(
-    pasteOut.includes('\u001b[?2004l'),
-    'raw driver disables bracketed paste mode after submit',
-  )
-
-  const splitPasteInput = new FakeRawInput()
-  const splitPasteOut: string[] = []
-  const splitPasted = readTuiInput({
-    input: splitPasteInput as never,
-    writeOut: (text) => splitPasteOut.push(text),
-    columns: 50,
-    color: false,
-  })
-  splitPasteInput.emit('data', '\u001b[20')
-  splitPasteInput.emit('data', '0~one\r')
-  splitPasteInput.emit('data', '\n二🙂\rthree\u001b[2')
-  splitPasteInput.emit('data', '01~')
-  assert(
-    splitPasteOut.filter((chunk) => chunk.includes('╭')).length === 2,
-    'split marker paste remains one redraw transaction',
-  )
-  splitPasteInput.emit('keypress', '\r', {
-    name: 'return',
-    sequence: '\r',
-  })
-  const splitPasteResult = await splitPasted
-  assert(
-    splitPasteResult.type === 'submit' &&
-      splitPasteResult.value === 'one\n二🙂\nthree',
-    `split markers and CR-only newlines are normalized: ${
-      splitPasteResult.type === 'submit'
-        ? JSON.stringify(splitPasteResult.value)
-        : splitPasteResult.type
-    }`,
-  )
-
-  const abortPasteInput = new FakeRawInput()
-  const abortPasteOut: string[] = []
-  const abortController = new AbortController()
-  const abortedPaste = readTuiInput({
-    input: abortPasteInput as never,
-    writeOut: (text) => abortPasteOut.push(text),
-    columns: 50,
-    color: false,
-    signal: abortController.signal,
-  })
-  abortPasteInput.emit('data', '\u001b[200~unfinished\r\npaste')
-  abortController.abort()
-  const abortedPasteResult = await abortedPaste
-  assert(abortedPasteResult.type === 'aborted', 'paste can be aborted')
-  assert(
-    abortPasteOut.includes('\u001b[?2004l'),
-    'abort cleanup disables bracketed paste mode',
-  )
-  assert(
-    abortPasteInput.listenerCount('keypress') === 0,
-    'abort cleanup removes the keypress listener',
-  )
-
-  const slashDriverInput = new FakeRawInput()
-  const slashDriver = readTuiInput({
-    input: slashDriverInput as never,
-    writeOut: () => {},
-    columns: 64,
-    color: false,
-    slashCandidates,
-  })
-  slashDriverInput.emit('keypress', '/', { name: 'slash', sequence: '/' })
-  slashDriverInput.emit('keypress', 'd', { name: 'd', sequence: 'd' })
-  slashDriverInput.emit('keypress', '\t', { name: 'tab', sequence: '\t' })
-  slashDriverInput.emit('keypress', '\r', {
-    name: 'return',
-    sequence: '\r',
-  })
-  const slashDriverResult = await slashDriver
-  assert(
-    slashDriverResult.type === 'submit' &&
-      slashDriverResult.value === '/doctor ',
-    'raw driver exposes slash discovery and completion',
-  )
 
   // 欢迎首页：宽屏将 Bolo 水晶与运行状态组成工作台，窄屏再回落单列。
   const welcome = renderInkLayout({
