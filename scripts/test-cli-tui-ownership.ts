@@ -37,6 +37,7 @@ async function main(): Promise<void> {
     runtimeSource,
     retainedSource,
     adapterSource,
+    runtimePagerSource,
   ] =
     await Promise.all([
       readSource('packages/cli/src/newSessionCli.ts'),
@@ -44,6 +45,7 @@ async function main(): Promise<void> {
       readSource('packages/cli/src/runtimeCli.ts'),
       readSource('packages/cli/src/tui/retainedTui.ts'),
       readSource('packages/cli/src/tui/boloTerminalAdapter.ts'),
+      readSource('packages/cli/src/tui/runtimePager.ts'),
     ])
 
   assertOmits(newSessionSource, 'new-session composition', [
@@ -79,6 +81,12 @@ async function main(): Promise<void> {
     'concurrentWriteViolations',
     'setExternalOwner',
     'writeExternal',
+  ])
+  assertOmits(runtimePagerSource, 'runtime pager module', [
+    'RuntimePagerInput',
+    'adaptRuntimePagerInput',
+    'readRuntimePagerKey',
+    'runRuntimePager',
   ])
 
   const dynamic = createCliOnEvent({
