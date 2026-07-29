@@ -536,6 +536,7 @@ C4: compact 成功且非 override system 时可选刷新短 skill catalog 段（
 | OI-14E · Composer/activity/footer | `d0fb822` | 常驻输入节点、slash/hint/history/undo、paste、分段 Thought/activity、usage footer 与单 stdin owner |
 | OI-14F · OverlayHost | `31384d4` | permission/question/provider/effort/diff/pager 进入唯一 root，保留 Composer identity/focus 与 writer owner |
 | OI-14G · 默认切换/可靠性/性能 | `6f4764f` · `4eedb0e` · `7567572` · `a9328ec` · `21525c4` · `ed7c804` · `6125f3e` · `accc22c` | retained 缺省、10k 行长会话/resize/paste/overlay、final flush、异常 cleanup、预算与 cold-start |
+| OI-14H · legacy 删除/发布审计 | `39e66b4`–`d4eaed0` | 删除 compatibility bridge、legacy pager/picker/panel、surface/raw editor/layout/tiny Markdown/engine selector；建立最终 owner/absence guard |
 
 - OI-14B 的 `CliTuiSessionEvent` 编译期兼容 core `SessionEvent`、`QueryLoopEvent` 与
   `ToolExecutionEvent`；resume 复用同一 reducer action，不另建历史状态机。
@@ -551,5 +552,12 @@ C4: compact 成功且非 override system 时可选刷新短 skill catalog 段（
 - 133 脚本完整 `npm.cmd test`、7-file clean install、Desktop/Electron 全绿；单文件
   1,727,232 bytes / 200 modules，cold `+50.4ms`、CPU `422ms`、render heap
   `+21.0MB`、cleanup retained `+1.5MB`，根 `dependencies` 保持 `{}`。
-- OI-14H 继续删除 legacy surface/prefixer/tiny Markdown/兼容桥并建立静态 owner
-  guard；真人 Windows Terminal 的字体、颜色、动画和按键/鼠标手感仍单列。
+- H 按 ownership → bridge/pager/picker → text fallback → local panels → surface/raw
+  editor/layout/tiny Markdown → engine selector 的依赖顺序分 12 个中文提交删除旧实现；
+  dynamic TTY 只剩 retained，plain/readline fallback 与 shared view-model 独立保留。
+- H 最终 134 脚本、7-file tarball/install、Desktop bundle、Electron launch、
+  notices/lockfile 与 dist stale-symbol audit 全绿；单文件 1,691,077 bytes /
+  195 modules，两次完整串 cold `+47.0–84.4ms`、CPU `375–672ms`、render heap
+  `+21.0–21.1MB`、cleanup retained `+1.5MB`，根 `dependencies` 仍为 `{}`。
+  真人 Windows Terminal 的字体、
+  颜色、动画和按键/鼠标手感继续单列 OI-H3。

@@ -29,7 +29,7 @@
 | Headless 核心 | ~82–90% | queryLoop · 权限 · tools · STE；partial stream fail-closed |
 | **Agent 能力面（工具集）** | **~82–88%** | 15 个常驻/可选工具 + **Web search**（hosted、MCP、SearXNG 均已活体验证） |
 | 会话 / CLI | ~92–97% | **零步骤首次启动** · 用户级 workspace JSONL · 旧项目会话兼容 · durable runtime · query/action CLI · TTY pager · pipe/JSON automation |
-| **CLI TUI** | **~84–91%** | OI-14A–G 已完成真实 VT/选型、retained transcript/Markdown、常驻 Composer/activity/footer、OverlayHost、默认切换及可靠性/性能收口；OI-14H 删除短期 legacy 回滚，真人 Windows Terminal 观感仍未验 |
+| **CLI TUI** | **~84–91%** | OI-14A–H 已完成真实 VT/选型、retained transcript/Markdown、常驻 Composer/activity/footer、OverlayHost、默认切换、可靠性/性能与 legacy 删除；retained 是唯一 dynamic TTY renderer，真人 Windows Terminal 观感仍未验 |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
 | Subagent | ~89–95% | `config.agents` + `agents/*.md` · durable task/result · overflow FIFO/cancel · safe delivery · worktree 保全 |
 | 文件 Diff 日用 | ~95%+ | D0–D7 · U0–U4 |
@@ -49,20 +49,21 @@ AR4 evidence gate · AR5 release hardening · **OI-04 SearXNG 直连、OI-X1 真
 smoke、OI-07 上游诊断 / `search doctor` / 可选 Docker setup、OI-08B CLI 零步骤
 首次启动、OI-14A 真实 VT/选型、OI-14B live view-state、OI-14C retained renderer
 基座、OI-14D transcript/Markdown、OI-14E Composer/activity/footer、OI-14F
-OverlayHost/交互面板、OI-14G 默认切换/可靠性/性能**。OI-09–OI-13 的
+OverlayHost/交互面板、OI-14G 默认切换/可靠性/性能、OI-14H legacy 删除/发布审计**。OI-09–OI-13 的
 slash/context/paste/Thought/权限/welcome 局部能力仍然有效，但不再作为整个 TUI
 renderer 稳定的证据。
 
-**当前主线：OI-14H。** OI-14G 已让双 TTY/raw-mode 会话缺省使用 retained
-renderer；显式 `BOLO_TUI_ENGINE=legacy` 仅保留为短期回滚，非法非空值 fail-safe
-到 legacy，non-TTY、pipe、JSON 与 `--print` 永远保持 plain/追加式路径。真实 xterm
-已覆盖 500 blocks / 10,000 行、scrollback、24–220 列反复 resize、paste/overlay
-往返和单 stdin/writer；final flush、异常启动、provider/tool failure、Abort/SIGINT、
-raw Ctrl+C 与进程退出 cleanup 均有门禁。完整 133 脚本、7-file clean install 与
-Electron launch 全绿；单文件为 1,727,232 bytes / 200 modules。完整串实测 cold
-相对 empty Node `+50.4ms`、CPU `422ms`、render heap `+21.0MB`、cleanup retained
-`+1.5MB`。OI-14H 下一步删除 legacy surface/prefixer/tiny Markdown/兼容桥并建立
-静态 owner guard；不会删除 non-TTY plain formatter。
+**当前状态：OI-14 自动实现已收口，只剩 OI-H3 真人走查。** OI-14H
+`39e66b4`–`d4eaed0` 已删除 compatibility bridge、legacy pager/picker/panel、
+`TerminalSurface`、raw editor/spacer、字符串 prefix/tiny Markdown 与 engine
+selector。双 TTY/raw-mode 只走 retained；non-TTY、pipe、JSON、`--print` 与
+raw-mode 不可用宿主继续走独立 plain/readline 路径。真实 xterm 已覆盖
+500 blocks / 10,000 行、scrollback、24–220 列反复 resize、paste/overlay 往返和
+单 stdin/writer；final flush、异常启动、provider/tool failure、Abort/SIGINT、
+raw Ctrl+C 与进程退出 cleanup 均有门禁。完整 134 脚本、7-file clean install 与
+Electron launch 全绿；单文件为 1,691,077 bytes / 195 modules。两次完整串实测 cold
+相对 empty Node `+47.0–84.4ms`、CPU `375–672ms`、render heap
+`+21.0–21.1MB`、cleanup retained `+1.5MB`；根 `dependencies` 仍为 `{}`。
 方案与选型证据见
 [docs/CLI_TUI_REFACTOR_PLAN.md](docs/CLI_TUI_REFACTOR_PLAN.md) 和
 [docs/CLI_TUI_RENDERER_DECISION.md](docs/CLI_TUI_RENDERER_DECISION.md)。
@@ -73,9 +74,8 @@ doctor 与显式 Docker 管理也已落地，Docker 不是默认依赖。
 
 **人工项：** retained 正文、常驻输入区和 overlays 的碎片、空洞、续行贴左、消失、
 动画、cursor/raw-mode 与 owner 交接代码缺陷已由 OI-14D–G 自动门禁关闭；
-legacy 删除继续由 OI-14H 自动关闭。真人仍需
-检查 Windows Terminal 的字体、颜色、动画和按键/鼠标手感；Desktop 点击与视觉也仍
-需真人。SearXNG 已完成真实实例 live smoke。
+legacy 删除已由 OI-14H 自动关闭。真人仍需检查 Windows Terminal 的字体、颜色、
+动画和按键/鼠标手感；Desktop 点击与视觉也仍需真人。SearXNG 已完成真实实例 live smoke。
 
 进度真源：[docs/ROADMAP.md](docs/ROADMAP.md)
 
@@ -202,13 +202,12 @@ pipe、`-p`/`--print` 和 JSON 路径保持追加式输出，不发送动态光�
 欢迎页宽度档位和回落开关见
 [docs/TUI.md](docs/TUI.md)。
 
-动态 TTY renderer 已在 OI-14G 缺省切到 retained：transcript/Markdown、常驻
+动态 TTY renderer 已在 OI-14H 收敛为 retained 单一路径：transcript/Markdown、常驻
 Composer/activity/footer 与单一 OverlayHost 使用同一 component tree；
 permission/question/provider/effort/diff/pager 不暂停 root 或转交 stdin/writer。
-普通用户无需设置 engine 环境变量。若当前终端宿主出现兼容问题，可暂时设置
-`BOLO_TUI_ENGINE=legacy` 回滚；OI-14H 会在真人核心场景走查后删除该旧实现。
-自动化或脚本场景继续使用非 TTY/`--print` plain 路径，engine 选择不会绕过 TTY/raw
-能力检查。重构计划、预算与回滚边界见
+普通用户无需也不能选择第二套 engine。自动化或脚本场景继续使用非 TTY/`--print`
+plain 路径；TTY 但 raw mode 不可用时自动回落 readline。需要显式关闭动态界面时使用
+`BOLO_TUI_INPUT=0` 或 `BOLO_TUI_LAYOUT=0`。重构计划、预算与兼容边界见
 [docs/CLI_TUI_REFACTOR_PLAN.md](docs/CLI_TUI_REFACTOR_PLAN.md)。
 
 `runtime list|inspect` 的文本输出在 **stdin/stdout 都是 TTY** 且内容超过一页时自动分页：`n/j/↓/→` 下一页，`p/k/↑/←` 上一页，`q/Esc` 退出，`Ctrl-C` 返回 130。0/1 页不读键盘；pipe 与 `--json` 永不进入 pager、不会输出 ANSI/banner，也不会因为大列表挂起。

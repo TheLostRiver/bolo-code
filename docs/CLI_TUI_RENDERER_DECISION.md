@@ -10,21 +10,24 @@
 >
 > **候选锚点：** Pi `c820aa26fe09` · `@earendil-works/pi-tui@0.82.1`
 
-本文件保存 OI-14A 的可复核数据与选型结论。它只决定 renderer 基座和支持边界，
-没有声称当前 legacy TUI 的可见故障已经修复。OI-14B 已完成纯 live view-state；
+本文件保存 OI-14A 的可复核数据与选型结论。A 交付时只决定 renderer 基座和支持边界，
+没有声称当时 legacy TUI 的可见故障已经修复。OI-14B 已完成纯 live view-state；
 OI-14C `1798a7c` 已完成 opt-in retained 基座，OI-14D `8b060e5` 已迁 retained
 transcript/Markdown，OI-14E `d0fb822` 已迁 retained Composer/activity/footer；
 OI-14F `31384d4` 已迁 retained overlays；OI-14G `6f4764f`–`accc22c` 已完成默认
-切换、可靠性、cleanup 与性能预算；当前进入 OI-14H 删除 legacy。
+切换、可靠性、cleanup 与性能预算；OI-14H `39e66b4`–`d4eaed0` 已删除 legacy
+dynamic 实现并建立最终 owner/absence guard。OI-14 只剩 OI-H3 真人走查。
 
 ## 1. Legacy 真实 VT 证据
 
-`scripts/test-cli-tui-vt-legacy.ts` 将真实 ANSI 输出送入
+在 OI-14A 锚点，`scripts/test-cli-tui-vt-legacy.ts` 曾将真实 ANSI 输出送入
 `@xterm/headless@5.5.0`，由终端执行 cell width、auto-wrap、scrollback 与 resize，
 不再用逻辑行模拟物理屏幕。fixture 包含 ANSI Markdown、长 URL、中文、emoji、
 整段/单字符/固定随机 chunk、running composer 和 56 -> 38 resize。
+OI-14H 后该文件已迁为旧 surface/layout/engine 模块的物理缺失门禁；retained 的
+真实 VT 行为由 transcript、Composer、OverlayHost 与 reliability fixtures 持续覆盖。
 
-默认模式要求稳定捕获以下四项已知失败并保持 CI 绿色：
+OI-14A 的 baseline 模式要求稳定捕获以下四项已知失败并保持 CI 绿色：
 
 | 签名 | 证明的问题 |
 |------|------------|
@@ -33,16 +36,16 @@ OI-14F `31384d4` 已迁 retained overlays；OI-14G `6f4764f`–`accc22c` 已完�
 | `chunk-boundary-changes-screen` | 相同正文因 provider chunk 切分不同而得到不同屏幕 |
 | `resize-breaks-composer` | resize 后旧物理行和 composer 没按当前宽度重排 |
 
+在 `1ae9f53` 锚点，legacy-expect 分支 `EXIT=0`，表示四项缺陷都被捕获；
+fixed-expect 分支在 retained renderer 接入前 `EXIT=1`。这套双模式是迁移红灯，
+不是当前产品命令。H 完成后，当前：
+
 ```powershell
 npm.cmd run test:cli-tui-vt
-
-$env:BOLO_TUI_VT_EXPECT = 'fixed'
-npm.cmd run test:cli-tui-vt
-Remove-Item Env:BOLO_TUI_VT_EXPECT
 ```
 
-第一条命令 `EXIT=0`，表示四项 legacy 缺陷都被捕获；第二条在 retained renderer
-接入前必须 `EXIT=1`。后续切片用同一 fixture 逐项转为正常不变量。
+只在旧 surface/layout/engine 模块物理缺失时通过；retained 的正常不变量由
+`test:cli-tui-retained`、transcript、Composer、OverlayHost 与 reliability 门禁覆盖。
 
 ## 2. Pi 候选实测
 
@@ -89,6 +92,11 @@ cold p50 为 empty Node 79.9ms、Bolo `--help` 130.3ms，相对增量 50.4ms。5
 retained +1.5MB，均低于 +1.5MB bundle、+100ms cold、3s CPU、128MB heap 与 64MB
 cleanup 预算。
 
+OI-14H 删除 legacy 后的当前产物为 1,691,077 bytes / 195 modules，相对 baseline
+增加 306,012B；两次完整串 cold 为 empty Node 80.6–107.7ms、Bolo `--help`
+127.6–192.2ms、增量 47.0–84.4ms。相同长会话 fixture 为 CPU 375–672ms、
+render heap +21.0–21.1MB、cleanup retained +1.5MB，预算继续有余量。
+
 Windows Node 24.15，去掉两次 warmup，`n=10`：
 
 | 场景 | avg | p50 | p95 |
@@ -128,7 +136,7 @@ candidate 相对空 Node 的 p50 增量约 88 ms，低于 +100 ms 软目标。
    `get-east-asian-width@1.6.0` 打入 `dist`；发布包现携带
    `THIRD_PARTY_NOTICES.md` 的完整 MIT 文本。OI-14D 首次把 `marked@18.0.5`
    打入精确子模块 bundle，NOTICE 同步加入 MarkedJS MIT 与 John Gruber Markdown
-   BSD 条款。OI-14H 仍须复核最终 tarball 清单和版权文本。
+   BSD 条款。OI-14H 已复核最终 7-file tarball、lockfile 版本和版权文本一致。
 
 ## 4. 功能与视觉双基准
 
@@ -177,13 +185,15 @@ component tree；Composer identity/focus 与单一 stdin/writer owner 在面板�
 129 项完整门禁全绿。单文件为 1,686,424 bytes / 199 modules；`dependencies` 仍为
 `{}`，显式 retained runtime pager 不再发送 legacy `ESC[2J`。
 
-OI-14G `6f4764f`–`accc22c` 已让双 TTY/raw-mode 缺省使用 retained，显式
-`BOLO_TUI_ENGINE=legacy` 只作短期回滚；非法非空值 fail-safe 到 legacy，non-TTY、
+OI-14G `6f4764f`–`accc22c` 当时让双 TTY/raw-mode 缺省使用 retained，显式
+`BOLO_TUI_ENGINE=legacy` 作短期回滚；非法非空值 fail-safe 到 legacy，non-TTY、
 pipe、JSON 与 `--print` 永远保持 plain。真实 xterm 已覆盖 500 blocks/10,000 行、
 scrollback、24–220 列反复 resize、paste/overlay 往返与单 owner；final flush、
 异常 acquisition/cleanup、Abort/SIGINT/raw Ctrl+C、dist/install、Desktop/Electron
 与 133 项完整门禁全绿。单文件、cold、CPU/heap 与 cleanup 数据见 §2.3。
 
-当前 OI-14H 负责删除 legacy surface/prefixer/tiny Markdown/兼容桥并建立最终静态
-owner guard；non-TTY plain formatter 不在删除范围。真人 Windows Terminal 仍需
-检查字体、颜色、动画与按键/鼠标手感。
+OI-14H `39e66b4`–`d4eaed0` 随后删除 legacy surface/prefixer/tiny Markdown/兼容桥/
+engine selector 并建立最终静态 owner/absence guard；non-TTY plain formatter 保留。
+134 项完整门禁、1,691,077-byte / 195-module 单文件、7-file install 与
+Desktop/Electron 全绿。真人 Windows Terminal 仍需检查字体、颜色、动画与按键/鼠标
+手感。

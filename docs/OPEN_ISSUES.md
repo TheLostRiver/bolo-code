@@ -4,7 +4,8 @@
 > `c2e6a98`（2026-07-28）；OI-14A 关闭锚点：`f04f8de`，OI-14B 关闭锚点：
 > `269b39c`；OI-14C 关闭锚点：`1798a7c`，OI-14D 关闭锚点：
 > `8b060e5`，OI-14E 关闭锚点：`d0fb822`（2026-07-28），OI-14F 关闭锚点：
-> `31384d4`，OI-14G 关闭锚点：`accc22c`（2026-07-29）。
+> `31384d4`，OI-14G 关闭锚点：`accc22c`，OI-14H 代码关闭锚点：
+> `d4eaed0`（2026-07-29）。
 > 本文只列当前仓库中有代码、测试、实测或互相矛盾文档支撑的问题。
 > 历史 TODO、已关闭的候选和仅凭印象提出的功能不算开放问题。
 
@@ -19,12 +20,13 @@
 
 ## 1. Agent 可直接解决
 
-当前默认 agent 可闭环队列为 **OI-14H**。以下已关闭条目继续保留准入与关闭证据，
-但 OI-09–OI-13 的局部关闭不再作为“整个 TUI renderer 已稳定”的证据。
+当前默认 agent 可闭环队列为 **空**。以下已关闭条目继续保留准入与关闭证据，
+OI-14 只剩明确的 OI-H3 真人走查；不得为保持自治而自造无准入证据的任务。
+OI-09–OI-13 的局部关闭不再作为“整个 TUI renderer 已稳定”的证据。
 
 ### OI-14 · CLI TUI retained renderer 重构
 
-**状态：OPEN（当前：OI-14H）**
+**状态：BLOCKED: HUMAN（OI-14A–H 自动实现已关闭，只剩 OI-H3）**
 
 完整方案：[CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md) ·
 OI-14A 实测决定：[CLI_TUI_RENDERER_DECISION.md](./CLI_TUI_RENDERER_DECISION.md)
@@ -65,7 +67,7 @@ Bolo terminal adapter；OI-14E 复用 Pi keys、`StdinBuffer` 与光标协议，
 私有 autocomplete/render 无法保持 Bolo 全宽框、ghost hint 与 footer，最终采用
 Bolo-owned `RetainedComposer`，不分发 `ProcessTerminal` 的动态 native helper。
 Pi 路线没有实质失败，因此不启动 OpenTUI spike，也不维护 Node 20 fork。
-禁止继续扩展当前 `TerminalSurface + contentPrefixer + tiny Markdown`。
+禁止继续扩展当时的 `TerminalSurface + contentPrefixer + tiny Markdown`；H 已删除。
 
 OI-14A 关闭证据：
 
@@ -164,13 +166,13 @@ OI-14F 关闭证据：
 - 文件审批与 `/diff` 已进入 controller overlay；resume 补齐 CLI asker 绑定。显式
   retained runtime pager 复用 shared pager reducer，在小终端支持 PgUp/PgDn、方向键、
   Ctrl+C/Ctrl+D/abort，且不发送 legacy `ESC[2J`。
-- `suspendForLegacyPanel()` 只剩兼容 API/历史测试，生产 retained 交互调用点为零；
-  删除 API 与 legacy surface 留给 OI-14H。
+- OI-14F 关闭时，`suspendForLegacyPanel()` 只剩兼容 API/历史测试，生产 retained
+  交互调用点为零；删除 API 与 legacy surface 当时明确留给 OI-14H。
 - 真实 xterm、new/resume、abort/resize、dist build/install、Desktop bundle 与
   Electron launch 连同 129 脚本完整门禁全绿。bundle 为
   1,686,424 bytes / 199 modules，较 E 增加 44,528 bytes（约 2.7%）；
   `dependencies` 仍为 `{}`。
-- retained 当前仍只由 `BOLO_TUI_ENGINE=retained` 显式 opt-in。OI-14F 没有切换默认，
+- OI-14F 关闭时 retained 仍只由 `BOLO_TUI_ENGINE=retained` 显式 opt-in；该切片没有切换默认，
   不能借 overlays 关闭证据冒充 OI-14G 的长会话、可靠性或性能验收。
 
 OI-14G 关闭证据：
@@ -190,6 +192,25 @@ OI-14G 关闭证据：
   renderer mount、session switch 与 model/effort mutation 全绿；根 `dependencies`
   仍为 `{}`。真人 Windows Terminal 观感仍未验，不以自动门禁冒充。
 
+OI-14H 自动关闭证据：
+
+- `39e66b4`–`d4eaed0` 按 ownership → compatibility bridge/pager/picker → text fallback →
+  local panels → surface/raw editor/layout/tiny Markdown → engine selector 的依赖顺序，
+  分 12 个中文提交删除旧 dynamic TTY 实现并逐刀 push。
+- 双 TTY/raw-mode 现在只由 `BoloTerminalAdapter` + retained root 持有 stdin/raw mode
+  和 terminal writer；non-TTY、pipe、JSON、`--print`、readline/raw-mode 不可用回落
+  与 shared permission/diff/pager view-model 独立保留。
+- ownership/absence guard 禁止 production 重新引用 compatibility API、旧 raw driver、
+  surface/prefix/tiny Markdown 或 engine env/resolver；构建后的 `dist/bolo.mjs` 也不含
+  这些符号。
+- 134 脚本完整 `npm test`、7-file tarball/install、Desktop bundle、Electron launch
+  全绿；单文件为 1,691,077 bytes / 195 modules，两次完整串 cold
+  `+47.0–84.4ms`、CPU `375–672ms`、render heap `+21.0–21.1MB`、
+  cleanup retained `+1.5MB`。根 `dependencies` 仍为 `{}`，
+  `THIRD_PARTY_NOTICES.md` 与 lockfile 版本一致。
+- 自动化可判断的删除、owner、布局、cursor、resize、cleanup 与发布缺陷已关闭。
+  字体、颜色、动画主观流畅度和真人按键/鼠标手感仍诚实保留在 OI-H3。
+
 | 切片 | packages-first 交付 | 人类可见结果 | 自动关闭条件 | 状态 |
 |------|---------------------|--------------|--------------|------|
 | **OI-14A · 真实 VT 红灯与选型** | `@xterm/headless` physical terminal harness；Pi direct/fork 与 OpenTUI 备选的 Node/esbuild/Windows/体积/许可报告 | 暂无产品改动；先准确复现碎片、空洞、续行贴左和 cursor 漂移 | 长 URL + ANSI + 随机 chunk + running composer 在旧代码稳定红；选型表有实测数据 | **CLOSED · `1ae9f53` / `f04f8de`** |
@@ -199,18 +220,17 @@ OI-14G 关闭证据：
 | **OI-14E · Composer/Activity/Footer** | 常驻 Bolo Composer、slash/hint/paste、分段 activity、usage/footer | 思考时输入框不消失；动画、Thought、model/token/快捷键稳定 | idle/running 同节点、burst backpressure、输入延迟与间距 VT | **CLOSED · `d0fb822`** |
 | **OI-14F · overlays** | permission/question/provider/effort/diff/pager 迁入 OverlayHost | 权限显示完整 command/cwd/参数并用 once/always/deny 选择 | 默认 deny、focus/Esc/Ctrl+C 恢复、无第二 stdout owner | **CLOSED · `31384d4`** |
 | **OI-14G · 默认切换** | retained 默认、scroll/resize/backpressure/perf、dist/pack/install | 长回答、resize、paste 与滚动不再破坏屏幕 | 完整门禁、性能预算、单文件产物与邻接轨全绿 | **CLOSED · `6f4764f`–`accc22c`** |
-| **OI-14H · 删除与文档** | 删除旧 surface/prefixer/tiny Markdown/兼容桥；NOTICE 与文档收口 | 不再存在两套 TTY renderer | 静态 stdout owner guard + 真人 Windows Terminal 核心场景 | **OPEN · NEXT** |
+| **OI-14H · 删除与文档** | 删除旧 surface/prefixer/tiny Markdown/兼容桥/engine selector；NOTICE 与文档收口 | 不再存在两套 TTY renderer | 静态 stdout/stdin owner 与物理缺失 guard + 134 scripts + dist/pack/install/Desktop/Electron | **CLOSED · `39e66b4`–`d4eaed0`** |
 
 实施顺序与边界：
 
-1. OI-14A–G 已关闭：真实失败/选型、纯状态层、retained 基座、transcript/Markdown、
-   Composer/activity/footer、overlays、默认切换与可靠性/性能分开提交。
-2. 当前 OI-14H 负责删除 legacy surface/prefixer/tiny Markdown/兼容桥并建立静态
-   stdout/stdin owner guard。
-3. 迁移期 `BOLO_TUI_ENGINE=legacy` 只能作为短期回滚；非 TTY plain formatter 永久
-   独立保留。一个会话不能同时启用两个 renderer。
-4. 每个代码切片独立中文提交并 push；文档水位另提。H 完成后才删除 engine 回滚入口。
-5. OI-H3 只保留自动化无法判断的字体、颜色、动画和真人按键/鼠标手感；已知物理布局、
+1. OI-14A–H 自动实现已关闭：真实失败/选型、纯状态层、retained 基座、
+   transcript/Markdown、Composer/activity/footer、overlays、默认切换、可靠性/性能与
+   legacy 删除均分开提交。
+2. dynamic TTY 只有 retained composition；非 TTY plain formatter 永久独立保留。
+   禁止重新引入 engine selector、第二 stdin/writer owner 或旧字符串布局补丁。
+3. 每个代码切片均已独立中文提交并 push；本批只同步正式文档。
+4. OI-H3 只保留自动化无法判断的字体、颜色、动画和真人按键/鼠标手感；已知物理布局、
    cursor、resize 与 cleanup 故障已由 OI-14G 自动门禁关闭。
 
 ### OI-13 · CLI TUI 垂直节奏与水晶工作台
@@ -222,13 +242,13 @@ OI-14G 关闭证据：
 
 准入证据：
 
-- 最新真实 Windows Terminal 截图中，Agent 正文结束后下一视觉行立即进入
-  composer 的 `Message` 标题边框；`TerminalSurface.composite()` 当前只生成
+- 当时最新的真实 Windows Terminal 截图中，Agent 正文结束后下一视觉行立即进入
+  composer 的 `Message` 标题边框；`TerminalSurface.composite()` 在该提交前只生成
   `[activity?, ...dock.lines]`，history、activity 与 dock 之间没有由 surface
   拥有的固定 spacer。这是可由 VT 序列测试证明的结构缺陷，不是字体偏好。
 - `bf25077` 只修复了 turn 内 running composer。后续真实 Windows Terminal 截图
   仍显示最终回答的下一行就是 idle `Message` 顶边框：`runRepl()` 在 turn 结束后
-  `surface.clearDock()`，下一轮改由 `readTuiInput()` 独立绘制，绕过了 surface
+  `surface.clearDock()`，下一轮当时改由 `readTuiInput()` 独立绘制，绕过了 surface
   spacer。旧测试只匹配输出字符串中的换行，没有执行 owner 交接后的屏幕行。
 - 文档承诺每段思考结束后留下 `Thought for <duration>`，但截图中完全没有。
   `finishReasoningSegment()` 已取得 activity elapsed，随后却在
@@ -748,7 +768,8 @@ resize，不能证明正文/surface 稳定。
 
 2026-07-28 截图暴露的正文碎片、巨大空洞、物理续行贴左、user/agent 间距、
 cursor/resize 与 cleanup 代码缺陷已由 OI-14G 的真实 xterm、故障注入和子进程门禁
-关闭。本条只检查真实 Windows Terminal 字体/颜色、动画主观流畅度、
+关闭；OI-14H 又删除了全部旧 dynamic owner 与回滚入口。本条只检查真实 Windows
+Terminal 字体/颜色、动画主观流畅度、
 鼠标/剪贴板手感、Ctrl+J/历史/删除组合键、权限面板真人切换，以及实际 terminal
 host 的 resize/滚动体验；不得用本条掩盖任何可由 headless terminal 复现的问题。
 

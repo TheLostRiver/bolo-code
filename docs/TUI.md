@@ -1,10 +1,10 @@
 # CLI TUI
 
 > 无遥测。品牌见 `docs/BRAND.md`。  
-> **现状：** OI-09–OI-13 已建立 Bolo 水晶、slash 菜单/参数提示、`/context`、paste
-> 事务、分段 Thinking/Thought、权限详情与非 TTY fallback 等业务能力；但后续真实
-> Windows Terminal 截图已确认当前 direct-write surface 会出现正文碎片、巨大空洞、
-> 物理续行贴左和 cursor/layout 漂移。系统性修复已重开为 **OI-14**。
+> **现状：** OI-09–OI-13 建立的 Bolo 水晶、slash 菜单/参数提示、`/context`、paste
+> 事务、分段 Thinking/Thought、权限详情与非 TTY fallback 等业务能力，已在
+> OI-14A–H 迁入单一 retained TTY 架构。旧 direct-write surface、字符串布局补丁、
+> 局部 raw owner 与 engine selector 均已删除；只剩 OI-H3 真人 Windows Terminal 走查。
 > **框架选择：** OI-14A 已选定精确版本的 Pi TUI direct bundle，不再继续扩展自研
 > `TerminalSurface + contentPrefixer + tiny Markdown`。分切片复用 renderer/Markdown/
 > keys/StdinBuffer 并保留 Bolo terminal adapter 与输入业务层；Node、Windows、
@@ -18,7 +18,8 @@
 > `d0fb822` 已迁常驻 Bolo Composer、分段 activity 与 footer；OI-14F `31384d4`
 > 已迁 permission/question/provider/effort/diff/pager 到唯一 OverlayHost。OI-14G
 > `6f4764f`–`accc22c` 已完成默认切换、长会话/resize/backpressure、final flush、
-> crash cleanup 与性能预算；当前 OI-14H 负责删除短期 legacy 回滚。
+> crash cleanup 与性能预算；OI-14H `39e66b4`–`d4eaed0` 已完成 legacy 删除、
+> static owner/absence guard 与发布审计。
 > Diff 轨见 [ROADMAP.md](./ROADMAP.md) §3 ·
 > [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) 轨 B。
 
@@ -36,7 +37,6 @@
 | `BOLO_PLAIN=1` / `BOLO_THEME=plain` | 关闭颜色并简化欢迎区；真实输入能力仍可用 |
 | `BOLO_TUI_INPUT=0` | 关闭动态输入/时间线，回落 readline |
 | `BOLO_TUI_LAYOUT=0` / `TERM=dumb` | 关闭 layout 与动态路径，回落 readline |
-| `BOLO_TUI_ENGINE=legacy` | 短期回滚到旧 dynamic TTY renderer；非法非空值同样 fail-safe 到 legacy，OI-14H 将删除；不影响 non-TTY plain |
 | `>=96` 列 | 最大 100-cell 工作台：完整水晶在左，Ready/workspace/model/session 在右 |
 | `56–95` 列 | 单列工作台：中型水晶、居中状态、左对齐 metadata |
 | `38–55` 列 | 单列工作台：6 行紧凑水晶；动态文本按 cell 宽度裁切 |
@@ -54,64 +54,57 @@
 | 文件 | 角色 |
 |------|------|
 | `packages/shared/src/cliTuiViewState.ts` | **OI-14B**：有序 live blocks、稳定 id、SessionEvent/resume 投影、composer/overlay/elapsed 纯状态真源 |
-| `packages/shared/src/runtimePager.ts` | **OI-14F–G**：legacy 与 retained 共用的 pager key/state/result 纯 reducer |
-| `tui/tuiEngine.ts` | **OI-14C/G**：session 创建时锁定 engine；双 TTY/raw-mode 缺省 retained，显式 legacy 与非法非空值 fail-safe 到 legacy，plain 路径独立 |
-| `tui/boloTerminalAdapter.ts` | **OI-14C–G**：retained 唯一原始 writer、resize/render epoch/scrollback；唯一 stdin owner、Pi `StdinBuffer` 与 raw/mode-2004 生命周期、异常 acquisition/cleanup |
-| `tui/retainedTui.ts` | **OI-14C–G**：稳定 Pi root/controller、theme/viewport/welcome、view-state、transcript/activity/composer/footer/overlay 根布局、精确 stream fallback 与 final flush |
+| `packages/shared/src/runtimePager.ts` | **OI-14F–H**：pager key/state/result 纯 reducer，由 retained OverlayHost 消费 |
+| `tui/boloTerminalAdapter.ts` | **OI-14C–H**：dynamic TTY 唯一原始 writer 与 stdin owner；resize/render epoch/scrollback、Pi `StdinBuffer`、raw/mode-2004 与异常 acquisition/cleanup |
+| `tui/retainedTui.ts` | **OI-14C–H**：稳定 Pi root/controller、theme/viewport/welcome、view-state、transcript/activity/composer/footer/overlay 根布局、精确 stream fallback 与 final flush |
 | `tui/retainedTranscript.ts` | **OI-14D**：按 stable block id 缓存 User/Assistant/Thought/Tool/Search/Error/Warning/Summary 组件；Pi Markdown、整宽用户块、物理 gutter 与父级 section gap |
 | `tui/retainedComposer.ts` | **OI-14E**：稳定 Bolo Composer/Footer；复用输入 reducer、slash/hint/history，补 undo、Pi keys 与 `CURSOR_MARKER` |
 | `tui/retainedActivity.ts` | **OI-14E**：把既有分段 activity 的当前帧投影为 retained child，不直接写 stdout |
-| `tui/retainedOverlay.ts` | **OI-14F**：唯一 OverlayHost；承载 permission/question/picker/diff/pager，保留 Composer identity/focus 与单一 stdin/writer owner |
+| `tui/retainedOverlay.ts` | **OI-14F–H**：唯一 OverlayHost；承载 permission/question/picker/diff/pager，保留 Composer identity/focus 与单一 stdin/writer owner |
 | `tui/crystalLogo.ts` | 水晶常量、源稿归一化、整块 cell-width 居中与 ASCII 降级 |
 | `tui/inkLayout.ts` | 一次性水晶工作台；宽屏 split、中/紧凑单列，不伪装成输入框 |
 | `tui/frame.ts` | 100-cell welcome、160-cell content 与全宽 dock 三套明确宽度契约 |
-| `tui/contentLayout.ts` | **legacy**：只识别逻辑换行的 gutter prefixer；OI-14 将由 block layout 替代 |
+| `tui/contentLayout.ts` | retained transcript/dashboard 共用的响应式 gutter 常量与解析 |
 | `tui/contextDashboard.ts` | core `ContextUsageViewModel` 的响应式 TTY 仪表盘 |
-| `tui/inputBox.ts` | 输入/slash reducer、argument hint、CJK-safe renderer、bracketed-paste raw driver、running dock |
-| `tui/composerSpacing.ts` | **legacy**：idle/running top-gap 补丁；OI-14 将由父级 layout gap 替代 |
-| `tui/terminalSurface.ts` | **legacy**：按逻辑行记账的 append/dock surface；不拥有 terminal auto-wrap |
-| `tui/localPanel.ts` | **legacy**：显式回滚路径的局部 erase/repaint；retained 面板已迁，OI-14H 删除兼容实现 |
-| `tui/terminalText.ts` | 当前字段级 ANSI/CJK/emoji helper；通用 wrap 将迁入成熟 renderer |
+| `tui/inputBox.ts` | 输入/slash reducer、argument hint、CJK-safe renderer、capability 判断与共享结果类型；不持有 stdin |
+| `tui/terminalText.ts` | 字段级 ANSI/CJK/emoji cell-width helper；block wrap 由 retained Markdown/layout 负责 |
 | `tui/turnActivity.ts` | reasoning/tool/search/retry 分段生命周期、动画与独立计时 |
-| `tui/terminalMarkdown.ts` | **legacy**：只处理 inline emphasis/code；OI-14 将由 block Markdown 替代 |
-| `tui/arrowPicker.ts` | F-T8：↑↓ 选择 |
+| `tui/arrowPicker.ts` | 箭头选择 reducer/formatter 与非动态编号文本回落 |
 | `tui/theme.ts` | F-T9：主题 |
 | `tui/banner.ts` · `statusLine.ts` | 启动/状态 |
-| `tui/formatSessionEvent.ts` | user/reasoning/tool/assistant 时间线 · tool_end 摘要 |
-| `tui/diffPane.ts` | U1 browse · U2 approve 面板；局部重绘 |
-| `tui/permissionPanel.ts` · `askPermissionTty.ts` | command/cwd/关键参数摘要与 once/always/deny 选择 |
+| `tui/formatSessionEvent.ts` | non-TTY/plain user/reasoning/tool/assistant 追加式 formatter |
+| `tui/diffPane.ts` | retained diff overlay 消费的结果类型 |
+| `tui/permissionPanel.ts` · `askPermissionTty.ts` | command/cwd/关键参数 view-model、once/always/deny reducer 与文本回落 |
 | `packages/core/src/runtimeTextView.ts` | AR1C：纯 runtime text page renderer；CLI 与 slash 共用 |
-| `tui/runtimePager.ts` | AR1C/OI-14F–G：默认 retained OverlayHost；显式 legacy 使用 raw key/TTY driver，两者复用 shared pager reducer |
+| `tui/runtimePager.ts` | AR1C/OI-14F–H：standalone retained OverlayHost pager；复用 shared pager reducer |
 | `slashCandidates.ts` | core 候选与 CLI-local `/exit`/`/quit` 的无副作用合并层 |
 | `runtimeCli.ts` | AR1：顶层 runtime query/action consumer 与 automation 输出 |
 | `newSessionCli.ts` · `resumeCli.ts` · `main.ts` | 入口 |
 
-### 2.1 已知架构限制
+### 2.1 当前架构边界
 
-显式 legacy 回滚路径仍是 event formatter 直接写 stdout。`contentLayout.ts` 只在
-字符串的逻辑行首加 gutter，`TerminalSurface` 只记录 renderer 提供的逻辑行数；
-超长 URL、ANSI 或 Markdown 由终端自动折出的额外物理行不进 erase/restore 账本。
-idle editor、running dock 和临时面板又分别拥有 cursor 生命周期，因此 provider
-streaming、dock 重绘或 resize 后仍可能出现续行贴左、文本碎片和巨大纵向空洞。
+dynamic TTY 只有一个 component tree、一个 `BoloTerminalAdapter`、一个 raw stdin
+owner 和一个 terminal writer。SessionEvent 先进入 shared `CliTuiViewState`，再由
+retained transcript/activity/composer/footer/OverlayHost 读取；renderer 不重建
+tool/search/resume 业务状态。所有 block 先按 viewport 计算物理行，resize 从原始文本
+重排，局部组件不直接发送 cursor/erase 序列。
 
-现有简化 `TestTerminalScreen` 没有 terminal width/auto-wrap/双宽 cell/resize，过去
-的局部门禁只能证明字符串、reducer 和显式 cursor 序列，不能证明物理终端布局。
-OI-14A 已用 `@xterm/headless` 固化四项真实 legacy 红灯；OI-14B 已建立纯 live
-view-state 并证明 chunk invariant；OI-14C 已用显式 opt-in 接入 retained component
-tree，证明 root/width/resize/single-writer 生命周期；OI-14D 已让 retained 正文、
-Markdown、物理 gutter 与 section gap 转绿；OI-14E 已让常驻输入区、running
-activity/footer、paste/raw-mode/new/resume 输入接线转绿；OI-14F 已让 OverlayHost、
-全部交互面板与单一 owner 接线转绿。OI-14G 再把 retained 切为双 TTY/raw-mode 默认，
-并以 500 blocks/10,000 行、24–220 列 resize、paste/overlay、final flush、故障注入、
-独立子进程 cleanup 和性能预算关闭自动化缺陷。剩余短期 legacy surface 与兼容桥只由
-OI-14H 删除；Windows Terminal 的字体、颜色、动画与真人按键/鼠标手感仍需人工走查。
+non-TTY、pipe、JSON、`--print` 和 raw-mode 不可用宿主走独立 plain/readline 路径。
+这条兼容边界不使用 dynamic renderer，也不代表存在第二套 TTY surface。OI-14H 已物理
+删除 compatibility bridge、legacy pager/picker/panel、`TerminalSurface`、raw editor/
+spacer、字符串 prefix/tiny Markdown 与 engine selector；ownership/absence 门禁禁止
+它们重新接回生产路径。
+
+自动化由 `@xterm/headless` 覆盖 cell auto-wrap、双宽字符、scrollback、24–220 列
+resize、stream/paste/overlay、故障注入、cleanup 与性能预算。仍无法替代的只有真实
+Windows Terminal 字体、颜色、动画主观流畅度和真人按键/鼠标手感，见 OI-H3。
 
 ---
 
-## 3. 会话交互（OI-09–OI-13 业务契约；OI-14 重建渲染）
+## 3. 会话交互（OI-14 retained 当前契约）
 
-以下交互是需要保留的产品契约，不表示当前 legacy renderer 已满足全部物理布局要求。
-OI-14 迁移时不得回退 slash、context、paste、Thought、权限与非 TTY 行为。
+以下交互由 retained dynamic TTY 与独立 plain fallback 共同守护。slash、context、
+paste、Thought、权限与非 TTY 行为都进入默认门禁。
 
 ### 3.1 欢迎首页
 
@@ -124,11 +117,11 @@ OI-14 迁移时不得回退 slash、context、paste、Thought、权限与非 TTY
 
 欢迎内容由 `resolveTuiWelcomeWidth()` 在超宽终端封顶 100 cells；普通内容页继续由
 `resolveTuiFrameWidth()` 封顶 160 cells；用户历史块、composer/status dock 使用
-`resolveTuiDockWidth()` 跟随终端可用宽度。OI-11/OI-12 当时的 legacy Agent 与 TTY slash 正文仍在
-各自 renderer 内使用逻辑行 gutter：24–31 列为 0、32–47 列为 2、48 列以上为 4，
-terminal auto-wrap 的物理续行仍可能绕过它。OI-14D retained transcript 已先从
-viewport 扣除 gutter，再给 Markdown 生成的每条物理行加回同一 gutter；OI-14E 已让
-transcript、用户块、activity、composer 与 footer 由同一个常驻 layout tree 计算。
+`resolveTuiDockWidth()` 跟随终端可用宽度。正文 gutter 在 24–31 列为 0、
+32–47 列为 2、48 列以上为 4；retained transcript 先从 viewport 扣除 gutter，
+再给 Markdown 生成的每条物理行加回同一 gutter。transcript、用户块、activity、
+composer 与 footer 由同一个常驻 layout tree 计算，terminal auto-wrap 不再绕过
+布局账本。
 `NO_COLOR` 只移除颜色；`BOLO_ASCII=1` 保留结构并切成 ASCII 字符；
 `BOLO_THEME=plain` / `BOLO_PLAIN=1` 才简化为纯文本；`BOLO_MASCOT=0` 只隐藏水晶。
 
@@ -159,24 +152,17 @@ argument hint。`/effort ` 的 hint 来自当前 provider/model 方言真源；P
 和其它内置命令复用各自 usage。提示只参与显示，不进入 value/cursor；开始输入实参
 或第二个空格后立即消失。其它不可见 C0/C1 控制符不会进入输入框。
 输入框最多显示四行，菜单默认最多显示六项并随选中项滚动；完整文本与候选仍保留在
-state 中。每次 turn 开始前负责编辑的 raw key listener 会释放 stdin，但
-`TerminalSurface` 会把同宽 composer 以 running 状态留在底部；历史输出先临时擦除
-dock、追加内容后再恢复，因此输入区不会凭空消失。权限/picker 接管 stdin 时暂时挂起
-dock，结束后恢复，不与空闲 listener 竞争。composer 上方一行 spacer 由共享
-`composerSpacing` 契约生成：turn 内由 `TerminalSurface` 拥有，turn 结束后的 idle
-首帧与输入重绘由 `readTuiInput` 拥有。该行始终与 composer 一起参与 cursor offset、
-局部 erase 和 repaint，因此 running → clearDock → idle 交接也不会让最终回答贴框。
+state 中。同一 `RetainedComposer` 节点在 idle/running 间只切 mode，
+value/cursor/history/undo/menu 保留在 component-local 状态，Pi `CURSOR_MARKER`
+定位硬件光标。composer 与 transcript/activity 之间的完整 gap 由父级 retained
+layout 负责，因此 turn 完成后最终回答不会贴框。
 
-上段记录 OI-11/OI-13 当时的 legacy 局部契约；真实截图已经证明它在超长物理行和
-streaming 重绘下不能保证整个屏幕。OI-14E retained 路径改为同一
-`RetainedComposer` 节点：idle/running 只切 mode，value/cursor/history/undo/menu
-保留在 component-local 状态，Pi `CURSOR_MARKER` 定位硬件光标。OI-14F 再把
-permission/question/provider/effort/diff/pager 放进同一 root 的 OverlayHost；
-overlay 期间 Composer 不卸载，输入与 writer owner 不转交。兼容
-`suspendForLegacyPanel()` API 只剩历史测试，生产 retained 交互调用点为零，API
-本身留待 OI-14H 删除。
+permission/question/provider/effort/diff/pager 都挂在同一 root 的 OverlayHost；
+overlay 期间 Composer 不卸载，输入状态、focus、raw stdin 与 writer owner 不转交。
+文本/非动态回落使用明确的 numbered prompt 或 fail-closed 结果，不创建局部 terminal
+surface。
 
-raw driver 进入时启用 terminal mode 2004，退出、提交和 abort 时恢复。收到
+adapter 获取 raw stdin 时启用 terminal mode 2004，退出、提交和 abort 时恢复。收到
 `paste-start` 后跨 data chunk 聚合正文，到 `paste-end` 才规范化 CRLF/CR 并调用一次
 `insertText()`、重绘一次；marker 不进入输入 state，粘贴中的换行也不会触发 submit。
 不支持 bracketed paste 的普通按键/文本路径保持原行为。
@@ -197,9 +183,8 @@ raw driver 进入时启用 terminal mode 2004，退出、提交和 abort 时恢�
 
 activity 使用确定性 `✦ → ✧ → ✶ → ✧` 状态帧，每 250ms 更新 glyph 与本段耗时；model、
 tool、search、retry 切换会重置段起点，同一 reasoning chunk 不会误重置。每帧把
-当前完整状态交给同一 `turnActivity` 状态机：legacy 才使用
-`\r + 完整状态行 + erase-to-end`，retained 则只更新 `RetainedActivity` child，
-由根 renderer 合并帧，因此都不会先清空整行再绘制或产生第二 writer。每帧仍读取
+当前完整状态交给同一 `turnActivity` 状态机，再只更新 `RetainedActivity` child，
+由根 renderer 合并帧，因此不会先清空整行再绘制或产生第二 writer。每帧仍读取
 当前终端列宽，完整文案放不下时依次退化为紧凑/最小文案，避免自动换行残影。
 `NO_COLOR` 只移除 SGR。永久 Thought 的资格由 activity 是否交回已结束 thinking
 segment elapsed 决定，不再依赖是否展示过 reasoning 文本；消费后清空段状态，所以
@@ -224,8 +209,8 @@ segment elapsed 决定，不再依赖是否展示过 reasoning 文本；消费�
   只做有界、安全的键值摘要，不泄漏 secret。
 - Always 的真实作用域是“本会话后续同名工具”，不是“只记住这一条命令”。
 - 文件变更继续使用可滚 Diff view-model，不复制 diff 算法。
-- arrow/diff/question/permission 都通过 `localPanel` 只擦除自己拥有的行；不会发送
-  `ESC[2J` 或全局 Home。独立 runtime pager 和用户主动 `Ctrl+L` 仍保留整屏语义。
+- arrow/diff/question/permission 都通过同一 OverlayHost 渲染，不直接发送
+  `ESC[2J` 或全局 Home。用户主动 `Ctrl+L` 仍保留明确的清屏语义。
 - 非 TTY、abort 或面板不可用时保持 fail-closed，并保留兼容文本路径。
 
 ### 3.6 输出边界
@@ -233,7 +218,7 @@ segment elapsed 决定，不再依赖是否展示过 reasoning 文本；消费�
 - 动态时间线只在 `shouldUseDynamicTui()` 为真时启用。
 - pipe、JSON、`-p`/`--print` 与 raw-mode 不可用的 fallback 不输出动态 activity、清行、
   cursor move 或用户回显，旧自动化无需清洗 TUI。
-- `formatSessionEventChunks()` 等旧追加式 formatter 继续保留；新时间线复用事件语义，
+- `formatSessionEventChunks()` 等追加式 plain formatter 继续保留；retained 时间线复用事件语义，
   不在 CLI 重建 core 状态机。
 - 当前已实现会话输入框内的 slash completion；尚无 PowerShell/Bash 外壳级 shell
   completion、鼠标输入或跨进程持久命令历史，它们不是 OI-10 的完成条件。
@@ -255,10 +240,9 @@ segment elapsed 决定，不再依赖是否展示过 reasoning 文本；消费�
 | reader/driver 错误 | `pager_failed`；exit 1 |
 
 0/1 页直接输出，不等待键盘。多页 pager 复用
-`packages/shared/src/runtimePager.ts` 的同一 reducer：默认 retained 使用 standalone
-OverlayHost，不发送 legacy `ESC[2J`；显式 `BOLO_TUI_ENGINE=legacy` 使用既有 raw
-driver。两条路径在 data、end、error、abort/Ctrl-C 的全部终态都移除 listener，
-并把 stdin raw mode 恢复到进入前状态。
+`packages/shared/src/runtimePager.ts` 的 reducer，并使用 standalone retained
+OverlayHost，不发送整屏 `ESC[2J`。data、end、error、abort/Ctrl-C 的全部终态都移除
+listener，并把 stdin raw mode 恢复到进入前状态。
 
 pipe 与 `--json` 永不启用 pager、永不读取 stdin，也不输出 ANSI、clear-screen、banner 或 summary。JSON query success 保留原始 `runtime.list|runtime.inspect` view；failure 固定为 `{ok:false,code,detail}`。JSON usage failure 只向 stdout 输出一个 payload、stderr 为空并 exit 2。
 
@@ -375,7 +359,7 @@ npx tsx scripts/test-diff-view.ts
 argument hint、bracketed paste 生命周期/跨 chunk/CRLF/单次重绘、菜单窗口与非 TTY
 回落；`test:context-dashboard` 覆盖 view-model 的 24/38/80/160 列 TTY 投影；
 `test:slash-completion` 覆盖内置/Plugin/Skill projection、动态 effort、重名、
-hidden alias、exact/prefix 与空匹配。完整门禁当前包含 **133** 个串联
+hidden alias、exact/prefix 与空匹配。完整门禁当前包含 **134** 个串联
 `scripts/*.ts`。
 
 OI-14B 新增的 `test:cli-tui-view-state` 覆盖稳定 turn/segment/call-id、reasoning 与
@@ -383,11 +367,10 @@ assistant 多段顺序、tool/search 原位更新、citation 去重、error/abor
 composer/overlay 与 per-segment elapsed；整段、逐字符和固定随机 chunk 的最终 state
 深相等。编译期护栏还证明三条真实事件源可直接投影。
 
-OI-14C 新增的 `test:cli-tui-retained` 覆盖 engine fail-safe、稳定 root identity、
-唯一 writer、同步 render epoch、legacy panel suspend/resume、scrollback 保留、
-24/38/56/80/120/160/220 列物理宽度、resize、plain byte snapshot 与 new/resume
-lifecycle。Pi 只通过精确构建子模块进入单文件，Editor、Markdown 与 native loader
-均未进入 C 的产物。
+OI-14C 新增、并在 H 迁移后的 `test:cli-tui-retained` 覆盖稳定 root identity、
+唯一 writer、同步 render epoch、scrollback 保留、24/38/56/80/120/160/220 列
+物理宽度、resize、plain byte snapshot 与 new/resume lifecycle。Pi 只通过精确构建
+子模块进入单文件，Editor、ProcessTerminal 与 native loader 均未进入产物。
 
 OI-14D 新增的 `test:cli-tui-transcript` 覆盖稳定 block component identity、
 User/Assistant/Thought/Tool/Search/Error/Warning/Summary 投影，whole/character/
@@ -420,14 +403,23 @@ Ctrl+C、进程退出 cleanup，以及 bundle/cold-start/CPU/render heap/cleanup
 预算。完整串实测为 1,727,232 bytes / 200 modules、cold `+50.4ms`、CPU `422ms`、
 render heap `+21.0MB`、cleanup retained `+1.5MB`。
 
-OI-14A 新增的 `test:cli-tui-vt` 使用 `@xterm/headless` 执行真实 cell
-auto-wrap/scrollback/resize，已覆盖 ANSI、长 URL、CJK/emoji、整段/逐字符/固定随机
+OI-14H 新增并扩展 `test:cli-tui-ownership` 与 `test:cli-tui-vt`，物理锁定
+compatibility bridge、legacy pager/picker/panel、surface/raw editor/layout/tiny
+Markdown 与 engine selector 不存在，并禁止 production 重新取得第二 stdout/stdin
+owner。完整门禁现为 134 scripts；单文件 1,691,077 bytes / 195 modules，cold
+`+47.0–84.4ms`、CPU `375–672ms`、render heap `+21.0–21.1MB`、
+cleanup retained `+1.5MB`，
+7-file install、Desktop bundle 与 Electron launch 全绿。
+
+OI-14A 当时的 `test:cli-tui-vt` 使用 `@xterm/headless` 执行真实 cell
+auto-wrap/scrollback/resize，覆盖 ANSI、长 URL、CJK/emoji、整段/逐字符/固定随机
 chunk、running composer 与 56 -> 38 resize，并稳定捕获四项 legacy 失败签名。
 OI-14C 已让 retained welcome/root 的宽度、resize 与 scrollback 基座转绿；OI-14D
 已让 Markdown list/code/table、OSC 8、transcript physical gutter/spacing 及
 chunk/resize/resume 同值转绿；OI-14E 已让 Composer/activity/footer 与输入生命周期
 转绿；OI-14F 已让 OverlayHost 与全部交互面板转绿；OI-14G 已关闭 default 与自动化
-可靠性/性能矩阵，OI-14H 只继续 legacy 删除与最终静态 guard；见
+可靠性/性能矩阵；OI-14H 已把该 fixture 迁为 legacy 模块物理缺失门禁，并完成最终
+静态 owner guard；见
 [CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md) §9 和
 [CLI_TUI_RENDERER_DECISION.md](./CLI_TUI_RENDERER_DECISION.md)。
 

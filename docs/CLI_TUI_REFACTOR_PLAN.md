@@ -1,6 +1,6 @@
 # CLI TUI retained renderer 重构方案
 
-> **状态：** OI-14 `OPEN`（OI-14A–G 已关闭；当前 OI-14H）
+> **状态：** OI-14 `BLOCKED: HUMAN`（OI-14A–H 自动实现已关闭；只剩 OI-H3）
 > **方案锚点：** Bolo `c2e6a98`；Pi `c820aa26fe09`；oh-my-pi
 > `d16c6168c86f`；Codex `f61b51ddd924`；OpenCode `66495a2a22cd`；
 > HelsincyCode `e6dd86ef990e`。
@@ -13,6 +13,7 @@
 > **OI-14E 交付：** `d0fb822` · retained Composer/activity/footer。
 > **OI-14F 交付：** `31384d4` · retained OverlayHost/交互面板。
 > **OI-14G 交付：** `6f4764f`–`accc22c` · 默认切换、可靠性、cleanup 与性能预算。
+> **OI-14H 交付：** `39e66b4`–`d4eaed0` · legacy 删除、单 owner guard 与发布审计。
 > **范围：** 本文定义 CLI TTY 路径的重构方案。非 TTY、`--print`、pipe、JSON 和
 > Desktop 的既有输出契约必须保持兼容。
 > **结论先行：** 停止继续扩展自研 `TerminalSurface + 字符串 prefix + tiny
@@ -150,8 +151,8 @@ OI-14A 开始时 Bolo 声明 Node `>=20`，Pi TUI 声明 Node `>=22.19.0`。隔�
 带 attribution 的 Windows native helper。Pi 路线没有实质失败，因此不启动
 OpenTUI spike。
 
-不得选择“继续修当前 `TerminalSurface`”作为长期方案。它可以在迁移期开 fallback，
-但不再新增布局能力。
+不得选择“继续修当时的 `TerminalSurface`”作为长期方案。它在迁移期可作 fallback，
+但不再新增布局能力；OI-14H 已将其删除。
 
 ---
 
@@ -261,33 +262,33 @@ OI-14B 已按此边界完成：
 
 ---
 
-## 7. 现有模块迁移
+## 7. 模块迁移结果
 
 | 当前模块 | 去向 |
 |----------|------|
 | `formatSessionEvent.ts` | 保留 plain formatter；TTY direct printer 改为 state action adapter |
-| `terminalSurface.ts` | retained renderer 默认后删除 |
-| `contentLayout.ts` | 删除跨 chunk prefixer；gutter 迁入 layout component |
-| `terminalMarkdown.ts` | 由成熟 block Markdown component 替代 |
+| `terminalSurface.ts` | 已删除；dynamic TTY 只使用 retained root |
+| `contentLayout.ts` | 跨 chunk prefixer 已删除；只保留 retained gutter 解析 |
+| `terminalMarkdown.ts` | 已删除；由成熟 block Markdown component 替代 |
 | `terminalText.ts` | 仅保留确有 Bolo 专用的 plain/字段 helper；通用 width/wrap 不维护重复实现 |
-| `composerSpacing.ts` | 删除；gap 由 transcript/composer parent layout 拥有 |
-| `inputBox.ts` | 保留 Bolo input/slash/status reducer 与纯 renderer；由常驻 `RetainedComposer` 包装，legacy raw driver 留到 H 删除 |
+| `composerSpacing.ts` | 已删除；gap 由 transcript/composer parent layout 拥有 |
+| `inputBox.ts` | 保留 Bolo input/slash/status reducer、纯 renderer、capability 与结果类型；raw driver 已删除 |
 | `turnActivity.ts` | 保留分段计时语义；retained 通过 child state 消费 frame，不直接写 stdout |
 | `permissionPanel.ts` | 保留安全摘要/decision view-model；renderer 迁到 overlay component |
-| `localPanel.ts` | picker/permission/diff 全部组件化后删除 |
+| `localPanel.ts` | 已删除；picker/permission/diff 由 OverlayHost 或文本回落承载 |
 | `contextDashboard.ts` | 保留 view-model；改为 width-aware component |
 | `crystalLogo.ts` / welcome | 保留 Bolo 资产；包成普通 responsive component |
 | `resumeCli.ts` | 每个交互会话只创建一个 `CliTuiController`，不再每轮重建 surface/editor |
 
-OI-14F 后 `suspendForLegacyPanel()` 只保留为历史兼容 API/测试，生产 retained
-交互调用点为零；新功能不得接入该 bridge，OI-14H 负责删除 API 与 legacy panel。
+OI-14H 已删除 `suspendForLegacyPanel()` compatibility API 与 legacy panel；
+ownership guard 禁止新功能重新接入第二 terminal owner。
 
 ---
 
 ## 8. 实施切片
 
-每个代码切片先红灯、后实现，代码/测试与文档分批中文 commit/push。任何阶段失败都可
-把 `BOLO_TUI_ENGINE=legacy` 作为短期回滚；非 TTY fallback 始终独立保留。
+每个代码切片均按先红灯、后实现，代码/测试与文档分批中文 commit/push。OI-14G
+迁移期曾以 legacy engine 作短期回滚；H 已删除该入口，非 TTY fallback 始终独立保留。
 
 | 顺序 | 切片 | 交付 | 自动关闭条件 |
 |------|------|------|--------------|
@@ -298,7 +299,7 @@ OI-14F 后 `suspendForLegacyPanel()` 只保留为历史兼容 API/测试，生�
 | **OI-14E ✅** | 常驻 Composer/Activity/Footer | Bolo retained Composer、slash menu/argument hint、paste、per-segment activity、usage/footer | idle/running 不卸载 Composer；输入/最终回答间距稳定；burst stream 无闪烁或逐 token 全重绘 |
 | **OI-14F ✅** | Overlay 与交互面板 | permission/question/provider/effort/diff/pager 迁入 OverlayHost | 面板显示完整操作详情；默认 deny；Esc/Ctrl+C/focus 恢复；无第二 stdout owner |
 | **OI-14G ✅** | 默认切换与可靠性 | retained 成为默认；scroll/resize/backpressure/perf；dist/pack/install/Windows 邻接轨 | 完整门禁、单文件 dist、冷启动/输入延迟预算、长会话和 crash cleanup 全绿 |
-| **OI-14H** | 删除 legacy 与文档收口 | 删除旧 surface/prefixer/tiny Markdown/兼容桥；更新 README/TUI/ROADMAP/handoff/release/NOTICE | 静态 guard 禁止活跃 TUI 绕过 terminal adapter；真人 Windows Terminal 核心场景通过 |
+| **OI-14H ✅ AUTO** | 删除 legacy 与文档收口 | 删除旧 surface/prefixer/tiny Markdown/兼容桥/engine selector；更新 README/TUI/ROADMAP/handoff/release/notices | 静态 guard 禁止活跃 TUI 绕过 terminal adapter；134 scripts 与发布邻接全绿。真人场景独立移交 OI-H3 |
 
 ### 8.1 切片停止条件
 
@@ -364,7 +365,7 @@ OI-14G 完整串实测：输入 p95 `0.1ms`、resize p95 `50.8ms`、cold 相对 
 
 ### 9.4 真人 Windows Terminal
 
-自动门禁全绿后，OI-14H 收口时必须真人检查：
+自动门禁全绿后，OI-H3 仍必须由真人检查：
 
 1. 80/120/220 列启动与 Bolo Crystal。
 2. 长 URL、Markdown 列表、代码块、中英混排与 emoji。
@@ -408,8 +409,8 @@ OI-14 只有同时满足以下条件才可 `CLOSED`：
 | 高频 token 导致 CPU/闪烁 | render coalescing/backpressure；final/error/permission 立即 flush |
 | 长会话重排变慢 | component cache、stable id、可见窗口/已完成 block 策略；先测量再优化 |
 | ANSI/OSC 污染布局或安全 | 使用成熟 parser/wrapper；未知控制序列过滤；宽度测试覆盖 hyperlink |
-| 双 renderer 竞争 | feature flag 只能二选一；controller 建立时锁定 engine |
-| legacy 永久残留 | OI-14H 删除条件写入看板；新功能禁止接 legacy |
+| 第二 renderer/writer 复活 | 无 engine flag/resolver；composition 与静态 owner guard 锁定单 adapter |
+| legacy 重新引入 | OI-14H 已物理删除并加 owner/absence guard；新功能禁止重新接入 |
 | 私有源码污染 | HC 可作内部功能复用来源，但公开产物不得泄露私有源码/路径/品牌或未授权第三方内容 |
 
 ---
@@ -430,30 +431,33 @@ OI-14 只有同时满足以下条件才可 `CLOSED`：
 10. `docs(tui): 同步 OI-14 完成证据与用户文档`
 
 每个代码提交只承载一个行为切片；对应定向测试、typecheck、完整门禁与
-`git diff --check` 通过后立即 push。文档水位独立提交。迁移期回滚只切换
-`BOLO_TUI_ENGINE=legacy`，不得回滚或破坏会话、transcript、配置和 non-TTY 数据。
+`git diff --check` 通过后立即 push。文档水位独立提交。OI-14G 迁移期曾用
+`BOLO_TUI_ENGINE=legacy` 作短期回滚；OI-14H 已删除该入口，同时保留会话、
+transcript、配置和 non-TTY/plain 数据契约。
 
 ---
 
-## 13. 下一步
+## 13. 完成状态与真人后置
 
-当前下一刀是 **OI-14H**：
+OI-14H 自动部分已完成：
 
-1. 先写静态红灯，枚举 retained 生产路径、legacy 入口和允许保留的 plain formatter；
-   禁止活跃 TUI 绕过 `BoloTerminalAdapter`，禁止新组件直写 stdout 或取得第二 stdin。
-2. 按依赖顺序删除生产 compatibility bridge、legacy panel/raw driver、`TerminalSurface`
-   与 composer spacer，再删除跨 chunk prefixer 和 tiny Markdown；每刀都先证明引用面
-   与回落边界，不能用大范围机械删除掩盖错误。
-3. 保留 `formatSessionEvent.ts` 的 non-TTY/plain formatter、pipe/JSON/`--print`、
-   readline/raw-mode 不可用回落，以及 shared permission/diff/pager view-model；
-   删除 legacy dynamic TTY 不等于删除自动化输出。
-4. 删除 `BOLO_TUI_ENGINE=legacy` 与非法值回滚契约后，engine resolver 只允许 retained
-   dynamic TTY 或 plain；同步清理帮助、环境变量和测试 fixture 中的短期兼容入口。
-5. 复跑真实 xterm、133 脚本、预算、dist/pack/install、Desktop/Electron、NOTICE 与
-   静态 owner guard；根 `dependencies` 保持 `{}`，单文件与用户数据兼容不变。
-6. 完成 §9.4 的真人 Windows Terminal 核心场景，记录字体、颜色、动画和按键/鼠标手感；
-   自动缺陷不得重新降级为人工 blocker。同步 README/TUI/ROADMAP/handoff/release 后
-   才能关闭 OI-14。
+1. `39e66b4` 建立静态 owner 红灯，锁定 dynamic TTY 只能经
+   `BoloTerminalAdapter` 持有 stdout/stdin/raw mode。
+2. `b41b37c`–`faa97ad` 删除 compatibility bridge、legacy runtime pager/picker，
+   并把非动态 permission/diff/question 回落收敛为明确文本。
+3. `0ee318f`–`203a565` 删除 local panels、`TerminalSurface`、raw editor/spacer、
+   跨 chunk prefixer 与 tiny Markdown；保留 shared reducers、retained components 和
+   `formatSessionEvent.ts` plain formatter。
+4. `d4eaed0` 删除 engine resolver、类型、环境变量成功契约与 fixture；双 TTY/raw-mode
+   只走 retained，能力不足只走 plain/readline。
+5. 134 脚本、预算、dist/pack/install、Desktop/Electron、第三方 notices 与静态 owner/
+   absence guard 全绿；根 `dependencies` 为 `{}`，单文件 1,691,077 bytes /
+   195 modules，两次完整串 cold `+47.0–84.4ms`、CPU `375–672ms`、render heap
+   `+21.0–21.1MB`、cleanup retained `+1.5MB`。
+
+只剩 §9.4 的真人 Windows Terminal 核心场景：记录字体、颜色、动画和按键/鼠标手感。
+它由 [OPEN_ISSUES.md](./OPEN_ISSUES.md) OI-H3 保持 `BLOCKED: HUMAN`；任何能在
+headless terminal 复现的缺陷仍必须回到自动队列，不能降级为人工 blocker。
 
 继续禁止对 `TerminalSurface`、`contentPrefixer`、tiny Markdown 或 composer spacer
-添加新的布局补丁。
+添加新的布局补丁，也禁止重新引入 engine selector 或第二 terminal owner。

@@ -30,31 +30,30 @@ agent 独立解决的问题。** 不要越过外部/人工阻塞项，也不要�
 | 6 | OI-08B · CLI 零步骤首次启动 | ✅ 已收口（代码 `22c0d0c`） |
 | 7 | OI-14A · CLI TUI 真实 VT 红灯与 retained renderer 选型 | ✅ 已收口（`1ae9f53` · `f04f8de`） |
 | 8 | OI-14B · live view-state | ✅ 已收口（`269b39c`） |
-| 9 | OI-14H · 删除 legacy/静态 owner guard/最终验收 | **NEXT**；A–G 已关闭 |
-| 10 | OI-H1/H2/H3 · 真 TTY、真人点击与视觉走查 | 人工阻塞；已知 TUI 代码缺陷先走 OI-14 |
+| 9 | OI-14H · 删除 legacy/静态 owner guard/发布审计 | ✅ 自动部分已收口（`39e66b4`–`d4eaed0`） |
+| 10 | OI-H1/H2/H3 · 真 TTY、真人点击与视觉走查 | 人工阻塞；不得用它们掩盖可自动复现的新缺陷 |
 
 OI-04 已完成零依赖、显式配置、fail-closed 的 SearXNG JSON 搜索契约、fixture、
 CLI/Desktop warning 与文档收口；OI-X1 已补齐真实 Docker 实例和上游搜索证据；
 OI-07 已完成上游故障诊断、只读 doctor 与显式 Docker setup/status/logs/stop。
 OI-08B 已完成安装后直接 `bolo`、用户级 workspace session store、旧路径兼容与显式
 `bolo init`；普通启动不创建项目 `.bolo/`。Docker 不是默认依赖，公网 live 不进默认
-门禁。OI-14A–G 已完成真实 VT/选型、live view-state、retained root、Markdown、
-Composer/activity/footer、OverlayHost、默认切换与可靠性/性能；当前只推进 OI-14H，
-不要重复实现 A–G，也不要继续修补 legacy surface。
+门禁。OI-14A–H 已完成真实 VT/选型、live view-state、retained root、Markdown、
+Composer/activity/footer、OverlayHost、默认切换、可靠性/性能与 legacy 删除；
+dynamic TTY 只剩 retained，non-TTY/plain/pipe/JSON/`--print` 永久保留。
 
-**当前只取 OI-14H。** 先以静态红灯锁定唯一 terminal adapter/stdin/writer owner，
-再删除生产 compatibility bridge、legacy panel/surface/raw driver、跨 chunk prefixer、
-tiny Markdown 与 engine 回滚入口；non-TTY/plain/pipe/JSON/`--print` 永久保留。
-删除顺序、停止条件和真人 Windows Terminal 验收见
-[CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md)。不要继续给 legacy surface
-打补丁，也不要把自动化可复现缺陷转回 OI-H3。
+**当前默认 agent 队列为空。** 先以 ROADMAP §0、§13.11 与 OPEN_ISSUES 的实际内容
+为准；若三处都没有新的、具备准入证据且可由 agent 独立关闭的任务，就记录核对结果并
+停止，不得为维持运行自行发明功能。OI-H1/H2/H3 只能由真人验收；任何新发现且可由
+headless terminal 复现的缺陷必须另立有红灯证据的自动任务，不能塞进人工 blocker。
+OI-14 完成边界见 [CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md)。
 
 **一条已知的遗留（不阻塞，顺手可做）：** `AskUserQuestion` 的**真人在真终端按键**没验过——
 控件测试注入 `readKey`，覆盖不到真实 raw-mode 与 REPL 抢 stdin 的问题。
 文档与 ROADMAP 已如实标注「真 TTY 交互未验」。**不要在没有真正验证的情况下把这个标注抹掉。**
 CLI TUI 的字体、颜色和真人按键手感仍由 OI-H3 人工验；正文碎片、巨大空洞、续行贴左、
-cursor/resize 等已知缺陷属于 OI-14，不得塞进人工 blocker。其余能力面候选已经落地、
-书面关闭或写明重开条件，不再作为隐含队列。
+cursor/resize 等已知缺陷已由 OI-14 自动门禁关闭，不得重新塞进人工 blocker。其余
+能力面候选已经落地、书面关闭或写明重开条件，不再作为隐含队列。
 
 ### 关于 Electron / GUI（OI-06，已关闭）
 
@@ -112,8 +111,9 @@ cursor/resize 等已知缺陷属于 OI-14，不得塞进人工 blocker。其余�
 - 开工先读 `task_plan.md` / `findings.md` / `progress.md`（存在的话）。
 - 每个切片开始时更新 `task_plan.md`：目标、阶段、准入证据。
 - **任何发现立刻写 `findings.md`**——尤其是实测结论、第三方 API 的真实行为、被证伪的假设。
-- 每完成一个阶段写 `progress.md`：做了什么、测试结果、遇到的错误与解决方式。
-- 所有错误都记进去。重复踩同一个坑是最浪费的事。
+- `progress.md` 的日常事实记录由 planning hooks 维护；不要手写重复流水账。阶段状态与
+  错误写 `task_plan.md`，测试结论、决定与理由写 `findings.md`。
+- 所有错误都记进 `task_plan.md`。重复踩同一个坑是最浪费的事。
 
 ## 6. 遇到 bug 怎么办（重点，不许马虎）
 
