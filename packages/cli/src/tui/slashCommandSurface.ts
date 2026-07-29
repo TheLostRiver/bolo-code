@@ -1,12 +1,27 @@
 import type {
   SlashDisplayPolicy,
+  SlashDisplayTone,
   SlashOverlayViewModel,
 } from '../../../core/src/index.ts'
-import type { CliCommandPanelInput } from '../../../shared/src/index.ts'
+import type {
+  CliCommandPanelInput,
+  CliCommandToastInput,
+} from '../../../shared/src/index.ts'
 import { doesCliCommandPanelOverflow } from './retainedCommandSurface.ts'
 import type { TextPagerContent } from './textPager.ts'
 
 export type RetainedSlashDisplayProjection =
+  | {
+      kind: 'history'
+      history: {
+        content: string
+        tone: SlashDisplayTone
+      }
+    }
+  | {
+      kind: 'toast'
+      toast: CliCommandToastInput
+    }
   | {
       kind: 'panel'
       panel: CliCommandPanelInput
@@ -63,6 +78,26 @@ export function projectRetainedSlashDisplay(options: {
   rows?: number
 }): RetainedSlashDisplayProjection | undefined {
   const { display, content } = options
+  if (display.surface === 'history') {
+    return {
+      kind: 'history',
+      history: {
+        content,
+        tone: display.tone,
+      },
+    }
+  }
+  if (display.surface === 'toast') {
+    return {
+      kind: 'toast',
+      toast: {
+        key: display.key,
+        content,
+        tone: display.tone,
+        ttlMs: display.ttlMs,
+      },
+    }
+  }
   if (display.surface === 'panel') {
     const title = titleForSlashDisplayKey(display.key)
     const panel: CliCommandPanelInput = {

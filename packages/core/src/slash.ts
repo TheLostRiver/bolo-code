@@ -2542,7 +2542,11 @@ async function cmdPluginsInstall(
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
-    return { ok: false, message: `install failed: ${msg}` }
+    return {
+      ok: false,
+      message: `install failed: ${msg}`,
+      display: historyDisplay('error'),
+    }
   }
 }
 
@@ -2571,7 +2575,11 @@ async function cmdPluginsUninstall(
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
-    return { ok: false, message: `uninstall failed: ${msg}` }
+    return {
+      ok: false,
+      message: `uninstall failed: ${msg}`,
+      display: historyDisplay('error'),
+    }
   }
 }
 
@@ -2596,7 +2604,19 @@ async function cmdPluginsReload(session: SlashSession): Promise<SlashDispatchRes
     for (const w of r.warnings.slice(0, 3)) lines.push(`  - ${w}`)
   }
   lines.push('Skill catalog refreshed in system sections; messages history kept.')
-  return { ok: true, message: lines.join('\n') }
+  return {
+    ok: true,
+    message: lines.join('\n'),
+    ...(r.errors.length || r.warnings.length
+      ? {
+          display: toastDisplay(
+            'slash:plugins:reload',
+            'warning',
+            8_000,
+          ),
+        }
+      : {}),
+  }
 }
 
 /**

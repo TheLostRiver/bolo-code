@@ -93,18 +93,24 @@ function testProjection(): void {
     'explicit pager policy opens even for one page',
   )
 
-  const ignored = projectRetainedSlashDisplay({
+  const toast = projectRetainedSlashDisplay({
     display: {
       surface: 'toast',
       key: 'slash:error',
       tone: 'error',
       ttlMs: 8_000,
     },
-    content: 'not part of OI-15C',
+    content: 'validation failed',
     columns: 80,
     rows: 24,
   })
-  assert(ignored === undefined, 'OI-15C does not consume toast policy')
+  assert(
+    toast?.kind === 'toast' &&
+      toast.toast.key === 'slash:error' &&
+      toast.toast.tone === 'error' &&
+      toast.toast.ttlMs === 8_000,
+    'OI-15E projects toast policy without changing panel/pager behavior',
+  )
 }
 
 function testTextPagerFormatter(): void {

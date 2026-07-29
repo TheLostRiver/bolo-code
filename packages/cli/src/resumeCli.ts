@@ -36,6 +36,7 @@ import { renderWelcomeBanner } from './tui/banner.ts'
 import { renderInkLayout } from './tui/inkLayout.ts'
 import {
   createSessionEventPrinter,
+  type CliSessionEvent,
   type SessionEventPrinter,
 } from './tui/formatSessionEvent.ts'
 import { shouldUseDynamicTui } from './tui/inputBox.ts'
@@ -769,6 +770,26 @@ export async function runOnePrompt(
           columns,
           rows,
         })
+        if (projection?.kind === 'toast') {
+          controller.showCommandToast(projection.toast)
+          return {
+            terminalReason: 'slash',
+            assistantText: result.message,
+          }
+        }
+        if (projection?.kind === 'history') {
+          const historyEvent: CliSessionEvent =
+            projection.history.tone === 'error'
+              ? { type: 'error', message: projection.history.content }
+              : projection.history.tone === 'warning'
+                ? { type: 'warning', message: projection.history.content }
+                : { type: 'text', text: projection.history.content }
+          controller.printer.onEvent(historyEvent)
+          return {
+            terminalReason: 'slash',
+            assistantText: result.message,
+          }
+        }
         if (projection?.kind === 'panel') {
           controller.showCommandPanel(projection.panel)
           return {
