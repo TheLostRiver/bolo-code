@@ -316,9 +316,125 @@ export type ContextUsageViewModel = {
   promptCacheLine?: string
 }
 
+export type SlashDisplayTone = 'info' | 'success' | 'warning' | 'error'
+
+export type SlashDisplayPolicy =
+  | {
+      readonly surface: 'history'
+      readonly tone: SlashDisplayTone
+      /** Slash history is visible UI state, never model/session persistence. */
+      readonly persistence: 'visual-only'
+    }
+  | {
+      readonly surface: 'panel'
+      readonly key: string
+      readonly placement: 'below-composer'
+      readonly dismissOnInput: boolean
+      readonly dismissOnEscape: boolean
+      readonly ttlMs?: number
+      readonly overflow: 'compact' | 'pager'
+    }
+  | {
+      readonly surface: 'toast'
+      readonly key: string
+      readonly tone: SlashDisplayTone
+      readonly ttlMs: number
+    }
+  | {
+      readonly surface: 'overlay'
+      readonly key: string
+      readonly view: 'picker' | 'pager' | 'diff'
+    }
+
+const SLASH_DISPLAY_TONES = new Set<SlashDisplayTone>([
+  'info',
+  'success',
+  'warning',
+  'error',
+])
+const SLASH_DISPLAY_KEY_RE = /^[a-z0-9][a-z0-9:._/-]*$/iu
+const MAX_SLASH_DISPLAY_TTL_MS = 24 * 60 * 60 * 1000
+
+function isSlashDisplayRecord(
+  value: unknown,
+): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function isSlashDisplayTone(value: unknown): value is SlashDisplayTone {
+  return (
+    typeof value === 'string' &&
+    SLASH_DISPLAY_TONES.has(value as SlashDisplayTone)
+  )
+}
+
+function isSlashDisplayKey(value: unknown): value is string {
+  return typeof value === 'string' && SLASH_DISPLAY_KEY_RE.test(value)
+}
+
+function isSlashDisplayTtl(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value > 0 &&
+    value <= MAX_SLASH_DISPLAY_TTL_MS
+  )
+}
+
+export function isSlashDisplayPolicy(
+  value: unknown,
+): value is SlashDisplayPolicy {
+  if (!isSlashDisplayRecord(value)) return false
+  switch (value.surface) {
+    case 'history':
+      return (
+        isSlashDisplayTone(value.tone) &&
+        value.persistence === 'visual-only'
+      )
+    case 'panel':
+      return (
+        isSlashDisplayKey(value.key) &&
+        value.placement === 'below-composer' &&
+        typeof value.dismissOnInput === 'boolean' &&
+        typeof value.dismissOnEscape === 'boolean' &&
+        (value.ttlMs === undefined || isSlashDisplayTtl(value.ttlMs)) &&
+        (value.overflow === 'compact' || value.overflow === 'pager')
+      )
+    case 'toast':
+      return (
+        isSlashDisplayKey(value.key) &&
+        isSlashDisplayTone(value.tone) &&
+        isSlashDisplayTtl(value.ttlMs)
+      )
+    case 'overlay':
+      return (
+        isSlashDisplayKey(value.key) &&
+        (value.view === 'picker' ||
+          value.view === 'pager' ||
+          value.view === 'diff')
+      )
+    default:
+      return false
+  }
+}
+
+export function normalizeSlashDisplayPolicy(
+  value: unknown,
+  fallbackTone: SlashDisplayTone = 'info',
+): SlashDisplayPolicy {
+  if (isSlashDisplayPolicy(value)) return value
+  return {
+    surface: 'history',
+    tone: isSlashDisplayTone(fallbackTone) ? fallbackTone : 'info',
+    persistence: 'visual-only',
+  }
+}
+
 export type SlashDispatchResult = {
   message: string
   ok: boolean
+  /** Renderer-neutral display intent; dispatch fills this when handlers omit it. */
+  display?: SlashDisplayPolicy
   /** `/context` overview data; terminal renderers must not parse message text. */
   contextView?: ContextUsageViewModel
   /**
@@ -345,10 +461,15 @@ export type SlashDispatchResult = {
   }
 }
 
+export type ResolvedSlashDispatchResult = SlashDispatchResult & {
+  display: SlashDisplayPolicy
+}
+
 export type SubmitUserInputResult =
   | {
       type: 'slash'
       message: string
+      display: SlashDisplayPolicy
       interactiveDiff?: {
         mode: 'session' | 'last'
         pathFilter?: string
@@ -402,10 +523,39 @@ export type SlashCommandDef = {
   group?: SlashCommandGroup
   /** 隐藏别名不单独占 help 行（如 status→doctor）；仍可 dispatch */
   hidden?: boolean
+  /** Stable UI policy or a resolver for argument/result-dependent commands. */
+  display:
+    | SlashDisplayPolicy
+    | ((
+        args: string,
+        result: SlashDispatchResult,
+      ) => SlashDisplayPolicy)
   run: (
     session: SlashSession,
     args: string,
   ) => Promise<SlashDispatchResult> | SlashDispatchResult
+}
+
+export function resolveSlashCommandDisplay(
+  command: SlashCommandDef,
+  args: string,
+  result: SlashDispatchResult,
+): SlashDisplayPolicy {
+  let candidate: unknown = result.display
+  if (candidate === undefined) {
+    try {
+      candidate =
+        typeof command.display === 'function'
+          ? command.display(args, result)
+          : command.display
+    } catch {
+      candidate = undefined
+    }
+  }
+  return normalizeSlashDisplayPolicy(
+    candidate,
+    result.ok ? 'info' : 'error',
+  )
 }
 
 /** 产品超集（E 轨）；与 providers/effortDialect CANONICAL 对齐 */
@@ -3790,17 +3940,139 @@ export function invokeSkillBySlash(
   }
 }
 
+function historyDisplay(
+  tone: SlashDisplayTone = 'info',
+): SlashDisplayPolicy {
+  return {
+    surface: 'history',
+    tone,
+    persistence: 'visual-only',
+  }
+}
+
+function panelDisplay(
+  key: string,
+  options: {
+    ttlMs?: number
+    overflow?: 'compact' | 'pager'
+  } = {},
+): SlashDisplayPolicy {
+  return {
+    surface: 'panel',
+    key,
+    placement: 'below-composer',
+    dismissOnInput: true,
+    dismissOnEscape: true,
+    ...(options.ttlMs ? { ttlMs: options.ttlMs } : {}),
+    overflow: options.overflow ?? 'compact',
+  }
+}
+
+function toastDisplay(
+  key: string,
+  tone: SlashDisplayTone = 'success',
+  ttlMs = 5_000,
+): SlashDisplayPolicy {
+  return {
+    surface: 'toast',
+    key,
+    tone,
+    ttlMs,
+  }
+}
+
+function overlayDisplay(
+  key: string,
+  view: 'picker' | 'pager' | 'diff',
+): SlashDisplayPolicy {
+  return {
+    surface: 'overlay',
+    key,
+    view,
+  }
+}
+
+function displayOnResult(
+  success: SlashDisplayPolicy,
+  errorKey: string,
+): SlashCommandDef['display'] {
+  return (_args, result) =>
+    result.ok ? success : toastDisplay(errorKey, 'error', 8_000)
+}
+
+function displayShowOrUpdate(
+  show: SlashDisplayPolicy,
+  update: SlashDisplayPolicy,
+  errorKey: string,
+): SlashCommandDef['display'] {
+  return (args, result) => {
+    if (!result.ok) return toastDisplay(errorKey, 'error', 8_000)
+    return args.trim() ? update : show
+  }
+}
+
+const contextDisplay: SlashCommandDef['display'] = (args, result) => {
+  if (!result.ok) return toastDisplay('slash:context:error', 'error', 8_000)
+  return args.trim().toLowerCase() === 'details'
+    ? overlayDisplay('slash:context:details', 'pager')
+    : panelDisplay('slash:context', { ttlMs: 12_000 })
+}
+
+const pluginsDisplay: SlashCommandDef['display'] = (args, result) => {
+  if (!result.ok) return toastDisplay('slash:plugins:error', 'error', 8_000)
+  const action = args.trim().split(/\s+/u)[0]?.toLowerCase() || 'list'
+  if (
+    action === 'reload' ||
+    action === 'install' ||
+    action === 'uninstall'
+  ) {
+    return toastDisplay(`slash:plugins:${action}`)
+  }
+  return overlayDisplay('slash:plugins', 'picker')
+}
+
+const providerDisplay: SlashCommandDef['display'] = (args, result) => {
+  if (!result.ok) return toastDisplay('slash:provider:error', 'error', 8_000)
+  const action = args.trim().split(/\s+/u)[0]?.toLowerCase()
+  return !action || action === 'list'
+    ? overlayDisplay('slash:provider', 'picker')
+    : toastDisplay('slash:provider:update')
+}
+
+const effortDisplay: SlashCommandDef['display'] = (args, result) => {
+  if (!result.ok) return toastDisplay('slash:effort:error', 'error', 8_000)
+  const action = args.trim().toLowerCase()
+  return !action || action === 'list'
+    ? overlayDisplay('slash:effort', 'picker')
+    : toastDisplay('slash:effort:update')
+}
+
+const backgroundDisplay: SlashCommandDef['display'] = (args, result) => {
+  if (!result.ok) return toastDisplay('slash:bg:error', 'error', 8_000)
+  return args.trim().toLowerCase().startsWith('cancel ')
+    ? toastDisplay('slash:bg:cancel')
+    : panelDisplay('slash:bg')
+}
+
 /** 内置注册表（组内顺序即 /help 组内列表顺序） */
 export const SLASH_COMMANDS: SlashCommandDef[] = [
   {
     name: 'help',
     summary: 'List slash commands (grouped)',
+    display: displayOnResult(
+      panelDisplay('slash:help', { overflow: 'pager' }),
+      'slash:help:error',
+    ),
     group: 'diagnostics',
     run: cmdHelp,
   },
   {
     name: 'clear',
     summary: 'Clear conversation messages (keep id/cwd/system)',
+    display: displayOnResult(
+      toastDisplay('slash:clear'),
+      'slash:clear:error',
+    ),
     group: 'session',
     run: cmdClear,
   },
@@ -3808,6 +4080,11 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     name: 'title',
     summary: 'Show or set session title (jsonl title entry; not model-visible)',
     usage: '[text]',
+    display: displayShowOrUpdate(
+      panelDisplay('slash:title'),
+      toastDisplay('slash:title:update'),
+      'slash:title:error',
+    ),
     group: 'session',
     run: cmdTitle,
   },
@@ -3816,6 +4093,11 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     summary:
       'List or append system_note (jsonl; not model-visible; rewrite keeps notes)',
     usage: '[[kind:]text]',
+    display: displayShowOrUpdate(
+      panelDisplay('slash:note', { overflow: 'pager' }),
+      historyDisplay('success'),
+      'slash:note:error',
+    ),
     group: 'session',
     run: cmdNote,
   },
@@ -3823,6 +4105,10 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     name: 'compact',
     summary: 'Summarize conversation (needs CompactSummarizer)',
     usage: '[note]',
+    display: displayOnResult(
+      historyDisplay('success'),
+      'slash:compact:error',
+    ),
     group: 'session',
     run: cmdCompact,
   },
@@ -3830,6 +4116,11 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     name: 'autocompact',
     summary: 'Show or set session auto compact (on/off)',
     usage: '[on|off]',
+    display: displayShowOrUpdate(
+      panelDisplay('slash:autocompact'),
+      toastDisplay('slash:autocompact:update'),
+      'slash:autocompact:error',
+    ),
     group: 'session',
     run: cmdAutocompact,
   },
@@ -3837,6 +4128,7 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     name: 'context',
     summary: 'Context stats: msgs, chars, token est, sections, cache tip, usage',
     usage: '[details]',
+    display: contextDisplay,
     group: 'session',
     run: cmdContext,
   },
@@ -3844,6 +4136,10 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     name: 'turn',
     summary: 'Inspect/control active turn and queued prompts',
     usage: '[status | steer <text> | interrupt | queue <text> | cancel <id>]',
+    display: displayOnResult(
+      historyDisplay(),
+      'slash:turn:error',
+    ),
     group: 'session',
     run: cmdTurn,
   },
@@ -3853,18 +4149,30 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
       'Protocol v1 runtime inspect/control/edit/remove/discard/retry-safe',
     usage:
       '[list [turn|control|task]|json|inspect <turn|control|task> <id>|interrupt <turnId>|cancel <control|task> <id>|edit <controlId> <prompt>|remove <controlId>|discard <turn|control|task> <id>|retry-safe <turn|control|task> <id>]',
+    display: displayOnResult(
+      historyDisplay(),
+      'slash:runtime:error',
+    ),
     group: 'session',
     run: cmdRuntime,
   },
   {
     name: 'cost',
     summary: 'Show session token usage (local only)',
+    display: displayOnResult(
+      panelDisplay('slash:cost'),
+      'slash:cost:error',
+    ),
     group: 'session',
     run: cmdCost,
   },
   {
     name: 'doctor',
     summary: 'Local diagnostics (node, cwd, mode, tools, usage, ~/.bolo)',
+    display: displayOnResult(
+      panelDisplay('slash:doctor'),
+      'slash:doctor:error',
+    ),
     group: 'diagnostics',
     run: cmdDoctor,
   },
@@ -3873,12 +4181,20 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     summary:
       'File changes; TTY opens panel (U1). /diff last · git [path] · <path>',
     usage: '[last | git [path] | <path>]',
+    display: displayOnResult(
+      overlayDisplay('slash:diff', 'diff'),
+      'slash:diff:error',
+    ),
     group: 'session',
     run: cmdDiff,
   },
   {
     name: 'usage',
     summary: 'Alias of /cost',
+    display: displayOnResult(
+      panelDisplay('slash:cost'),
+      'slash:cost:error',
+    ),
     group: 'session',
     hidden: true,
     run: cmdCost,
@@ -3887,12 +4203,20 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     name: 'memory',
     summary: 'Long-term MEMORY.md path, status, topics, preview',
     usage: '[path|status|topics]',
+    display: displayOnResult(
+      panelDisplay('slash:memory', { overflow: 'pager' }),
+      'slash:memory:error',
+    ),
     group: 'session',
     run: cmdMemory,
   },
   {
     name: 'status',
     summary: 'Alias of /doctor',
+    display: displayOnResult(
+      panelDisplay('slash:doctor'),
+      'slash:doctor:error',
+    ),
     group: 'diagnostics',
     hidden: true,
     run: cmdDoctor,
@@ -3901,6 +4225,10 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     name: 'mcp',
     summary: 'List MCP servers, status/diagnostics, tools, resources, prompts',
     usage: '[status|tools|resources|prompts]',
+    display: displayOnResult(
+      overlayDisplay('slash:mcp', 'pager'),
+      'slash:mcp:error',
+    ),
     group: 'extensions',
     run: cmdMcp,
   },
@@ -3910,12 +4238,17 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
       'Plugins + minimal marketplace (list/reload/market/search/install)',
     usage:
       '[list|commands|reload|market|search|install|uninstall]',
+    display: pluginsDisplay,
     group: 'extensions',
     run: cmdPlugins,
   },
   {
     name: 'reload-plugins',
     summary: 'Alias of /plugins reload',
+    display: displayOnResult(
+      toastDisplay('slash:plugins:reload'),
+      'slash:plugins:error',
+    ),
     group: 'extensions',
     hidden: true,
     run: (session) => cmdPluginsReload(session),
@@ -3924,6 +4257,10 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     name: 'hooks',
     summary: 'List hooks; /hooks recent|failures for diag; /hooks <Event>',
     usage: '[EventName|recent|failures]',
+    display: displayOnResult(
+      overlayDisplay('slash:hooks', 'pager'),
+      'slash:hooks:error',
+    ),
     group: 'extensions',
     run: cmdHooks,
   },
@@ -3931,6 +4268,10 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     name: 'init',
     summary: 'Ensure ~/.bolo and project .bolo layout (scaffold)',
     usage: '[all|user|project]',
+    display: displayOnResult(
+      historyDisplay('success'),
+      'slash:init:error',
+    ),
     group: 'diagnostics',
     run: cmdInit,
   },
@@ -3938,6 +4279,11 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     name: 'model',
     summary: 'Show or set model; optional providerId/model sugar',
     usage: '[name | providerId/model]',
+    display: displayShowOrUpdate(
+      panelDisplay('slash:model'),
+      toastDisplay('slash:model:update'),
+      'slash:model:error',
+    ),
     group: 'model',
     run: cmdModel,
   },
@@ -3946,6 +4292,7 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     summary:
       'TTY pick / list / hot-switch / add preset (config.providers)',
     usage: '[list | use <id> [model] | add <preset> [as <id>]]',
+    display: providerDisplay,
     group: 'model',
     run: cmdProvider,
   },
@@ -3954,6 +4301,7 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     summary:
       'TTY pick / show / set reasoning effort (dialect wire; docs/EFFORT.md)',
     usage: '[list | auto|low|medium|high|xhigh|max|…]',
+    display: effortDisplay,
     group: 'model',
     run: cmdEffort,
   },
@@ -3962,6 +4310,11 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     summary:
       'CX8 sugar: off (default) | tip (hint /effort high) | turn (this-turn high)',
     usage: '[off|tip|turn]',
+    display: displayShowOrUpdate(
+      panelDisplay('slash:ultrathink'),
+      toastDisplay('slash:ultrathink:update'),
+      'slash:ultrathink:error',
+    ),
     group: 'model',
     run: cmdUltrathink,
   },
@@ -3970,6 +4323,11 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     summary:
       'Show/hide thinking display; /thinking persist on|off for openai-compatible refeed',
     usage: '[on|off] | persist [on|off]',
+    display: displayShowOrUpdate(
+      panelDisplay('slash:thinking'),
+      toastDisplay('slash:thinking:update'),
+      'slash:thinking:error',
+    ),
     group: 'model',
     run: cmdThinking,
   },
@@ -3977,12 +4335,21 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     name: 'websearch',
     summary: 'Show or set web search mode',
     usage: '[on|off|auto]',
+    display: displayShowOrUpdate(
+      panelDisplay('slash:websearch'),
+      toastDisplay('slash:websearch:update'),
+      'slash:websearch:error',
+    ),
     group: 'model',
     run: cmdWebSearch,
   },
   {
     name: 'plan',
     summary: 'Set permissionMode to plan',
+    display: displayOnResult(
+      toastDisplay('slash:plan'),
+      'slash:plan:error',
+    ),
     group: 'model',
     run: cmdPlan,
   },
@@ -3990,6 +4357,11 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     name: 'permissions',
     summary: 'Show or set permission mode (four tiers)',
     usage: '[mode]',
+    display: displayShowOrUpdate(
+      panelDisplay('slash:permissions'),
+      toastDisplay('slash:permissions:update'),
+      'slash:permissions:error',
+    ),
     group: 'model',
     run: cmdPermissions,
   },
@@ -3997,6 +4369,10 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     name: 'allow',
     summary: 'List or add session always-allow (tool / path:glob / bash:pattern)',
     usage: '[ToolName | path:GLOB | bash:PATTERN]',
+    display: displayOnResult(
+      historyDisplay(),
+      'slash:allow:error',
+    ),
     group: 'model',
     run: cmdAllow,
   },
@@ -4005,6 +4381,10 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     summary:
       'List or add session always-deny (hard; wins over bypass / allow)',
     usage: '[ToolName | path:GLOB | bash:PATTERN | prefix:PFX]',
+    display: displayOnResult(
+      historyDisplay(),
+      'slash:deny:error',
+    ),
     group: 'model',
     run: cmdDeny,
   },
@@ -4012,6 +4392,10 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     name: 'rules',
     summary: 'List or show loaded .bolo/rules',
     usage: '[list|show <name>]',
+    display: displayOnResult(
+      overlayDisplay('slash:rules', 'pager'),
+      'slash:rules:error',
+    ),
     group: 'extensions',
     run: cmdRules,
   },
@@ -4019,6 +4403,10 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     name: 'skills',
     summary: 'List loaded skills (catalog)',
     usage: '[filter]',
+    display: displayOnResult(
+      overlayDisplay('slash:skills', 'picker'),
+      'slash:skills:error',
+    ),
     group: 'extensions',
     run: cmdSkills,
   },
@@ -4026,6 +4414,10 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     name: 'agents',
     summary: 'List active subagent types; status for background runs',
     usage: '[status]',
+    display: displayOnResult(
+      panelDisplay('slash:agents'),
+      'slash:agents:error',
+    ),
     group: 'extensions',
     run: cmdAgents,
   },
@@ -4033,6 +4425,7 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     name: 'bg',
     summary: 'List background tasks or cancel a queued task',
     usage: '[status] | cancel <taskId>',
+    display: backgroundDisplay,
     group: 'extensions',
     run: cmdBg,
   },
@@ -4040,6 +4433,10 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     name: 'skill',
     summary: 'Load a skill body into the conversation by id',
     usage: '<id>',
+    display: displayOnResult(
+      historyDisplay('success'),
+      'slash:skill:error',
+    ),
     group: 'extensions',
     run: cmdSkill,
   },
@@ -4177,25 +4574,45 @@ export async function dispatchSlashCommand(
   session: SlashSession,
   name: string,
   args: string,
-): Promise<SlashDispatchResult> {
+): Promise<ResolvedSlashDispatchResult> {
   const cmd = getSlashCommand(name)
   if (cmd) {
-    return await cmd.run(session, args)
+    const result = await cmd.run(session, args)
+    return {
+      ...result,
+      display: resolveSlashCommandDisplay(cmd, args, result),
+    }
   }
 
   // 回落：插件 contributes.commands（PL2）
   const pluginHit = invokePluginCommand(session, name)
-  if (pluginHit) return pluginHit
+  if (pluginHit) {
+    return {
+      ...pluginHit,
+      display: normalizeSlashDisplayPolicy(
+        pluginHit.display,
+        pluginHit.ok ? 'info' : 'error',
+      ),
+    }
+  }
 
   // 回落：/<skill-id> 或 /skill-creator（user-invocable skill）
   const skills = sessionSkills(session)
   if (skills.length && findSkillById(skills, name)) {
-    return invokeSkillBySlash(session, name)
+    const result = invokeSkillBySlash(session, name)
+    return {
+      ...result,
+      display: normalizeSlashDisplayPolicy(
+        result.display,
+        result.ok ? 'info' : 'error',
+      ),
+    }
   }
 
   return {
     ok: false,
     message: formatUnknownCommand(name, session),
+    display: toastDisplay('slash:unknown', 'error', 8_000),
   }
 }
 
@@ -4220,6 +4637,7 @@ export async function submitUserInput(
     return {
       type: 'slash',
       message: r.message,
+      display: r.display,
       ...(r.interactiveDiff ? { interactiveDiff: r.interactiveDiff } : {}),
       ...(r.interactiveProvider
         ? { interactiveProvider: r.interactiveProvider }
