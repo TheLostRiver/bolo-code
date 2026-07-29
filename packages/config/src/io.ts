@@ -6,7 +6,11 @@ import { promises as fs } from 'node:fs'
 import type { BoloConfigJson, HooksFileJson, McpFileJson } from './types.ts'
 import { DEFAULT_CONFIG } from './types.ts'
 import type { BoloLayoutPaths } from './paths.ts'
-import { mergeProvidersMaps } from './providerRegistry.ts'
+import {
+  mergeProviderConfigJson,
+  mergeProvidersMaps,
+} from './providerRegistry.ts'
+import { validateBoloConfigModelMetadata } from './modelMetadata.ts'
 
 /**
  * 去掉 JSONC 注释与尾逗号，便于 config.json 写说明。
@@ -162,7 +166,7 @@ export async function loadConfigJsonWithWarnings(
   }
   return {
     config: mergeConfigJson({ ...DEFAULT_CONFIG }, r.value),
-    warnings: [],
+    warnings: validateBoloConfigModelMetadata(r.value, layout.configJson),
   }
 }
 
@@ -220,6 +224,7 @@ export function mergeConfigJson(
       ? { ...(base.agents ?? {}), ...(over.agents ?? {}) }
       : undefined
   const search = mergeSearchConfig(base.search, over.search)
+  const provider = mergeProviderConfigJson(base.provider, over.provider)
   const providers = mergeProvidersMaps(base.providers, over.providers)
   const defaultProvider =
     over.defaultProvider?.trim() ||
@@ -228,10 +233,7 @@ export function mergeConfigJson(
   return {
     ...base,
     ...over,
-    provider: {
-      ...base.provider,
-      ...over.provider,
-    },
+    ...(provider ? { provider } : { provider: undefined }),
     ...(providers && Object.keys(providers).length
       ? { providers }
       : { providers: undefined }),

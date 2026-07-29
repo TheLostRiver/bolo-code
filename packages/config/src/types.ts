@@ -6,6 +6,13 @@ import type { HooksConfig } from '../../shared/src/index.ts'
 import type { PermissionMode } from '../../permissions/src/index.ts'
 import type { SearchConfigJson } from './searxng.ts'
 
+export type ModelLimitsConfigJson = {
+  /** 模型完整上下文窗口。必须是有限正整数。 */
+  contextWindowTokens?: number
+  /** 单次生成输出上限。必须是有限正整数且不能超过有效上下文窗口。 */
+  maxTokens?: number
+}
+
 export type ProviderConfigJson = {
   /** mock | openai-compatible | openai-responses | anthropic */
   kind?: 'mock' | 'openai-compatible' | 'openai-responses' | 'anthropic'
@@ -24,8 +31,12 @@ export type ProviderConfigJson = {
   baseUrl?: string
   model?: string
   timeoutMs?: number
+  /** provider 默认模型上下文窗口；exact model entry 可覆盖。 */
+  contextWindowTokens?: number
   /** Anthropic max_tokens */
   maxTokens?: number
+  /** 同一 provider 内按 exact model id 覆盖 limits。 */
+  models?: Record<string, ModelLimitsConfigJson>
   /**
    * Effort 方言（E 轨）：内置 id 或内联表。
    * 例：`"deepseek-chat"` · `"openai-responses"` · `"max-tokens"`
@@ -71,7 +82,7 @@ export type BoloConfigJson = {
    * 默认 true（对照参考全局 config）；可用 config / 会话 / 环境变量关掉。
    */
   autoCompactEnabled?: boolean
-  /** 模型上下文窗口估计（auto compact） */
+  /** 旧：workspace 级模型上下文窗口；仅作为 model metadata legacy fallback。 */
   contextWindowTokens?: number
   /**
    * Microcompact（清旧 tool_result，无 LLM）。

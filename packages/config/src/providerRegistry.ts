@@ -4,8 +4,13 @@
  * 见 docs/ROADMAP.md §9.4
  */
 
-import type { BoloConfigJson, ProviderConfigJson } from './types.ts'
+import type {
+  BoloConfigJson,
+  ModelLimitsConfigJson,
+  ProviderConfigJson,
+} from './types.ts'
 import { DEFAULT_CONFIG } from './types.ts'
+import { normalizeProviderModelMetadata } from './modelMetadata.ts'
 
 export type ProviderKindName =
   | 'mock'
@@ -23,7 +28,10 @@ export type ProviderProfile = {
   baseUrl?: string
   model?: string
   timeoutMs?: number
+  contextWindowTokens?: number
   maxTokens?: number
+  models?: Record<string, ModelLimitsConfigJson>
+  modelMetadataWarnings?: string[]
   /**
    * Effort 方言：内置 id 字符串，或内联 dialect 对象。
    * 交给 createProviderFromProfile → provider config.effortDialect
@@ -62,17 +70,52 @@ function normalizeKind(
   return undefined
 }
 
-/** 浅合并两个 profile JSON（后写覆盖） */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function mergeModelLimitsMaps(
+  base: unknown,
+  over: unknown,
+): Record<string, ModelLimitsConfigJson> | undefined {
+  const baseMap = isRecord(base) ? base : undefined
+  const overMap = isRecord(over) ? over : undefined
+  if (!baseMap && !overMap) return undefined
+
+  const ids = new Set([
+    ...Object.keys(baseMap ?? {}),
+    ...Object.keys(overMap ?? {}),
+  ])
+  const merged: Record<string, ModelLimitsConfigJson> = {}
+  for (const id of ids) {
+    const baseEntry = baseMap?.[id]
+    const overEntry = overMap?.[id]
+    const baseRecord = isRecord(baseEntry) ? baseEntry : undefined
+    const overRecord = isRecord(overEntry) ? overEntry : undefined
+    const entry = overRecord
+      ? { ...(baseRecord ?? {}), ...overRecord }
+      : baseRecord
+    if (entry) merged[id] = entry as ModelLimitsConfigJson
+  }
+  return Object.keys(merged).length ? merged : undefined
+}
+
+/** 合并两个 profile JSON；model limits map 按 exact model id 深合并。 */
 export function mergeProviderConfigJson(
   base?: ProviderConfigJson,
   over?: ProviderConfigJson,
 ): ProviderConfigJson | undefined {
   if (!base && !over) return undefined
-  return { ...(base ?? {}), ...(over ?? {}) }
+  const models = mergeModelLimitsMaps(base?.models, over?.models)
+  return {
+    ...(base ?? {}),
+    ...(over ?? {}),
+    ...(models ? { models } : { models: undefined }),
+  }
 }
 
 /**
- * 合并 user/project 的 providers 表：同 id 字段浅合并；后层赢。
+ * 合并 user/project 的 providers 表：同 id 后层赢，models 按 model id 深合并。
  */
 export function mergeProvidersMaps(
   base?: Record<string, ProviderConfigJson>,
@@ -128,6 +171,10 @@ export function profileFromConfigJson(
   const baseUrl = p.baseUrl?.trim() || undefined
   const model = p.model?.trim() || undefined
   const effortDialect = normalizeEffortDialectFromConfig(p.effort)
+  const modelMetadata = normalizeProviderModelMetadata(
+    p,
+    `providers.${id}`,
+  )
   return {
     id,
     ...(kind ? { kind } : {}),
@@ -139,8 +186,15 @@ export function profileFromConfigJson(
     ...(p.timeoutMs != null && Number.isFinite(p.timeoutMs)
       ? { timeoutMs: Math.floor(p.timeoutMs) }
       : {}),
-    ...(p.maxTokens != null && Number.isFinite(p.maxTokens)
-      ? { maxTokens: Math.floor(p.maxTokens) }
+    ...(modelMetadata.contextWindowTokens !== undefined
+      ? { contextWindowTokens: modelMetadata.contextWindowTokens }
+      : {}),
+    ...(modelMetadata.maxTokens !== undefined
+      ? { maxTokens: modelMetadata.maxTokens }
+      : {}),
+    ...(modelMetadata.models ? { models: modelMetadata.models } : {}),
+    ...(modelMetadata.warnings.length
+      ? { modelMetadataWarnings: modelMetadata.warnings }
       : {}),
     ...(effortDialect != null ? { effortDialect } : {}),
   }

@@ -24,6 +24,7 @@ export {
   DEFAULT_HOOKS_FILE,
   type BoloConfigJson,
   type AgentsConfigJson,
+  type ModelLimitsConfigJson,
   type ProviderConfigJson,
   type McpFileJson,
   type HooksFileJson,
@@ -72,6 +73,21 @@ export {
   type ProviderProfileSummary,
   type ProviderKindName,
 } from './providerRegistry.ts'
+
+export {
+  BUILTIN_MODEL_METADATA,
+  DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
+  DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
+  normalizeProviderModelMetadata,
+  resolveModelMetadata,
+  validateBoloConfigModelMetadata,
+  type ModelMetadataCatalogEntry,
+  type ModelMetadataSource,
+  type NormalizedProviderModelMetadata,
+  type ProviderModelMetadataProfile,
+  type ResolveModelMetadataOptions,
+  type ResolvedModelMetadata,
+} from './modelMetadata.ts'
 
 export {
   BUILTIN_PROVIDER_PRESETS,
