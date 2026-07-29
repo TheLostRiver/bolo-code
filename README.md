@@ -18,6 +18,7 @@
 | **接手开发的 Agent / 同事** | **[docs/AGENT_HANDOFF.md](docs/AGENT_HANDOFF.md)**（架构 · 进度 · 改码规矩） |
 | **查总进度与各轨** | **[docs/ROADMAP.md](docs/ROADMAP.md)**（进度真源） |
 | **查 CLI TUI 重构** | **[docs/CLI_TUI_REFACTOR_PLAN.md](docs/CLI_TUI_REFACTOR_PLAN.md)**（OI-14 retained renderer · OI-15 slash lifecycle · OI-16 pager 高度 · OI-17 邻接布局）· [选型证据](docs/CLI_TUI_RENDERER_DECISION.md) |
+| **查长工具输出 / 模型上下文方案** | **[docs/TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md](docs/TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md)**（CTX/OUT · 已准入、尚未实现） |
 | **查分层边界** | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 
 ---
@@ -29,13 +30,13 @@
 | Headless 核心 | ~82–90% | queryLoop · 权限 · tools · STE；partial stream fail-closed |
 | **Agent 能力面（工具集）** | **~82–88%** | 15 个常驻/可选工具 + **Web search**（hosted、MCP、SearXNG 均已活体验证） |
 | 会话 / CLI | ~92–97% | **零步骤首次启动** · 用户级 workspace JSONL · 旧项目会话兼容 · durable runtime · query/action CLI · TTY pager · pipe/JSON automation |
-| **CLI TUI** | **~85–92%** | OI-14 retained 主体、OI-15A–F command lifecycle、OI-16 pager 高度与 OI-17 REPL 邻接布局已完成；真人 Windows Terminal 主观观感仍未验 |
+| **CLI TUI** | **~85–92%** | OI-14 retained 主体、OI-15A–F command lifecycle、OI-16 pager 高度与 OI-17 REPL 邻接布局已完成；OUT-1..5 长工具输出折叠/全文查看已准入、尚未实现 |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
 | Subagent | ~89–95% | `config.agents` + `agents/*.md` · durable task/result · overflow FIFO/cancel · safe delivery · worktree 保全 |
 | 文件 Diff 日用 | ~95%+ | D0–D7 · U0–U4 |
 | Hooks 日用 | ~96–98% | H0–H5（含 SessionEnd） |
 | Compact 日用 | ~93–96% | C0–C5 + AR2A0a/A0b（hybrid 计数 · 中段截断 · 防重摘要） |
-| **多 Provider 热切** | **~92–96%** | P0–P4.1 + CX7 Desktop |
+| **多 Provider 热切** | **~92–96%** | P0–P4.1 + CX7 Desktop；CTX-1..3 模型上下文元数据已准入、尚未实现 |
 | **Effort 方言** | **~92–95%** | E0–E9 |
 | **Provider UX** | **~95–98%** | CX0–CX8（ultrathink 默认 off） |
 | Durable Runtime | DR0–DR4 ✅ | admission · recovery · 单 runner · durable control/task · FIFO/promotion · v1 protocol/resolution · crash/restart closeout |
@@ -57,8 +58,12 @@ read-only panel/pager migration、OI-15D Skills/Plugins stable-key overlay、OI-
 slash/context/paste/Thought/权限/welcome 局部能力仍然有效，但不再作为整个 TUI
 renderer 稳定的证据。
 
-**当前状态：OI-15A–F、OI-16 与 OI-17 自动实现已关闭；当前没有已准入的 agent 可闭环队列。**
-OI-15A 已在 core 建立
+**当前状态：新队列为 CTX-1..3 → OUT-1..5；下一刀是 CTX-1。**
+用户实测确认长 Read/工具结果会占满 transcript；代码审计确认顶层
+`contextWindowTokens` 不会随 provider/model 热切，写进 provider profile 会被静默
+忽略。正式契约见
+[docs/TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md](docs/TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md)。
+OI-15A–F、OI-16 与 OI-17 自动实现仍保持关闭。OI-15A 已在 core 建立
 `history | panel | toast | overlay` display policy、运行时 fail-closed 校验和
 35 个内建命令分类，并保持 plain `message` 不变。OI-15B `d6bd087` 已在
 `packages/shared`/CLI 建立单 panel/toast、单调 generation、可注入 TTL effect、
@@ -90,6 +95,12 @@ OI-17 `cda22fd` 修复了这个定位漏测：REPL 内 text/runtime pager 现在
 生命周期；Permission、Question、Picker、Catalog、Diff 继续作为 modal overlay。
 48/80 行真实 xterm composite、footer/页码、`q` 后草稿续写、modal 回归与独立
 `runtime` 顶层 pager 均已进入默认门禁。plain/non-TTY 字节和零运行时依赖不变。
+
+CTX/OUT 新轨不会恢复 legacy surface，也不会引入其它 Agent 的依赖。CTX 先把 provider
+默认与 exact model limits 归一为同一 `ResolvedModelMetadata`，让 create、resume、
+热切、compact、skills 和 dashboard 使用同一窗口；OUT 再增加通用 Tool presentation、
+renderer-local 折叠、file-backed 全文 pager、键鼠路径与第二阶段只读调用聚合。未实现前，
+现有顶层 `contextWindowTokens` 和长工具结果展示限制仍然存在。
 
 OI-14 的单 retained renderer、常驻 Composer、Markdown、OverlayHost、物理终端门禁
 与 plain/non-TTY fallback 保持不变；OI-15 不增加新 renderer 或其它 Agent 的运行时
@@ -391,6 +402,7 @@ scripts/       单测与 smoke
 | [docs/SLASH_COMMANDS.md](docs/SLASH_COMMANDS.md) | 斜杠命令 |
 | [docs/TUI.md](docs/TUI.md) | CLI TUI · 环境变量 |
 | [docs/CLI_TUI_REFACTOR_PLAN.md](docs/CLI_TUI_REFACTOR_PLAN.md) | OI-14 retained renderer · OI-15 slash surface/lifecycle · OI-16 pager 高度 · OI-17 邻接布局 · 参考审计 · 迁移/回滚/验收 |
+| [docs/TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md](docs/TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md) | CTX/OUT · model limits/resolver · 长工具输出摘要/折叠/pager/mouse |
 | [docs/SKILLS.md](docs/SKILLS.md) · [MCP.md](docs/MCP.md) · [PLUGINS.md](docs/PLUGINS.md) | 扩展面 |
 | [docs/SUBAGENT.md](docs/SUBAGENT.md) · [SUBAGENT_SPEC.md](docs/SUBAGENT_SPEC.md) | Subagent |
 | [docs/PROMPT_CACHE.md](docs/PROMPT_CACHE.md) | Prompt cache 观测 |

@@ -143,14 +143,14 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | **Agent 能力面（工具集）** | **~82–88%** | 15 个常驻/可选工具 + 显式 SearXNG `WebSearch`（ROADMAP §14 · [TOOLS.md](./TOOLS.md)） |
 | **分发（CLI）** | **~87–93%** | Node `>=22.19.0`；`npm i -g` / `npx` 单文件产物；安装后直接 `bolo`，无需 init；零独立运行时依赖（ROADMAP §15 · [RELEASE.md](./RELEASE.md)） |
 | 会话 / CLI | ~92–97% | 用户级 workspace JSONL · 旧项目/用户会话兼容 · 零项目副作用首次启动 · new/resume 同构 runtime · durable controls/tasks |
-| **CLI TUI** | **~85–92%** | OI-14 retained 主体、OI-15A–F slash lifecycle、OI-16 pager 高度与 OI-17 REPL 邻接布局已完成；真人 Windows Terminal 主观观感仍未验 |
+| **CLI TUI** | **~85–92%** | OI-14 retained 主体、OI-15A–F slash lifecycle、OI-16 pager 高度与 OI-17 REPL 邻接布局已完成；OUT-1..5 长工具输出折叠/全文查看已准入、尚未实现 |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
 | Subagent | ~89–95% | Spec v0；durable task/result · overflow FIFO/cancel · safe-boundary delivery · worktree 成果保全 |
 | 文件 Diff 日用 | ~95%+ | **D0–D7** |
 | 文件 Diff UI | ~90–95% | **U0–U4**；U5 真 Ink/IDE 可选 |
 | Hooks 日用 | ~96–98% | **H0–H5**（含 SessionEnd） |
 | Compact 日用 | ~93–96% | **C0–C5 + AR2 全段**（hybrid 计数 · 中段截断 · 防重摘要 · range/watermark 契约）；任意中段 rewrite 按证据门控不启用 |
-| 多 Provider 热切 | ~92–96% | **P0–P4.1 + CX7 Desktop** |
+| 多 Provider 热切 | ~92–96% | **P0–P4.1 + CX7 Desktop**；CTX-1..3 模型上下文元数据已准入、尚未实现 |
 | Effort 方言 | ~92–95% | **E0–E9** |
 | Provider UX | ~95–98% | **CX0–CX8**（ultrathink 默认 off） |
 | Durable Runtime | DR0–DR4 ✅ | 输入先落盘 · recovery · 单 runner · durable control/task · FIFO/promotion · v1 protocol/resolution · crash/restart closeout |
@@ -159,9 +159,18 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 
 **已闭环：** Diff · Hooks · Compact（含 AR2 全段）· Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR-T1–T3+ Agent 能力面** · **AR3/OI-06 Desktop 产品接线** · **AR4 evidence gate** · **AR5 release hardening** · **OI-04 SearXNG 直连、OI-X1 真实实例 smoke、OI-07 上游诊断 / doctor / 可选 Docker setup、OI-08B CLI 零步骤首次启动、OI-14A 真实 VT/renderer 选型、OI-14B live view-state、OI-14C retained renderer 基座、OI-14D retained transcript/Markdown、OI-14E Composer/activity/footer、OI-14F OverlayHost/交互面板、OI-14G 默认切换/可靠性/性能、OI-14H legacy 删除/发布审计、OI-15A–F slash command surface/lifecycle、OI-16 Doctor pager height、OI-17 REPL pager adjacency**。OI-09–OI-13 的局部 TUI 能力保留为完成历史，但不再代表 renderer 整体稳定。
 
-**当前没有已准入的 agent 可闭环队列。** 真人走查与代码审计曾确认普通 slash
-结果会由 `appendCompatibilityOutput()` 永久拼在 transcript 与 Composer 之间。
-OI-15A 已在 core 增加并校验 `history | panel | toast | overlay` display policy，
+**当前 agent 可闭环队列：CTX-1..3 → OUT-1..5；下一刀是 CTX-1。**
+用户实测确认长 Read/工具结果会占满 transcript；代码审计确认顶层
+`contextWindowTokens` 不会随 provider/model 热切，写进 provider profile 会被静默
+忽略。CTX 先建立 provider/model limits、resolved metadata 与 create/resume/hot-switch
+单一消费链；OUT 再建立 Tool presentation、默认折叠、file-backed 全文 pager、键鼠
+路径与第二阶段只读调用聚合。正式契约见
+[TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md](./TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md)；
+两轨均为已准入、尚未实现。
+
+真人走查与代码审计曾确认普通 slash 结果会由 `appendCompatibilityOutput()` 永久拼在
+transcript 与 Composer 之间。OI-15A 已在 core 增加并校验
+`history | panel | toast | overlay` display policy，
 35 个内建命令已完整分类，Plugin/Skill/unknown 有 fail-closed 兜底；OI-15B
 `d6bd087` 已实现 Composer 下方单 panel、footer toast、TTL/input-clear 与
 generation guard。OI-15C `26f796f` 已把 `/context`、`/doctor`、`/status` 与只读
@@ -268,6 +277,14 @@ DR2A 单 session runner ✅
 → OI-15F compatibility cleanup ✅
 → OI-16 Doctor pager height ✅
 → OI-17 REPL pager adjacency ✅
+→ CTX-1 配置契约 / validator / resolver ▶ NEXT
+→ CTX-2 create / resume / hot-switch 接线
+→ CTX-3 可观测性 / 文档
+→ OUT-1 ToolPresentation 契约
+→ OUT-2 默认折叠 / 键盘路径
+→ OUT-3 file-backed pager / resume
+→ OUT-4 SGR mouse
+→ OUT-5 连续只读调用聚合
 → OI-H3 真人 Windows Terminal 走查 BLOCKED: HUMAN
 ```
 
@@ -346,6 +363,7 @@ renderer 壳原样复制，共享 `RuntimeClient` 单独打成 browser ESM。不
 | Effort | [EFFORT.md](./EFFORT.md) · [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md) |
 | Diff | [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) · [TUI.md](./TUI.md) |
 | **CLI TUI 重构** | **[CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md)**（OI-14/OI-15/OI-16/OI-17）· [OI-14A 选型证据](./CLI_TUI_RENDERER_DECISION.md) · [OPEN_ISSUES.md](./OPEN_ISSUES.md) OI-16/OI-17 |
+| **模型上下文 / 长工具输出** | **[TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md](./TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md)**（CTX/OUT · 已准入、尚未实现） |
 | Hooks | [HOOKS.md](./HOOKS.md) |
 | Compact | [COMPACTION.md](./COMPACTION.md) |
 | Subagent | [SUBAGENT.md](./SUBAGENT.md) · [SUBAGENT_SPEC.md](./SUBAGENT_SPEC.md) |
