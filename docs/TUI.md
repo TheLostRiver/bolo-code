@@ -403,10 +403,15 @@ Ctrl+C、进程退出 cleanup，以及 bundle/cold-start/CPU/render heap/cleanup
 预算。完整串实测为 1,727,232 bytes / 200 modules、cold `+50.4ms`、CPU `422ms`、
 render heap `+21.0MB`、cleanup retained `+1.5MB`。
 
+`e6ec6cb` 补上真人复测暴露的中断竞态：durable interrupt 已把 runner 推回 idle，
+但异步 SIGINT handler 尚未 settle 时，REPL 不得提前让 Composer 重新获取 raw
+stdin。`test-cli-tui-cleanup` 现在确定性挂起 handler 尾部，断言等待期间零 input
+owner、完成后恢复 focus/raw stdin、可继续编辑，并能再次用 idle Ctrl+C 正常退出。
+
 OI-14H 新增并扩展 `test:cli-tui-ownership` 与 `test:cli-tui-vt`，物理锁定
 compatibility bridge、legacy pager/picker/panel、surface/raw editor/layout/tiny
 Markdown 与 engine selector 不存在，并禁止 production 重新取得第二 stdout/stdin
-owner。完整门禁现为 134 scripts；单文件 1,691,077 bytes / 195 modules，cold
+owner。完整门禁现为 134 scripts；单文件 1,691,759 bytes / 195 modules，cold
 `+47.0–84.4ms`、CPU `375–672ms`、render heap `+21.0–21.1MB`、
 cleanup retained `+1.5MB`，
 7-file install、Desktop bundle 与 Electron launch 全绿。

@@ -92,8 +92,9 @@ cold p50 为 empty Node 79.9ms、Bolo `--help` 130.3ms，相对增量 50.4ms。5
 retained +1.5MB，均低于 +1.5MB bundle、+100ms cold、3s CPU、128MB heap 与 64MB
 cleanup 预算。
 
-OI-14H 删除 legacy 后的当前产物为 1,691,077 bytes / 195 modules，相对 baseline
-增加 306,012B；两次完整串 cold 为 empty Node 80.6–107.7ms、Bolo `--help`
+OI-14H 删除 legacy、并合入 `e6ec6cb` 中断后输入恢复修复后的当前产物为
+1,691,759 bytes / 195 modules，相对 baseline 增加 306,694B；两次完整串 cold
+为 empty Node 80.6–107.7ms、Bolo `--help`
 127.6–192.2ms、增量 47.0–84.4ms。相同长会话 fixture 为 CPU 375–672ms、
 render heap +21.0–21.1MB、cleanup retained +1.5MB，预算继续有余量。
 
@@ -194,6 +195,7 @@ scrollback、24–220 列反复 resize、paste/overlay 往返与单 owner；fina
 
 OI-14H `39e66b4`–`d4eaed0` 随后删除 legacy surface/prefixer/tiny Markdown/兼容桥/
 engine selector 并建立最终静态 owner/absence guard；non-TTY plain formatter 保留。
-134 项完整门禁、1,691,077-byte / 195-module 单文件、7-file install 与
+`e6ec6cb` 又关闭 durable SIGINT handler/Composer 输入竞态。134 项完整门禁、
+1,691,759-byte / 195-module 单文件、7-file install 与
 Desktop/Electron 全绿。真人 Windows Terminal 仍需检查字体、颜色、动画与按键/鼠标
 手感。

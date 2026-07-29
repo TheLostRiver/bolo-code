@@ -164,8 +164,10 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 宿主永远保持 plain/readline。真实 xterm 已覆盖 500 blocks / 10,000 行、scrollback、
 24–220 列反复 resize、paste/overlay 往返与单 stdin/writer；final flush、异常启动、
 provider/tool failure、Abort/SIGINT、raw Ctrl+C 与进程退出 cleanup 均有门禁。
-134 脚本、7-file clean install 与 Electron launch 全绿；产物为
-1,691,077 bytes / 195 modules。OI-14 只剩 OI-H3 真人 Windows Terminal 走查。完整方案见
+`e6ec6cb` 另用确定性竞态夹具保证 durable SIGINT handler 完成后才重新获取
+Composer stdin，并实测中断后可继续输入。134 脚本、7-file clean install 与
+Electron launch 全绿；产物为 1,691,759 bytes / 195 modules。OI-14 只剩 OI-H3
+真人 Windows Terminal 走查。完整方案见
 [CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md)，选型数据见
 [CLI_TUI_RENDERER_DECISION.md](./CLI_TUI_RENDERER_DECISION.md)。
 
@@ -477,7 +479,7 @@ cd apps/desktop && npm install && set BOLO_DESKTOP_MOCK=1 && npm start
 | **OI-11** | terminal surface · timeline/status · segment activity · permission details/chooser · local panel VT · Responses abort diagnosis · Bolo crystal；代码 `e9a32cf`–`8088fbb`，121 项门禁，真人观感仍见 OI-H3 |
 | **OI-12** | argument hint · context view-model/dashboard · logical content gutter · dock-width 用户块 · bracketed paste transaction；代码 `1696127` / `7f76093` / `15b37ed` / `40a5d41` / `8d2a7a5`；物理 wrap 证明不足，转 OI-14 |
 | **OI-13** | silent Thought completion · 显式 surface/gap · 100-cell responsive crystal workbench；代码 `fe2d39a` / `bf25077` / `2b9d008` / `4c4fb08`；局部完成，不代表 renderer 整体稳定 |
-| **OI-14 · BLOCKED: HUMAN** | retained renderer 重构：A 真实 VT/选型 ✅（`1ae9f53` / `f04f8de`）→ B live view-state ✅（`269b39c`）→ C renderer ✅（`1798a7c`）→ D Markdown/transcript ✅（`8b060e5`）→ E Composer/activity/footer ✅（`d0fb822`）→ F overlays ✅（`31384d4`）→ G 默认切换/可靠性 ✅（`6f4764f`–`accc22c`）→ H legacy 删除/发布审计 ✅（`39e66b4`–`d4eaed0`）；只剩 OI-H3 真人走查 |
+| **OI-14 · BLOCKED: HUMAN** | retained renderer 重构：A 真实 VT/选型 ✅（`1ae9f53` / `f04f8de`）→ B live view-state ✅（`269b39c`）→ C renderer ✅（`1798a7c`）→ D Markdown/transcript ✅（`8b060e5`）→ E Composer/activity/footer ✅（`d0fb822`）→ F overlays ✅（`31384d4`）→ G 默认切换/可靠性 ✅（`6f4764f`–`accc22c`）→ H legacy 删除/发布审计 ✅（`39e66b4`–`d4eaed0`）→ interrupt/Composer 竞态修复 ✅（`e6ec6cb`）；只剩 OI-H3 真人走查 |
 | **AR5C-early** | esbuild 单文件产物 · 发布元数据 · `getBundledSkillsDir()` 双布局 · pack→install→run E2E 进门禁 · [RELEASE.md](./RELEASE.md) |
 
 最新 commit 以 `git log` 为准。

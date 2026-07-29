@@ -14,6 +14,7 @@
 > **OI-14F 交付：** `31384d4` · retained OverlayHost/交互面板。
 > **OI-14G 交付：** `6f4764f`–`accc22c` · 默认切换、可靠性、cleanup 与性能预算。
 > **OI-14H 交付：** `39e66b4`–`d4eaed0` · legacy 删除、单 owner guard 与发布审计。
+> **可靠性 follow-up：** `e6ec6cb` · durable SIGINT handler/Composer 输入串行化。
 > **范围：** 本文定义 CLI TTY 路径的重构方案。非 TTY、`--print`、pipe、JSON 和
 > Desktop 的既有输出契约必须保持兼容。
 > **结论先行：** 停止继续扩展自研 `TerminalSurface + 字符串 prefix + tiny
@@ -451,9 +452,11 @@ OI-14H 自动部分已完成：
 4. `d4eaed0` 删除 engine resolver、类型、环境变量成功契约与 fixture；双 TTY/raw-mode
    只走 retained，能力不足只走 plain/readline。
 5. 134 脚本、预算、dist/pack/install、Desktop/Electron、第三方 notices 与静态 owner/
-   absence guard 全绿；根 `dependencies` 为 `{}`，单文件 1,691,077 bytes /
+   absence guard 全绿；根 `dependencies` 为 `{}`，单文件 1,691,759 bytes /
    195 modules，两次完整串 cold `+47.0–84.4ms`、CPU `375–672ms`、render heap
    `+21.0–21.1MB`、cleanup retained `+1.5MB`。
+6. `e6ec6cb` 用确定性挂起的 durable interrupt handler 证明并关闭下一轮 Composer
+   提前获取 stdin 的竞态；恢复后可继续编辑，idle Ctrl+C 仍正常退出。
 
 只剩 §9.4 的真人 Windows Terminal 核心场景：记录字体、颜色、动画和按键/鼠标手感。
 它由 [OPEN_ISSUES.md](./OPEN_ISSUES.md) OI-H3 保持 `BLOCKED: HUMAN`；任何能在

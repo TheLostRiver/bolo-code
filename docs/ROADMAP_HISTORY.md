@@ -561,3 +561,7 @@ C4: compact 成功且非 override system 时可选刷新短 skill catalog 段（
   `+21.0–21.1MB`、cleanup retained `+1.5MB`，根 `dependencies` 仍为 `{}`。
   真人 Windows Terminal 的字体、
   颜色、动画和按键/鼠标手感继续单列 OI-H3。
+- post-H follow-up `e6ec6cb`：真人复测发现 turn 中 Ctrl+C 后 Composer 可能失去
+  输入；确定性夹具证明 durable SIGINT handler 与下一轮 raw stdin 获取存在竞态。
+  REPL 现等待单飞 interrupt task settle 后才恢复 Composer，并验证可继续编辑与
+  idle Ctrl+C 退出。当前单文件为 1,691,759 bytes / 195 modules。

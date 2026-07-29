@@ -204,10 +204,12 @@ OI-14H 自动关闭证据：
   surface/prefix/tiny Markdown 或 engine env/resolver；构建后的 `dist/bolo.mjs` 也不含
   这些符号。
 - 134 脚本完整 `npm test`、7-file tarball/install、Desktop bundle、Electron launch
-  全绿；单文件为 1,691,077 bytes / 195 modules，两次完整串 cold
+  全绿；单文件为 1,691,759 bytes / 195 modules，两次完整串 cold
   `+47.0–84.4ms`、CPU `375–672ms`、render heap `+21.0–21.1MB`、
   cleanup retained `+1.5MB`。根 `dependencies` 仍为 `{}`，
   `THIRD_PARTY_NOTICES.md` 与 lockfile 版本一致。
+- `e6ec6cb` 关闭真人复测暴露的 post-interrupt 输入竞态：SIGINT handler 未 settle
+  前不重新获取 Composer stdin；完成后恢复 focus/raw input 并验证可继续编辑。
 - 自动化可判断的删除、owner、布局、cursor、resize、cleanup 与发布缺陷已关闭。
   字体、颜色、动画主观流畅度和真人按键/鼠标手感仍诚实保留在 OI-H3。
 
@@ -768,7 +770,8 @@ resize，不能证明正文/surface 稳定。
 
 2026-07-28 截图暴露的正文碎片、巨大空洞、物理续行贴左、user/agent 间距、
 cursor/resize 与 cleanup 代码缺陷已由 OI-14G 的真实 xterm、故障注入和子进程门禁
-关闭；OI-14H 又删除了全部旧 dynamic owner 与回滚入口。本条只检查真实 Windows
+关闭；OI-14H 又删除了全部旧 dynamic owner 与回滚入口；`e6ec6cb` 进一步关闭
+durable SIGINT handler 与下一轮 Composer stdin 获取的竞态。本条只检查真实 Windows
 Terminal 字体/颜色、动画主观流畅度、
 鼠标/剪贴板手感、Ctrl+J/历史/删除组合键、权限面板真人切换，以及实际 terminal
 host 的 resize/滚动体验；不得用本条掩盖任何可由 headless terminal 复现的问题。
