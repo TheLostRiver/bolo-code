@@ -18,7 +18,7 @@
 | **接手开发的 Agent / 同事** | **[docs/AGENT_HANDOFF.md](docs/AGENT_HANDOFF.md)**（架构 · 进度 · 改码规矩） |
 | **查总进度与各轨** | **[docs/ROADMAP.md](docs/ROADMAP.md)**（进度真源） |
 | **查 CLI TUI 重构** | **[docs/CLI_TUI_REFACTOR_PLAN.md](docs/CLI_TUI_REFACTOR_PLAN.md)**（OI-14 retained renderer · OI-15 slash lifecycle · OI-16 pager 高度 · OI-17 邻接布局）· [选型证据](docs/CLI_TUI_RENDERER_DECISION.md) |
-| **查长工具输出 / 模型上下文方案** | **[docs/TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md](docs/TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md)**（CTX/OUT · 已准入、尚未实现） |
+| **查长工具输出 / 模型上下文方案** | **[docs/TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md](docs/TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md)**（CTX-1 已完成 · CTX-2 下一刀 · OUT 待实现） |
 | **查分层边界** | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 
 ---
@@ -36,7 +36,7 @@
 | 文件 Diff 日用 | ~95%+ | D0–D7 · U0–U4 |
 | Hooks 日用 | ~96–98% | H0–H5（含 SessionEnd） |
 | Compact 日用 | ~93–96% | C0–C5 + AR2A0a/A0b（hybrid 计数 · 中段截断 · 防重摘要） |
-| **多 Provider 热切** | **~92–96%** | P0–P4.1 + CX7 Desktop；CTX-1..3 模型上下文元数据已准入、尚未实现 |
+| **多 Provider 热切** | **~92–96%** | P0–P4.1 + CX7 Desktop；CTX-1 config/schema/validator/resolver 已完成，CTX-2 runtime 接线待实现 |
 | **Effort 方言** | **~92–95%** | E0–E9 |
 | **Provider UX** | **~95–98%** | CX0–CX8（ultrathink 默认 off） |
 | Durable Runtime | DR0–DR4 ✅ | admission · recovery · 单 runner · durable control/task · FIFO/promotion · v1 protocol/resolution · crash/restart closeout |
@@ -58,10 +58,11 @@ read-only panel/pager migration、OI-15D Skills/Plugins stable-key overlay、OI-
 slash/context/paste/Thought/权限/welcome 局部能力仍然有效，但不再作为整个 TUI
 renderer 稳定的证据。
 
-**当前状态：新队列为 CTX-1..3 → OUT-1..5；下一刀是 CTX-1。**
-用户实测确认长 Read/工具结果会占满 transcript；代码审计确认顶层
-`contextWindowTokens` 不会随 provider/model 热切，写进 provider profile 会被静默
-忽略。正式契约见
+**当前状态：CTX-1 ✅ → CTX-2..3 → OUT-1..5；下一刀是 CTX-2。**
+用户实测确认长 Read/工具结果会占满 transcript。CTX-1 `27a2506` 已让 provider/model
+limits 能被解析、按 exact model 深合并、字段级告警并归一为带 source 的
+`ResolvedModelMetadata`；但 session create/resume/hot-switch、compact、skills 与
+dashboard 尚未消费该结果，端到端配置仍待 CTX-2。正式契约见
 [docs/TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md](docs/TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md)。
 OI-15A–F、OI-16 与 OI-17 自动实现仍保持关闭。OI-15A 已在 core 建立
 `history | panel | toast | overlay` display policy、运行时 fail-closed 校验和
@@ -96,11 +97,12 @@ OI-17 `cda22fd` 修复了这个定位漏测：REPL 内 text/runtime pager 现在
 48/80 行真实 xterm composite、footer/页码、`q` 后草稿续写、modal 回归与独立
 `runtime` 顶层 pager 均已进入默认门禁。plain/non-TTY 字节和零运行时依赖不变。
 
-CTX/OUT 新轨不会恢复 legacy surface，也不会引入其它 Agent 的依赖。CTX 先把 provider
-默认与 exact model limits 归一为同一 `ResolvedModelMetadata`，让 create、resume、
-热切、compact、skills 和 dashboard 使用同一窗口；OUT 再增加通用 Tool presentation、
-renderer-local 折叠、file-backed 全文 pager、键鼠路径与第二阶段只读调用聚合。未实现前，
-现有顶层 `contextWindowTokens` 和长工具结果展示限制仍然存在。
+CTX/OUT 新轨不会恢复 legacy surface，也不会引入其它 Agent 的依赖。CTX-1 已把 provider
+默认与 exact model limits 归一为同一 `ResolvedModelMetadata`；CTX-2 将让 create、
+resume、热切、compact、skills 和 dashboard 使用同一结果。OUT 再增加通用 Tool
+presentation、renderer-local 折叠、file-backed 全文 pager、键鼠路径与第二阶段只读
+调用聚合。CTX-2 完成前，runtime 仍沿用旧顶层 `contextWindowTokens`；OUT 完成前，
+长工具结果展示限制仍然存在。
 
 OI-14 的单 retained renderer、常驻 Composer、Markdown、OverlayHost、物理终端门禁
 与 plain/non-TTY fallback 保持不变；OI-15 不增加新 renderer 或其它 Agent 的运行时

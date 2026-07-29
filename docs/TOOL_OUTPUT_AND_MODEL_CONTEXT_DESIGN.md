@@ -1,7 +1,7 @@
 # 长工具输出折叠与模型上下文元数据设计
 
-> **状态：** Accepted design，尚未实现。
-> **基线：** `dc20807`。
+> **状态：** CTX-1 `27a2506` 已完成；CTX-2 是下一刀；CTX-3 与 OUT-1..5 尚未实现。
+> **设计基线：** `dc20807`；当前实施基线：`27a2506`。
 > **路线标识：** `CTX-1..3`、`OUT-1..5`。
 > **进度真源：** [ROADMAP.md](./ROADMAP.md) §0、§13.11。
 > **相关实现：** [COMPACTION.md](./COMPACTION.md) ·
@@ -16,6 +16,18 @@
 
 本方案只借鉴 Pi、oh-my-pi、HelsincyCode、Codex、OpenCode 的职责边界与交互语义，
 不引入这些项目的运行时依赖，不复制未授权实现。
+
+### 实施水位
+
+| 切片 | 状态 | 当前边界 |
+|------|------|----------|
+| CTX-1 | ✅ `27a2506` | config/schema/validator/resolver、深合并、warning、exact catalog 与 source 已落地 |
+| CTX-2 | **▶ NEXT** | create/resume/hot-switch、dynamic compact、skills/dashboard/provider request 待接线 |
+| CTX-3 | PENDING | `/provider`、`/model`、`/context`、`/doctor`、Desktop 与最终用户文档 |
+| OUT-1..5 | PENDING | 通用 Tool presentation、折叠、全文 pager、鼠标与只读调用聚合 |
+
+CTX-2 完成前，runtime 仍沿用旧顶层 `contextWindowTokens`，不能把 CTX-1 的配置与
+resolver 宣称为端到端生效。OUT 完成前，长工具结果仍可能占满 retained transcript。
 
 ---
 
@@ -78,7 +90,7 @@ Read/Bash/MCP tool
 
 ### 2.2 上下文窗口链路
 
-当前真实数据流：
+CTX-1 前、当前 runtime 仍在使用的真实数据流：
 
 ```text
 config.contextWindowTokens（默认 128000）
@@ -90,17 +102,24 @@ config.contextWindowTokens（默认 128000）
   → session snapshot / transcript meta
 ```
 
-准确缺口：
+CTX-1 已关闭的配置/解析缺口：
 
-- `ProviderConfigJson`、`ProviderProfile` 与 `profileFromConfigJson()` 没有 context 字段。
-- `loadConfigJsonWithWarnings()` 只检查 JSONC 是否能解析，不检查未知字段或数值语义。
-- `providers.<id>.contextWindowTokens` 会被 normalization 静默丢弃。
+- `ProviderConfigJson`、`ProviderProfile` 与 `profileFromConfigJson()` 已支持 provider
+  默认 `contextWindowTokens/maxTokens` 和 exact model `models` map。
+- user/project model entry 会逐字段深合并。
+- 非法值、未知字段和常见拼错别名会进入现有 config warning 通道。
+- `resolveModelMetadata()` 已按 model/provider/catalog/legacy/snapshot/fallback
+  逐字段解析并记录 source；超窗 output 会被拒绝并向低优先级降级。
+
+CTX-2 仍需关闭的 runtime 缺口：
+
 - `ResolvedWorkspace` 没有 resolved model metadata 或 value source。
 - `/provider use` 与 `/model` 更新 client/model/effort/cache，但不更新 context。
 - auto-compact prepare 捕获装配时的固定窗口；后来只改 session 字段仍可能继续用旧阈值。
 - resume 优先使用 snapshot window；用户修正当前配置后，旧会话仍可能保留旧值。
 
-所以该字段不是完全没有消费者，而是作用域和生命周期错误。
+所以 CTX-1 只建立了可复用的配置与解析真源；在 CTX-2 接入消费者前，作用域和生命周期
+问题仍未端到端解决。
 
 ---
 
@@ -568,7 +587,7 @@ OUT-3 增加可选 transcript entry，按 call id 保存 presentation metadata �
 每个代码切片先写失败测试；新测试同时进入独立 npm script 与默认 `npm test`。
 代码/测试与文档分批中文 commit，commit 后立即 push。
 
-### CTX-1 · 配置契约与 resolver
+### CTX-1 · 配置契约与 resolver ✅ `27a2506`
 
 packages-first：
 
@@ -578,9 +597,10 @@ packages-first：
 - 内置小型 catalog/preset metadata 与明确 fallback。
 
 验收：user/project merge、精确 model/provider/catalog/legacy/fallback 优先级、拼错字段、
-非法值、unknown model。
+非法值、unknown model。新增 `test:model-metadata-config` 已进入默认 `npm test`；
+专项、typecheck、既有 config/provider 回归与完整门禁已通过。
 
-### CTX-2 · create/resume/hot-switch 接线
+### CTX-2 · create/resume/hot-switch 接线 ▶ NEXT
 
 - `ResolvedWorkspace.resolvedModel`。
 - create/resume/provider/model 原子更新。
@@ -589,6 +609,9 @@ packages-first：
 - snapshot 兼容与 current-config-first resume。
 
 验收：32k/128k/200k/1m 切换；旧 session；热切失败回滚；auto/mid-turn compact 阈值。
+
+本切片完成前，session、compact、skills、dashboard 与 provider request 仍使用旧顶层
+窗口或既有输出配置，不能把 provider/model limits 写进最终用户用法并宣称已生效。
 
 ### CTX-3 · 可观测性与用户文档
 
