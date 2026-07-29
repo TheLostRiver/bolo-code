@@ -44,6 +44,7 @@ import {
   type ArrowPickItem,
   type ArrowPickResult,
 } from './tui/arrowPicker.ts'
+import { runRetainedArrowPicker } from './tui/retainedPicker.ts'
 import { getCliSlashCommandCandidates } from './slashCandidates.ts'
 import {
   createRetainedTuiController,
@@ -298,9 +299,8 @@ export async function pickProjectSessionId(opts: {
   writeOut?: (s: string) => void
   writeErr?: (s: string) => void
   readChoice?: (prompt: string) => Promise<string>
-  /** F-T8-PICKER：优先箭头键；false 强制编号 */
+  /** 优先 retained picker；false 强制编号。 */
   arrowPicker?: boolean
-  readKey?: () => Promise<string>
 }): Promise<string> {
   const writeOut = opts.writeOut ?? ((s) => process.stdout.write(s))
   const writeErr = opts.writeErr ?? ((s) => process.stderr.write(s))
@@ -328,21 +328,20 @@ export async function pickProjectSessionId(opts: {
     )
   }
 
-  const useArrow =
+  const useRetainedPicker =
     opts.arrowPicker !== false &&
     process.env.BOLO_ARROW_PICKER !== '0' &&
-    (opts.readKey != null || process.stdin.isTTY === true)
+    shouldUseDynamicTui({ isTty })
 
-  if (useArrow) {
+  if (useRetainedPicker) {
     const pickItems: ArrowPickItem[] = items.map((it) => ({
       id: it.id,
       label:
         `${it.id.slice(0, 12)}  ${(it.title ?? it.preview ?? '').slice(0, 40)}  n=${it.messageCount}`.trim(),
     }))
-    const ar = await runArrowPicker({
+    const ar = await runRetainedArrowPicker({
       items: pickItems,
       writeOut,
-      readKey: opts.readKey,
       isTty: true,
     })
     if (ar.ok) return ar.id

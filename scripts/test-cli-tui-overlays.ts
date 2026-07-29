@@ -9,6 +9,7 @@ import {
   type CliTuiController,
 } from '../packages/cli/src/index.ts'
 import { buildDiffViewModelFromPreview } from '../packages/core/src/index.ts'
+import { runRetainedArrowPicker } from '../packages/cli/src/tui/retainedPicker.ts'
 import { measureTerminalText } from '../packages/cli/src/tui/terminalText.ts'
 import type { AskQuestion } from '../packages/shared/src/index.ts'
 import type {
@@ -228,6 +229,23 @@ function assertFits(fixture: Fixture, columns: number, label: string): void {
       `${label}: row ${line.index} triggered terminal auto-wrap`,
     )
   }
+}
+
+async function waitForTerminalText(
+  terminal: HeadlessTerminalHarness,
+  pattern: RegExp,
+  label: string,
+): Promise<void> {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    await terminal.flush()
+    const content = terminal
+      .viewport()
+      .map((line) => line.text)
+      .join('\n')
+    if (pattern.test(content)) return
+    await new Promise((resolve) => setTimeout(resolve, 5))
+  }
+  throw new Error(`FAIL: timed out waiting for ${label}`)
 }
 
 async function main(): Promise<void> {
@@ -454,6 +472,27 @@ async function main(): Promise<void> {
     assert(
       !effortResult.ok && effortResult.reason === 'cancel',
       'Esc cancels the effort picker without mutating settings',
+    )
+
+    const generic = fixture.controller.runPickerOverlay({
+      mode: 'picker',
+      items: [
+        { id: 'first', label: 'First session' },
+        { id: 'second', label: 'Second session' },
+      ],
+      title: 'Select session',
+    })
+    await settle(fixture)
+    assert(
+      fixture.controller.getState().overlay.mode === 'picker' &&
+        screen(fixture).includes('Second session'),
+      'generic picker has an honest retained overlay mode',
+    )
+    fixture.input.send('2')
+    const genericResult = await generic
+    assert(
+      genericResult.ok && genericResult.id === 'second',
+      'generic retained picker preserves numeric selection',
     )
 
     fixture.terminal.resize(80, 48)
@@ -735,6 +774,10 @@ async function main(): Promise<void> {
       'one retained picker helper serves both provider and effort modes',
     )
     assert(
+      resumeSource.includes('await runRetainedArrowPicker({'),
+      'pre-session resume selection uses the standalone retained picker',
+    )
+    assert(
       runtimeSource.includes('await runRetainedRuntimePager({') &&
         !runtimeSource.includes('resolveCliTuiEngine') &&
         !runtimeSource.includes('await runRuntimePager({'),
@@ -745,6 +788,48 @@ async function main(): Promise<void> {
   } finally {
     await fixture.controller.stop()
     fixture.terminal.dispose()
+  }
+
+  const standaloneTerminal = new HeadlessTerminalHarness({
+    columns: 80,
+    rows: 24,
+    scrollback: 200,
+  })
+  const standaloneInput = new RawInputHarness()
+  const standaloneOutput = new ResizableOutput(80, 24)
+  try {
+    const standalone = runRetainedArrowPicker({
+      items: [
+        { id: 'alpha', label: 'Alpha session' },
+        { id: 'beta', label: 'Beta session' },
+      ],
+      title: 'Select a session',
+      isTty: true,
+      input: standaloneInput,
+      output: standaloneOutput,
+      color: false,
+      writeOut: (text) => standaloneTerminal.write(text),
+    })
+    await waitForTerminalText(
+      standaloneTerminal,
+      /Beta session/u,
+      'standalone retained picker frame',
+    )
+    standaloneInput.send('\u001b[B')
+    standaloneInput.send('\r')
+    const result = await standalone
+    assert(
+      result.ok && result.id === 'beta',
+      'standalone retained picker returns the selected session',
+    )
+    assert(
+      standaloneInput.isRaw === false &&
+        JSON.stringify(standaloneInput.rawTransitions) ===
+          JSON.stringify([true, false]),
+      'standalone retained picker restores raw mode exactly once',
+    )
+  } finally {
+    standaloneTerminal.dispose()
   }
 }
 

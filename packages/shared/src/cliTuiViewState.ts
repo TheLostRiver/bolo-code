@@ -153,6 +153,7 @@ export const CLI_TUI_OVERLAY_MODES = [
   'none',
   'permission',
   'question',
+  'picker',
   'provider',
   'effort',
   'diff',
@@ -180,6 +181,7 @@ export type CliTuiOverlayState =
   | { mode: 'none' }
   | { mode: 'permission'; request: CliTuiPermissionRequest }
   | { mode: 'question' }
+  | { mode: 'picker' }
   | { mode: 'provider' }
   | { mode: 'effort' }
   | { mode: 'diff' }

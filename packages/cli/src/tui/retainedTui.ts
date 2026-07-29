@@ -47,6 +47,7 @@ import {
   type RetainedDiffOverlayOptions,
   type RetainedDiffOverlayResult,
   type RetainedPagerOverlayOptions,
+  type RetainedPickerOverlayMode,
 } from './retainedOverlay.ts'
 import {
   RetainedTranscript,
@@ -90,7 +91,7 @@ export type CliTuiController = {
     signal?: AbortSignal
   }): Promise<AskUserQuestionOutcome>
   runPickerOverlay(options: {
-    mode: 'provider' | 'effort'
+    mode: RetainedPickerOverlayMode
     items: ArrowPickItem[]
     title?: string
     initialIndex?: number

@@ -72,8 +72,13 @@ type QuestionSession = OverlaySessionBase & {
   resolve: (outcome: AskUserQuestionOutcome) => void
 }
 
+export type RetainedPickerOverlayMode =
+  | 'picker'
+  | 'provider'
+  | 'effort'
+
 type PickerSession = OverlaySessionBase & {
-  mode: 'provider' | 'effort'
+  mode: RetainedPickerOverlayMode
   items: ArrowPickItem[]
   title?: string
   index: number
@@ -125,6 +130,16 @@ type OverlaySession =
   | PickerSession
   | DiffSession
   | PagerSession
+
+function isPickerSession(
+  session: OverlaySession | undefined,
+): session is PickerSession {
+  return (
+    session?.mode === 'picker' ||
+    session?.mode === 'provider' ||
+    session?.mode === 'effort'
+  )
+}
 
 function decodePanelKey(data: string): string {
   const key = parseKey(data)
@@ -267,7 +282,7 @@ export class RetainedOverlayHost implements Component, Focusable {
   }
 
   runPicker(options: {
-    mode: 'provider' | 'effort'
+    mode: RetainedPickerOverlayMode
     items: ArrowPickItem[]
     title?: string
     initialIndex?: number
@@ -440,10 +455,7 @@ export class RetainedOverlayHost implements Component, Focusable {
       this.finishPermission('deny')
     } else if (this.active?.mode === 'question') {
       this.finishQuestion({ kind: 'cancelled' })
-    } else if (
-      this.active?.mode === 'provider' ||
-      this.active?.mode === 'effort'
-    ) {
+    } else if (isPickerSession(this.active)) {
       this.finishPicker({
         ok: false,
         reason: 'cancel',
@@ -498,7 +510,7 @@ export class RetainedOverlayHost implements Component, Focusable {
       this.acceptQuestionSelection(active, next.done.selection)
       return
     }
-    if (active.mode === 'provider' || active.mode === 'effort') {
+    if (isPickerSession(active)) {
       const next = applyArrowPickerKey(
         active.index,
         active.items.length,
@@ -595,7 +607,7 @@ export class RetainedOverlayHost implements Component, Focusable {
       }
       return lines
     }
-    if (active.mode === 'provider' || active.mode === 'effort') {
+    if (isPickerSession(active)) {
       return wrapPanelScreen(
         formatArrowPickerScreen(active.items, active.index, {
           title: active.title,
@@ -729,12 +741,7 @@ export class RetainedOverlayHost implements Component, Focusable {
 
   private finishPicker(result: ArrowPickResult): void {
     const active = this.active
-    if (
-      !active ||
-      (active.mode !== 'provider' && active.mode !== 'effort')
-    ) {
-      return
-    }
+    if (!isPickerSession(active)) return
     this.active = undefined
     this.close(active)
     active.resolve(result)
