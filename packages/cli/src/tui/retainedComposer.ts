@@ -87,6 +87,8 @@ export class RetainedComposer implements Component, Focusable {
       color: boolean
       requestRender: () => void
       onInputSettled: () => void
+      onInputMutation: () => void
+      onIdleEscape: () => void
       onRunningInterrupt: () => void
       clearScreen: () => void
     },
@@ -163,9 +165,10 @@ export class RetainedComposer implements Component, Focusable {
         -BRACKETED_PASTE_END.length,
       )
       const next = insertTuiInputText(this.state, pasted)
-      if (next !== this.state) {
+      if (next.value !== this.state.value) {
         this.pushUndo(this.state)
         this.state = next
+        this.options.onInputMutation()
         this.options.requestRender()
       }
       return
@@ -176,9 +179,22 @@ export class RetainedComposer implements Component, Focusable {
       this.undo()
       return
     }
+    const hadSlashMenu = this.state.slashMenu !== null
+    const previousValue = this.state.value
     const result = applyTuiInputKey(this.state, decoded.key)
-    if (result.state.value !== this.state.value) this.pushUndo(this.state)
+    const valueChanged = result.state.value !== previousValue
+    if (valueChanged) this.pushUndo(this.state)
     this.state = result.state
+    if (
+      valueChanged &&
+      decoded.id !== 'up' &&
+      decoded.id !== 'down'
+    ) {
+      this.options.onInputMutation()
+    }
+    if (decoded.id === 'escape' && !hadSlashMenu) {
+      this.options.onIdleEscape()
+    }
 
     if (result.action === 'submit') {
       const value = result.value ?? this.state.value
@@ -222,7 +238,9 @@ export class RetainedComposer implements Component, Focusable {
   private undo(): void {
     const previous = this.undoStack.pop()
     if (!previous) return
+    const valueChanged = previous.value !== this.state.value
     this.state = previous
+    if (valueChanged) this.options.onInputMutation()
     this.options.requestRender()
   }
 

@@ -89,6 +89,13 @@ export {
   type RetainedWelcomeOptions,
 } from './tui/retainedTui.ts'
 export {
+  formatCliCommandSurface,
+  type FormatCliCommandSurfaceOptions,
+} from './tui/retainedCommandSurface.ts'
+export {
+  type CliCommandSurfaceTimers,
+} from './tui/commandSurfaceEffect.ts'
+export {
   resolveTuiTheme,
   type TuiTheme,
   type TuiThemeId,

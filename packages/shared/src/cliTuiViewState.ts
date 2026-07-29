@@ -7,6 +7,12 @@
 
 import type { ChatMessage, SessionPhase } from './index.ts'
 import { COMPACT_SUMMARY_MARKER } from './turnTimeline.ts'
+import {
+  createCliCommandSurfaceState,
+  reduceCliCommandSurfaceState,
+  type CliCommandSurfaceAction,
+  type CliCommandSurfaceState,
+} from './cliCommandSurface.ts'
 
 export const CLI_TUI_BLOCK_STATUSES = [
   'streaming',
@@ -195,6 +201,7 @@ export type CliTuiViewState = {
   nextTurnSequence: number
   composer: CliTuiComposerState
   overlay: CliTuiOverlayState
+  commandSurface: CliCommandSurfaceState
 }
 
 /**
@@ -316,6 +323,7 @@ export type CliTuiViewAction =
   | { type: 'restore_messages'; messages: readonly ChatMessage[] }
   | { type: 'set_composer_mode'; mode: CliTuiComposerMode }
   | { type: 'set_overlay'; overlay: CliTuiOverlayState }
+  | { type: 'command_surface'; action: CliCommandSurfaceAction }
   | { type: 'set_block_elapsed'; blockId: string; elapsedMs: number }
   | { type: 'finish_thinking_segment'; elapsedMs: number }
 
@@ -327,6 +335,7 @@ export function createCliTuiViewState(): CliTuiViewState {
     nextTurnSequence: 0,
     composer: { mode: 'editing' },
     overlay: { mode: 'none' },
+    commandSurface: createCliCommandSurfaceState(),
   }
 }
 
@@ -929,14 +938,31 @@ export function reduceCliTuiViewState(
       return reduceSessionEvent(state, action.event)
     case 'end_turn':
       return finishActiveTurn(state, action.terminal)
-    case 'restore_messages':
-      return createCliTuiViewStateFromMessages(action.messages)
+    case 'restore_messages': {
+      const restored = createCliTuiViewStateFromMessages(action.messages)
+      return {
+        ...restored,
+        commandSurface: reduceCliCommandSurfaceState(
+          state.commandSurface,
+          { type: 'reset' },
+        ),
+      }
+    }
     case 'set_composer_mode':
       return state.composer.mode === action.mode
         ? state
         : { ...state, composer: { mode: action.mode } }
     case 'set_overlay':
       return { ...state, overlay: action.overlay }
+    case 'command_surface': {
+      const commandSurface = reduceCliCommandSurfaceState(
+        state.commandSurface,
+        action.action,
+      )
+      return commandSurface === state.commandSurface
+        ? state
+        : { ...state, commandSurface }
+    }
     case 'set_block_elapsed':
       return updateBlockElapsed(state, action.blockId, action.elapsedMs)
     case 'finish_thinking_segment':

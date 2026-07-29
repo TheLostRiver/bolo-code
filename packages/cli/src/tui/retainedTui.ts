@@ -9,11 +9,18 @@ import { Text } from '@earendil-works/pi-tui/dist/components/text.js'
 import { parseKey } from '@earendil-works/pi-tui/dist/keys.js'
 import { getBoloHomeDir } from '../../../config/src/paths.ts'
 import {
+  createCliCommandSurfaceState,
   createCliTuiViewState,
   projectCliTuiSessionEvent,
   reduceCliTuiViewState,
   type AskQuestion,
   type ChatMessage,
+  type CliCommandPanelInput,
+  type CliCommandPanelState,
+  type CliCommandSurfaceAction,
+  type CliCommandSurfaceState,
+  type CliCommandToastInput,
+  type CliCommandToastState,
   type CliTuiSessionEvent,
   type CliTuiViewAction,
   type CliTuiViewState,
@@ -39,10 +46,16 @@ import {
 } from './inkLayout.ts'
 import { RetainedActivity } from './retainedActivity.ts'
 import {
+  CliCommandSurfaceEffect,
+  createDefaultCliCommandSurfaceTimers,
+  type CliCommandSurfaceTimers,
+} from './commandSurfaceEffect.ts'
+import {
   RetainedComposer,
   RetainedComposerFooter,
   type RetainedComposerConfig,
 } from './retainedComposer.ts'
+import { RetainedCommandSurface } from './retainedCommandSurface.ts'
 import {
   RetainedOverlayHost,
   type RetainedDiffOverlayOptions,
@@ -78,6 +91,10 @@ export type CliTuiController = {
   configureComposer(options: RetainedComposerConfig): void
   setRunningInterruptHandler(handler?: () => void): void
   readInput(options?: { signal?: AbortSignal }): Promise<ReadTuiInputResult>
+  showCommandPanel(panel: CliCommandPanelInput): CliCommandPanelState
+  showCommandToast(toast: CliCommandToastInput): CliCommandToastState
+  getCommandSurfaceState(): CliCommandSurfaceState
+  resetCommandSurface(): void
   restoreMessages(messages: readonly ChatMessage[]): void
   getState(): CliTuiViewState
   start(): Promise<void>
@@ -153,6 +170,7 @@ class RetainedRoot extends Container {
   private readonly transcript: RetainedTranscript
   private readonly activity: RetainedActivity
   private readonly composer: RetainedComposer
+  private readonly commandSurface: RetainedCommandSurface
   private readonly footer: RetainedComposerFooter
   private readonly compatibilityOutput = new Text('', 1, 0)
   private outputText = ''
@@ -173,6 +191,10 @@ class RetainedRoot extends Container {
     this.transcript = new RetainedTranscript({ env, getViewportRows })
     this.activity = activity
     this.composer = composer
+    this.commandSurface = new RetainedCommandSurface(
+      createCliCommandSurfaceState(),
+      { color, getViewportRows },
+    )
     this.footer = new RetainedComposerFooter(
       composer,
       color,
@@ -182,6 +204,7 @@ class RetainedRoot extends Container {
     this.addChild(this.compatibilityOutput)
     this.addChild(this.activity)
     this.addChild(this.composer)
+    this.addChild(this.commandSurface)
     this.addChild(this.footer)
     this.markDirty()
   }
@@ -199,6 +222,7 @@ class RetainedRoot extends Container {
   setState(state: CliTuiViewState): void {
     this.transcript.setState(state)
     this.composer.setMode(state.composer.mode)
+    this.commandSurface.setState(state.commandSurface)
     this.markDirty()
   }
 
@@ -266,6 +290,7 @@ class RetainedRoot extends Container {
       append(this.compatibilityOutput.render(width), 1)
       append(this.activity.render(width), 1)
       append(this.composer.render(width), 1)
+      append(this.commandSurface.render(width), 0)
       append(this.footer.render(width), 0)
     }
     this.renderedRevision = this.revision
@@ -304,6 +329,7 @@ export function createRetainedTuiController(options: {
   explainError?: (message: string) => string
   now?: () => number
   activityIntervalMs?: number
+  commandSurfaceTimers?: CliCommandSurfaceTimers
   /** Standalone overlays (for example runtime pager) do not render the REPL root. */
   rootVisible?: boolean
 }): CliTuiController {
@@ -325,6 +351,7 @@ export function createRetainedTuiController(options: {
   let root: RetainedRoot
   let tui: TUI
   let overlayHandle: OverlayHandle | undefined
+  let commandSurfaceEffect: CliCommandSurfaceEffect
 
   const requestRender = (): void => {
     if (started && !stopped) tui.requestRender()
@@ -338,6 +365,12 @@ export function createRetainedTuiController(options: {
     requestRender: requestComponentRender,
     onInputSettled: () => {
       if (!runningInterruptHandler) adapter.setInputEnabled(false)
+    },
+    onInputMutation: () => {
+      apply({ type: 'command_surface', action: { type: 'accepted_input' } })
+    },
+    onIdleEscape: () => {
+      apply({ type: 'command_surface', action: { type: 'escape' } })
     },
     onRunningInterrupt: () => runningInterruptHandler?.(),
     clearScreen: () => {
@@ -379,8 +412,14 @@ export function createRetainedTuiController(options: {
   const apply = (action: CliTuiViewAction): void => {
     state = reduceCliTuiViewState(state, action)
     root.setState(state)
+    commandSurfaceEffect.sync(state.commandSurface)
     requestRender()
   }
+  commandSurfaceEffect = new CliCommandSurfaceEffect(
+    (action: CliCommandSurfaceAction) =>
+      apply({ type: 'command_surface', action }),
+    options.commandSurfaceTimers ?? createDefaultCliCommandSurfaceTimers(),
+  )
   const overlay = new RetainedOverlayHost({
     color,
     setOverlayState: (next) => apply({ type: 'set_overlay', overlay: next }),
@@ -544,6 +583,29 @@ export function createRetainedTuiController(options: {
       }
       return pending
     },
+    showCommandPanel(panel) {
+      apply({
+        type: 'command_surface',
+        action: { type: 'show_panel', panel },
+      })
+      return state.commandSurface.panel!
+    },
+    showCommandToast(toast) {
+      apply({
+        type: 'command_surface',
+        action: { type: 'show_toast', toast },
+      })
+      return state.commandSurface.toast!
+    },
+    getCommandSurfaceState() {
+      return state.commandSurface
+    },
+    resetCommandSurface() {
+      apply({
+        type: 'command_surface',
+        action: { type: 'reset' },
+      })
+    },
     restoreMessages(messages) {
       apply({ type: 'restore_messages', messages })
     },
@@ -593,6 +655,7 @@ export function createRetainedTuiController(options: {
           runningInterruptHandler = undefined
         },
         () => removeRunningInterruptInputListener(),
+        () => commandSurfaceEffect.dispose(),
         () => composer.cancelInput(),
         () => adapter.setInputEnabled(false),
         () => {

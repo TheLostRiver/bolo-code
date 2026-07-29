@@ -1,0 +1,175 @@
+import type { Component } from '@earendil-works/pi-tui/dist/tui.js'
+import type {
+  CliCommandPanelState,
+  CliCommandSurfaceState,
+  CliCommandSurfaceTone,
+} from '../../../shared/src/index.ts'
+import { resolveTuiDockWidth } from './frame.ts'
+import {
+  clipTerminalText,
+  measureTerminalText,
+  padTerminalText,
+  wrapTerminalText,
+} from './terminalText.ts'
+
+export type FormatCliCommandSurfaceOptions = {
+  columns?: number
+  rows?: number
+  color?: boolean
+}
+
+function normalizeDimension(
+  value: number | undefined,
+  fallback: number,
+): number {
+  return Number.isFinite(value)
+    ? Math.max(1, Math.floor(value!))
+    : fallback
+}
+
+function frameLine(
+  left: string,
+  right: string,
+  width: number,
+  title?: string,
+): string {
+  if (width <= 1) return left
+  if (width === 2) return `${left}${right}`
+  const innerWidth = width - 2
+  const label = title
+    ? ` ${clipTerminalText(title, Math.max(1, innerWidth - 2))} `
+    : ''
+  const clippedLabel = clipTerminalText(label, innerWidth)
+  return `${left}${clippedLabel}${'─'.repeat(
+    Math.max(0, innerWidth - measureTerminalText(clippedLabel)),
+  )}${right}`
+}
+
+function panelBodyLine(text: string, width: number): string {
+  if (width < 4) return clipTerminalText(text, width)
+  return `│ ${padTerminalText(text, width - 4)} │`
+}
+
+function renderCompactPanel(
+  panel: CliCommandPanelState,
+  frameWidth: number,
+  maxHeight: number,
+): string[] {
+  if (maxHeight <= 0) return []
+  const title = panel.title?.trim() || 'Command'
+  if (maxHeight < 3 || frameWidth < 4) {
+    return [clipTerminalText(`[${title}] ${panel.content}`, frameWidth)]
+  }
+
+  const bodyWidth = Math.max(1, frameWidth - 4)
+  const wrapped = wrapTerminalText(panel.content, bodyWidth)
+  const bodyLimit = maxHeight - 2
+  const visible = wrapped.slice(0, bodyLimit)
+  if (wrapped.length > bodyLimit && visible.length) {
+    visible[visible.length - 1] = clipTerminalText(
+      `${visible[visible.length - 1]}…`,
+      bodyWidth,
+    )
+  }
+  if (!visible.length) visible.push('')
+
+  return [
+    frameLine('╭', '╮', frameWidth, title),
+    ...visible.map((line) => panelBodyLine(line, frameWidth)),
+    frameLine('╰', '╯', frameWidth),
+  ]
+}
+
+function tonePrefix(tone: CliCommandSurfaceTone): string {
+  switch (tone) {
+    case 'success':
+      return '✓'
+    case 'warning':
+      return '!'
+    case 'error':
+      return '×'
+    case 'info':
+      return '•'
+  }
+}
+
+function toneColor(tone: CliCommandSurfaceTone): string {
+  switch (tone) {
+    case 'success':
+      return '\u001b[38;5;114m'
+    case 'warning':
+      return '\u001b[38;5;221m'
+    case 'error':
+      return '\u001b[38;5;203m'
+    case 'info':
+      return '\u001b[38;5;81m'
+  }
+}
+
+export function formatCliCommandSurface(
+  state: CliCommandSurfaceState,
+  options: FormatCliCommandSurfaceOptions = {},
+): string[] {
+  const columns = normalizeDimension(options.columns, 80)
+  const rows = normalizeDimension(options.rows, 24)
+  const frameWidth = Math.min(columns, resolveTuiDockWidth(columns))
+  const color = options.color !== false
+  const reset = color ? '\u001b[0m' : ''
+  const border = color ? '\u001b[38;5;244m' : ''
+  const lines: string[] = []
+
+  if (state.panel) {
+    const maxPanelHeight = Math.min(10, Math.floor(rows * 0.4))
+    const panelLines = renderCompactPanel(
+      state.panel,
+      frameWidth,
+      maxPanelHeight,
+    )
+    for (const line of panelLines) {
+      lines.push(color ? `${border}${line}${reset}` : line)
+    }
+  }
+
+  if (state.toast) {
+    const prefix = `${tonePrefix(state.toast.tone)} `
+    const plain = clipTerminalText(
+      `${prefix}${state.toast.content}`,
+      frameWidth,
+    )
+    lines.push(
+      color
+        ? `${toneColor(state.toast.tone)}${plain}${reset}`
+        : plain,
+    )
+  }
+
+  return lines
+}
+
+export class RetainedCommandSurface implements Component {
+  private state: CliCommandSurfaceState
+
+  constructor(
+    state: CliCommandSurfaceState,
+    private readonly options: {
+      color: boolean
+      getViewportRows: () => number
+    },
+  ) {
+    this.state = state
+  }
+
+  setState(state: CliCommandSurfaceState): void {
+    this.state = state
+  }
+
+  invalidate(): void {}
+
+  render(width: number): string[] {
+    return formatCliCommandSurface(this.state, {
+      columns: width,
+      rows: this.options.getViewportRows(),
+      color: this.options.color,
+    })
+  }
+}

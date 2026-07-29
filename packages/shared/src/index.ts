@@ -353,6 +353,20 @@ export {
   type ComposerIntentResult,
 } from './composerIntent.ts'
 
+// OI-15B：retained slash command panel/toast 的纯单槽状态机
+export {
+  createCliCommandSurfaceState,
+  reduceCliCommandSurfaceState,
+  type CliCommandPanelInput,
+  type CliCommandPanelState,
+  type CliCommandSurfaceAction,
+  type CliCommandSurfaceState,
+  type CliCommandSurfaceToken,
+  type CliCommandSurfaceTone,
+  type CliCommandToastInput,
+  type CliCommandToastState,
+} from './cliCommandSurface.ts'
+
 // OI-14B：CLI live transcript / activity / composer / overlay 的纯状态真源
 export {
   CLI_TUI_BLOCK_KINDS,
