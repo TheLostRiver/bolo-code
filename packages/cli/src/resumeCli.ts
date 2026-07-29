@@ -955,6 +955,8 @@ export async function runRepl(
     isTty?: boolean
     /** 外部关闭信号；active turn 时取消，idle 时退出 REPL */
     signal?: AbortSignal
+    /** 组合测试注入；生产默认使用 durable session control。 */
+    requestControl?: typeof requestSessionControl
   },
 ): Promise<void> {
   const writeOut = options?.writeOut ?? ((s) => process.stdout.write(s))
@@ -966,6 +968,7 @@ export async function runRepl(
   const dynamicTui = controller !== undefined
   const runtimeOut = controller?.writeOutput ?? writeOut
   const runtimeErr = controller?.writeError ?? writeErr
+  const requestControl = options?.requestControl ?? requestSessionControl
   const color =
     process.env.NO_COLOR === undefined &&
     process.env.BOLO_THEME?.trim().toLowerCase() !== 'plain'
@@ -1021,11 +1024,12 @@ export async function runRepl(
   }
 
   let activeTurn: AbortController | null = null
+  let interruptTask: Promise<void> | null = null
   const interrupt = async () => {
     if (activeTurn && !activeTurn.signal.aborted) {
       const snapshot = session.coordinator.snapshot(session.id)
       if (snapshot.state === 'running') {
-        const result = await requestSessionControl(session, {
+        const result = await requestControl(session, {
           controlId: `control_${randomUUID().replaceAll('-', '')}`,
           kind: 'interrupt',
           sessionId: session.id,
@@ -1048,19 +1052,35 @@ export async function runRepl(
     runtimeOut('^C\n')
     rl?.close()
   }
+  const scheduleInterrupt = () => {
+    if (interruptTask) return
+    const pending = interrupt().catch((error: unknown) => {
+      if (activeTurn && !activeTurn.signal.aborted) {
+        activeTurn.abort('interrupt')
+      }
+      const message = error instanceof Error ? error.message : String(error)
+      runtimeErr(`error: failed to interrupt turn: ${message}\n`)
+    })
+    interruptTask = pending
+    void pending.finally(() => {
+      if (interruptTask === pending) interruptTask = null
+    })
+  }
   const onSigint = () => {
-    void interrupt()
+    scheduleInterrupt()
   }
   if (dynamicTui) process.on('SIGINT', onSigint)
   else rl?.on('SIGINT', onSigint)
   const onExternalAbort = () => {
-    void interrupt()
+    scheduleInterrupt()
   }
   options?.signal?.addEventListener('abort', onExternalAbort, { once: true })
 
   let bodyFailed = false
   try {
     while (!replClosed) {
+      if (interruptTask) await interruptTask
+      if (replClosed) break
       if (controller) configureSessionComposer(controller, session, history)
       const queued = await takeNextQueuedReplPrompt(session)
       let text: string

@@ -11,12 +11,15 @@ import {
   runRepl,
 } from '../packages/cli/src/index.ts'
 import {
+  attachSessionEventPrinter,
   attachSessionTuiController,
 } from '../packages/cli/src/resumeCli.ts'
 import {
   createSession,
   endSession,
+  requestSessionControl,
 } from '../packages/core/src/index.ts'
+import type { LlmProvider } from '../packages/providers/src/index.ts'
 import {
   runWithAsyncCleanup,
 } from '../packages/cli/src/cleanup.ts'
@@ -147,6 +150,27 @@ async function waitFor(
   while (!predicate()) {
     if (Date.now() >= deadline) throw new Error(`timeout waiting for ${label}`)
     await new Promise((resolve) => setTimeout(resolve, 5))
+  }
+}
+
+async function withTimeout<T>(
+  pending: Promise<T>,
+  label: string,
+  timeoutMs = 2_000,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      pending,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`timeout waiting for ${label}`)),
+          timeoutMs,
+        )
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
   }
 }
 
@@ -521,6 +545,135 @@ async function testReplCleanupPreservesFailures(): Promise<void> {
       assert(
         process.listenerCount('SIGINT') === sigintListeners,
         'REPL removes its SIGINT listener after cleanup failure',
+      )
+    }
+
+    {
+      let markProviderStarted: (() => void) | undefined
+      const providerStarted = new Promise<void>((resolve) => {
+        markProviderStarted = resolve
+      })
+      let releaseInterruptHandler: (() => void) | undefined
+      const interruptHandlerRelease = new Promise<void>((resolve) => {
+        releaseInterruptHandler = resolve
+      })
+      let markInterruptControlHandled: (() => void) | undefined
+      const interruptControlHandled = new Promise<void>((resolve) => {
+        markInterruptControlHandled = resolve
+      })
+      const provider: LlmProvider = {
+        id: 'repl-interrupt-input',
+        async *completeStream(_messages, providerOptions) {
+          markProviderStarted?.()
+          await new Promise<void>((resolve) => {
+            const signal = providerOptions?.signal
+            if (signal?.aborted) {
+              resolve()
+              return
+            }
+            signal?.addEventListener('abort', () => resolve(), { once: true })
+          })
+          throw Object.assign(new Error('interrupted provider fixture'), {
+            name: 'AbortError',
+          })
+        },
+      }
+      const session = await createSession({
+        cwd: process.cwd(),
+        provider,
+        systemPrompt: false,
+        autoSave: false,
+      })
+      const input = new FaultInput(
+        undefined,
+        new Error('unused interrupt input fault'),
+      )
+      const output = new FaultOutput(
+        undefined,
+        new Error('unused interrupt output fault'),
+      )
+      const controller = createRetainedTuiController({
+        input,
+        output,
+        writeOut: () => {},
+        env: { NO_COLOR: '1' },
+      })
+      await controller.start()
+      attachSessionTuiController(session, controller)
+      attachSessionEventPrinter(session, controller.printer)
+
+      const pending = runRepl(session, {
+        isTty: true,
+        requestControl: async (runtimeSession, request) => {
+          const result = await requestSessionControl(runtimeSession, request)
+          markInterruptControlHandled?.()
+          await interruptHandlerRelease
+          return result
+        },
+      })
+      await waitFor(
+        () => input.listenerCount() === 1 && input.isRaw,
+        'initial retained REPL input',
+      )
+      input.send('interrupt me\r')
+      await withTimeout(providerStarted, 'interrupt provider start')
+      await waitFor(
+        () => session.coordinator.snapshot(session.id).state === 'running',
+        'active retained turn',
+      )
+      process.emit('SIGINT')
+      await withTimeout(
+        interruptControlHandled,
+        'interrupt control promotion before handler release',
+      )
+      await waitFor(
+        () => session.coordinator.snapshot(session.id).state === 'idle',
+        'interrupted retained turn to become idle',
+      )
+      assert(
+        !controller.composer.isReading() &&
+          input.listenerCount() === 0 &&
+          !input.isRaw,
+        'retained REPL must not reacquire input before SIGINT handling settles',
+      )
+      releaseInterruptHandler?.()
+      await waitFor(
+        () =>
+          controller.composer.getMode() === 'editing' &&
+          controller.composer.isReading() &&
+          input.listenerCount() === 1 &&
+          input.isRaw,
+        'retained Composer input after turn interrupt',
+      )
+      assert(
+        controller.composer.focused,
+        'turn interrupt restores retained Composer focus',
+      )
+      const inputEventsBeforeExit = controller.getTerminalStats().inputEvents
+      input.send('x')
+      await waitFor(
+        () =>
+          controller.getTerminalStats().inputEvents > inputEventsBeforeExit,
+        'post-interrupt terminal input event',
+      )
+      await waitFor(
+        () => controller.composer.getState().value === 'x',
+        'post-interrupt Composer edit',
+      )
+      input.send('\u0003')
+      await withTimeout(pending, 'post-interrupt idle Ctrl+C')
+
+      assert(
+        session.phase === 'ended',
+        'turn interrupt restores input and idle Ctrl+C closes the retained REPL',
+      )
+      assert(
+        input.listenerCount() === 0 && !input.isRaw,
+        'post-interrupt REPL close releases the restored input owner',
+      )
+      assert(
+        process.listenerCount('SIGINT') === sigintListeners,
+        'turn interrupt path releases its process SIGINT listener',
       )
     }
 
