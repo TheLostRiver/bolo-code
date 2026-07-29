@@ -1,7 +1,7 @@
 # CLI TUI retained renderer 重构方案
 
 > **状态：** OI-14 `BLOCKED: HUMAN`（OI-14A–H 自动实现已关闭；只剩 OI-H3）；
-> OI-15 `OPEN`（slash 命令 surface/lifecycle 方案已完成，生产实现尚未开始）
+> OI-15 `IN PROGRESS`（OI-15A core display policy 已完成；OI-15B 下一刀）
 > **方案锚点：** Bolo `c2e6a98`；Pi `c820aa26fe09`；oh-my-pi
 > `d16c6168c86f`；Codex `f61b51ddd924`；OpenCode `66495a2a22cd`；
 > HelsincyCode `e6dd86ef990e`。
@@ -16,6 +16,7 @@
 > **OI-14G 交付：** `6f4764f`–`accc22c` · 默认切换、可靠性、cleanup 与性能预算。
 > **OI-14H 交付：** `39e66b4`–`d4eaed0` · legacy 删除、单 owner guard 与发布审计。
 > **可靠性 follow-up：** `e6ec6cb` · durable SIGINT handler/Composer 输入串行化。
+> **OI-15A 交付：** `d681734` · core display policy、完整内建分类与 fail-closed。
 > **范围：** 本文定义 CLI TTY 路径的重构方案。非 TTY、`--print`、pipe、JSON 和
 > Desktop 的既有输出契约必须保持兼容。
 > **结论先行：** 停止继续扩展自研 `TerminalSurface + 字符串 prefix + tiny
@@ -551,7 +552,7 @@ type SlashDisplayPolicy =
   | {
       surface: 'history'
       tone: 'info' | 'success' | 'warning' | 'error'
-      persistence: 'visual-only' | 'session'
+      persistence: 'visual-only'
     }
   | {
       surface: 'panel'
@@ -571,20 +572,28 @@ type SlashDisplayPolicy =
   | {
       surface: 'overlay'
       key: string
-      view: 'picker' | 'pager'
+      view: 'picker' | 'pager' | 'diff'
     }
 
 type SlashDispatchResult = {
   ok: boolean
   message: string
+  // handler 可显式覆盖；中央 dispatch 负责补齐
   display?: SlashDisplayPolicy
   // 既有 contextView / interactive* payload 渐进迁移
+}
+
+type ResolvedSlashDispatchResult = SlashDispatchResult & {
+  display: SlashDisplayPolicy
 }
 ```
 
 禁止把 Pi `Component`、terminal columns、timer handle 或 CLI callback 放进 core。
-`display` 缺失时迁移期仍走现有 plain/history 兼容行为；所有内建命令分类完成后，
-定向门禁禁止 normal slash result 再调用 `appendCompatibilityOutput()`。
+OI-15A 已让 `SlashCommandDef.display` 成为内建注册表必填字段，并在中央 dispatch
+完成校验/归一化；35 个内建命令全部分类，未分类 Plugin/Skill 使用 visual-only
+history，unknown/非法参数使用 error toast。retained consumer 尚未接入，OI-15B–E
+迁移期 UI 仍走现有 compatibility 行为；OI-15F 再用定向门禁禁止 normal slash result
+调用 `appendCompatibilityOutput()`。
 
 `packages/shared`/CLI retained state 新增单槽状态和纯 action：
 
@@ -635,7 +644,7 @@ request generation，并记录 session id、cwd 和 command key；异步完成�
 
 | 顺序 | 切片 | 交付 | 关闭条件 |
 |------|------|------|----------|
-| **OI-15A** | core display policy + 红灯 | discriminated union、默认策略解析、命令分类表；新测试同时注册独立 script 与默认门禁 | 非法 policy 编译/运行时 fail-closed；plain `message` byte-stable |
+| **OI-15A ✅ · `d681734`** | core display policy + 红灯 | discriminated union、运行时校验/归一化、35 个内建分类、Plugin/Skill/unknown fallback；独立 script + 默认门禁 | 非法 policy fail-closed；plain `message` byte-stable；完整 `npm test` 通过 |
 | **OI-15B** | retained single-slot state | panel/toast state、generation、effect timer、Composer 下方组件、input/Esc/reset 清除 | 连续 20 次 `/context` 高度不增长；TTL/replace/timer race/resize 全绿 |
 | **OI-15C** | context/doctor/status 迁移 | context compact panel/details pager；doctor 与只读诊断映射 | footer/panel 分层；长内容 pager；不进入 resume/model messages |
 | **OI-15D** | Skills/Plugins overlay | picker/pager、loading→result 原位 replace、focus restore、stale async guard | cwd/session/request 变化忽略迟到结果；取消后输入原值与光标恢复 |
@@ -666,8 +675,8 @@ OI-15 自动队列，不能只记为主观验收。
 
 ### 14.9 回滚边界
 
-- `message` 始终保留为 plain fallback；回滚某个命令只需移除其 `display` policy，
-  不回滚 core 命令行为、session 数据或 renderer。
+- `message` 始终保留为 plain fallback；回滚某个命令的 UI 映射时改回显式
+  visual-only history policy，不回滚 core 命令行为、session 数据或 renderer。
 - OI-15B–E 期间允许未分类命令走有界兼容 history，但已迁移命令不得双写
   history + panel/toast。
 - 不恢复 OI-14 已删除的 `TerminalSurface`、engine selector、局部 raw input owner

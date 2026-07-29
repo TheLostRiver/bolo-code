@@ -682,6 +682,7 @@ npm run test:searxng-setup
 npm run test:searxng-setup-cli
 npm run test:slash
 npm run test:slash-completion
+npm run test:slash-display-policy
 npm run test:cli-tui
 npx tsx scripts/test-multi-provider.ts
 npx tsx scripts/test-ultrathink.ts

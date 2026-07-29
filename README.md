@@ -29,7 +29,7 @@
 | Headless 核心 | ~82–90% | queryLoop · 权限 · tools · STE；partial stream fail-closed |
 | **Agent 能力面（工具集）** | **~82–88%** | 15 个常驻/可选工具 + **Web search**（hosted、MCP、SearXNG 均已活体验证） |
 | 会话 / CLI | ~92–97% | **零步骤首次启动** · 用户级 workspace JSONL · 旧项目会话兼容 · durable runtime · query/action CLI · TTY pager · pipe/JSON automation |
-| **CLI TUI** | **~82–90%** | OI-14 retained 主体已完成；OI-15 正在补齐 slash 结果的 panel/toast/overlay/history 生命周期；真人 Windows Terminal 观感仍未验 |
+| **CLI TUI** | **~82–90%** | OI-14 retained 主体已完成；OI-15A core display policy 已完成，OI-15B–F 继续接 retained panel/toast/overlay/history 生命周期；真人 Windows Terminal 观感仍未验 |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
 | Subagent | ~89–95% | `config.agents` + `agents/*.md` · durable task/result · overflow FIFO/cancel · safe delivery · worktree 保全 |
 | 文件 Diff 日用 | ~95%+ | D0–D7 · U0–U4 |
@@ -49,14 +49,18 @@ AR4 evidence gate · AR5 release hardening · **OI-04 SearXNG 直连、OI-X1 真
 smoke、OI-07 上游诊断 / `search doctor` / 可选 Docker setup、OI-08B CLI 零步骤
 首次启动、OI-14A 真实 VT/选型、OI-14B live view-state、OI-14C retained renderer
 基座、OI-14D transcript/Markdown、OI-14E Composer/activity/footer、OI-14F
-OverlayHost/交互面板、OI-14G 默认切换/可靠性/性能、OI-14H legacy 删除/发布审计**。OI-09–OI-13 的
+OverlayHost/交互面板、OI-14G 默认切换/可靠性/性能、OI-14H legacy 删除/发布审计、
+OI-15A slash display policy**。OI-09–OI-13 的
 slash/context/paste/Thought/权限/welcome 局部能力仍然有效，但不再作为整个 TUI
 renderer 稳定的证据。
 
-**当前状态：OI-15A–F 是默认 agent 队列。** 当前普通 slash 结果仍通过
+**当前状态：OI-15B–F 是默认 agent 队列。** OI-15A 已在 core 建立
+`history | panel | toast | overlay` display policy、运行时 fail-closed 校验和
+35 个内建命令分类，并保持 plain `message` 不变。retained CLI 尚未消费该字段，
+所以当前普通 slash 结果仍通过
 `appendCompatibilityOutput()` 永久拼在 transcript 与 Composer 之间，所以重复
-`/context`、`/skills`、`/plugins`、`/doctor` 会挤满屏幕。方案是在 core 定义
-`history | panel | toast | overlay` display policy：Context/Doctor 使用 Composer
+`/context`、`/skills`、`/plugins`、`/doctor` 会挤满屏幕。OI-15B 起让
+Context/Doctor 使用 Composer
 下方单 panel，短反馈使用 footer toast，Skills/Plugins 和长内容复用 OverlayHost，
 并用 TTL、输入清除、stable key 与 generation 防止累积和迟到结果覆盖。
 

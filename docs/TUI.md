@@ -4,8 +4,9 @@
 > **现状：** OI-09–OI-13 建立的 Bolo 水晶、slash 菜单/参数提示、`/context`、paste
 > 事务、分段 Thinking/Thought、权限详情与非 TTY fallback 等业务能力，已在
 > OI-14A–H 迁入单一 retained TTY 架构。旧 direct-write surface、字符串布局补丁、
-> 局部 raw owner 与 engine selector 均已删除。OI-15 正在补齐 slash 命令结果的
-> panel/toast/overlay/history 生命周期；OI-H3 真人 Windows Terminal 走查继续单列。
+> 局部 raw owner 与 engine selector 均已删除。OI-15A 已补齐 core slash display
+> policy；OI-15B–F 仍需让 retained CLI 消费 panel/toast/overlay/history 生命周期；
+> OI-H3 真人 Windows Terminal 走查继续单列。
 > **框架选择：** OI-14A 已选定精确版本的 Pi TUI direct bundle，不再继续扩展自研
 > `TerminalSurface + contentPrefixer + tiny Markdown`。分切片复用 renderer/Markdown/
 > keys/StdinBuffer 并保留 Bolo terminal adapter 与输入业务层；Node、Windows、
@@ -202,7 +203,8 @@ segment elapsed 决定，不再依赖是否展示过 reasoning 文本；消费�
 - 非 TTY 输出同一 view-model 的紧凑纯文本。`/context details` 与
   `/context --details` 保留 sections、skills、memory、cache、prepare/compact 等
   完整诊断，不把诊断 dump 塞回默认概览。
-- **当前已知缺陷（OI-15）：** dashboard 内容虽然结构化，但仍通过
+- **当前已知缺陷（OI-15B–F）：** dashboard 内容虽然结构化，core 也已在 OI-15A
+  声明 `slash:context` panel policy，但 retained CLI 尚未消费，仍通过
   `writeSlashOutput()` 进入 retained `compatibilityOutput`，没有 replacement key、
   TTL 或 clear action；重复 `/context` 会永久扩大 Composer 上方区域。内容 renderer
   已完成不等于结果生命周期已完成。
@@ -229,10 +231,11 @@ segment elapsed 决定，不再依赖是否展示过 reasoning 文本；消费�
 - 当前已实现会话输入框内的 slash completion；尚无 PowerShell/Bash 外壳级 shell
   completion、鼠标输入或跨进程持久命令历史，它们不是 OI-10 的完成条件。
 
-### 3.7 slash 命令结果生命周期（OI-15 目标，尚未实现）
+### 3.7 slash 命令结果生命周期（OI-15A 已完成，B–F 待实现）
 
-OI-15 不再让所有命令共享一个追加字符串出口。core 先声明语义，retained CLI 再映射
-到四类 surface：
+OI-15A 已让 core 为所有内建命令声明并校验四类 surface，Plugin/Skill/unknown 也有
+fail-closed fallback；plain `message` 保持不变。retained CLI 尚未消费这些 policy，
+OI-15B 起按下表映射：
 
 | 类别 | 位置 | 适用 | 清除 |
 |------|------|------|------|
@@ -380,6 +383,7 @@ npm run test:cli-events
 npm run test:cli
 npm run test:cli-first-run
 npm run test:slash-completion
+npm run test:slash-display-policy
 npm run test:runtime-cli-renderer
 npm run test:runtime-cli-pager
 npm run test:runtime-cli-automation
@@ -395,7 +399,9 @@ npx tsx scripts/test-diff-view.ts
 argument hint、bracketed paste 生命周期/跨 chunk/CRLF/单次重绘、菜单窗口与非 TTY
 回落；`test:context-dashboard` 覆盖 view-model 的 24/38/80/160 列 TTY 投影；
 `test:slash-completion` 覆盖内置/Plugin/Skill projection、动态 effort、重名、
-hidden alias、exact/prefix 与空匹配。完整门禁当前包含 **134** 个串联
+hidden alias、exact/prefix 与空匹配；`test:slash-display-policy` 覆盖四类 policy、
+非法 key/TTL/view fail-closed、35 个内建分类、Plugin/Skill/unknown fallback 与
+submit payload 不变。完整门禁当前包含 **135** 个串联
 `scripts/*.ts`。
 
 OI-14B 新增的 `test:cli-tui-view-state` 覆盖稳定 turn/segment/call-id、reasoning 与
@@ -450,7 +456,7 @@ abort 不输出内部 turn id 或 warning。
 OI-14H 新增并扩展 `test:cli-tui-ownership` 与 `test:cli-tui-vt`，物理锁定
 compatibility bridge、legacy pager/picker/panel、surface/raw editor/layout/tiny
 Markdown 与 engine selector 不存在，并禁止 production 重新取得第二 stdout/stdin
-owner。完整门禁现为 134 scripts；当前单文件 1,692,863 bytes / 195 modules，cold
+owner。完整门禁现为 135 scripts；当前单文件 1,702,556 bytes / 195 modules，cold
 `+46.8–84.4ms`、CPU `328–672ms`、render heap `+21.0–21.1MB`、
 cleanup retained `+1.5MB`，
 7-file install、Desktop bundle 与 Electron launch 全绿。

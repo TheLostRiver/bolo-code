@@ -253,7 +253,7 @@ compact 回归由 `test-compact-benchmark.ts` 守；CLI 体积与产物契约由
 ### 6.6 发布 checklist（逐项可执行）
 
 ```bash
-npm test                              # 当前 typecheck + 134 个串联门禁脚本，必须 EXIT=0
+npm test                              # 当前 typecheck + 135 个串联门禁脚本，必须 EXIT=0
 npm run test:cli-tui-budget           # 独立重建并复测 OI-14H 发布预算
 node -e "console.log(JSON.stringify(require('./package.json').dependencies))"
                                       # 必须输出 {}
