@@ -220,6 +220,10 @@ OI-15C 起，retained TUI 的 `/context` 使用 Composer 下方 12 秒单 panel�
 替换同一槽，开始编辑、`Esc`、TTL 或 reset/restore 会清除。`details`、`detail`、
 `--details` 与超出 panel 容量的 `/doctor`/`/status`、help/memory 等只读内容使用
 text pager；`/mcp`、`/hooks` 直接进入 pager。迁移结果不会进入兼容输出区或会话消息。
+OI-16 起，REPL 内嵌 text pager 的正文每页最多 18 行；高终端不会把短 Doctor
+人为撑到近全屏，短于一页的内容只占实际行数。footer 始终显示页码与
+`q/Esc close`；关闭后恢复 Composer。这个高度策略不改变顶层 runtime pager，
+也不改变 pipe、`--print`、JSON 或非 TTY 的原始文本字节。
 OI-15D 起，`/skills`、`/plugins`、commands、market/search 会先在唯一 OverlayHost
 显示 loading，再用结构化目录原位替换；迟到或已取消的请求不会覆盖当前视图。长目录
 支持 `PgUp`、`PgDn`、`Home`、`End`，终端 resize 后仍保持选中项可见；`Esc`/关闭后
@@ -692,6 +696,7 @@ npm run test:runtime-cli-command
 npm run test:runtime-cli-renderer
 npm run test:runtime-cli-pager
 npm run test:runtime-cli-automation
+npm run test:cli-doctor-pager-viewport
 npm run test:session-settings
 npm run test:desktop-session-settings
 npm run test:searxng-setup

@@ -9,6 +9,7 @@
 > context/doctor/status 与只读 panel/pager，OI-15D 已迁移 Skills/Plugins
 > stable-key catalog overlay，OI-15E 已迁移 toast/error，OI-15F 已完成
 > normal slash compatibility cleanup 与统一 action-picker/diff payload；
+> OI-16 已限制 embedded text pager 的物理高度并补齐 Doctor viewport 门禁；
 > OI-H3 真人 Windows Terminal 走查继续单列。
 > **框架选择：** OI-14A 已选定精确版本的 Pi TUI direct bundle，不再继续扩展自研
 > `TerminalSurface + contentPrefixer + tiny Markdown`。分切片复用 renderer/Markdown/
@@ -235,7 +236,7 @@ segment elapsed 决定，不再依赖是否展示过 reasoning 文本；消费�
 - 当前已实现会话输入框内的 slash completion；尚无 PowerShell/Bash 外壳级 shell
   completion、鼠标输入或跨进程持久命令历史，它们不是 OI-10 的完成条件。
 
-### 3.7 slash 命令结果生命周期（OI-15A–F 已完成）
+### 3.7 slash 命令结果生命周期（OI-15A–F 与 OI-16 已完成）
 
 OI-15A 已让 core 为所有内建命令声明并校验四类 surface，Plugin/Skill/unknown 也有
 fail-closed fallback；plain `message` 保持不变。OI-15B `d6bd087` 已建立单 panel/
@@ -264,6 +265,12 @@ loading/result 使用 stable key 原位替换，异步结果以
 `key + generation + sessionId + cwd` 检查，迟到结果不得覆盖当前视图。40 项目录在
 18→10 行 resize 后仍保持选中项可见，支持 `PgUp`、`PgDn`、`Home`、`End`；关闭后
 恢复 Composer value、cursor、focus 与 raw input owner。
+
+OI-16 `5b22c15` 补上了 text pager 的根组件高度契约：REPL embedded pager 默认
+正文页高为 `min(18, max(1, rows - 6))`，短页不补无意义空行。24/48/80 行终端
+中的 29 行 Doctor 均为两页且组件不超过 21 行，footer 始终可见；`q`/`Esc`
+关闭后恢复 Composer。顶层 runtime pager、Diff、权限与其它 overlay 不共用这个
+18 行上限。
 
 短动作连续执行只替换 toast；Usage/非法参数保持 error toast。插件 install/uninstall
 进入执行后失败使用 typed error history，reload merge notes 使用 8 秒 warning toast。

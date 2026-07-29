@@ -12,6 +12,8 @@
 > OI-15D Skills/Plugins stable-key overlay 关闭锚点：`21ee1e2` / `87054df`
 > （2026-07-29）。
 > OI-15E toast/error policy 关闭锚点：`1d49d53`（2026-07-29）。
+> OI-15F compatibility cleanup 关闭锚点：`d1e26bb`（2026-07-29）。
+> OI-16 Doctor pager viewport 关闭锚点：`5b22c15`（2026-07-29）。
 > 本文只列当前仓库中有代码、测试、实测或互相矛盾文档支撑的问题。
 > 历史 TODO、已关闭的候选和仅凭印象提出的功能不算开放问题。
 
@@ -27,7 +29,33 @@
 ## 1. Agent 可直接解决
 
 当前没有已准入的 agent 可闭环队列。OI-14 只剩明确的 OI-H3 真人走查；
-OI-09–OI-13 的局部关闭不再作为“整个 TUI renderer 已稳定”的证据。
+OI-16 已按真人截图提供的新证据自动闭环；OI-09–OI-13 的局部关闭不再作为
+“整个 TUI renderer 已稳定”的证据。
+
+### OI-16 · `/doctor` pager 占满真实终端 viewport
+
+**状态：CLOSED · `5b22c15`**
+
+准入证据：
+
+- 真人 Windows Terminal 截图显示，约 29 行 Doctor 结果占据近 40 行，footer
+  `q/Esc close` 不可见，Composer 被推到终端底部且只剩左侧边框。
+- `/doctor` 已正确从 panel 升级到 text pager；真正根因是 `runTextPager()` 默认
+  以 `rows - 6` 作为正文页高，`formatTextPagerScreen()` 又把不足一页的正文补空
+  到完整页高。48 行终端因此得到 42 行正文预算和 45 行组件。
+- 这是 headless `RetainedOverlayHost` 可自动复现的几何缺陷，不属于 OI-H3 的字体、
+  颜色、动画或按键手感等主观验收。
+
+关闭证据：
+
+- embedded text pager 默认正文页高固定为 `min(18, max(1, rows - 6))`；短页只渲染
+  实际正文，不再用空行占满高终端。
+- 独立 `test:cli-doctor-pager-viewport` 在 24/48/80 行终端验证 29 行 Doctor
+  稳定分成两页、组件最多 21 行、footer 可见、第二页可达，`q`/`Esc` 后 overlay
+  关闭并恢复 Composer 输入所有权。
+- runtime pager、Diff、权限与其它 overlay 策略不变；plain/non-TTY `/doctor`
+  `message` 字节不变。完整 `npm test`、dist/install、CLI 预算和 Electron smoke
+  退出 0，`dependencies` 仍为 `{}`。
 
 ### OI-15 · slash 命令临时结果与 Composer 空间治理
 

@@ -689,10 +689,25 @@ request generation，并记录 session id、cwd 和 command key；异步完成�
 - non-TTY、pipe、`--print`、JSON 输出无 ANSI、无 timer 副作用且文本兼容；
 - transient 不进入 `ChatMessage[]`、JSONL、compact、resume 或模型输入；
 - normal slash output 不再命中 `appendCompatibilityOutput()` 的静态 guard。
+- embedded text pager 在 24/48/80 行终端的物理高度、footer、分页导航与关闭后
+  Composer 恢复，不得只测试 display projection。
 
 OI-H3 真人补充检查 panel 在 Composer 下方的阅读节奏、12 秒 Context 时长、动画/
 输入手感和窄窗口可读性。若真人发现可由 xterm 复现的布局或按键缺陷，必须回到
 OI-15 自动队列，不能只记为主观验收。
+
+#### OI-16 · Doctor pager viewport 回归
+
+OI-15C 关闭后，真人 Windows Terminal 截图仍显示约 29 行 `/doctor` 结果占据近
+40 行，footer 与 Composer 不可见。根因不是 display policy，而是
+`runTextPager()` 用 `rows - 6` 扩大正文页高，formatter 又把短正文补空到完整页高；
+48 行终端最终得到 45 行组件。这个缺陷可由真实 `RetainedOverlayHost` 自动复现，
+因此不归 OI-H3。
+
+OI-16 `5b22c15` 把 embedded text pager 正文限制为
+`min(18, max(1, rows - 6))`，并让短页按实际行数渲染。独立默认门禁覆盖
+24/48/80 行 Doctor、两页 footer/导航、`q`/`Esc` 关闭和 Composer 恢复；runtime
+pager、Diff、权限、plain/non-TTY 字节与 `dependencies: {}` 保持不变。
 
 ### 14.9 回滚边界
 
