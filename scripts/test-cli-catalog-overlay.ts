@@ -116,6 +116,7 @@ async function testCoreCatalogContract(): Promise<void> {
 
 async function testCatalogHostLifecycle(): Promise<void> {
   let inputEnabled = false
+  let rows = 18
   const hidden: boolean[] = []
   const host = new RetainedOverlayHost({
     color: false,
@@ -126,7 +127,7 @@ async function testCatalogHostLifecycle(): Promise<void> {
     },
     shouldKeepInput: () => false,
     getColumns: () => 52,
-    getRows: () => 18,
+    getRows: () => rows,
   })
   host.attach({
     setHidden(value: boolean) {
@@ -265,6 +266,60 @@ async function testCatalogHostLifecycle(): Promise<void> {
   await aborted.result
   host.handleInput('q')
   await active.result
+
+  const longCatalog = host.openCatalog({
+    key: 'slash:plugins',
+    sessionId: 'session-a',
+    cwd: 'E:\\workspace\\a',
+    title: 'Plugins',
+    loadingText: 'Loading plugins...',
+  })
+  assert(
+    longCatalog.replace({
+      key: 'slash:plugins',
+      sessionId: 'session-a',
+      cwd: 'E:\\workspace\\a',
+      items: Array.from({ length: 40 }, (_, index) => ({
+        id: `plugin-${index + 1}`,
+        label: `Plugin ${index + 1}`,
+      })),
+    }),
+    'long catalog accepts its matching result',
+  )
+  const firstPage = host.render(52)
+  assert(
+    firstPage.length <= rows &&
+      firstPage.some((line) => line.includes('Plugin 1')) &&
+      !firstPage.some((line) => line.includes('Plugin 40')),
+    'long catalog renders a bounded first window',
+  )
+  host.handleInput('\u001b[F')
+  const lastPage = host.render(52)
+  assert(
+    lastPage.some((line) => /›\s+40\.\s+Plugin 40/u.test(line)),
+    'End keeps the final selection visible',
+  )
+  host.handleInput('\u001b[5~')
+  const previousPage = host.render(52)
+  assert(
+    previousPage.some((line) => line.startsWith('›')) &&
+      !previousPage.some((line) => /›\s+40\./u.test(line)),
+    'PageUp moves by the visible catalog window',
+  )
+  rows = 10
+  const resizedPage = host.render(52)
+  assert(
+    resizedPage.length <= rows &&
+      resizedPage.some((line) => line.startsWith('›')),
+    'resize recomputes a bounded window around the current selection',
+  )
+  host.handleInput('\u001b[H')
+  assert(
+    host.render(52).some((line) => /›\s+1\.\s+Plugin 1/u.test(line)),
+    'Home returns to the first item without changing overlay ownership',
+  )
+  host.handleInput('q')
+  await longCatalog.result
 }
 
 class RawInputHarness extends EventEmitter {

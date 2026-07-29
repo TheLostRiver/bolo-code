@@ -52,7 +52,10 @@ import {
   formatTextPagerScreen,
   type TextPagerContent,
 } from './textPager.ts'
-import { wrapTerminalText } from './terminalText.ts'
+import {
+  clipTerminalText,
+  wrapTerminalText,
+} from './terminalText.ts'
 
 type OverlaySessionBase = {
   signal?: AbortSignal
@@ -235,6 +238,64 @@ function wrapPanelScreen(screen: string, width: number): string[] {
     if (!line) return ['']
     return wrapTerminalText(line, safeWidth)
   })
+}
+
+function catalogPageSize(rows: number): number {
+  const safeRows = Math.max(1, Math.floor(rows))
+  return safeRows < 5 ? safeRows : Math.max(1, safeRows - 4)
+}
+
+function applyCatalogPickerKey(
+  index: number,
+  length: number,
+  key: string,
+  pageSize: number,
+): { index: number; done?: 'select' | 'cancel' } {
+  if (length <= 0) return { index: 0, done: 'cancel' }
+  if (key === 'home') return { index: 0 }
+  if (key === 'end') return { index: length - 1 }
+  if (key === 'pageUp') {
+    return { index: Math.max(0, index - pageSize) }
+  }
+  if (key === 'pageDown') {
+    return { index: Math.min(length - 1, index + pageSize) }
+  }
+  return applyArrowPickerKey(index, length, key)
+}
+
+function formatCatalogPickerScreen(
+  session: CatalogSession,
+  width: number,
+  rows: number,
+): string[] {
+  const safeWidth = Math.max(1, Math.floor(width))
+  const safeRows = Math.max(1, Math.floor(rows))
+  const pageSize = catalogPageSize(safeRows)
+  const maxStart = Math.max(0, session.items.length - pageSize)
+  const start = Math.min(
+    maxStart,
+    Math.floor(session.index / pageSize) * pageSize,
+  )
+  const end = Math.min(session.items.length, start + pageSize)
+  const itemLines = session.items.slice(start, end).map((item, offset) => {
+    const absoluteIndex = start + offset
+    const mark = absoluteIndex === session.index ? '›' : ' '
+    return clipTerminalText(
+      `${mark} ${absoluteIndex + 1}. ${item.label}`,
+      safeWidth,
+    )
+  })
+  if (safeRows < 5) return itemLines.slice(0, safeRows)
+  return [
+    clipTerminalText(session.title, safeWidth),
+    '',
+    ...itemLines,
+    '',
+    clipTerminalText(
+      `${start + 1}-${end} of ${session.items.length} · ↑/↓ · PgUp/PgDn · Enter · q`,
+      safeWidth,
+    ),
+  ]
 }
 
 export class RetainedOverlayHost implements Component, Focusable {
@@ -772,10 +833,11 @@ export class RetainedOverlayHost implements Component, Focusable {
         }
         return
       }
-      const next = applyArrowPickerKey(
+      const next = applyCatalogPickerKey(
         active.index,
         active.items.length,
         key,
+        catalogPageSize(this.options.getRows()),
       )
       active.index = next.index
       if (next.done === 'select') {
@@ -887,7 +949,7 @@ export class RetainedOverlayHost implements Component, Focusable {
             'Esc cancel',
           ].join('\n'),
           width,
-        )
+        ).slice(0, Math.max(1, Math.floor(this.options.getRows())))
       }
       if (!active.items.length) {
         return wrapPanelScreen(
@@ -899,13 +961,12 @@ export class RetainedOverlayHost implements Component, Focusable {
             'Esc close',
           ].join('\n'),
           width,
-        )
+        ).slice(0, Math.max(1, Math.floor(this.options.getRows())))
       }
-      return wrapPanelScreen(
-        formatArrowPickerScreen(active.items, active.index, {
-          title: `${active.title} (↑/↓ · Enter · q cancel)`,
-        }),
+      return formatCatalogPickerScreen(
+        active,
         width,
+        this.options.getRows(),
       )
     }
     if (active.mode === 'diff') {
