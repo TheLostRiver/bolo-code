@@ -3,6 +3,7 @@ import {
   Container,
   TUI,
   type Component,
+  type Focusable,
   type OverlayHandle,
 } from '@earendil-works/pi-tui/dist/tui.js'
 import { Text } from '@earendil-works/pi-tui/dist/components/text.js'
@@ -181,6 +182,7 @@ class RetainedRoot extends Container {
   private readonly composer: RetainedComposer
   private readonly commandSurface: RetainedCommandSurface
   private readonly footer: RetainedComposerFooter
+  private embeddedPager: Component | undefined
   private readonly compatibilityOutput = new Text('', 1, 0)
   private outputText = ''
   private visible = true
@@ -238,6 +240,14 @@ class RetainedRoot extends Container {
   setVisible(visible: boolean): void {
     if (this.visible === visible) return
     this.visible = visible
+    this.markDirty()
+  }
+
+  setEmbeddedPager(component: Component): void {
+    if (this.embeddedPager === component) return
+    if (this.embeddedPager) this.removeChild(this.embeddedPager)
+    this.embeddedPager = component
+    this.addChild(component)
     this.markDirty()
   }
 
@@ -299,6 +309,7 @@ class RetainedRoot extends Container {
       append(this.compatibilityOutput.render(width), 1)
       append(this.activity.render(width), 1)
       append(this.composer.render(width), 1)
+      append(this.embeddedPager?.render(width) ?? [], 0)
       append(this.commandSurface.render(width), 0)
       append(this.footer.render(width), 0)
     }
@@ -315,6 +326,31 @@ class RetainedRoot extends Container {
   private markDirty(): void {
     this.revision += 1
     this.invalidate()
+  }
+}
+
+class RetainedOverlayView implements Component, Focusable {
+  focused = false
+
+  constructor(
+    private readonly host: RetainedOverlayHost,
+    private readonly presentation: 'modal' | 'embedded-pager',
+  ) {}
+
+  handleInput(data: string): void {
+    this.host.focused = this.focused
+    this.host.handleInput(data)
+  }
+
+  invalidate(): void {
+    this.host.invalidate()
+  }
+
+  render(width: number): string[] {
+    this.host.focused = this.focused
+    return this.presentation === 'embedded-pager'
+      ? this.host.renderEmbeddedPager(width)
+      : this.host.render(width)
   }
 }
 
@@ -360,6 +396,7 @@ export function createRetainedTuiController(options: {
   let root: RetainedRoot
   let tui: TUI
   let overlayHandle: OverlayHandle | undefined
+  let embeddedPagerView: RetainedOverlayView
   let commandSurfaceEffect: CliCommandSurfaceEffect
 
   const requestRender = (): void => {
@@ -438,7 +475,18 @@ export function createRetainedTuiController(options: {
       composer.isReading() || runningInterruptHandler !== undefined,
     getColumns: () => adapter.columns,
     getRows: () => adapter.rows,
+    embedPagers: options.rootVisible !== false,
+    onPresentationChange: (presentation) => {
+      if (presentation === 'embedded-pager') {
+        tui.setFocus(embeddedPagerView)
+      } else if (presentation === 'none' && options.rootVisible !== false) {
+        tui.setFocus(composer)
+      }
+    },
   })
+  const modalOverlayView = new RetainedOverlayView(overlay, 'modal')
+  embeddedPagerView = new RetainedOverlayView(overlay, 'embedded-pager')
+  root.setEmbeddedPager(embeddedPagerView)
   const removeRunningInterruptInputListener = tui.addInputListener((data) => {
     const handler = runningInterruptHandler
     if (
@@ -626,7 +674,7 @@ export function createRetainedTuiController(options: {
       started = true
       try {
         tui.start()
-        overlayHandle = tui.showOverlay(overlay, {
+        overlayHandle = tui.showOverlay(modalOverlayView, {
           width: '100%',
           maxHeight: options.rootVisible === false ? '100%' : '90%',
           anchor: 'bottom-center',

@@ -171,6 +171,11 @@ export type RetainedTextPagerOverlayOptions =
       onInterrupt?: () => void
     }
 
+export type RetainedOverlayPresentation =
+  | 'none'
+  | 'modal'
+  | 'embedded-pager'
+
 type PagerSource =
   | {
       kind: 'runtime'
@@ -314,6 +319,10 @@ export class RetainedOverlayHost implements Component, Focusable {
       shouldKeepInput: () => boolean
       getColumns: () => number
       getRows: () => number
+      embedPagers?: boolean
+      onPresentationChange?: (
+        presentation: RetainedOverlayPresentation,
+      ) => void
     },
   ) {}
 
@@ -907,7 +916,17 @@ export class RetainedOverlayHost implements Component, Focusable {
 
   render(width: number): string[] {
     const active = this.active
-    if (!active) return []
+    if (!active || this.presentation(active) === 'embedded-pager') return []
+    return this.renderActive(active, width)
+  }
+
+  renderEmbeddedPager(width: number): string[] {
+    const active = this.active
+    if (!active || this.presentation(active) !== 'embedded-pager') return []
+    return this.renderActive(active, width)
+  }
+
+  private renderActive(active: OverlaySession, width: number): string[] {
     if (active.mode === 'permission') {
       return formatPermissionPanelScreen(active.request, active.index, {
         columns: width,
@@ -1005,30 +1024,43 @@ export class RetainedOverlayHost implements Component, Focusable {
   }
 
   private open(overlay: CliTuiOverlayState): void {
+    const presentation = this.presentation(this.active)
     this.options.setOverlayState(overlay)
-    this.handle?.setHidden(false)
+    this.handle?.setHidden(presentation !== 'modal')
     try {
       this.options.setInputEnabled(true)
     } catch {
       this.cancel()
       return
     }
+    this.options.onPresentationChange?.(presentation)
     this.options.requestRender()
   }
 
   private close(active: OverlaySession): void {
+    const presentation = this.presentation(active)
     this.detachAbort(active)
     if (active.mode === 'question' && active.customInput) {
       active.customInput.focused = false
     }
     this.options.setOverlayState({ mode: 'none' })
-    this.handle?.setHidden(true)
+    if (presentation === 'modal') this.handle?.setHidden(true)
     try {
       this.options.setInputEnabled(this.options.shouldKeepInput())
     } catch {
       // The panel result must settle even if the terminal cannot restore raw mode.
     }
+    this.options.onPresentationChange?.('none')
     this.options.requestRender()
+  }
+
+  private presentation(
+    active: OverlaySession | undefined,
+  ): RetainedOverlayPresentation {
+    if (!active) return 'none'
+    return active.mode === 'pager' && this.options.embedPagers
+      ? 'embedded-pager'
+      : 'modal'
   }
 
   private finishPermission(decision: AskPermissionDecision): void {
