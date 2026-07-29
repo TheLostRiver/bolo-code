@@ -17,7 +17,7 @@
 | **新用户 / 要跑起来** | **[docs/USAGE.md](docs/USAGE.md)**（含 **如何配置 Agent/Subagent**） |
 | **接手开发的 Agent / 同事** | **[docs/AGENT_HANDOFF.md](docs/AGENT_HANDOFF.md)**（架构 · 进度 · 改码规矩） |
 | **查总进度与各轨** | **[docs/ROADMAP.md](docs/ROADMAP.md)**（进度真源） |
-| **查 CLI TUI 重构** | **[docs/CLI_TUI_REFACTOR_PLAN.md](docs/CLI_TUI_REFACTOR_PLAN.md)**（OI-14 架构 · 迁移 · 验收）· [选型证据](docs/CLI_TUI_RENDERER_DECISION.md) |
+| **查 CLI TUI 重构** | **[docs/CLI_TUI_REFACTOR_PLAN.md](docs/CLI_TUI_REFACTOR_PLAN.md)**（OI-14 retained renderer · OI-15 slash lifecycle）· [选型证据](docs/CLI_TUI_RENDERER_DECISION.md) |
 | **查分层边界** | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 
 ---
@@ -29,7 +29,7 @@
 | Headless 核心 | ~82–90% | queryLoop · 权限 · tools · STE；partial stream fail-closed |
 | **Agent 能力面（工具集）** | **~82–88%** | 15 个常驻/可选工具 + **Web search**（hosted、MCP、SearXNG 均已活体验证） |
 | 会话 / CLI | ~92–97% | **零步骤首次启动** · 用户级 workspace JSONL · 旧项目会话兼容 · durable runtime · query/action CLI · TTY pager · pipe/JSON automation |
-| **CLI TUI** | **~84–91%** | OI-14A–H 已完成真实 VT/选型、retained transcript/Markdown、常驻 Composer/activity/footer、OverlayHost、默认切换、可靠性/性能与 legacy 删除；retained 是唯一 dynamic TTY renderer，真人 Windows Terminal 观感仍未验 |
+| **CLI TUI** | **~82–90%** | OI-14 retained 主体已完成；OI-15 正在补齐 slash 结果的 panel/toast/overlay/history 生命周期；真人 Windows Terminal 观感仍未验 |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
 | Subagent | ~89–95% | `config.agents` + `agents/*.md` · durable task/result · overflow FIFO/cancel · safe delivery · worktree 保全 |
 | 文件 Diff 日用 | ~95%+ | D0–D7 · U0–U4 |
@@ -53,22 +53,16 @@ OverlayHost/交互面板、OI-14G 默认切换/可靠性/性能、OI-14H legacy 
 slash/context/paste/Thought/权限/welcome 局部能力仍然有效，但不再作为整个 TUI
 renderer 稳定的证据。
 
-**当前状态：OI-14 自动实现已收口，只剩 OI-H3 真人走查。** OI-14H
-`39e66b4`–`d4eaed0` 已删除 compatibility bridge、legacy pager/picker/panel、
-`TerminalSurface`、raw editor/spacer、字符串 prefix/tiny Markdown 与 engine
-selector。双 TTY/raw-mode 只走 retained；non-TTY、pipe、JSON、`--print` 与
-raw-mode 不可用宿主继续走独立 plain/readline 路径。真实 xterm 已覆盖
-500 blocks / 10,000 行、scrollback、24–220 列反复 resize、paste/overlay 往返和
-单 stdin/writer；final flush、异常启动、provider/tool failure、Abort/SIGINT、
-raw Ctrl+C 与进程退出 cleanup 均有门禁。`e6ec6cb` 进一步串行化 durable SIGINT
-handler 与下一轮 Composer 输入获取；`6b7ff99` 又让 retained turn 运行期间持续持有
-raw stdin，并在 Pi TUI 全局输入边界用 `Esc` 主键（`Ctrl+C` 兼容）请求中断，关闭
-Windows 父批处理抢占 stdin、内部 turn id/warning 泄漏和中断后无法继续输入。完整
-134 脚本、7-file clean install 与 Electron launch 全绿；单文件为 1,692,863 bytes /
-195 modules。三次完整串实测 cold
-相对 empty Node `+46.8–84.4ms`、CPU `328–672ms`、render heap
-`+21.0–21.1MB`、cleanup retained `+1.5MB`；根 `dependencies` 仍为 `{}`。
-方案与选型证据见
+**当前状态：OI-15A–F 是默认 agent 队列。** 当前普通 slash 结果仍通过
+`appendCompatibilityOutput()` 永久拼在 transcript 与 Composer 之间，所以重复
+`/context`、`/skills`、`/plugins`、`/doctor` 会挤满屏幕。方案是在 core 定义
+`history | panel | toast | overlay` display policy：Context/Doctor 使用 Composer
+下方单 panel，短反馈使用 footer toast，Skills/Plugins 和长内容复用 OverlayHost，
+并用 TTL、输入清除、stable key 与 generation 防止累积和迟到结果覆盖。
+
+OI-14 的单 retained renderer、常驻 Composer、Markdown、OverlayHost、物理终端门禁
+与 plain/non-TTY fallback 保持不变；OI-15 不增加新 renderer 或其它 Agent 的运行时
+依赖。OI-H3 真人 Windows Terminal 走查继续单列。方案与选型证据见
 [docs/CLI_TUI_REFACTOR_PLAN.md](docs/CLI_TUI_REFACTOR_PLAN.md) 和
 [docs/CLI_TUI_RENDERER_DECISION.md](docs/CLI_TUI_RENDERER_DECISION.md)。
 
@@ -76,10 +70,11 @@ Windows 父批处理抢占 stdin、内部 turn id/warning 泄漏和中断后无�
 就在 cwd 创建 `.bolo/`；项目模板只由显式 `bolo init [--project]` 创建。SearXNG
 doctor 与显式 Docker 管理也已落地，Docker 不是默认依赖。
 
-**人工项：** retained 正文、常驻输入区和 overlays 的碎片、空洞、续行贴左、消失、
-动画、cursor/raw-mode 与 owner 交接代码缺陷已由 OI-14D–G 自动门禁关闭；
-legacy 删除已由 OI-14H 自动关闭。真人仍需检查 Windows Terminal 的字体、颜色、
-动画和按键/鼠标手感；Desktop 点击与视觉也仍需真人。SearXNG 已完成真实实例 live smoke。
+**人工项：** retained 正文、常驻输入区和 overlays 的碎片、空洞、续行贴左、
+cursor/raw-mode 与 owner 交接缺陷已由 OI-14 自动门禁关闭；slash 结果不消失/累积
+属于 OI-15 自动任务，不归人工 blocker。真人仍需检查 Windows Terminal 的字体、
+颜色、动画和按键/鼠标手感；Desktop 点击与视觉也仍需真人。SearXNG 已完成真实实例
+live smoke。
 
 进度真源：[docs/ROADMAP.md](docs/ROADMAP.md)
 
@@ -361,7 +356,7 @@ scripts/       单测与 smoke
 | [docs/SESSIONS.md](docs/SESSIONS.md) | 会话落盘 · resume |
 | [docs/SLASH_COMMANDS.md](docs/SLASH_COMMANDS.md) | 斜杠命令 |
 | [docs/TUI.md](docs/TUI.md) | CLI TUI · 环境变量 |
-| [docs/CLI_TUI_REFACTOR_PLAN.md](docs/CLI_TUI_REFACTOR_PLAN.md) | OI-14 retained renderer 重构 · 参考审计 · 迁移/回滚/验收 |
+| [docs/CLI_TUI_REFACTOR_PLAN.md](docs/CLI_TUI_REFACTOR_PLAN.md) | OI-14 retained renderer · OI-15 slash surface/lifecycle · 参考审计 · 迁移/回滚/验收 |
 | [docs/SKILLS.md](docs/SKILLS.md) · [MCP.md](docs/MCP.md) · [PLUGINS.md](docs/PLUGINS.md) | 扩展面 |
 | [docs/SUBAGENT.md](docs/SUBAGENT.md) · [SUBAGENT_SPEC.md](docs/SUBAGENT_SPEC.md) | Subagent |
 | [docs/PROMPT_CACHE.md](docs/PROMPT_CACHE.md) | Prompt cache 观测 |
@@ -412,6 +407,6 @@ query/action/renderer/pager/automation、PTL 恢复与真实 Electron 启动专�
 1. **职责分明**的模块架构优先于炫技实现  
 2. 先审计许可证与兼容性；允许复用成熟基础库或有归属的窄 fork，不复制未许可源码、不嵌入本机参考路径、不抄遥测
 3. 密钥走环境变量 / `apiKeyEnv`；**不**写进 transcript  
-4. TUI 必须由真实物理终端测试证明；不盲选框架，也不为“零依赖”重复手搓成熟 renderer — 见 OI-14 方案
+4. TUI 必须由真实物理终端测试证明；不盲选框架，也不为“零依赖”重复手搓成熟 renderer — 见 OI-14/OI-15 方案
 
 License：MIT

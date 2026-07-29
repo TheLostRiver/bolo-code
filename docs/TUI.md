@@ -4,7 +4,8 @@
 > **现状：** OI-09–OI-13 建立的 Bolo 水晶、slash 菜单/参数提示、`/context`、paste
 > 事务、分段 Thinking/Thought、权限详情与非 TTY fallback 等业务能力，已在
 > OI-14A–H 迁入单一 retained TTY 架构。旧 direct-write surface、字符串布局补丁、
-> 局部 raw owner 与 engine selector 均已删除；只剩 OI-H3 真人 Windows Terminal 走查。
+> 局部 raw owner 与 engine selector 均已删除。OI-15 正在补齐 slash 命令结果的
+> panel/toast/overlay/history 生命周期；OI-H3 真人 Windows Terminal 走查继续单列。
 > **框架选择：** OI-14A 已选定精确版本的 Pi TUI direct bundle，不再继续扩展自研
 > `TerminalSurface + contentPrefixer + tiny Markdown`。分切片复用 renderer/Markdown/
 > keys/StdinBuffer 并保留 Bolo terminal adapter 与输入业务层；Node、Windows、
@@ -103,8 +104,9 @@ Windows Terminal 字体、颜色、动画主观流畅度和真人按键/鼠标�
 
 ## 3. 会话交互（OI-14 retained 当前契约）
 
-以下交互由 retained dynamic TTY 与独立 plain fallback 共同守护。slash、context、
-paste、Thought、权限与非 TTY 行为都进入默认门禁。
+以下交互由 retained dynamic TTY 与独立 plain fallback 共同守护。slash discovery、
+context 内容、paste、Thought、权限与非 TTY 行为都进入默认门禁；slash **结果的
+surface/lifecycle** 仍是 OI-15 开放项，不能把现有永久追加行为当成完成契约。
 
 ### 3.1 欢迎首页
 
@@ -200,6 +202,10 @@ segment elapsed 决定，不再依赖是否展示过 reasoning 文本；消费�
 - 非 TTY 输出同一 view-model 的紧凑纯文本。`/context details` 与
   `/context --details` 保留 sections、skills、memory、cache、prepare/compact 等
   完整诊断，不把诊断 dump 塞回默认概览。
+- **当前已知缺陷（OI-15）：** dashboard 内容虽然结构化，但仍通过
+  `writeSlashOutput()` 进入 retained `compatibilityOutput`，没有 replacement key、
+  TTL 或 clear action；重复 `/context` 会永久扩大 Composer 上方区域。内容 renderer
+  已完成不等于结果生命周期已完成。
 
 ### 3.5 权限与临时面板
 
@@ -222,6 +228,36 @@ segment elapsed 决定，不再依赖是否展示过 reasoning 文本；消费�
   不在 CLI 重建 core 状态机。
 - 当前已实现会话输入框内的 slash completion；尚无 PowerShell/Bash 外壳级 shell
   completion、鼠标输入或跨进程持久命令历史，它们不是 OI-10 的完成条件。
+
+### 3.7 slash 命令结果生命周期（OI-15 目标，尚未实现）
+
+OI-15 不再让所有命令共享一个追加字符串出口。core 先声明语义，retained CLI 再映射
+到四类 surface：
+
+| 类别 | 位置 | 适用 | 清除 |
+|------|------|------|------|
+| history | typed transcript | 需审计动作、不可恢复错误 | 正常随 history 滚动 |
+| panel | **Composer 下方、footer 上方**的单槽 | `/context`、`/doctor`、只读 status/help | 同 key/新 panel 原位替换；编辑输入、`Esc`、reset 或显式 TTL |
+| toast | footer 单行辅助状态 | reload/set/copy 等短反馈 | 默认 5 秒；新 toast 替换旧项并取消旧 timer |
+| overlay | 现有 OverlayHost | Skills/Plugins picker、长诊断/pager | `Esc`/完成关闭并恢复 Composer focus |
+
+panel 最多 10 行且不超过可用 rows 的 40%，不能因重复命令继续增加高度。默认
+`/context` 使用 12 秒 compact panel，token 百分比继续留在 footer；
+`/context details` 和超长 `/doctor` 使用 pager。`/skills`、`/plugins` 的
+loading/result 使用 stable key 原位替换，异步结果以 session/cwd/request generation
+检查，迟到结果不得覆盖当前视图。
+
+slash 灰色用户输入块仍可留在视觉 transcript；transient result 不进入
+`ChatMessage[]`、JSONL、compact、resume 或模型输入。non-TTY、pipe、`--print` 与
+JSON 继续消费 plain `message`，不启动 timer、overlay 或 ANSI 控制。
+
+清除优先级固定为：focused overlay `Esc` → running turn interrupt → idle slash menu
+→ idle panel。Composer 第一次产生编辑 mutation 时先清 panel/toast，再更新输入和
+slash menu；history 方向键导航不算新输入。timer 只按 `key + generation` 清除自己的
+旧 surface，不能误删后来替换的内容。
+
+完整类型、命令迁移表、切片与测试矩阵见
+[CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md) §14。
 
 ---
 

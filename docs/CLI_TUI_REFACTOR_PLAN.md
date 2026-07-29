@@ -1,6 +1,7 @@
 # CLI TUI retained renderer 重构方案
 
-> **状态：** OI-14 `BLOCKED: HUMAN`（OI-14A–H 自动实现已关闭；只剩 OI-H3）
+> **状态：** OI-14 `BLOCKED: HUMAN`（OI-14A–H 自动实现已关闭；只剩 OI-H3）；
+> OI-15 `OPEN`（slash 命令 surface/lifecycle 方案已完成，生产实现尚未开始）
 > **方案锚点：** Bolo `c2e6a98`；Pi `c820aa26fe09`；oh-my-pi
 > `d16c6168c86f`；Codex `f61b51ddd924`；OpenCode `66495a2a22cd`；
 > HelsincyCode `e6dd86ef990e`。
@@ -468,3 +469,208 @@ headless terminal 复现的缺陷仍必须回到自动队列，不能降级为�
 
 继续禁止对 `TerminalSurface`、`contentPrefixer`、tiny Markdown 或 composer spacer
 添加新的布局补丁，也禁止重新引入 engine selector 或第二 terminal owner。
+
+---
+
+## 14. OI-15 · slash 命令 surface 与生命周期
+
+### 14.1 问题与根因
+
+2026-07-29 的真人走查确认：`/context`、`/skills`、`/plugins`、`/doctor` 等本地
+命令每执行一次，结果都会永久留在 Composer 上方；重复查询会把整个可见区域逐步
+挤满。这不是 Context dashboard 的样式问题，而是 slash 结果没有显示生命周期。
+
+当前数据流如下：
+
+```text
+SlashDispatchResult { ok, message, contextView? ... }
+  -> runOnePrompt().writeSlashOutput()
+  -> retained controller.writeOutput()
+  -> RetainedRoot.appendCompatibilityOutput()
+  -> outputText += text（最多 65,536 字符）
+  -> welcome / transcript / compatibilityOutput / activity / composer / footer
+```
+
+`SlashDispatchResult` 能表达内容和少数交互意图，却不能表达：
+
+- 结果应该进入 history、临时 panel、toast 还是 overlay；
+- 同一个命令再次执行时替换、去重还是追加；
+- 何时由新输入、`Esc`、TTL、session switch 或 reset 清除；
+- 长内容何时升级为 pager；
+- 异步结果是否仍属于当前 session/cwd/request；
+- 是否允许进入模型消息、session persistence 或 resume。
+
+slash 输入本身已通过 `beginTurn({ echoUser: true, activity: false })` 进入 typed
+transcript，slash 输出却绕过 reducer，落入单一追加字符串桶。这种“一半 typed、
+一半 compatibility string”的双路径是直接根因。
+
+### 14.2 五个参考项目的可借鉴结论
+
+| 项目 | 实际机制 | Bolo 借鉴 | 不照搬 |
+|------|----------|-----------|--------|
+| **Pi** | `notify`、keyed `setStatus`、keyed `setWidget`、focused overlay 分通道；widget 可放 editor 上/下，按 key 替换，`undefined` 清除，字符串最多 10 行 | surface primitive 分层、keyed replace、显式 clear、editor 邻接位置 | Pi 没有内建 `/context`；不复制其业务命令或整个 coding-agent |
+| **oh-my-pi** | `/context` 是 typed `TranscriptBlock`，但 `presentCommandOutput()` 仍把它加入 `chatContainer`；连续 status 可原位替换 | typed panel、streaming 时延迟插入、status replace/append 按语义区分 | 漂亮面板仍会永久累积，不能作为 lifecycle 答案 |
+| **HelsincyCode** | notification queue 有默认 8 秒 TTL、priority、key 去重/fold、invalidates、抢占和 timer 清理；local JSX 有独立 slot/focus restore | notification queue、临时 local view、focus restore | 普通空闲 `/context` 实际仍会进入 messages；视觉上移出视口不等于已删除 |
+| **Codex** | history cell、bottom pane、overlay、composer、transient status 分开；`/skills` 用 selection view；`/plugins` 用稳定 view ID，把 loading 原位 replace 为结果，并忽略迟到请求 | stable view key、replace/dismiss、generation/request guard、失败单独进入 durable error | `/status` 本身仍可写 history；不复制 Rust/Ratatui 实现 |
+| **OpenCode** | 单 current toast，默认 5 秒，新 toast 替换旧项并取消旧 timer；dialog `replace()` 清旧栈并恢复 focus；context usage 在 sidebar | toast/dialog/status 的用途映射、单 owner、绝对/底部 surface 不增加 transcript | 不引入 Solid/OpenTUI/Bun 依赖栈 |
+
+共同原则是“先按命令意图选 surface，再决定 lifetime”，而不是给所有 slash 输出统一
+增加 TTL。OI-15 只借鉴这些状态与 owner 边界，继续使用 Bolo 当前 Pi TUI retained
+基座和 OverlayHost，不增加第三方运行时依赖。
+
+### 14.3 四类输出与布局决定
+
+| Surface | 用途 | 默认位置与高度 | 生命周期 | 持久化 |
+|---------|------|----------------|----------|--------|
+| `history` | 真正需要审计的动作、不可恢复错误、用户明确要求保留的报告 | typed transcript block | append；随 history 正常滚动 | 明确声明；默认不进模型消息 |
+| `panel` | `/context`、`/doctor` 摘要、只读 status/help/memory/hooks 等当前状态 | **Composer 下方、footer 上方**的单 replaceable slot；最多 10 行且不超过可用 rows 的 40% | 新 panel 替换旧 panel；首个编辑输入、`Esc`、session switch/reset 清除；命令可声明 TTL | never |
+| `toast` | reload/set/copy 等短成功、警告或可立即修正的失败 | footer 的单行辅助状态，不增加 transcript 或主布局高度 | 默认 5 秒；新 toast 替换旧 toast并取消旧 timer；输入可提前清除 | never |
+| `overlay` | Skills/Plugins picker、长诊断、pager、需要焦点的交互 | 现有 OverlayHost | stable key replace；`Esc`/完成关闭并恢复 Composer focus | never |
+
+约束：
+
+1. 同一时刻最多一个 panel、一个 toast、一个 focused overlay；任何一类都不能用数组
+   模拟 history。
+2. panel 在 Composer 下方，不再占用“对话正文与 Composer 之间”的主工作区；出现时
+   transcript viewport 可有界缩小，但连续调用不会继续缩小。
+3. panel 内容超过上限时不得静默截断为不可读碎片：命令必须提供 compact view，
+   或升级到 pager overlay。默认 `/context` 始终使用 compact panel，
+   `/context details` 使用 pager。
+4. slash 命令的灰色用户输入块可继续留在视觉 transcript，满足操作可追溯性；结果
+   不得因此进入模型上下文或 session message persistence。
+5. `ok: false` 不自动等于 durable history。语法错误、取消和可重试失败可用
+   error toast/panel；只有命令显式声明的不可恢复/需审计错误才进入 typed history。
+
+### 14.4 packages-first 类型契约
+
+第一刀在 `packages/core` 定义与 renderer 无关的 discriminated union；`message`
+继续作为 plain/non-TTY fallback，保证旧调用方与脚本输出可渐进迁移：
+
+```ts
+type SlashDisplayPolicy =
+  | {
+      surface: 'history'
+      tone: 'info' | 'success' | 'warning' | 'error'
+      persistence: 'visual-only' | 'session'
+    }
+  | {
+      surface: 'panel'
+      key: string
+      placement: 'below-composer'
+      dismissOnInput: boolean
+      dismissOnEscape: boolean
+      ttlMs?: number
+      overflow: 'compact' | 'pager'
+    }
+  | {
+      surface: 'toast'
+      key: string
+      tone: 'info' | 'success' | 'warning' | 'error'
+      ttlMs: number
+    }
+  | {
+      surface: 'overlay'
+      key: string
+      view: 'picker' | 'pager'
+    }
+
+type SlashDispatchResult = {
+  ok: boolean
+  message: string
+  display?: SlashDisplayPolicy
+  // 既有 contextView / interactive* payload 渐进迁移
+}
+```
+
+禁止把 Pi `Component`、terminal columns、timer handle 或 CLI callback 放进 core。
+`display` 缺失时迁移期仍走现有 plain/history 兼容行为；所有内建命令分类完成后，
+定向门禁禁止 normal slash result 再调用 `appendCompatibilityOutput()`。
+
+`packages/shared`/CLI retained state 新增单槽状态和纯 action：
+
+```text
+commandSurface
+  panel?: { key, generation, content, policy }
+  toast?: { key, generation, content, tone, expiresAt }
+  overlay?: { key, generation, view }
+
+show/replace_panel · dismiss_panel
+show/replace_toast · expire_toast
+open/replace_overlay · close_overlay
+accepted_input · session_reset
+```
+
+reducer 不持有 timer。CLI effect 层创建 timer，并在回调中携带
+`key + generation`；过期 timer 不能清掉后来替换的新内容。每次 dispatch 生成
+request generation，并记录 session id、cwd 和 command key；异步完成时若任一项已
+变化则丢弃迟到结果。resize 只用现有 raw/typed content 重排，不改变 lifetime。
+
+### 14.5 清除与按键优先级
+
+1. focused overlay 独占输入；`Esc` 先关闭 overlay并恢复 Composer focus。
+2. running turn 的 `Esc` 仍是 interrupt；运行中不得让旧 panel 抢键。
+3. idle Composer 第一次产生 value mutation 时，先 dispatch `accepted_input` 清除
+   panel/toast，再更新 slash menu；方向键浏览 history 不算新输入。
+4. idle 且没有输入 mutation 时，`Esc` 依次关闭 slash menu、panel；没有可关闭项时
+   保持现有 idle 语义。
+5. TTL、同 key replace、不同 panel replace、session switch、`/clear` 与进程 stop
+   都必须取消旧 timer；timer callback 只能按 generation 关闭自己的 surface。
+
+### 14.6 命令迁移表
+
+| 命令意图 | 目标 surface | 具体策略 |
+|----------|--------------|----------|
+| `/context` | panel | key `slash:context`；compact dashboard；12 秒、新输入或 `Esc` 清除；footer 始终只保留精简 token 百分比 |
+| `/context details` | pager overlay | key `slash:context:details`；关闭后回到原 Composer value/focus |
+| `/skills [filter]` | picker overlay | key `slash:skills`；同 key loading/result 原位替换；选择/取消后关闭 |
+| `/plugins`、`/plugins market/search` | picker/pager overlay | key `slash:plugins:<mode>`；异步结果带 session/cwd/generation guard |
+| `/plugins reload/install/uninstall` 等动作 | toast；失败可升级 history | 成功/可重试失败 5 秒；文件损坏、回滚失败等需审计错误进入 typed error |
+| `/doctor` | panel | 结构化摘要；新输入/`Esc` 清除；内容超过上限升级 pager，不把 dump 截断塞入 panel |
+| `/help`、`/mcp`、`/hooks`、`/memory`、`/cost`、只读 status | panel 或 pager | 每个逻辑视图 stable key；重复命令 replace；长列表走 pager |
+| `/provider`、`/effort`、`/diff` | 现有 overlay | 迁入统一 display policy，删除并行 `interactiveProvider`/`interactiveEffort`/`interactiveDiff` 分支 |
+| `/title`、设置开关、queue/interrupt 等短动作 | toast 或 history | 纯确认用 toast；影响 durable runtime 且需要追溯的动作保留 typed history |
+| 未迁移 Plugin/Skill command | explicit fallback | Plugin API 后续允许声明 policy；声明前使用有界 history，不得进入无界 compatibility bucket |
+
+### 14.7 实施切片
+
+| 顺序 | 切片 | 交付 | 关闭条件 |
+|------|------|------|----------|
+| **OI-15A** | core display policy + 红灯 | discriminated union、默认策略解析、命令分类表；新测试同时注册独立 script 与默认门禁 | 非法 policy 编译/运行时 fail-closed；plain `message` byte-stable |
+| **OI-15B** | retained single-slot state | panel/toast state、generation、effect timer、Composer 下方组件、input/Esc/reset 清除 | 连续 20 次 `/context` 高度不增长；TTL/replace/timer race/resize 全绿 |
+| **OI-15C** | context/doctor/status 迁移 | context compact panel/details pager；doctor 与只读诊断映射 | footer/panel 分层；长内容 pager；不进入 resume/model messages |
+| **OI-15D** | Skills/Plugins overlay | picker/pager、loading→result 原位 replace、focus restore、stale async guard | cwd/session/request 变化忽略迟到结果；取消后输入原值与光标恢复 |
+| **OI-15E** | toast 与错误分级 | action feedback、priority/tone、durable error 显式策略 | 新 toast 取消旧 timer；短反馈不改变 transcript 高度；不可恢复错误可审计 |
+| **OI-15F** | 清理兼容桶与发布收口 | normal slash 不再走 compatibilityOutput；旧 `interactive*` 字段迁移/删除；docs/dist 审计 | 真实 VT、plain/JSON、full test、pack/install、owner guard 全绿 |
+
+每个代码切片先写红灯，再实现；代码/测试与文档分批使用中文 commit 并 push。
+不在本阶段引入新 renderer、UI framework、状态库或其它 Agent 的运行时依赖。
+
+### 14.8 自动门禁与真人验收
+
+自动门禁至少覆盖：
+
+- core policy 的 exhaustive switch、非法 TTL/key/placement、Plugin fallback；
+- 24/38/80/160 列下 panel 位于 Composer 下方、最大高度和 pager upgrade；
+- 连续执行 20 次 `/context`、`/doctor`、`/skills`、`/plugins`，主布局高度有界；
+- 同 key/different key replace、TTL fake clock、旧 timer 与迟到 async result；
+- 编辑输入清除、`Esc` 优先级、overlay focus/value/cursor restore；
+- running/activity/permission 与 panel 不争抢 stdin、writer 或 layout owner；
+- `/clear`、session switch、resume、resize、abort、crash cleanup；
+- non-TTY、pipe、`--print`、JSON 输出无 ANSI、无 timer 副作用且文本兼容；
+- transient 不进入 `ChatMessage[]`、JSONL、compact、resume 或模型输入；
+- normal slash output 不再命中 `appendCompatibilityOutput()` 的静态 guard。
+
+OI-H3 真人补充检查 panel 在 Composer 下方的阅读节奏、12 秒 Context 时长、动画/
+输入手感和窄窗口可读性。若真人发现可由 xterm 复现的布局或按键缺陷，必须回到
+OI-15 自动队列，不能只记为主观验收。
+
+### 14.9 回滚边界
+
+- `message` 始终保留为 plain fallback；回滚某个命令只需移除其 `display` policy，
+  不回滚 core 命令行为、session 数据或 renderer。
+- OI-15B–E 期间允许未分类命令走有界兼容 history，但已迁移命令不得双写
+  history + panel/toast。
+- 不恢复 OI-14 已删除的 `TerminalSurface`、engine selector、局部 raw input owner
+  或第二 stdout writer。
+- OI-15F 删除正常 slash 的 compatibility 路径前，必须有命令注册表 completeness
+  测试；发现漏项时回滚该清理提交，而不是放宽 owner guard。

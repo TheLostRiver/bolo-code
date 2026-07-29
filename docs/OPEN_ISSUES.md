@@ -5,7 +5,7 @@
 > `269b39c`；OI-14C 关闭锚点：`1798a7c`，OI-14D 关闭锚点：
 > `8b060e5`，OI-14E 关闭锚点：`d0fb822`（2026-07-28），OI-14F 关闭锚点：
 > `31384d4`，OI-14G 关闭锚点：`accc22c`，OI-14H 代码关闭锚点：
-> `d4eaed0`（2026-07-29）。
+> `d4eaed0`（2026-07-29）；OI-15 准入锚点：`85c5c48`（2026-07-29）。
 > 本文只列当前仓库中有代码、测试、实测或互相矛盾文档支撑的问题。
 > 历史 TODO、已关闭的候选和仅凭印象提出的功能不算开放问题。
 
@@ -20,9 +20,77 @@
 
 ## 1. Agent 可直接解决
 
-当前默认 agent 可闭环队列为 **空**。以下已关闭条目继续保留准入与关闭证据，
-OI-14 只剩明确的 OI-H3 真人走查；不得为保持自治而自造无准入证据的任务。
-OI-09–OI-13 的局部关闭不再作为“整个 TUI renderer 已稳定”的证据。
+当前默认 agent 可闭环队列为 **OI-15A → OI-15F**。OI-14 只剩明确的 OI-H3
+真人走查；OI-09–OI-13 的局部关闭不再作为“整个 TUI renderer 已稳定”的证据。
+
+### OI-15 · slash 命令临时结果与 Composer 空间治理
+
+**状态：OPEN（调研与方案完成，生产实现尚未开始）**
+
+完整方案：[CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md) §14
+
+准入证据：
+
+- 真人走查确认 `/context`、`/skills`、`/plugins`、`/doctor` 等命令结果不会消失；
+  重复执行会持续占用 Composer 上方空间，最终把可见屏幕挤满。
+- `SlashDispatchResult` 只有 `ok`、`message` 和少数 `contextView`/`interactive*`
+  payload，没有 surface、replacement key、TTL、dismiss、overflow 或 persistence
+  policy。
+- `runOnePrompt()` 会把 slash 输入作为 typed user block 回显，但所有普通 slash 输出
+  仍经 `writeSlashOutput()` 进入 `RetainedRoot.appendCompatibilityOutput()`。
+  该方法把文本持续拼入最多 65,536 字符的单一 `Text` component；根布局把它固定在
+  transcript 与 activity/composer 之间，没有任何 replace 或 clear action。
+- Pi 证明 keyed widget/status/overlay 应分通道；Codex 的 Plugins view 用稳定 ID
+  原位替换 loading/result 并忽略迟到请求；OpenCode 的单 toast/dialog 不进入
+  transcript；HC 的 notification queue 提供 TTL/key/priority/timer 清理。
+  oh-my-pi 的 `/context` 虽是 typed panel，仍追加到 chatContainer，反证“只换样式”
+  不能解决生命周期。
+- HelsincyCode 当前普通 `/context` 也会进入 messages；用户观察到的“位于输入框
+  下方并消失”可能含 viewport 行为。Bolo 不依赖这种隐式效果，必须用显式 state 和
+  persistence policy 保证结果确实被替换/删除。
+
+架构决定：
+
+```text
+packages/core SlashDisplayPolicy
+  -> history | panel | toast | overlay
+  -> retained commandSurface 单槽 state + generation
+  -> Composer 下方 panel / footer toast / OverlayHost
+  -> plain/non-TTY 继续使用 message
+```
+
+- `panel` 是 Composer 下方、footer 上方的单 replaceable slot，最多 10 行且不超过
+  可用 rows 的 40%；新输入、`Esc`、session reset 或命令 TTL 清除。
+- `toast` 是 footer 单行短反馈，默认 5 秒；新 toast 替换旧项并取消旧 timer。
+- `overlay` 复用现有 OverlayHost，按 stable key replace，关闭后恢复 Composer
+  value/cursor/focus。
+- `history` 只留给显式需要审计的动作或不可恢复错误；`ok: false` 不自动永久追加。
+- transient 永不进入模型消息、JSONL、compact 或 resume。slash 命令的灰色输入块
+  可保留在视觉 transcript，但命令结果不再进入无界 compatibility bucket。
+- `/context` 使用 12 秒 compact panel，`/context details` 使用 pager；`/skills`
+  和 `/plugins` 使用 picker/pager；`/doctor` 使用有界摘要并在超长时升级 pager。
+
+执行切片：
+
+| 切片 | packages-first 交付 | 关闭证据 | 状态 |
+|------|---------------------|----------|------|
+| **OI-15A · display policy** | core discriminated union、默认策略、命令分类、红灯 | exhaustive/fail-closed；plain message byte-stable；测试进入独立 script + 默认门禁 | OPEN |
+| **OI-15B · single-slot state** | panel/toast reducer、generation、effect timer、Composer 下方组件 | 连续 20 次查询高度不增长；TTL/replace/timer race/resize | OPEN |
+| **OI-15C · context/doctor/status** | context compact/details、doctor/只读诊断映射 | footer/panel/pager 分层；transient 不进 persistence/resume/model | OPEN |
+| **OI-15D · Skills/Plugins overlay** | picker/pager、loading→result replace、stale async guard | session/cwd/request 变化忽略迟到结果；focus/value/cursor 恢复 | OPEN |
+| **OI-15E · toast/error policy** | action feedback、tone/priority、显式 durable error | 新 toast 取消旧 timer；短反馈不改变 transcript 高度 | OPEN |
+| **OI-15F · compatibility cleanup** | normal slash 禁止 `appendCompatibilityOutput`；迁移旧 `interactive*` | VT/plain/JSON/full test/dist/pack/install/owner guard 全绿 | OPEN |
+
+关闭条件：
+
+1. 20 次重复 `/context`、`/skills`、`/plugins`、`/doctor` 不增加 Composer 上方
+   retained 内容高度，且新输入/`Esc`/TTL 后真实 state 中不存在旧 panel。
+2. panel 在 Composer 下方且高度有界；长内容走 pager，不截断成不可操作文本。
+3. timer 与异步结果都由 `key + generation` 防止清错/覆盖当前视图。
+4. dynamic TTY 保持单 stdin/writer/layout owner；plain/JSON 字节兼容。
+5. normal slash 输出不再使用 compatibility bucket；transient 不进入持久化。
+6. 定向、typecheck、完整 `npm test`、dist/pack/install 与 OI-H3 邻接场景通过；
+   代码/测试和文档分批中文 commit/push。
 
 ### OI-14 · CLI TUI retained renderer 重构
 

@@ -31,7 +31,8 @@ agent 独立解决的问题。** 不要越过外部/人工阻塞项，也不要�
 | 7 | OI-14A · CLI TUI 真实 VT 红灯与 retained renderer 选型 | ✅ 已收口（`1ae9f53` · `f04f8de`） |
 | 8 | OI-14B · live view-state | ✅ 已收口（`269b39c`） |
 | 9 | OI-14H · 删除 legacy/静态 owner guard/发布审计 | ✅ 自动部分已收口（`39e66b4`–`d4eaed0`） |
-| 10 | OI-H1/H2/H3 · 真 TTY、真人点击与视觉走查 | 人工阻塞；不得用它们掩盖可自动复现的新缺陷 |
+| 10 | OI-15A–F · slash command surface/lifecycle | 🚧 当前队列：core policy → single-slot panel/toast → context/doctor → Skills/Plugins → cleanup |
+| 11 | OI-H1/H2/H3 · 真 TTY、真人点击与视觉走查 | 人工阻塞；不得用它们掩盖可自动复现的新缺陷 |
 
 OI-04 已完成零依赖、显式配置、fail-closed 的 SearXNG JSON 搜索契约、fixture、
 CLI/Desktop warning 与文档收口；OI-X1 已补齐真实 Docker 实例和上游搜索证据；
@@ -42,11 +43,13 @@ OI-08B 已完成安装后直接 `bolo`、用户级 workspace session store、旧
 Composer/activity/footer、OverlayHost、默认切换、可靠性/性能与 legacy 删除；
 dynamic TTY 只剩 retained，non-TTY/plain/pipe/JSON/`--print` 永久保留。
 
-**当前默认 agent 队列为空。** 先以 ROADMAP §0、§13.11 与 OPEN_ISSUES 的实际内容
-为准；若三处都没有新的、具备准入证据且可由 agent 独立关闭的任务，就记录核对结果并
-停止，不得为维持运行自行发明功能。OI-H1/H2/H3 只能由真人验收；任何新发现且可由
-headless terminal 复现的缺陷必须另立有红灯证据的自动任务，不能塞进人工 blocker。
-OI-14 完成边界见 [CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md)。
+**当前默认 agent 队列是 OI-15A → OI-15F。** 先以 ROADMAP §0、§13.11 与
+OPEN_ISSUES 的切片顺序推进：core display policy、retained 单 panel/toast slot、
+context/doctor/status、Skills/Plugins overlay、toast/error policy、compatibility
+cleanup。每刀先红灯，packages-first，代码/测试与文档分批中文 commit/push。
+OI-H1/H2/H3 只能由真人验收；任何新发现且可由 headless terminal 复现的缺陷不能
+塞进人工 blocker。OI-14/OI-15 完成边界见
+[CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md)。
 
 **一条已知的遗留（不阻塞，顺手可做）：** `AskUserQuestion` 的**真人在真终端按键**没验过——
 控件测试注入 `readKey`，覆盖不到真实 raw-mode 与 REPL 抢 stdin 的问题。
