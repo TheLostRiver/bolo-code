@@ -143,7 +143,7 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | **Agent 能力面（工具集）** | **~82–88%** | 15 个常驻/可选工具 + 显式 SearXNG `WebSearch`（ROADMAP §14 · [TOOLS.md](./TOOLS.md)） |
 | **分发（CLI）** | **~87–93%** | Node `>=22.19.0`；`npm i -g` / `npx` 单文件产物；安装后直接 `bolo`，无需 init；零独立运行时依赖（ROADMAP §15 · [RELEASE.md](./RELEASE.md)） |
 | 会话 / CLI | ~92–97% | 用户级 workspace JSONL · 旧项目/用户会话兼容 · 零项目副作用首次启动 · new/resume 同构 runtime · durable controls/tasks |
-| **CLI TUI** | **~85–92%** | OI-14 retained 主体与 OI-15A–D display policy/单槽/只读 panel-pager/扩展目录 overlay 已完成；OI-15E–F 迁移 toast/error 与 compatibility；真人 Windows Terminal 仍未验 |
+| **CLI TUI** | **~85–92%** | OI-14 retained 主体与 OI-15A–E display policy/单槽/只读 panel-pager/扩展目录 overlay/toast-error 已完成；OI-15F 清理 compatibility；真人 Windows Terminal 仍未验 |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
 | Subagent | ~89–95% | Spec v0；durable task/result · overflow FIFO/cancel · safe-boundary delivery · worktree 成果保全 |
 | 文件 Diff 日用 | ~95%+ | **D0–D7** |
@@ -159,7 +159,7 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 
 **已闭环：** Diff · Hooks · Compact（含 AR2 全段）· Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR-T1–T3+ Agent 能力面** · **AR3/OI-06 Desktop 产品接线** · **AR4 evidence gate** · **AR5 release hardening** · **OI-04 SearXNG 直连、OI-X1 真实实例 smoke、OI-07 上游诊断 / doctor / 可选 Docker setup、OI-08B CLI 零步骤首次启动、OI-14A 真实 VT/renderer 选型、OI-14B live view-state、OI-14C retained renderer 基座、OI-14D retained transcript/Markdown、OI-14E Composer/activity/footer、OI-14F OverlayHost/交互面板、OI-14G 默认切换/可靠性/性能、OI-14H legacy 删除/发布审计**。OI-09–OI-13 的局部 TUI 能力保留为完成历史，但不再代表 renderer 整体稳定。
 
-**当前默认 agent 队列是 OI-15E → OI-15F。** 真人走查与代码审计确认普通 slash
+**当前默认 agent 队列是 OI-15F。** 真人走查与代码审计确认普通 slash
 结果曾经由 `appendCompatibilityOutput()` 永久拼在 transcript 与 Composer 之间。
 OI-15A 已在 core 增加并校验 `history | panel | toast | overlay` display policy，
 35 个内建命令已完整分类，Plugin/Skill/unknown 有 fail-closed 兜底；OI-15B
@@ -169,8 +169,11 @@ help/cost/memory/mcp/hooks 映射到 panel/text pager，并证明 20× replace�
 resize/CJK、compatibility 与 session-message 隔离。OI-15D `21ee1e2` / `87054df`
 又迁移 Skills/Plugins、commands、market/search：core preview 在 handler 前打开
 loading，结构化 catalog 原位替换；`key/generation/session/cwd` stale guard、有界目录、
-分页键、resize selection 与 Composer value/cursor/focus 恢复均有门禁。下一刀处理
-toast/error，之后执行 compatibility cleanup。plain/non-TTY
+分页键、resize selection 与 Composer value/cursor/focus 恢复均有门禁。OI-15E
+`1d49d53` 已消费 toast/history：20×短动作复用 footer 单槽，Usage error 保持 toast，
+插件 install/uninstall 执行失败进入 visual-only error history，reload notes 使用 warning
+toast；迁移结果不写 compatibility/plain writer/session messages。下一刀执行
+compatibility cleanup。plain/non-TTY
 `message` 保持兼容，不增加其它 Agent 的运行时依赖。OI-14 只剩 OI-H3 真人
 Windows Terminal 走查。完整方案见
 [CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md) §14，选型数据见
@@ -249,7 +252,8 @@ DR2A 单 session runner ✅
 → OI-15B retained single-slot command surface ✅
 → OI-15C read-only panel/pager migration ✅
 → OI-15D Skills/Plugins stable-key overlay ✅
-→ OI-15E–F toast/error · compatibility cleanup 🚧
+→ OI-15E toast/error policy ✅
+→ OI-15F compatibility cleanup 🚧
 → OI-H3 真人 Windows Terminal 走查 BLOCKED: HUMAN
 ```
 
@@ -490,7 +494,7 @@ cd apps/desktop && npm install && set BOLO_DESKTOP_MOCK=1 && npm start
 | **OI-12** | argument hint · context view-model/dashboard · logical content gutter · dock-width 用户块 · bracketed paste transaction；代码 `1696127` / `7f76093` / `15b37ed` / `40a5d41` / `8d2a7a5`；物理 wrap 证明不足，转 OI-14 |
 | **OI-13** | silent Thought completion · 显式 surface/gap · 100-cell responsive crystal workbench；代码 `fe2d39a` / `bf25077` / `2b9d008` / `4c4fb08`；局部完成，不代表 renderer 整体稳定 |
 | **OI-14 · BLOCKED: HUMAN** | retained renderer 重构：A 真实 VT/选型 ✅（`1ae9f53` / `f04f8de`）→ B live view-state ✅（`269b39c`）→ C renderer ✅（`1798a7c`）→ D Markdown/transcript ✅（`8b060e5`）→ E Composer/activity/footer ✅（`d0fb822`）→ F overlays ✅（`31384d4`）→ G 默认切换/可靠性 ✅（`6f4764f`–`accc22c`）→ H legacy 删除/发布审计 ✅（`39e66b4`–`d4eaed0`）→ interrupt/Composer 竞态修复 ✅（`e6ec6cb`）；只剩 OI-H3 真人走查 |
-| **OI-15 · IN PROGRESS** | slash 结果 surface/lifecycle：A core display policy ✅（`d681734`）→ B retained single-slot panel/toast ✅（`d6bd087`）→ C context/doctor/status 与只读 panel/pager ✅（`26f796f`）→ D Skills/Plugins overlay ✅（`21ee1e2` / `87054df`）→ E toast/error policy → F compatibility cleanup；下一刀 OI-15E |
+| **OI-15 · IN PROGRESS** | slash 结果 surface/lifecycle：A core display policy ✅（`d681734`）→ B retained single-slot panel/toast ✅（`d6bd087`）→ C context/doctor/status 与只读 panel/pager ✅（`26f796f`）→ D Skills/Plugins overlay ✅（`21ee1e2` / `87054df`）→ E toast/error policy ✅（`1d49d53`）→ F compatibility cleanup；下一刀 OI-15F |
 | **AR5C-early** | esbuild 单文件产物 · 发布元数据 · `getBundledSkillsDir()` 双布局 · pack→install→run E2E 进门禁 · [RELEASE.md](./RELEASE.md) |
 
 最新 commit 以 `git log` 为准。

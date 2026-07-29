@@ -223,8 +223,11 @@ text pager；`/mcp`、`/hooks` 直接进入 pager。迁移结果不会进入兼�
 OI-15D 起，`/skills`、`/plugins`、commands、market/search 会先在唯一 OverlayHost
 显示 loading，再用结构化目录原位替换；迟到或已取消的请求不会覆盖当前视图。长目录
 支持 `PgUp`、`PgDn`、`Home`、`End`，终端 resize 后仍保持选中项可见；`Esc`/关闭后
-恢复输入内容、光标与焦点。动作 toast/error 与 compatibility cleanup 仍按
-[ROADMAP.md](./ROADMAP.md) 的 OI-15E–F 顺序迁移。
+恢复输入内容、光标与焦点。OI-15E 起，短动作、警告和可立即修正错误使用 footer
+单 toast 槽，重复动作只替换旧项；只有显式需要审计的不可恢复错误才进入 visual-only
+history。插件 install/uninstall 执行失败可审计，reload merge notes 使用 warning
+toast；Usage 错误仍是短 error toast。normal slash compatibility cleanup 仍由
+[ROADMAP.md](./ROADMAP.md) 的 OI-15F 完成。
 pipe、`--print`、JSON 与非 TTY 的 plain 文本契约不会因此改变。
 
 `BOLO_MASCOT=0` 可隐藏水晶；`BOLO_ASCII=1` 使用 ASCII 水晶；`NO_COLOR` 只去颜色并

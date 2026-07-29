@@ -11,6 +11,7 @@
 > OI-15C read-only panel/pager migration 关闭锚点：`26f796f`（2026-07-29）。
 > OI-15D Skills/Plugins stable-key overlay 关闭锚点：`21ee1e2` / `87054df`
 > （2026-07-29）。
+> OI-15E toast/error policy 关闭锚点：`1d49d53`（2026-07-29）。
 > 本文只列当前仓库中有代码、测试、实测或互相矛盾文档支撑的问题。
 > 历史 TODO、已关闭的候选和仅凭印象提出的功能不算开放问题。
 
@@ -25,12 +26,12 @@
 
 ## 1. Agent 可直接解决
 
-当前默认 agent 可闭环队列为 **OI-15E → OI-15F**。OI-14 只剩明确的 OI-H3
+当前默认 agent 可闭环队列为 **OI-15F**。OI-14 只剩明确的 OI-H3
 真人走查；OI-09–OI-13 的局部关闭不再作为“整个 TUI renderer 已稳定”的证据。
 
 ### OI-15 · slash 命令临时结果与 Composer 空间治理
 
-**状态：IN PROGRESS（OI-15A–D 已关闭；OI-15E 下一刀）**
+**状态：IN PROGRESS（OI-15A–E 已关闭；OI-15F 下一刀）**
 
 完整方案：[CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md) §14
 
@@ -43,14 +44,15 @@
   dismiss、overflow 或 persistence policy。OI-15A 已在 core 补齐该契约，OI-15B
   已接入 retained 单槽 primitive。OI-15C 又迁移了 `/context`、`/doctor`、`/status`
   与只读 panel/pager consumer。OI-15D 又迁移了 Skills/Plugins catalog overlay；
-  当前剩余症状集中在 toast/history 与最终 compatibility cleanup。
+  OI-15E 已迁移 toast/history 并建立显式 durable error 边界，当前只剩最终
+  compatibility cleanup。
 - 准入时，`runOnePrompt()` 会把 slash 输入作为 typed user block 回显，所有普通
   slash 输出也会经 `writeSlashOutput()` 进入
   `RetainedRoot.appendCompatibilityOutput()`。该方法把文本持续拼入最多 65,536
   字符的单一 `Text` component；根布局把它固定在 transcript 与 activity/composer
   之间，没有任何 replace 或 clear action。OI-15C 已让迁移的只读命令绕开该路径，
-  OI-15D 又让 Skills/Plugins catalog 绕开该路径；OI-15E–F 继续迁移动作反馈并删除
-  normal slash 的兼容入口。
+  OI-15D 又让 Skills/Plugins catalog 绕开该路径；OI-15E 让 toast/history 结果绕开
+  该路径；OI-15F 删除 normal slash 的兼容入口。
 - Pi 证明 keyed widget/status/overlay 应分通道；Codex 的 Plugins view 用稳定 ID
   原位替换 loading/result 并忽略迟到请求；OpenCode 的单 toast/dialog 不进入
   transcript；HC 的 notification queue 提供 TTL/key/priority/timer 清理。
@@ -84,6 +86,9 @@ packages/core SlashDisplayPolicy
   结构化 payload 原位替换；identity 为 `key + generation + sessionId + cwd`。长目录
   使用有界窗口和 `PgUp`/`PgDn`/`Home`/`End`，resize 后保持选中项可见，关闭后恢复
   Composer value/cursor/focus；plain/non-TTY fallback 保持。
+- 短动作、警告和可立即修正错误消费 footer 单 toast 槽；显式不可恢复错误消费
+  visual-only history。`ok: false` 不自动持久化；插件 install/uninstall 执行失败显式
+  可审计，reload merge notes 使用 warning toast；plain/non-TTY 字节保持不变。
 
 执行切片：
 
@@ -93,7 +98,7 @@ packages/core SlashDisplayPolicy
 | **OI-15B · single-slot state** | panel/toast reducer、generation、effect timer、Composer 下方组件 | 连续 20 次 replace 高度不增长；TTL/replace/timer race/resize/input/Esc/restore/stop | **CLOSED · `d6bd087`** |
 | **OI-15C · context/doctor/status** | context compact/details、doctor/只读诊断映射 | footer/panel/pager 分层；20× replace；single/multi-page/resize；transient 不进 compatibility/plain writer/session messages | **CLOSED · `26f796f`** |
 | **OI-15D · Skills/Plugins overlay** | picker/pager、loading→result replace、stale async guard | 20× stable-key；session/cwd/request 变化忽略迟到结果；40 项 resize 有界；分页键；focus/value/cursor 恢复 | **CLOSED · `21ee1e2` / `87054df`** |
-| **OI-15E · toast/error policy** | action feedback、tone/priority、显式 durable error | 新 toast 取消旧 timer；短反馈不改变 transcript 高度 | OPEN |
+| **OI-15E · toast/error policy** | action feedback、tone/priority、显式 durable error | 20×短动作单槽；Usage/error toast；插件 install/uninstall durable error；reload warning；compatibility/session 隔离 | **CLOSED · `1d49d53`** |
 | **OI-15F · compatibility cleanup** | normal slash 禁止 `appendCompatibilityOutput`；迁移旧 `interactive*` | VT/plain/JSON/full test/dist/pack/install/owner guard 全绿 | OPEN |
 
 关闭条件：

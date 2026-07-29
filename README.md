@@ -29,7 +29,7 @@
 | Headless 核心 | ~82–90% | queryLoop · 权限 · tools · STE；partial stream fail-closed |
 | **Agent 能力面（工具集）** | **~82–88%** | 15 个常驻/可选工具 + **Web search**（hosted、MCP、SearXNG 均已活体验证） |
 | 会话 / CLI | ~92–97% | **零步骤首次启动** · 用户级 workspace JSONL · 旧项目会话兼容 · durable runtime · query/action CLI · TTY pager · pipe/JSON automation |
-| **CLI TUI** | **~85–92%** | OI-14 retained 主体与 OI-15A–D display policy/单槽 command surface/只读 panel-pager/扩展目录 overlay 已完成；OI-15E–F 继续 toast/error 与 compatibility cleanup；真人 Windows Terminal 观感仍未验 |
+| **CLI TUI** | **~85–92%** | OI-14 retained 主体与 OI-15A–E display policy/单槽 command surface/只读 panel-pager/扩展目录 overlay/toast-error 分级已完成；OI-15F 继续 compatibility cleanup；真人 Windows Terminal 观感仍未验 |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
 | Subagent | ~89–95% | `config.agents` + `agents/*.md` · durable task/result · overflow FIFO/cancel · safe delivery · worktree 保全 |
 | 文件 Diff 日用 | ~95%+ | D0–D7 · U0–U4 |
@@ -51,11 +51,12 @@ smoke、OI-07 上游诊断 / `search doctor` / 可选 Docker setup、OI-08B CLI 
 基座、OI-14D transcript/Markdown、OI-14E Composer/activity/footer、OI-14F
 OverlayHost/交互面板、OI-14G 默认切换/可靠性/性能、OI-14H legacy 删除/发布审计、
 OI-15A slash display policy、OI-15B retained single-slot command surface、OI-15C
-read-only panel/pager migration、OI-15D Skills/Plugins stable-key overlay**。OI-09–OI-13 的
+read-only panel/pager migration、OI-15D Skills/Plugins stable-key overlay、OI-15E
+toast/error policy**。OI-09–OI-13 的
 slash/context/paste/Thought/权限/welcome 局部能力仍然有效，但不再作为整个 TUI
 renderer 稳定的证据。
 
-**当前状态：OI-15E → OI-15F 是默认 agent 队列。** OI-15A 已在 core 建立
+**当前状态：OI-15F 是默认 agent 队列。** OI-15A 已在 core 建立
 `history | panel | toast | overlay` display policy、运行时 fail-closed 校验和
 35 个内建命令分类，并保持 plain `message` 不变。OI-15B `d6bd087` 已在
 `packages/shared`/CLI 建立单 panel/toast、单调 generation、可注入 TTL effect、
@@ -66,8 +67,12 @@ panel/pager policy：重复查询替换同一 panel，详情和长内容复用 O
 又把 `/skills`、`/plugins`、commands、market/search 迁入唯一 OverlayHost：core
 pre-dispatch preview 先显示 loading，结构化 catalog 原位替换，`key + generation +
 sessionId + cwd` 阻止迟到结果覆盖当前视图；长目录支持有界窗口、
-`PgUp`/`PgDn`/`Home`/`End`，关闭后恢复 Composer value/cursor/focus。动作
-toast/error 仍由 OI-15E 迁移，OI-15F 最终清理 normal slash compatibility 路径。
+`PgUp`/`PgDn`/`Home`/`End`，关闭后恢复 Composer value/cursor/focus。OI-15E
+`1d49d53` 已让短动作和可修正错误进入 footer 单 toast 槽，让显式 durable error
+进入 visual-only history：20 次 `/plan` 不增加 transcript 高度，Usage error 保持
+error toast，插件 install/uninstall 执行失败可审计，reload merge notes 使用 warning
+toast；retained 结果不写 compatibility/plain writer/session messages，non-TTY
+`message` 字节不变。OI-15F 最终清理 normal slash compatibility 路径。
 
 OI-14 的单 retained renderer、常驻 Composer、Markdown、OverlayHost、物理终端门禁
 与 plain/non-TTY fallback 保持不变；OI-15 不增加新 renderer 或其它 Agent 的运行时
@@ -80,8 +85,8 @@ OI-14 的单 retained renderer、常驻 Composer、Markdown、OverlayHost、物�
 doctor 与显式 Docker 管理也已落地，Docker 不是默认依赖。
 
 **人工项：** retained 正文、常驻输入区和 overlays 的碎片、空洞、续行贴左、
-cursor/raw-mode 与 owner 交接缺陷已由 OI-14 自动门禁关闭；尚未迁移的动作反馈和
-compatibility 路径属于 OI-15E–F 自动任务，不归人工 blocker。真人仍需检查 Windows Terminal 的字体、
+cursor/raw-mode 与 owner 交接缺陷已由 OI-14 自动门禁关闭；剩余 normal slash
+compatibility 路径属于 OI-15F 自动任务，不归人工 blocker。真人仍需检查 Windows Terminal 的字体、
 颜色、动画和按键/鼠标手感；Desktop 点击与视觉也仍需真人。SearXNG 已完成真实实例
 live smoke。
 
