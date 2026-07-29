@@ -231,14 +231,10 @@ async function main() {
   }
 
   {
-    const keys = ['y']
-    let i = 0
     const ask = createTtyAskPermission({
       isTty: true,
       useDiffPanel: true,
-      readKey: async () => keys[i++] ?? 'n',
-      writeOut: () => {},
-      readAnswer: async () => 'n',
+      readAnswer: async () => 'y',
     })
     const d = await ask({
       toolName: 'Edit',

@@ -566,7 +566,6 @@ export async function resumeFromIdOrPath(
     isTty,
     readAnswer: opts.readPermissionAnswer,
     nonTtyDecision: opts.nonTtyPermission ?? 'deny',
-    writeOut: controller?.writeOutput ?? writeOut,
     ...(controller
       ? {
           runPermissionOverlay: controller.runPermissionOverlay,
@@ -660,9 +659,6 @@ export async function runOnePrompt(
     isTty?: boolean
     columns?: number
     color?: boolean
-    /** REPL：打开 raw 面板前暂停 readline */
-    pauseInput?: () => unknown | Promise<unknown>
-    resumeInput?: () => unknown | Promise<unknown>
     /** Plain REPL 复用现有 readline，不创建第二个 stdin owner。 */
     readLine?: (prompt: string) => Promise<string | null>
     /** 当前 turn 取消信号 */
@@ -678,8 +674,6 @@ export async function runOnePrompt(
   const isTty = options?.isTty ?? process.stdin.isTTY === true
   const columns = options?.columns ?? process.stdout.columns ?? 80
   const controller = getSessionTuiController(session)
-  const pauseInput = options?.pauseInput
-  const resumeInput = options?.resumeInput
   const withContentLayout = (text: string): string =>
     isTty && !controller
       ? prefixTuiContentBlock(text, { columns })
@@ -764,27 +758,12 @@ export async function runOnePrompt(
             lastTurn: result.interactiveDiff.mode === 'last',
             pathFilter: result.interactiveDiff.pathFilter,
           })
-          if (vm.files.length) {
-            const pane = controller
-              ? await controller.runDiffOverlay({
-                  mode: 'browse',
-                  model: vm,
-                  ...(options?.signal ? { signal: options.signal } : {}),
-                })
-              : await (async () => {
-                  const { runDiffPane } = await import('./tui/diffPane.ts')
-                  await pauseInput?.()
-                  try {
-                    return await runDiffPane({
-                      model: vm,
-                      writeOut,
-                      isTty: true,
-                      signal: options?.signal,
-                    })
-                  } finally {
-                    await resumeInput?.()
-                  }
-                })()
+          if (vm.files.length && controller) {
+            const pane = await controller.runDiffOverlay({
+              mode: 'browse',
+              model: vm,
+              ...(options?.signal ? { signal: options.signal } : {}),
+            })
             if (pane.ok) {
               return {
                 terminalReason: 'slash',
@@ -1055,30 +1034,6 @@ export async function runRepl(
     })
   }
 
-  // Plain fallback shares readline with permission prompts. Dynamic input is
-  // short-lived and has already released stdin before a turn starts.
-  const pauseRl = () => {
-    if (!rl) return
-    try {
-      rl.pause()
-    } catch {
-      /* ignore */
-    }
-  }
-  const resumeRl = () => {
-    if (!rl) return
-    try {
-      rl.resume()
-    } catch {
-      /* ignore */
-    }
-  }
-  const pauseInteractiveSurface: () => void | Promise<void> = dynamicTui
-    ? () => undefined
-    : pauseRl
-  const resumeInteractiveSurface: () => void | Promise<void> = dynamicTui
-    ? () => undefined
-    : resumeRl
   let activeTurn: AbortController | null = null
   const interrupt = async () => {
     if (activeTurn && !activeTurn.signal.aborted) {
@@ -1166,18 +1121,10 @@ export async function runRepl(
                 (await question(prompt, turnController.signal)) ?? '',
             }),
         nonTtyDecision: 'deny',
-        writeOut: runtimeOut,
         ...(controller
           ? {
               runPermissionOverlay: controller.runPermissionOverlay,
               runDiffOverlay: controller.runDiffOverlay,
-            }
-          : {}),
-        ...(!controller
-          ? {
-              pauseInput: pauseInteractiveSurface,
-              resumeInput: resumeInteractiveSurface,
-              suspendTextPrompt: dynamicTui,
             }
           : {}),
         signal: turnController.signal,
@@ -1192,8 +1139,6 @@ export async function runRepl(
           color,
           ...(!controller
             ? {
-                pauseInput: pauseInteractiveSurface,
-                resumeInput: resumeInteractiveSurface,
                 readLine: (prompt: string) =>
                   question(prompt, turnController.signal),
               }

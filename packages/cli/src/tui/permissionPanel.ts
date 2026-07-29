@@ -182,13 +182,32 @@ function permissionFields(request: AskPermissionRequest): Array<{
   }
 
   const summary = request.preview?.summaryText?.trim()
+  const changedPaths =
+    request.preview?.files
+      ?.map((file) => file.path.trim())
+      .filter(Boolean) ?? []
   return [
     ...(summary ? [{ label: 'Preview', value: summary }] : []),
+    ...(changedPaths.length
+      ? [{ label: 'Files', value: changedPaths.join('\n') }]
+      : []),
     { label: 'Input', value: formatGenericInput(request.toolInput) },
     ...(request.cwd?.trim()
       ? [{ label: 'Working directory', value: request.cwd.trim() }]
       : []),
   ]
+}
+
+export function formatPermissionRequestDetails(
+  request: AskPermissionRequest,
+): string {
+  const lines = [`${request.toolName} requests permission`]
+  for (const field of permissionFields(request)) {
+    const [first = '', ...rest] = field.value.split('\n')
+    lines.push(`${field.label}: ${first}`)
+    rest.forEach((line) => lines.push(`  ${line}`))
+  }
+  return lines.join('\n')
 }
 
 function stylePanelLine(line: PanelLine, color: boolean): string {

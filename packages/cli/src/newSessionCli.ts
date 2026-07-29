@@ -88,7 +88,6 @@ export async function runNewSessionCli(
     isTty,
     readAnswer: opts.readPermissionAnswer,
     nonTtyDecision: opts.nonTtyPermission ?? 'deny',
-    writeOut: controller?.writeOutput ?? writeOut,
     ...(controller
       ? {
           runPermissionOverlay: controller.runPermissionOverlay,

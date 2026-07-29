@@ -8,12 +8,11 @@ import {
   buildDiffViewModelFromPreview,
   type DiffViewModel,
 } from '../../../core/src/diffViewModel.ts'
-import {
-  runDiffApprovePane,
-  type DiffPaneApproveResult,
-  type DiffPaneBrowseResult,
+import type {
+  DiffPaneApproveResult,
+  DiffPaneBrowseResult,
 } from './diffPane.ts'
-import { runPermissionPanel } from './permissionPanel.ts'
+import { formatPermissionRequestDetails } from './permissionPanel.ts'
 
 export type AskPermissionDecision = 'allow' | 'deny' | 'allow_always'
 
@@ -75,6 +74,12 @@ export function formatPermissionPrompt(
   return `${colored}\n${head}`
 }
 
+export function formatPermissionRequestPrompt(
+  request: AskPermissionRequest,
+): string {
+  return `${formatPermissionRequestDetails(request)}\nAllow ${request.toolName}? [y/a/N] `
+}
+
 function colorizePreviewBody(body: string): string {
   const RESET = '\x1b[0m'
   const GREEN = '\x1b[32m'
@@ -104,22 +109,10 @@ export type CreateTtyAskPermissionOptions = {
    * 默认 true；`BOLO_PERM_DIFF_PANEL=0` 或 false 关闭。
    */
   useDiffPanel?: boolean
-  /** 非文件工具使用结构化选择面板；默认 true。 */
-  usePermissionPanel?: boolean
-  writeOut?: (s: string) => void
-  /** 测试注入 raw key */
-  readKey?: () => Promise<string>
-  /** 面板前后（REPL 暂停 readline） */
-  pauseInput?: () => unknown | Promise<unknown>
-  resumeInput?: () => unknown | Promise<unknown>
-  /** 文本权限询问也临时接管动态 composer 区域。 */
-  suspendTextPrompt?: boolean
   /** 当前 turn 的取消信号；abort 时权限请求按 deny 收口 */
   signal?: AbortSignal
-  /** raw diff panel 收到 Ctrl-C 时通知 turn owner */
+  /** retained overlay 收到 Ctrl-C 时通知 turn owner */
   onInterrupt?: () => void
-  columns?: number
-  color?: boolean
   /** retained root 内的唯一 OverlayHost；提供时不暂停或转交 stdin。 */
   runPermissionOverlay?: (options: {
     request: AskPermissionRequest
@@ -174,9 +167,6 @@ export function createTtyAskPermission(
   const nonTty = opts.nonTtyDecision ?? 'deny'
   const usePanel =
     opts.useDiffPanel !== false && process.env.BOLO_PERM_DIFF_PANEL !== '0'
-  const usePermissionPanel =
-    opts.usePermissionPanel !== false &&
-    process.env.BOLO_PERM_PANEL !== '0'
 
   const defaultRead = async (
     prompt: string,
@@ -205,15 +195,18 @@ export function createTtyAskPermission(
     }
   }
 
-  const writeOut = opts.writeOut ?? ((s: string) => process.stdout.write(s))
-
   return async (req) => {
     const signal = req.signal ?? opts.signal
     if (!isTty) return nonTty
     if (signal?.aborted) return 'deny'
 
     // U2：结构化 files → 可滚审批
-    if (usePanel && req.preview?.files && req.preview.files.length > 0) {
+    if (
+      usePanel &&
+      opts.runDiffOverlay &&
+      req.preview?.files &&
+      req.preview.files.length > 0
+    ) {
       try {
         const vm = buildDiffViewModelFromPreview({
           tool: req.preview.tool ?? req.toolName,
@@ -222,33 +215,16 @@ export function createTtyAskPermission(
           removed: req.preview.removed,
         })
         if (vm.files.length) {
-          if (opts.runDiffOverlay) {
-            const pane = await opts.runDiffOverlay({
-              mode: 'approve',
-              model: vm,
-              toolName: req.toolName,
-              ...(signal ? { signal } : {}),
-              ...(opts.onInterrupt
-                ? { onInterrupt: opts.onInterrupt }
-                : {}),
-            })
-            if (pane.ok && 'decision' in pane) return pane.decision
-          }
-          await opts.pauseInput?.()
-          try {
-            const pane = await runDiffApprovePane({
-              model: vm,
-              toolName: req.toolName,
-              writeOut,
-              isTty: true,
-              readKey: opts.readKey,
-              signal,
-              onInterrupt: opts.onInterrupt,
-            })
-            if (pane.ok) return pane.decision
-          } finally {
-            await opts.resumeInput?.()
-          }
+          const pane = await opts.runDiffOverlay({
+            mode: 'approve',
+            model: vm,
+            toolName: req.toolName,
+            ...(signal ? { signal } : {}),
+            ...(opts.onInterrupt
+              ? { onInterrupt: opts.onInterrupt }
+              : {}),
+          })
+          if (pane.ok && 'decision' in pane) return pane.decision
         }
       } catch {
         /* fall through to text prompt */
@@ -263,33 +239,10 @@ export function createTtyAskPermission(
       })
     }
 
-    if (usePermissionPanel && !opts.readAnswer) {
-      await opts.pauseInput?.()
-      try {
-        return await runPermissionPanel({
-          request: req,
-          writeOut,
-          readKey: opts.readKey,
-          isTty: true,
-          columns: opts.columns,
-          color: opts.color,
-          signal,
-          onInterrupt: opts.onInterrupt,
-        })
-      } finally {
-        await opts.resumeInput?.()
-      }
-    }
-
-    if (opts.suspendTextPrompt) await opts.pauseInput?.()
-    try {
-      const prompt = formatPermissionPrompt(req.toolName, req.preview)
-      const raw = opts.readAnswer
-        ? await resolveOnAbort(opts.readAnswer(prompt), signal, '')
-        : await defaultRead(prompt, signal)
-      return parsePermissionAnswer(raw)
-    } finally {
-      if (opts.suspendTextPrompt) await opts.resumeInput?.()
-    }
+    const prompt = formatPermissionRequestPrompt(req)
+    const raw = opts.readAnswer
+      ? await resolveOnAbort(opts.readAnswer(prompt), signal, '')
+      : await defaultRead(prompt, signal)
+    return parsePermissionAnswer(raw)
   }
 }

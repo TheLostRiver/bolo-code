@@ -753,8 +753,9 @@ async function main(): Promise<void> {
           /runDiffOverlay: controller\.runDiffOverlay/gu,
         ) ?? []
       ).length >= 2 &&
-        resumeSource.includes('await controller.runDiffOverlay({'),
-      'resume permission and /diff paths use the retained diff OverlayHost',
+        resumeSource.includes('await controller.runDiffOverlay({') &&
+        !resumeSource.includes('runDiffPane'),
+      'resume permission and /diff use retained overlay or plain text, never a local raw pane',
     )
     assert(
       newSessionSource.includes(

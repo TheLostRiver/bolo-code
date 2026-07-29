@@ -1,6 +1,8 @@
 /**
  * OI-11D: auditable operation details and a keyboard permission selector.
  */
+import { readFile } from 'node:fs/promises'
+import path from 'node:path'
 import {
   applyPermissionPanelKey,
   createTtyAskPermission,
@@ -117,30 +119,28 @@ async function main(): Promise<void> {
     'permission panel never clears the full screen',
   )
 
-  let pauses = 0
-  let resumes = 0
-  const askWrites: string[] = []
-  const askKeys = ['up', 'enter']
+  let textPrompt = ''
   const ask = createTtyAskPermission({
     isTty: true,
-    readKey: async () => askKeys.shift() ?? 'n',
-    writeOut: (text) => askWrites.push(text),
-    pauseInput: () => pauses++,
-    resumeInput: () => resumes++,
-    suspendTextPrompt: true,
+    readAnswer: async (prompt) => {
+      textPrompt = prompt
+      return 'a'
+    },
   })
   assert(
     (await ask(request)) === 'allow_always',
-    'TTY ask uses the structured choice panel',
+    'plain TTY ask accepts the always decision',
   )
-  assert(pauses === 1 && resumes === 1, 'panel owns input exactly once')
-  assert(askWrites.join('').includes(process.cwd()), 'TTY ask exposes cwd')
+  assert(
+    textPrompt.includes('npm.cmd test -- --runInBand') &&
+      textPrompt.includes(process.cwd()) &&
+      textPrompt.includes('[y/a/N]'),
+    'plain permission prompt exposes the actual operation before asking',
+  )
 
   let retainedOverlayCalls = 0
-  let retainedPauses = 0
   const retainedAsk = createTtyAskPermission({
     isTty: true,
-    readKey: async () => 'n',
     runPermissionOverlay: async ({ request: overlayRequest }) => {
       retainedOverlayCalls += 1
       assert(
@@ -149,16 +149,14 @@ async function main(): Promise<void> {
       )
       return 'allow'
     },
-    pauseInput: () => retainedPauses++,
-    resumeInput: () => retainedPauses++,
   })
   assert(
     (await retainedAsk(request)) === 'allow',
     'retained ask returns the OverlayHost decision',
   )
   assert(
-    retainedOverlayCalls === 1 && retainedPauses === 0,
-    'retained permission uses one overlay without suspending its root',
+    retainedOverlayCalls === 1,
+    'retained permission uses the existing OverlayHost',
   )
 
   const fileRequest = {
@@ -187,7 +185,6 @@ async function main(): Promise<void> {
     },
   }
   let retainedDiffCalls = 0
-  let retainedDiffPauses = 0
   const retainedDiffAsk = createTtyAskPermission({
     isTty: true,
     runPermissionOverlay: async () => {
@@ -203,27 +200,43 @@ async function main(): Promise<void> {
       )
       return { ok: true, decision: 'allow_always' }
     },
-    pauseInput: () => retainedDiffPauses++,
-    resumeInput: () => retainedDiffPauses++,
   })
   assert(
     (await retainedDiffAsk(fileRequest)) === 'allow_always',
     'file permission returns the retained diff decision',
   )
   assert(
-    retainedDiffCalls === 1 && retainedDiffPauses === 0,
-    'retained file permission never suspends the root',
+    retainedDiffCalls === 1,
+    'retained file permission stays inside the existing root',
   )
 
-  let interrupted = 0
+  let filePrompt = ''
+  const plainFileAsk = createTtyAskPermission({
+    isTty: true,
+    readAnswer: async (prompt) => {
+      filePrompt = prompt
+      return 'y'
+    },
+  })
+  assert(
+    (await plainFileAsk(fileRequest)) === 'allow',
+    'plain file permission uses the text decision path',
+  )
+  assert(
+    filePrompt.includes('src/example.ts'),
+    'plain file permission names the affected file',
+  )
+
+  const abort = new AbortController()
+  abort.abort()
   const interruptedAsk = createTtyAskPermission({
     isTty: true,
-    readKey: async () => 'ctrl-c',
-    writeOut: () => {},
-    onInterrupt: () => interrupted++,
+    readAnswer: async () => {
+      throw new Error('aborted permission must not read an answer')
+    },
+    signal: abort.signal,
   })
-  assert((await interruptedAsk(request)) === 'deny', 'Ctrl+C fails closed')
-  assert(interrupted === 1, 'Ctrl+C notifies the active turn')
+  assert((await interruptedAsk(request)) === 'deny', 'abort fails closed')
 
   let legacyPrompt = ''
   const legacyAsk = createTtyAskPermission({
@@ -262,6 +275,16 @@ async function main(): Promise<void> {
   assert(
     permissionCwd === process.cwd(),
     'core passes the actual cwd into permission requests',
+  )
+
+  const askPermissionSource = await readFile(
+    path.resolve('packages/cli/src/tui/askPermissionTty.ts'),
+    'utf8',
+  )
+  assert(
+    !askPermissionSource.includes('runPermissionPanel') &&
+      !askPermissionSource.includes('runDiffApprovePane'),
+    'production permission composition has no legacy raw panel fallback',
   )
 
   console.log('PASS: CLI permission panel')
