@@ -3,6 +3,7 @@
  * 非 TTY / 无 raw → 调用方回落编号输入。
  */
 
+import * as readline from 'node:readline'
 import { createLocalPanelPainter } from './localPanel.ts'
 
 export type ArrowPickItem = {
@@ -60,6 +61,102 @@ export function formatArrowPickerScreen(
     lines.push(`${mark} ${i + 1}. ${lab}`)
   })
   return lines.join('\n')
+}
+
+export async function runNumberedArrowPicker(opts: {
+  items: ArrowPickItem[]
+  title: string
+  initialIndex?: number
+  writeOut?: (text: string) => void
+  readLine?: (prompt: string) => Promise<string | null>
+  signal?: AbortSignal
+}): Promise<ArrowPickResult> {
+  if (!opts.items.length) {
+    return { ok: false, reason: 'cancel', message: 'empty list' }
+  }
+  if (opts.signal?.aborted) {
+    return { ok: false, reason: 'cancel', message: 'cancelled' }
+  }
+
+  const writeOut =
+    opts.writeOut ?? ((text: string) => process.stdout.write(text))
+  const defaultIndex =
+    opts.initialIndex != null && Number.isFinite(opts.initialIndex)
+      ? Math.max(
+          0,
+          Math.min(opts.items.length - 1, Math.floor(opts.initialIndex)),
+        )
+      : undefined
+  const ownReadline = opts.readLine
+    ? undefined
+    : readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+        terminal: true,
+      })
+  const readLine =
+    opts.readLine ??
+    ((prompt: string) =>
+      new Promise<string | null>((resolve) => {
+        if (!ownReadline || opts.signal?.aborted) {
+          resolve(null)
+          return
+        }
+        let settled = false
+        const finish = (answer: string | null) => {
+          if (settled) return
+          settled = true
+          opts.signal?.removeEventListener('abort', onAbort)
+          resolve(answer)
+        }
+        const onAbort = () => finish(null)
+        opts.signal?.addEventListener('abort', onAbort, { once: true })
+        ownReadline.question(prompt, (answer) => finish(answer))
+      }))
+
+  writeOut(`${opts.title}\n`)
+  opts.items.forEach((item, index) => {
+    const active = index === defaultIndex ? ' (current)' : ''
+    writeOut(`${index + 1}. ${item.label}${active}\n`)
+  })
+
+  try {
+    for (;;) {
+      if (opts.signal?.aborted) {
+        return { ok: false, reason: 'cancel', message: 'cancelled' }
+      }
+      const answer = await readLine(
+        `Select [1-${opts.items.length}] (q cancel): `,
+      )
+      if (answer == null || opts.signal?.aborted) {
+        return { ok: false, reason: 'cancel', message: 'cancelled' }
+      }
+      const value = answer.trim()
+      const lower = value.toLowerCase()
+      if (lower === 'q' || lower === 'quit' || lower === 'cancel') {
+        return { ok: false, reason: 'cancel', message: 'cancelled' }
+      }
+      if (!value && defaultIndex != null) {
+        return {
+          ok: true,
+          id: opts.items[defaultIndex]!.id,
+          index: defaultIndex,
+        }
+      }
+      const selected = Number(value)
+      if (
+        Number.isInteger(selected) &&
+        selected >= 1 &&
+        selected <= opts.items.length
+      ) {
+        const index = selected - 1
+        return { ok: true, id: opts.items[index]!.id, index }
+      }
+      writeOut(`Choose 1-${opts.items.length} or q to cancel.\n`)
+    }
+  } finally {
+    ownReadline?.close()
+  }
 }
 
 /**

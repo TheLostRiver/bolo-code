@@ -40,7 +40,7 @@ import {
 import { shouldUseDynamicTui } from './tui/inputBox.ts'
 import { formatSessionStatusLine } from './tui/statusLine.ts'
 import {
-  runArrowPicker,
+  runNumberedArrowPicker,
   type ArrowPickItem,
   type ArrowPickResult,
 } from './tui/arrowPicker.ts'
@@ -663,6 +663,8 @@ export async function runOnePrompt(
     /** REPL：打开 raw 面板前暂停 readline */
     pauseInput?: () => unknown | Promise<unknown>
     resumeInput?: () => unknown | Promise<unknown>
+    /** Plain REPL 复用现有 readline，不创建第二个 stdin owner。 */
+    readLine?: (prompt: string) => Promise<string | null>
     /** 当前 turn 取消信号 */
     signal?: AbortSignal
     /** queued control 已分配的 durable turn id。 */
@@ -695,21 +697,18 @@ export async function runOnePrompt(
     if (controller) {
       return await controller.runPickerOverlay({
         ...picker,
+        title: `${picker.title} (↑/↓ · Enter · q cancel)`,
         ...(options?.signal ? { signal: options.signal } : {}),
       })
     }
-    await pauseInput?.()
-    try {
-      return await runArrowPicker({
-        items: picker.items,
-        writeOut,
-        isTty: true,
-        title: picker.title,
-        initialIndex: picker.initialIndex,
-      })
-    } finally {
-      await resumeInput?.()
-    }
+    return await runNumberedArrowPicker({
+      items: picker.items,
+      writeOut,
+      title: picker.title,
+      initialIndex: picker.initialIndex,
+      ...(options?.readLine ? { readLine: options.readLine } : {}),
+      ...(options?.signal ? { signal: options.signal } : {}),
+    })
   }
   const printer = getSessionEventPrinter(session)
   let terminalReason = 'failed'
@@ -811,7 +810,7 @@ export async function runOnePrompt(
             const ar = await runInteractivePicker({
               mode: 'provider',
               items,
-              title: 'Select provider (↑/↓ · Enter · q cancel)',
+              title: 'Select provider',
               initialIndex: activeProviderPickerIndex(session),
             })
             if (ar.ok) {
@@ -865,7 +864,7 @@ export async function runOnePrompt(
             const ar = await runInteractivePicker({
               mode: 'effort',
               items,
-              title: 'Select effort (↑/↓ · Enter · q cancel)',
+              title: 'Select effort',
               initialIndex: activeEffortPickerIndex({
                 dialect: dialect as string | undefined,
                 model,
@@ -1195,6 +1194,8 @@ export async function runRepl(
             ? {
                 pauseInput: pauseInteractiveSurface,
                 resumeInput: resumeInteractiveSurface,
+                readLine: (prompt: string) =>
+                  question(prompt, turnController.signal),
               }
             : {}),
           signal: turnController.signal,

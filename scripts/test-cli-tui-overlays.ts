@@ -9,6 +9,7 @@ import {
   type CliTuiController,
 } from '../packages/cli/src/index.ts'
 import { buildDiffViewModelFromPreview } from '../packages/core/src/index.ts'
+import { runNumberedArrowPicker } from '../packages/cli/src/tui/arrowPicker.ts'
 import { runRetainedArrowPicker } from '../packages/cli/src/tui/retainedPicker.ts'
 import { measureTerminalText } from '../packages/cli/src/tui/terminalText.ts'
 import type { AskQuestion } from '../packages/shared/src/index.ts'
@@ -778,6 +779,11 @@ async function main(): Promise<void> {
       'pre-session resume selection uses the standalone retained picker',
     )
     assert(
+      resumeSource.includes('return await runNumberedArrowPicker({') &&
+        !resumeSource.includes('runArrowPicker'),
+      'plain provider and effort fallback uses numbered readline without a raw owner',
+    )
+    assert(
       runtimeSource.includes('await runRetainedRuntimePager({') &&
         !runtimeSource.includes('resolveCliTuiEngine') &&
         !runtimeSource.includes('await runRuntimePager({'),
@@ -831,6 +837,27 @@ async function main(): Promise<void> {
   } finally {
     standaloneTerminal.dispose()
   }
+
+  const textWrites: string[] = []
+  const textAnswers = ['invalid', '2']
+  const textResult = await runNumberedArrowPicker({
+    items: [
+      { id: 'openai', label: 'OpenAI' },
+      { id: 'anthropic', label: 'Anthropic' },
+    ],
+    title: 'Select provider',
+    writeOut: (text) => textWrites.push(text),
+    readLine: async () => textAnswers.shift() ?? 'q',
+  })
+  assert(
+    textResult.ok && textResult.id === 'anthropic',
+    'numbered text picker returns a valid selection after retry',
+  )
+  assert(
+    textWrites.join('').includes('1. OpenAI') &&
+      textWrites.join('').includes('Choose 1-2 or q to cancel.'),
+    'numbered text picker renders choices and actionable retry guidance',
+  )
 }
 
 main().catch((error) => {
