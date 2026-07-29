@@ -80,6 +80,22 @@ function renderCompactPanel(
   ]
 }
 
+export function doesCliCommandPanelOverflow(
+  content: string,
+  options: FormatCliCommandSurfaceOptions = {},
+): boolean {
+  const columns = normalizeDimension(options.columns, 80)
+  const rows = normalizeDimension(options.rows, 24)
+  const frameWidth = Math.min(columns, resolveTuiDockWidth(columns))
+  const maxHeight = Math.min(10, Math.floor(rows * 0.4))
+  if (maxHeight < 3 || frameWidth < 4) {
+    return measureTerminalText(content) > frameWidth || content.includes('\n')
+  }
+  const bodyWidth = Math.max(1, frameWidth - 4)
+  const bodyLimit = maxHeight - 2
+  return wrapTerminalText(content, bodyWidth).length > bodyLimit
+}
+
 function tonePrefix(tone: CliCommandSurfaceTone): string {
   switch (tone) {
     case 'success':

@@ -48,6 +48,10 @@ import type {
   DiffPaneApproveResult,
   DiffPaneBrowseResult,
 } from './diffPane.ts'
+import {
+  formatTextPagerScreen,
+  type TextPagerContent,
+} from './textPager.ts'
 import { wrapTerminalText } from './terminalText.ts'
 
 type OverlaySessionBase = {
@@ -113,13 +117,29 @@ export type RetainedPagerOverlayOptions = OverlaySessionBase & {
   onInterrupt?: () => void
 }
 
+export type RetainedTextPagerOverlayOptions =
+  OverlaySessionBase &
+    TextPagerContent & {
+      pageSize?: number
+      onInterrupt?: () => void
+    }
+
+type PagerSource =
+  | {
+      kind: 'runtime'
+      view: RuntimeQueryView
+      filter?: RuntimeTextRenderOptions['filter']
+    }
+  | ({
+      kind: 'text'
+    } & TextPagerContent)
+
 type PagerSession = OverlaySessionBase & {
   mode: 'pager'
-  view: RuntimeQueryView
+  source: PagerSource
   page: number
   pageCount: number
   pageSize: number
-  filter?: RuntimeTextRenderOptions['filter']
   resolve: (result: RuntimePagerSuccess) => void
   onInterrupt?: () => void
 }
@@ -428,12 +448,72 @@ export class RetainedOverlayHost implements Component, Focusable {
     return new Promise<RuntimePagerSuccess>((resolve) => {
       const session: PagerSession = {
         mode: 'pager',
-        view: options.view,
+        source: {
+          kind: 'runtime',
+          view: options.view,
+          ...(options.filter ? { filter: options.filter } : {}),
+        },
         page: initial.page,
         pageCount: initial.pageCount,
         pageSize,
         resolve,
-        ...(options.filter ? { filter: options.filter } : {}),
+        ...(options.signal ? { signal: options.signal } : {}),
+        ...(options.onInterrupt
+          ? { onInterrupt: options.onInterrupt }
+          : {}),
+      }
+      if (options.signal) {
+        session.onAbort = () => this.finishPager('interrupt')
+        options.signal.addEventListener('abort', session.onAbort, {
+          once: true,
+        })
+      }
+      this.active = session
+      this.open({ mode: 'pager' })
+    })
+  }
+
+  runTextPager(
+    options: RetainedTextPagerOverlayOptions,
+  ): Promise<RuntimePagerSuccess> {
+    if (this.active) {
+      return Promise.reject(
+        new Error(`overlay already active: ${this.active.mode}`),
+      )
+    }
+    const pageSize =
+      options.pageSize ??
+      Math.max(1, Math.floor(this.options.getRows()) - 6)
+    const initial = formatTextPagerScreen({
+      title: options.title,
+      content: options.content,
+      columns: this.options.getColumns(),
+      page: 0,
+      pageSize,
+      color: this.options.color,
+    })
+    if (options.signal?.aborted) {
+      return Promise.resolve({
+        ok: true,
+        reason: 'interrupt',
+        page: initial.page,
+        pageCount: initial.pageCount,
+      })
+    }
+
+    return new Promise<RuntimePagerSuccess>((resolve) => {
+      const session: PagerSession = {
+        mode: 'pager',
+        source: {
+          kind: 'text',
+          key: options.key,
+          title: options.title,
+          content: options.content,
+        },
+        page: initial.page,
+        pageCount: initial.pageCount,
+        pageSize,
+        resolve,
         ...(options.signal ? { signal: options.signal } : {}),
         ...(options.onInterrupt
           ? { onInterrupt: options.onInterrupt }
@@ -625,13 +705,23 @@ export class RetainedOverlayHost implements Component, Focusable {
       }).split('\n')
     }
     if (active.mode === 'pager') {
-      const rendered = renderRuntimeText(active.view, {
-        columns: width,
-        page: active.page,
-        pageSize: active.pageSize,
-        color: this.options.color,
-        filter: active.filter,
-      })
+      const rendered =
+        active.source.kind === 'runtime'
+          ? renderRuntimeText(active.source.view, {
+              columns: width,
+              page: active.page,
+              pageSize: active.pageSize,
+              color: this.options.color,
+              filter: active.source.filter,
+            })
+          : formatTextPagerScreen({
+              title: active.source.title,
+              content: active.source.content,
+              columns: width,
+              page: active.page,
+              pageSize: active.pageSize,
+              color: this.options.color,
+            })
       active.page = rendered.page
       active.pageCount = rendered.pageCount
       return rendered.text.split('\n')

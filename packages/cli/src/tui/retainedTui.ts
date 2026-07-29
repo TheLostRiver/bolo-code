@@ -62,6 +62,7 @@ import {
   type RetainedDiffOverlayResult,
   type RetainedPagerOverlayOptions,
   type RetainedPickerOverlayMode,
+  type RetainedTextPagerOverlayOptions,
 } from './retainedOverlay.ts'
 import {
   RetainedTranscript,
@@ -121,6 +122,9 @@ export type CliTuiController = {
   ): Promise<RetainedDiffOverlayResult>
   runPagerOverlay(
     options: RetainedPagerOverlayOptions,
+  ): Promise<RuntimePagerSuccess>
+  runTextPagerOverlay(
+    options: RetainedTextPagerOverlayOptions,
   ): Promise<RuntimePagerSuccess>
   writeOutput(text: string): void
   writeError(text: string): void
@@ -703,6 +707,17 @@ export function createRetainedTuiController(options: {
         })
       }
       return overlay.runPager(overlayOptions)
+    },
+    runTextPagerOverlay(overlayOptions) {
+      if (stopped) {
+        return Promise.resolve({
+          ok: true,
+          reason: 'interrupt',
+          page: 0,
+          pageCount: 1,
+        })
+      }
+      return overlay.runTextPager(overlayOptions)
     },
     writeOutput(text) {
       root.appendCompatibilityOutput(text)

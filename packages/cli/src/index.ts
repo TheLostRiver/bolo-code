@@ -89,9 +89,24 @@ export {
   type RetainedWelcomeOptions,
 } from './tui/retainedTui.ts'
 export {
+  doesCliCommandPanelOverflow,
   formatCliCommandSurface,
   type FormatCliCommandSurfaceOptions,
 } from './tui/retainedCommandSurface.ts'
+export {
+  projectRetainedSlashDisplay,
+  titleForSlashDisplayKey,
+  type RetainedSlashDisplayProjection,
+} from './tui/slashCommandSurface.ts'
+export {
+  formatTextPagerScreen,
+  type FormatTextPagerScreenOptions,
+  type RenderedTextPagerScreen,
+  type TextPagerContent,
+} from './tui/textPager.ts'
+export {
+  type RetainedTextPagerOverlayOptions,
+} from './tui/retainedOverlay.ts'
 export {
   type CliCommandSurfaceTimers,
 } from './tui/commandSurfaceEffect.ts'

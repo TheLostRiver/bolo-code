@@ -1,5 +1,8 @@
 import type { ContextUsageViewModel } from '../../../core/src/index.ts'
-import { resolveTuiFrameWidth } from './frame.ts'
+import {
+  resolveTuiDockWidth,
+  resolveTuiFrameWidth,
+} from './frame.ts'
 import {
   clipTerminalText,
   measureTerminalText,
@@ -54,10 +57,16 @@ export function renderContextDashboard(options: {
   view: ContextUsageViewModel
   columns?: number
   color?: boolean
+  frame?: boolean
+  variant?: 'full' | 'panel'
 }): RenderedContextDashboard {
   const view = options.view
-  const width = resolveTuiFrameWidth(options.columns ?? 80)
-  const bodyWidth = Math.max(4, width - 4)
+  const columns = options.columns ?? 80
+  const frame = options.frame !== false
+  const width = frame
+    ? resolveTuiFrameWidth(columns)
+    : Math.max(1, resolveTuiDockWidth(columns) - 4)
+  const bodyWidth = frame ? Math.max(4, width - 4) : width
   const color = options.color !== false
   const border = color ? '\u001b[38;5;244m' : ''
   const accent = color ? '\u001b[38;5;81m' : ''
@@ -75,15 +84,63 @@ export function renderContextDashboard(options: {
 
   const row = (content: string, tone = '') => {
     const clipped = clipTerminalText(content, bodyWidth)
+    if (!frame) {
+      lines.push(`${tone}${clipped}${reset}`)
+      return
+    }
     const padded = padTerminalText(clipped, bodyWidth)
     lines.push(
       `${border}│${reset} ${tone}${padded}${reset} ${border}│${reset}`,
     )
   }
 
-  lines.push(
-    `${border}${borderLine('╭', '╮', width, 'Context usage')}${reset}`,
-  )
+  if (frame) {
+    lines.push(
+      `${border}${borderLine('╭', '╮', width, 'Context usage')}${reset}`,
+    )
+  }
+  const autoCompact = view.autoCompact.enabled
+    ? view.autoCompact.envDisabled
+      ? 'on · env-disabled'
+      : view.autoCompact.aboveThreshold
+        ? 'on · threshold reached'
+        : 'on'
+    : 'off'
+
+  if (options.variant === 'panel') {
+    row(
+      `${formatTokens(view.usage.tokenCount)} / ${formatTokens(
+        view.usage.windowTokens,
+      )} tokens · ${view.usage.source}`,
+      accent,
+    )
+    row(usageBar(view.usage.percentOfWindow, bodyWidth), warning)
+    row(
+      `${view.usage.level} · threshold ${formatTokens(
+        view.usage.autoThresholdTokens,
+      )} (${view.usage.percentOfThreshold}%)`,
+      warning,
+    )
+    row(
+      `Messages ~${formatTokens(
+        view.estimate.messagesTokens,
+      )} · System ~${formatTokens(
+        view.estimate.systemTokens,
+      )} · Free ~${formatTokens(view.usage.freeTokens)}`,
+    )
+    row(
+      `Model ${view.session.model ?? '(unset)'} · effort ${view.session.effort}`,
+    )
+    row(
+      `Auto compact ${autoCompact} · ${view.session.messageCount} messages`,
+    )
+    row('/context details  full diagnostics', dim)
+    if (frame) {
+      lines.push(`${border}${borderLine('╰', '╯', width)}${reset}`)
+    }
+    return { text: lines.join('\n'), lines }
+  }
+
   if (bodyWidth < 28) {
     row(
       `${formatTokens(view.usage.tokenCount)} / ${formatTokens(
@@ -134,13 +191,6 @@ export function renderContextDashboard(options: {
   row(
     `${view.session.messageCount} messages · ${view.sections.length} sections · ${view.skills.totalSkills} skills`,
   )
-  const autoCompact = view.autoCompact.enabled
-    ? view.autoCompact.envDisabled
-      ? 'on · env-disabled'
-      : view.autoCompact.aboveThreshold
-        ? 'on · threshold reached'
-        : 'on'
-    : 'off'
   row(`Auto compact ${autoCompact}`)
   row(
     bodyWidth < 28
@@ -154,7 +204,9 @@ export function renderContextDashboard(options: {
       : '/context details  full diagnostics',
     dim,
   )
-  lines.push(`${border}${borderLine('╰', '╯', width)}${reset}`)
+  if (frame) {
+    lines.push(`${border}${borderLine('╰', '╯', width)}${reset}`)
+  }
 
   return { text: lines.join('\n'), lines }
 }

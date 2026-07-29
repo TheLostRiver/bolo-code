@@ -55,6 +55,7 @@ import type {
   BoloTerminalOutput,
 } from './tui/boloTerminalAdapter.ts'
 import { renderContextDashboard } from './tui/contextDashboard.ts'
+import { projectRetainedSlashDisplay } from './tui/slashCommandSurface.ts'
 
 export type ResumeCliOptions = {
   /** session id / 路径；省略或 true 时进入项目列表选择 */
@@ -652,6 +653,7 @@ export async function runOnePrompt(
     writeErr?: (s: string) => void
     isTty?: boolean
     columns?: number
+    rows?: number
     color?: boolean
     /** Plain REPL 复用现有 readline，不创建第二个 stdin owner。 */
     readLine?: (prompt: string) => Promise<string | null>
@@ -667,6 +669,7 @@ export async function runOnePrompt(
   const writeErr = options?.writeErr ?? ((s) => process.stderr.write(s))
   const isTty = options?.isTty ?? process.stdin.isTTY === true
   const columns = options?.columns ?? process.stdout.columns ?? 80
+  const rows = options?.rows ?? process.stdout.rows ?? 24
   const controller = getSessionTuiController(session)
   const writeSlashOutput = (text: string) => {
     const line = text.endsWith('\n') ? text : `${text}\n`
@@ -716,6 +719,41 @@ export async function runOnePrompt(
 
     if (result.type === 'slash') {
       terminalReason = 'slash'
+      if (controller) {
+        const content =
+          result.contextView && result.display.surface === 'panel'
+            ? renderContextDashboard({
+                view: result.contextView,
+                columns,
+                color: false,
+                frame: false,
+                variant: 'panel',
+              }).text
+            : result.message
+        const projection = projectRetainedSlashDisplay({
+          display: result.display,
+          content,
+          columns,
+          rows,
+        })
+        if (projection?.kind === 'panel') {
+          controller.showCommandPanel(projection.panel)
+          return {
+            terminalReason: 'slash',
+            assistantText: result.message,
+          }
+        }
+        if (projection?.kind === 'pager') {
+          await controller.runTextPagerOverlay({
+            ...projection.pager,
+            ...(options?.signal ? { signal: options.signal } : {}),
+          })
+          return {
+            terminalReason: 'slash',
+            assistantText: result.message,
+          }
+        }
+      }
       if (
         result.contextView &&
         isTty
@@ -1158,6 +1196,7 @@ export async function runRepl(
           writeErr: runtimeErr,
           isTty,
           columns: process.stdout.columns,
+          rows: process.stdout.rows,
           color,
           ...(!controller
             ? {

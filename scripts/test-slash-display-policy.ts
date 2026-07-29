@@ -130,8 +130,17 @@ const doctor = await dispatchSlashCommand(session, 'doctor', '')
 assert(doctor.message === rawDoctor.message, 'display policy preserves message bytes')
 assert(
   doctor.display.surface === 'panel' &&
-    doctor.display.key === 'slash:doctor',
-  'doctor uses a replaceable panel',
+    doctor.display.key === 'slash:doctor' &&
+    doctor.display.overflow === 'pager',
+  'doctor uses a replaceable panel that promotes long diagnostics',
+)
+
+const status = await dispatchSlashCommand(session, 'status', '')
+assert(
+  status.display.surface === 'panel' &&
+    status.display.key === 'slash:doctor' &&
+    status.display.overflow === 'pager',
+  'status alias shares the doctor overflow policy',
 )
 
 const context = await dispatchSlashCommand(session, 'context', '')
@@ -153,6 +162,38 @@ assert(
     contextDetails.display.view === 'pager',
   'context details uses the pager overlay',
 )
+
+for (const alias of ['detail', '--details']) {
+  const detailAlias = await dispatchSlashCommand(
+    session,
+    'context',
+    alias,
+  )
+  assert(
+    detailAlias.ok &&
+      detailAlias.display.surface === 'overlay' &&
+      detailAlias.display.view === 'pager',
+    `context ${alias} shares the details pager policy`,
+  )
+}
+
+for (const name of ['help', 'memory']) {
+  const command = await dispatchSlashCommand(session, name, '')
+  assert(
+    command.display.surface === 'panel' &&
+      command.display.overflow === 'pager',
+    `${name} promotes overflow to a pager`,
+  )
+}
+
+for (const name of ['mcp', 'hooks']) {
+  const command = await dispatchSlashCommand(session, name, '')
+  assert(
+    command.display.surface === 'overlay' &&
+      command.display.view === 'pager',
+    `${name} uses the pager overlay`,
+  )
+}
 
 const invalidContext = await dispatchSlashCommand(
   session,

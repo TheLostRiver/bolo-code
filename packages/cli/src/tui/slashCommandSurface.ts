@@ -1,0 +1,89 @@
+import type { SlashDisplayPolicy } from '../../../core/src/index.ts'
+import type { CliCommandPanelInput } from '../../../shared/src/index.ts'
+import { doesCliCommandPanelOverflow } from './retainedCommandSurface.ts'
+import type { TextPagerContent } from './textPager.ts'
+
+export type RetainedSlashDisplayProjection =
+  | {
+      kind: 'panel'
+      panel: CliCommandPanelInput
+    }
+  | {
+      kind: 'pager'
+      pager: TextPagerContent
+    }
+
+const DISPLAY_ACRONYMS = new Map([
+  ['mcp', 'MCP'],
+  ['api', 'API'],
+])
+
+function titleSegment(segment: string): string {
+  const normalized = segment.trim().toLowerCase()
+  const acronym = DISPLAY_ACRONYMS.get(normalized)
+  if (acronym) return acronym
+  return normalized
+    ? `${normalized[0]!.toUpperCase()}${normalized.slice(1)}`
+    : ''
+}
+
+export function titleForSlashDisplayKey(key: string): string {
+  const segments = key
+    .replace(/^slash:/u, '')
+    .split(':')
+    .map((segment) => segment.trim().toLowerCase())
+    .filter(Boolean)
+  if (!segments.length) return 'Command'
+  return segments
+    .map((segment, index) => {
+      const acronym = DISPLAY_ACRONYMS.get(segment)
+      if (acronym) return acronym
+      return index === 0 ? titleSegment(segment) : segment
+    })
+    .join(' ')
+}
+
+export function projectRetainedSlashDisplay(options: {
+  display: SlashDisplayPolicy
+  content: string
+  columns?: number
+  rows?: number
+}): RetainedSlashDisplayProjection | undefined {
+  const { display, content } = options
+  if (display.surface === 'panel') {
+    const title = titleForSlashDisplayKey(display.key)
+    const panel: CliCommandPanelInput = {
+      key: display.key,
+      title,
+      content,
+      dismissOnInput: display.dismissOnInput,
+      dismissOnEscape: display.dismissOnEscape,
+      ...(display.ttlMs ? { ttlMs: display.ttlMs } : {}),
+      overflow: display.overflow,
+    }
+    if (
+      display.overflow === 'pager' &&
+      doesCliCommandPanelOverflow(content, {
+        columns: options.columns,
+        rows: options.rows,
+      })
+    ) {
+      return {
+        kind: 'pager',
+        pager: { key: display.key, title, content },
+      }
+    }
+    return { kind: 'panel', panel }
+  }
+  if (display.surface === 'overlay' && display.view === 'pager') {
+    return {
+      kind: 'pager',
+      pager: {
+        key: display.key,
+        title: titleForSlashDisplayKey(display.key),
+        content,
+      },
+    }
+  }
+  return undefined
+}

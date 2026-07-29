@@ -4013,7 +4013,12 @@ function displayShowOrUpdate(
 
 const contextDisplay: SlashCommandDef['display'] = (args, result) => {
   if (!result.ok) return toastDisplay('slash:context:error', 'error', 8_000)
-  return args.trim().toLowerCase() === 'details'
+  const action = args.trim().toLowerCase()
+  return (
+    action === 'details' ||
+    action === 'detail' ||
+    action === '--details'
+  )
     ? overlayDisplay('slash:context:details', 'pager')
     : panelDisplay('slash:context', { ttlMs: 12_000 })
 }
@@ -4170,7 +4175,7 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     name: 'doctor',
     summary: 'Local diagnostics (node, cwd, mode, tools, usage, ~/.bolo)',
     display: displayOnResult(
-      panelDisplay('slash:doctor'),
+      panelDisplay('slash:doctor', { overflow: 'pager' }),
       'slash:doctor:error',
     ),
     group: 'diagnostics',
@@ -4214,7 +4219,7 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     name: 'status',
     summary: 'Alias of /doctor',
     display: displayOnResult(
-      panelDisplay('slash:doctor'),
+      panelDisplay('slash:doctor', { overflow: 'pager' }),
       'slash:doctor:error',
     ),
     group: 'diagnostics',
