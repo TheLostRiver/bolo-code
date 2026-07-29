@@ -50,6 +50,7 @@ import type {
 } from './diffPane.ts'
 import {
   formatTextPagerScreen,
+  resolveEmbeddedTextPagerPageSize,
   type TextPagerContent,
 } from './textPager.ts'
 import {
@@ -680,7 +681,7 @@ export class RetainedOverlayHost implements Component, Focusable {
     }
     const pageSize =
       options.pageSize ??
-      Math.max(1, Math.floor(this.options.getRows()) - 6)
+      resolveEmbeddedTextPagerPageSize(this.options.getRows())
     const initial = formatTextPagerScreen({
       title: options.title,
       content: options.content,

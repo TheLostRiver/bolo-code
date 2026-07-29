@@ -34,6 +34,10 @@ function normalizePositive(value: number | undefined, fallback: number): number 
     : fallback
 }
 
+export function resolveEmbeddedTextPagerPageSize(rows: number): number {
+  return Math.min(18, Math.max(1, Math.floor(rows) - 6))
+}
+
 export function formatTextPagerScreen(
   options: FormatTextPagerScreenOptions,
 ): RenderedTextPagerScreen {
@@ -55,7 +59,6 @@ export function formatTextPagerScreen(
     page * pageSize,
     (page + 1) * pageSize,
   )
-  while (body.length < pageSize) body.push('')
 
   const color = options.color !== false
   const accent = color ? '\u001b[38;5;81m' : ''
