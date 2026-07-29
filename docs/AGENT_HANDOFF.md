@@ -150,7 +150,7 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 | 文件 Diff UI | ~90–95% | **U0–U4**；U5 真 Ink/IDE 可选 |
 | Hooks 日用 | ~96–98% | **H0–H5**（含 SessionEnd） |
 | Compact 日用 | ~93–96% | **C0–C5 + AR2 全段**（hybrid 计数 · 中段截断 · 防重摘要 · range/watermark 契约）；任意中段 rewrite 按证据门控不启用 |
-| 多 Provider 热切 | ~92–96% | **P0–P4.1 + CX7 Desktop**；CTX-1 config/schema/validator/resolver 与 CTX-2 runtime 单一消费链已完成，CTX-3 可观测性待实现 |
+| 多 Provider 热切 | ~94–97% | **P0–P4.1 + CX7 Desktop**；CTX-1 config/resolver、CTX-2 runtime 单一消费链与 CTX-3 CLI/Desktop 元数据可观测性均已完成 |
 | Effort 方言 | ~92–95% | **E0–E9** |
 | Provider UX | ~95–98% | **CX0–CX8**（ultrathink 默认 off） |
 | Durable Runtime | DR0–DR4 ✅ | 输入先落盘 · recovery · 单 runner · durable control/task · FIFO/promotion · v1 protocol/resolution · crash/restart closeout |
@@ -159,16 +159,17 @@ defaults < ~/.bolo < 项目 .bolo < 环境变量（Key / 熔断）
 
 **已闭环：** Diff · Hooks · Compact（含 AR2 全段）· Provider · Effort · Provider UX CX0–CX8 · **CLI/Agent 可靠性 R0–R4** · **Durable Runtime DR0–DR4** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR-T1–T3+ Agent 能力面** · **AR3/OI-06 Desktop 产品接线** · **AR4 evidence gate** · **AR5 release hardening** · **OI-04 SearXNG 直连、OI-X1 真实实例 smoke、OI-07 上游诊断 / doctor / 可选 Docker setup、OI-08B CLI 零步骤首次启动、OI-14A 真实 VT/renderer 选型、OI-14B live view-state、OI-14C retained renderer 基座、OI-14D retained transcript/Markdown、OI-14E Composer/activity/footer、OI-14F OverlayHost/交互面板、OI-14G 默认切换/可靠性/性能、OI-14H legacy 删除/发布审计、OI-15A–F slash command surface/lifecycle、OI-16 Doctor pager height、OI-17 REPL pager adjacency**。OI-09–OI-13 的局部 TUI 能力保留为完成历史，但不再代表 renderer 整体稳定。
 
-**当前 agent 可闭环队列：CTX-3 → OUT-1..5；下一刀是 CTX-3。**
+**当前 agent 可闭环队列：OUT-1..5；下一刀是 OUT-1。**
 用户实测确认长 Read/工具结果会占满 transcript。CTX-1 `27a2506` 已建立 provider
 默认/exact model limits、user/project 深合并、字段级 warning、小型 exact catalog
 与带逐字段 source 的 `ResolvedModelMetadata`；CTX-2 `6ea3a4f` 已让 workspace/
 session/snapshot、create/resume/hot-switch、dynamic compact、skills、dashboard 与
-provider output baseline 消费同一 metadata。CTX-3 再补 slash/doctor/Desktop 来源
-展示与最终用户文档；OUT 建立 Tool presentation、默认折叠、file-backed 全文 pager、
+provider output baseline 消费同一 metadata；CTX-3 `d966d4b` 已让 slash/doctor/model/
+provider、CLI dashboard 与 Desktop header/settings 显示逐字段数值、来源和 warning。
+OUT 建立 Tool presentation、默认折叠、file-backed 全文 pager、
 键鼠路径与第二阶段只读调用聚合。正式契约见
 [TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md](./TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md)；
-CTX-1/2 已完成，CTX-3 与 OUT 尚未实现。
+CTX-1..3 已完成，OUT 尚未实现。
 
 真人走查与代码审计曾确认普通 slash 结果会由 `appendCompatibilityOutput()` 永久拼在
 transcript 与 Composer 之间。OI-15A 已在 core 增加并校验
@@ -281,8 +282,8 @@ DR2A 单 session runner ✅
 → OI-17 REPL pager adjacency ✅
 → CTX-1 配置契约 / validator / resolver ✅ `27a2506`
 → CTX-2 create / resume / hot-switch 接线 ✅ `6ea3a4f`
-→ CTX-3 可观测性 / 文档 ▶ NEXT
-→ OUT-1 ToolPresentation 契约
+→ CTX-3 可观测性 / 文档 ✅ `d966d4b`
+→ OUT-1 ToolPresentation 契约 ▶ NEXT
 → OUT-2 默认折叠 / 键盘路径
 → OUT-3 file-backed pager / resume
 → OUT-4 SGR mouse
@@ -365,7 +366,7 @@ renderer 壳原样复制，共享 `RuntimeClient` 单独打成 browser ESM。不
 | Effort | [EFFORT.md](./EFFORT.md) · [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md) |
 | Diff | [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) · [TUI.md](./TUI.md) |
 | **CLI TUI 重构** | **[CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md)**（OI-14/OI-15/OI-16/OI-17）· [OI-14A 选型证据](./CLI_TUI_RENDERER_DECISION.md) · [OPEN_ISSUES.md](./OPEN_ISSUES.md) OI-16/OI-17 |
-| **模型上下文 / 长工具输出** | **[TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md](./TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md)**（CTX-1/2 已完成 · CTX-3 下一刀 · OUT 待实现） |
+| **模型上下文 / 长工具输出** | **[TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md](./TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md)**（CTX-1..3 已完成 · OUT-1 下一刀） |
 | Hooks | [HOOKS.md](./HOOKS.md) |
 | Compact | [COMPACTION.md](./COMPACTION.md) |
 | Subagent | [SUBAGENT.md](./SUBAGENT.md) · [SUBAGENT_SPEC.md](./SUBAGENT_SPEC.md) |

@@ -96,11 +96,17 @@ defaults
   "provider": {
     "kind": "openai-compatible",
     "baseUrl": "https://api.openai.com/v1",
-    "model": "gpt-4o-mini"
+    "model": "gpt-4o-mini",
+    "contextWindowTokens": 128000,
+    "maxTokens": 8192,
+    "models": {
+      "gpt-4o-mini": {
+        "maxTokens": 16384
+      }
+    }
   },
   "permissionMode": "default",
   "autoCompactEnabled": true,
-  "contextWindowTokens": 128000,
   "agents": {
     "enabled": true,
     "maxConcurrent": 3,
@@ -193,21 +199,69 @@ query 或 fragment。错误配置会禁用工具并产生 CLI/Desktop warning。
       "kind": "openai-compatible",
       "baseUrl": "https://api.openai.com/v1",
       "model": "gpt-4o-mini",
-      "apiKeyEnv": "OPENAI_API_KEY"
+      "apiKeyEnv": "OPENAI_API_KEY",
+      "contextWindowTokens": 128000,
+      "maxTokens": 8192,
+      "models": {
+        "gpt-4o-mini": {
+          "maxTokens": 16384
+        }
+      }
     },
     "claude": {
       "kind": "anthropic",
       "model": "claude-sonnet-4-20250514",
-      "apiKeyEnv": "ANTHROPIC_API_KEY"
+      "apiKeyEnv": "ANTHROPIC_API_KEY",
+      "contextWindowTokens": 200000,
+      "maxTokens": 8192
     }
   }
 }
 ```
 
-**合并：** user/project 同 id 字段浅合并；`defaultProvider` 后写覆盖。  
+**合并：** user/project 同 id 的普通字段后写覆盖；`models` 再按 exact model id 深合并；
+`defaultProvider` 后写覆盖。
 **Key：** 优先 `apiKeyEnv` / 环境变量；不要把密钥提交进项目配置。  
 **热切失败**（缺 key / 未知 id）→ 明确错误，**保留**当前 provider。  
 **后置（P5）：** Desktop 设置下拉；resume 快照持久化 `providerId`。
+
+### 模型上下文与输出上限（**CTX-1..3 已完成**）
+
+`contextWindowTokens` 与 `maxTokens` 是两个独立能力：前者驱动 context pressure、
+auto compact 与 skills budget，后者是 provider 请求的输出基线。主配置入口是
+provider 默认值和 exact model 覆盖：
+
+```jsonc
+{
+  "providers": {
+    "gateway": {
+      "kind": "openai-responses",
+      "baseUrl": "https://example.test/v1",
+      "model": "custom-200k",
+      "contextWindowTokens": 128000,
+      "maxTokens": 8192,
+      "models": {
+        "custom-200k": {
+          "contextWindowTokens": 200000,
+          "maxTokens": 32768
+        }
+      }
+    }
+  }
+}
+```
+
+每个字段独立按以下顺序解析：exact `models.<id>` → provider 默认 → 内置 exact
+catalog；context 之后才尝试顶层旧字段 `contextWindowTokens` 与匹配当前
+provider/model 的 session snapshot，output 只再尝试匹配 snapshot；最后分别回退
+128k/8k。顶层字段只为旧配置保留，不再是新配置入口。
+
+model id 必须完整匹配，不做前缀或模糊猜测。字段必须是有限正整数，且 `maxTokens`
+不能大于最终 context window；非法候选会被忽略并产生可见 warning，不会阻止 CLI
+启动。`/context`、`/doctor`、`/model`、`/provider list/use` 与 Desktop 会显示有效
+ctx/out 及逐字段来源：`model override`、`provider default`、`built-in catalog`、
+`legacy config`、`session snapshot` 或 `fallback`。未知自定义模型仍可运行，但在
+补齐显式 limits 前会显示 `WARNING`/`fallback`。
 
 ### Effort 方言（**E 轨 · E0–E5 已落地**）
 
@@ -249,13 +303,17 @@ query 或 fragment。错误配置会禁用工具并产生 CLI/Desktop warning。
 |------|------|------|
 | `autoCompactEnabled` | `true` | 为 true 且会话有 `compactSummarizer` 时，queryLoop 的 `prepareMessages` 达 token 阈值会走 full compact（对照参考 autoCompactIfNeeded）。会话内 `/autocompact on\|off` 可改；环境变量 `BOLO_DISABLE_AUTO_COMPACT` / `BOLO_DISABLE_COMPACT` 熔断 auto（manual `/compact` 仍可用） |
 | `ultrathink` | 省略/`off` | **CX8**：`off` \| `tip` \| `turn`。默认 off。`tip` 检测关键词只提示；`turn` 本轮 effective effort→high（不写 session）。env `BOLO_ULTRATHINK` 可覆盖；会话 `/ultrathink` 最高。见 [PROVIDER_UX.md](./PROVIDER_UX.md) |
-| `contextWindowTokens` | `128000` | 用于 `getAutoCompactThreshold` / `getContextPressure`；token 估见 `estimateTokens`（加权启发式，非 tokenizer） |
+| 顶层 `contextWindowTokens` | `128000` | **旧配置 fallback**；新配置应写 provider 默认或 `providers.<id>.models.<model>`。最终有效值用于 `getAutoCompactThreshold` / `getContextPressure`；token 估见 `estimateTokens`（加权启发式，非 tokenizer） |
 | `microcompactEnabled` | `true` | 为 true 时 prepare 链先跑 microcompact（清旧 tool 正文，无 LLM）；`false` 关闭 |
 | `maxPtlRetries` | `3` | callModel / compact summarizer 命中上下文过长时截断最旧轮次再试的次数；`0` 关闭 |
 | `extraSkillRoots` | 省略/`[]` | **可选**旁路 skill 根；默认 **off**；见 SKILLS.md S-PORT-2 |
 | `foreignPluginRoots` | 省略/`[]` | **可选**外来插件根（skills 只读）；默认 **off** |
 
-`createSessionFromWorkspace` 会读上述字段；也可用 `createSession({ autoCompactEnabled, contextWindowTokens, compactSummarizer, microcompact, maxPtlRetries })` 直接开。未显式传 `autoCompactEnabled` 时默认 **开**。
+`createSessionFromWorkspace` 会解析 provider/model metadata 并把同一结果交给 session；
+直接调用 `createSession({ resolvedModel, autoCompactEnabled, compactSummarizer,
+microcompact, maxPtlRetries })` 可注入完整来源，旧
+`createSession({ contextWindowTokens })` 仍作为兼容入口。未显式传
+`autoCompactEnabled` 时默认 **开**。
 
 **prepare / 失败恢复顺序**：`microcompact` → `auto full compact` → `callModel` →（PTL 则 truncate → 再 prepare → 重试）。见 `docs/COMPACTION.md` §2.5。
 

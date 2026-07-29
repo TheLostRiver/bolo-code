@@ -53,6 +53,7 @@
   "provider": {
     "kind": "anthropic",
     "model": "claude-sonnet-4-20250514",
+    "contextWindowTokens": 200000,
     "maxTokens": 8192
   },
   "permissionMode": "default"
@@ -66,12 +67,54 @@
   "provider": {
     "kind": "openai-compatible",
     "baseUrl": "https://api.openai.com/v1",
-    "model": "gpt-4o-mini"
+    "model": "gpt-4o-mini",
+    "contextWindowTokens": 128000,
+    "maxTokens": 16384
   }
 }
 ```
 
 **Key 建议用环境变量**，不要提交进项目配置。
+
+## 模型上下文元数据
+
+provider 可以定义 `contextWindowTokens` / `maxTokens` 默认值，并用 `models` 对完整
+model id 做逐字段覆盖。user/project 合并时，provider 普通字段后写覆盖，`models`
+则按 model id 和字段深合并：
+
+```jsonc
+{
+  "providers": {
+    "work": {
+      "kind": "openai-responses",
+      "baseUrl": "https://api.openai.com/v1",
+      "model": "gpt-4o",
+      "contextWindowTokens": 128000,
+      "maxTokens": 8192,
+      "models": {
+        "gpt-4o": {
+          "contextWindowTokens": 128000,
+          "maxTokens": 16384
+        },
+        "proxy-200k": {
+          "contextWindowTokens": 200000,
+          "maxTokens": 32768
+        }
+      }
+    }
+  }
+}
+```
+
+解析按字段独立进行：exact model override → provider default → built-in catalog →
+legacy/session fallback → 128k/8k fallback。legacy 顶层 `contextWindowTokens` 只适用于
+context；session snapshot 仅在 provider/model identity 匹配且当前配置/catalog 没有
+该字段时使用。非法值被忽略并产生 warning，`maxTokens` 不能超过有效 context。
+
+`/context`、`/doctor`、`/model`、`/provider list/use`、CLI dashboard 与 Desktop
+使用同一共享 view。输出会把来源标为 `model override`、`provider default`、
+`built-in catalog`、`legacy config`、`session snapshot` 或 `fallback`。未知模型不会
+被猜成已知模型；未显式配置时仍可运行，但会清楚显示 `WARNING` 和 fallback 原因。
 
 ## 协议要点
 
@@ -265,13 +308,17 @@ npx tsx scripts/smoke-live.ts
       "kind": "openai-compatible",
       "baseUrl": "https://api.openai.com/v1",
       "model": "gpt-4o-mini",
-      "apiKeyEnv": "OPENAI_API_KEY"
+      "apiKeyEnv": "OPENAI_API_KEY",
+      "contextWindowTokens": 128000,
+      "maxTokens": 16384
     },
     "deepseek": {
       "kind": "openai-compatible",
       "baseUrl": "https://api.deepseek.com",
       "model": "deepseek-chat",
-      "apiKeyEnv": "DEEPSEEK_API_KEY"
+      "apiKeyEnv": "DEEPSEEK_API_KEY",
+      "contextWindowTokens": 128000,
+      "maxTokens": 8192
     }
   }
 }
@@ -282,11 +329,11 @@ npx tsx scripts/smoke-live.ts
 | 命令 | 行为 |
 |------|------|
 | `/provider` | **TTY**：箭头列表选后端并热切（不必记 id）；非 TTY / `BOLO_PROVIDER_PANEL=0`：文本列表 |
-| `/provider list` | 仅文本列表（不开 picker） |
-| `/provider use <id> [model]` | 精确热切；缺 key **拒绝**并保留旧后端 |
+| `/provider list` | 仅文本列表（不开 picker）；每项显示 ctx/out 与来源 |
+| `/provider use <id> [model]` | 精确热切；成功结果显示新 ctx/out 与来源；缺 key **拒绝**并保留旧后端 |
 | `/provider add <preset> [as <id>]` | **CX1**：写入 `config.providers`（仅 `apiKeyEnv`，无明文 key）；`add list` 列 preset |
-| `/model` | 显示 model + providerId + kind |
-| `/model <name>` | 仅改当前后端 model（本地 cache-break） |
+| `/model` | 显示 model + providerId + kind + ctx/out 与来源 |
+| `/model <name>` | 仅改当前后端 model（本地 cache-break），同时重新解析并显示 metadata |
 | `/model <id>/<name>` | 切后端并设 model |
 
 **CLI 环境：**

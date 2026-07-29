@@ -1,7 +1,7 @@
 # 长工具输出折叠与模型上下文元数据设计
 
-> **状态：** CTX-1 `27a2506`、CTX-2 `6ea3a4f` 已完成；CTX-3 是下一刀；OUT-1..5 尚未实现。
-> **设计基线：** `dc20807`；当前实施基线：`6ea3a4f`。
+> **状态：** CTX-1 `27a2506`、CTX-2 `6ea3a4f`、CTX-3 `d966d4b` 已完成；OUT-1 是下一刀。
+> **设计基线：** `dc20807`；当前实施基线：`d966d4b`。
 > **路线标识：** `CTX-1..3`、`OUT-1..5`。
 > **进度真源：** [ROADMAP.md](./ROADMAP.md) §0、§13.11。
 > **相关实现：** [COMPACTION.md](./COMPACTION.md) ·
@@ -12,8 +12,8 @@
 1. Read、Bash、MCP 等长工具结果会把 retained transcript 填满；当前没有通用折叠、
    单块展开或全文查看契约。
 2. provider/model 上下文窗口与输出上限需要统一解析、随热切更新并可解释来源；旧实现
-   只有 workspace 顶层 `contextWindowTokens`。CTX-1/2 已关闭解析与 runtime 消费缺口，
-   CTX-3 继续补齐可观测性和最终用户文档。
+   只有 workspace 顶层 `contextWindowTokens`。CTX-1..3 已关闭解析、runtime 消费、
+   CLI/Desktop 可观测性和最终用户文档缺口。
 
 本方案只借鉴 Pi、oh-my-pi、HelsincyCode、Codex、OpenCode 的职责边界与交互语义，
 不引入这些项目的运行时依赖，不复制未授权实现。
@@ -24,11 +24,11 @@
 |------|------|----------|
 | CTX-1 | ✅ `27a2506` | config/schema/validator/resolver、深合并、warning、exact catalog 与 source 已落地 |
 | CTX-2 | ✅ `6ea3a4f` | create/resume/hot-switch、dynamic compact、skills/dashboard/provider request 已统一接线 |
-| CTX-3 | **▶ NEXT** | `/provider`、`/model`、`/context`、`/doctor`、Desktop 与最终用户文档 |
-| OUT-1..5 | PENDING | 通用 Tool presentation、折叠、全文 pager、鼠标与只读调用聚合 |
+| CTX-3 | ✅ `d966d4b` | `/provider`、`/model`、`/context`、`/doctor`、CLI dashboard、Desktop 与最终用户文档 |
+| OUT-1..5 | **▶ NEXT：OUT-1** | 通用 Tool presentation、折叠、全文 pager、鼠标与只读调用聚合 |
 
-runtime 已统一消费 resolved metadata；CTX-3 完成前，来源展示与最终用户配置口径仍未
-收口。OUT 完成前，长工具结果仍可能占满 retained transcript。
+模型元数据轨已统一解析、消费和展示。OUT 完成前，长工具结果仍可能占满 retained
+transcript。
 
 ---
 
@@ -123,8 +123,9 @@ CTX-2 已关闭的 runtime 缺口：
 - JSON/JSONL 持久化 resolved metadata；JSONL `session_state` 去重、last-wins，compact
   rewrite 把最新 metadata 折回首行 meta。
 
-CTX-1 建立可复用的配置与解析真源，CTX-2 完成作用域和生命周期接线。当前剩余缺口属于
-CTX-3：让 slash/doctor/Desktop 明确展示数值与来源，并发布最终用户配置口径。
+CTX-1 建立可复用的配置与解析真源，CTX-2 完成作用域和生命周期接线，CTX-3 已让
+slash/doctor/Desktop 明确展示数值与来源并发布最终用户配置口径。当前剩余缺口属于
+OUT-1..5 的长工具输出 presentation 与交互。
 
 ---
 
@@ -618,14 +619,20 @@ packages-first：
 专项、typecheck、既有 config/provider/session/compact/runtime/TUI/Desktop 回归与完整
 `npm test` 已通过。JSON/JSONL roundtrip、`session_state` 去重与 compact fold、
 current-config-first、matching snapshot fallback、热切失败回滚及 prompt-cache break
-均有门禁。最终用户用法与来源展示仍由 CTX-3 收口。
+均有门禁。
 
-### CTX-3 · 可观测性与用户文档 ▶ NEXT
+### CTX-3 · 可观测性与用户文档 ✅ `d966d4b`
 
-- `/provider`、`/model`、`/context`、`/doctor`、Desktop projection。
-- CONFIG/PROVIDERS/USAGE/ROADMAP/AGENT_HANDOFF。
+- 共享 `ModelMetadataView` 同时驱动 `/provider`、`/model`、`/context`、`/doctor`、
+  CLI dashboard 与 Desktop header/settings。
+- context 与 max output 分别显示有效值和来源；来源标签为 `model override`、
+  `provider default`、`built-in catalog`、`legacy config`、`session snapshot`、
+  `fallback`。
+- unknown model、fallback 和非法配置 warning 均可见；Electron live smoke 证明
+  `metadataVisible=true` 且未知模型为 `metadataStatus=warning`。
+- 完整 `npm test`、dist/pack/install、Desktop bundle/launch 与发布预算均已通过。
 
-### OUT-1 · ToolPresentation 契约
+### OUT-1 · ToolPresentation 契约 ▶ NEXT
 
 - shared 类型/分类 policy。
 - core 原始规模、truncated、spill ref、bounded preview。

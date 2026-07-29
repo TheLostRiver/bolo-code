@@ -26,22 +26,25 @@
 | **Electron GUI** | **~80–88%** | 壳 + 流式 + 权限 + 多 provider（CX7）+ runtime v1 + **会话切换/恢复 + composer controls + model/effort 设置 + control/tool progress 投影** + AskUserQuestion；真人点击/视觉仍未验 |
 | **Hooks · 日用契约** | **~96–98%** | **H0–H5 已落地**（SessionEnd · exit 语义 · updatedInput · `/hooks recent`） |
 | **Compact · 日用管道** | **~96–98%** | **C0–C5 + AR2 全段已落地**（hybrid 计数 · 中段截断 · 防重摘要 · range/watermark 契约 · 切分不拆对穷举验证 · 写失败完整回退 · durable 条目不丢 · **估算按字符类别分档**（CJK 1.3 / 散文 4.5 / 其余 3.5；实测推翻了「密文 = token 密」的旧前提，最差高估 109% → 19.5%）· 管道基准）；中段压缩与远端压缩均**显式关闭**（§13.10.2 · [ADR](./ADR_COMPACT_REMOTE.md)） |
-| **Provider · 多实例热切** | **~92–96%** | **P0–P4.1 + CX7 Desktop**；**CTX-1 config/schema/validator/resolver ✅，CTX-2 runtime 单一消费链 ✅ `6ea3a4f`，CTX-3 可观测性待实现** |
+| **Provider · 多实例热切** | **~94–97%** | **P0–P4.1 + CX7 Desktop**；**CTX-1 config/resolver ✅ `27a2506`，CTX-2 runtime 单一消费链 ✅ `6ea3a4f`，CTX-3 CLI/Desktop 可观测性 ✅ `d966d4b`** |
 | **Effort · 推理强度方言** | **~92–95%** | **E0–E9 已落地**；adaptive thinking 归 AR4 |
 | **Provider UX · 便利层** | **~95–98%** | **CX0–CX8 已落地**（ultrathink 默认 off）· [PROVIDER_UX.md](./PROVIDER_UX.md) |
 | **产品整体（相对 HC）** | **~68–82%** | Headless 日用高；CLI TUI 渲染可靠性按 OI-14 重新计入 |
 
 **已闭环主线：** headless 日用 → Diff（D0–D7 / U0–U4）· Hooks（H0–H5）· Compact（C0–C5）· Provider（P0–P4.1）· Effort（E0–E9）· Provider UX（CX0–CX8）· 可靠性（R0–R4）· **Durable Runtime（DR0–DR4）** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR3 Desktop 产品接线** · **OI-07 SearXNG 上游诊断、`search doctor` 与可选 Docker setup** · **OI-08B CLI 零步骤首次启动** · **OI-14A–H retained renderer 重构** · **OI-15A–F slash command surface/lifecycle** · **OI-16 Doctor pager height** · **OI-17 REPL pager adjacency**。OI-09–OI-13 的 slash/context/paste/Thought/权限/welcome 等局部切片保留为完成历史，但不再作为整个 renderer 稳定的独立证据。OI-H3 继续独立保持 `BLOCKED: HUMAN`。切片明细 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
 
-**当前队列：CTX-1..2 ✅ → CTX-3 → OUT-1..5。** 用户实测确认长 Read/工具结果会占满
+**当前队列：CTX-1..3 ✅ → OUT-1..5；下一刀是 OUT-1。** 用户实测确认长 Read/工具结果会占满
 transcript。CTX-1 `27a2506` 已建立 provider 默认/exact model limits、user/project
 深合并、字段级 warning、小型 exact catalog 与带逐字段 source 的纯 resolver；CTX-2
 `6ea3a4f` 已把 resolved metadata 接入 workspace/session/snapshot、create/resume/
-hot-switch、dynamic compact、skills、dashboard 与 provider output baseline。正式契约、
+hot-switch、dynamic compact、skills、dashboard 与 provider output baseline；CTX-3
+`d966d4b` 已把共享 metadata view 接入 `/context`、`/doctor`、`/model`、
+`/provider list/use`、CLI dashboard 与 Desktop header/settings，fallback/invalid
+状态显式显示 warning。正式契约、
 兼容策略、测试和回滚见
 [TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md](./TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md)。
-下一刀完成 slash/doctor/Desktop 的数值来源可观测性与最终用户文档，再实现通用 Tool
-presentation、默认折叠、file-backed pager、鼠标与相邻只读调用聚合。OI-15A–F、
+下一刀从共享 `ToolPresentation` 契约开始，再实现默认折叠、file-backed pager、鼠标
+与相邻只读调用聚合。OI-15A–F、
 OI-16 与 OI-17 自动实现仍保持关闭。OI-14 已建立
 单 retained renderer/OverlayHost；OI-15 准入时普通 slash 结果仍可能通过
 `appendCompatibilityOutput()` 持续拼接并固定在 transcript 与 Composer 之间。
@@ -93,10 +96,10 @@ ownership/reliability/runtime 回归与完整 `npm test` 均已通过。
 
 **已插队并收口：** **AR-T · Agent 能力面**（§14）。准入证据：基础设施深度（DR0–DR4 + AR1）已远超能力广度——彼时 agent 无法跨步骤记住计划，也无法启动任何活过一次工具调用的进程。AR2 压缩深化顺延，A0a/A0b 成果不受影响。
 
-**agent 可闭环开放项：CTX-3 → OUT-1..5。** OI-H1/H2/H3 是明确真人项，LSP
-继续由证据门控。CTX-1 的 provider/model limits 配置/resolver 与 CTX-2
-create/resume/hot-switch 单一消费链均已完成；CTX-3 补齐数值来源可观测性和用户文档。
-OUT 再建立有界 Tool presentation、renderer-local 折叠、全文 pager、鼠标和第二阶段
+**agent 可闭环开放项：OUT-1..5。** OI-H1/H2/H3 是明确真人项，LSP
+继续由证据门控。CTX-1 的 provider/model limits 配置/resolver、CTX-2
+create/resume/hot-switch 单一消费链与 CTX-3 数值来源可观测性/用户文档均已完成。
+OUT 建立有界 Tool presentation、renderer-local 折叠、全文 pager、鼠标和第二阶段
 聚合。切片边界以
 [专题设计](./TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md) 为准，不得把鼠标真人手感冒充
 自动验收。CLI init
@@ -481,8 +484,8 @@ AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 regis
 | 30 | **OI-15 · slash 命令 surface/lifecycle** | A core display policy ✅ `d681734` · B retained panel/toast 单槽 ✅ `d6bd087` · C context/doctor/status 与只读 panel/pager ✅ `26f796f` · D Skills/Plugins overlay ✅ `21ee1e2` / `87054df` · E toast/error policy ✅ `1d49d53` · F compatibility cleanup ✅ `d1e26bb` | `/context` 位于 Composer 下方并自动清除；重复查询 replace；长内容 pager；短动作 toast；迟到结果不覆盖当前视图；normal slash 不写 compatibility | core exhaustive + 20×重复查询 + fake clock/generation + single/multi-page/resize/focus/reset + persistence/plain/JSON + full/dist/pack/install | ✅ A–F 已关闭；OI-H3 真人验收继续单列 |
 | 31 | **OI-16 · Doctor pager height** | text pager 18 行正文上限 · 短内容实际高度 · host 生命周期专项 | `/doctor` 在高终端分成可导航页；footer 保持在组件内；短页不补空行 | 24/48/80 行真实 host 物理高度 + page/footer/navigation/close + plain byte-stable + full/dist/install/预算/Electron smoke | ✅ `5b22c15`；高度修复关闭，未覆盖 composite 坐标 |
 | 32 | **OI-17 · REPL pager adjacency** | 单 host 状态机 · embedded/modal 无状态视图 · 根布局焦点接线 | REPL pager 紧邻 Composer；modal 与 standalone runtime pager不变；关闭后原草稿续写 | 48/80 行真实 xterm composite 坐标 + footer/page/close/focus + modal/runtime/ownership/reliability/full gate | ✅ `cda22fd`；第二张真人截图准入、自动闭环 |
-| 33 | **CTX-1..3 · provider/model 上下文元数据** | 1 config/schema/深合并/validator/resolver ✅ `27a2506` · 2 create/resume/hot-switch/dynamic compact/skills ✅ `6ea3a4f` · 3 doctor/context/Desktop/docs | provider 默认 + exact model limits；32k/128k/200k/1m 热切立即生效；窗口与输出上限显示来源；旧顶层与旧 session 兼容 | config priority/invalid/unknown + create/resume/switch rollback + compact/skills/dashboard/provider request + full/dist | **▶ NEXT：CTX-3**；CTX-2 完整门禁已绿，runtime 已统一消费 resolved metadata，来源展示与最终用户文档待收口 |
-| 34 | **OUT-1..5 · 长工具输出摘要/折叠/全文查看** | 1 shared ToolPresentation · 2 renderer-local fold/键盘 · 3 file pager/resume · 4 SGR mouse · 5 连续只读调用聚合 | 成功长输出默认有界摘要；运行 tail/错误 cap；点击或键盘查看全文并恢复 Composer；plain 不变 | long/ANSI/CJK/resize/stream/resume/spill/path safety + xterm mouse/paste/focus + perf/full/dist | **PENDING：依赖 CTX 主契约完成后启动** |
+| 33 | **CTX-1..3 · provider/model 上下文元数据** | 1 config/schema/深合并/validator/resolver ✅ `27a2506` · 2 create/resume/hot-switch/dynamic compact/skills ✅ `6ea3a4f` · 3 doctor/context/model/provider/Desktop/docs ✅ `d966d4b` | provider 默认 + exact model limits；32k/128k/200k/1m 热切立即生效；窗口与输出上限显示来源；旧顶层与旧 session 兼容 | config priority/invalid/unknown + create/resume/switch rollback + compact/skills/dashboard/provider request + observability/Desktop + full/dist | **✅ CTX-1..3 自动闭环**；完整门禁、dist/pack/install、Electron live smoke 全绿，未知模型显示 warning/fallback |
+| 34 | **OUT-1..5 · 长工具输出摘要/折叠/全文查看** | 1 shared ToolPresentation · 2 renderer-local fold/键盘 · 3 file pager/resume · 4 SGR mouse · 5 连续只读调用聚合 | 成功长输出默认有界摘要；运行 tail/错误 cap；点击或键盘查看全文并恢复 Composer；plain 不变 | long/ANSI/CJK/resize/stream/resume/spill/path safety + xterm mouse/paste/focus + perf/full/dist | **▶ NEXT：OUT-1**；CTX 主契约已完成，先落 packages/shared/core presentation 契约 |
 
 固定 checkpoint：
 

@@ -235,6 +235,14 @@ DR0–DR4 与 AR1 全段已收口；全局当前主线只以 [ROADMAP.md](./ROAD
 | `permissionRules` / `effortLevel` / **`providerId`** / `usage`（可选） | Always-allow + always-deny；effort；**命名后端 id（CX6 resume）**；本地 token 累计；resume 恢复；无遥测 |
 | `createdAt` / `updatedAt` | ISO 时间 |
 
+`resolvedModel` 是当时已生效 metadata 的兼容快照，不是比当前配置更高的 override。
+resume 会先用当前 user/project provider、exact model limits 与内置 catalog 重新解析；
+context 还会在 snapshot 前尝试显式 legacy 顶层值。只有 provider id 和 model identity
+匹配、且当前来源缺字段时，才以 `session snapshot` 补齐。畸形、跨 provider 或跨 model
+快照不会被信任。恢复后 `/context`、`/doctor`、`/model`、`/provider` 与 Desktop 会
+显示最终逐字段 provenance；若只能使用 128k/8k fallback，则保留 warning 而不是伪装成
+模型真实能力。
+
 **不落盘**：provider、hooks 运行时、skills 全文、`onEvent`、`askPermission` 等句柄（resume 时由调用方重新注入）。
 
 ## 3. API

@@ -216,6 +216,12 @@ Agent/slash 正文按终端宽度保留稳定 gutter，底栏显示 model/mode�
 `/context details`（或 `--details`）才输出 sections、skills、memory、cache 和
 prepare/compact 的完整诊断。
 
+CTX-3 起，context 仪表盘还显示当前模型的 context window、max output 及逐字段来源。
+`/doctor` 给出完整健康状态与 warning，`/model`、`/provider list` 和成功的
+`/provider use` 给出紧凑的 `ctx … · out …` 摘要。来源可能是 `model override`、
+`provider default`、`built-in catalog`、`legacy config`、`session snapshot` 或
+`fallback`；未知自定义模型不会阻止运行，但会显式显示 `WARNING` 与 fallback 原因。
+
 OI-15C 起，retained TUI 的 `/context` 使用 Composer 下方 12 秒单 panel；重复执行只
 替换同一槽，开始编辑、`Esc`、TTL 或 reset/restore 会清除。`details`、`detail`、
 `--details` 与超出 panel 容量的 `/doctor`/`/status`、help/memory 等只读内容使用
@@ -369,6 +375,10 @@ Settings 中的 **Model** 输入会列出当前 provider 的内置建议，但�
 session；校验或写盘失败时设置窗口保持打开、原输入不丢，并显示错误。密钥仍只从
 环境变量/`apiKeyEnv` 读取，不进入 renderer snapshot。
 
+Desktop 顶部状态区与 Settings 使用和 CLI 相同的模型元数据 view：显示 context
+window、max output 和来源；unknown/fallback/invalid 状态以 warning 呈现。切换
+provider/model 或恢复 session 后该信息随当前生效 metadata 刷新，不读取密钥。
+
 工具运行时，`tool_progress` 会在同一条工具行原位更新，不会每个 tick 刷一条消息。
 Steer 的提示只在请求已到达安全边界并真正注入后显示为 applied；它不是“已排队”的
 提前回执。两类文案都由 packages 投影，renderer 不自行猜 safe-boundary 状态。
@@ -387,8 +397,8 @@ PowerShell/Bash 外壳补全。
 |------|------|
 | `/exit` · `/quit` | 关闭交互 REPL；`/quit` 是只在明确前缀时显示的隐藏别名 |
 | `/help` | 命令列表 |
-| `/provider` · `/provider use <id>` · `/provider add …` | 后端列表 / 热切 / preset |
-| `/model` · `/model name` · `/model id/name` | 模型 |
+| `/provider` · `/provider use <id>` · `/provider add …` | 后端列表 / 热切 / preset；list/use 显示 ctx/out 与来源 |
+| `/model` · `/model name` · `/model id/name` | 模型；显示并重新解析 ctx/out 与来源 |
 | `/effort` · `/effort high` | 推理强度（方言 wire；输入 `/effort ` 可见当前合法档位） |
 | `/ultrathink [off\|tip\|turn]` | CX8 糖；**默认 off** |
 | `/agents` · `/bg` · `/bg cancel <taskId>` | subagent 后台 FIFO/status；只取消 queued；resume 后显示 interrupted 诊断 |
@@ -401,10 +411,10 @@ PowerShell/Bash 外壳补全。
 | `/runtime discard <turn\|control\|task> <id>` | 对 interrupted 记录追加人工确认；不删除原历史 |
 | `/runtime retry-safe <turn\|control\|task> <id>` | 只为 admitted-only turn 或未启动 queue 建立新 FIFO turn；其它类型拒绝 |
 | `/diff` · `/diff last` · `/diff git` | 本会话文件改动 |
-| `/compact` · `/context [details]` · `/cost` | 压缩 · 上下文概览/完整诊断 · 本地 token |
+| `/compact` · `/context [details]` · `/cost` | 压缩 · 上下文概览/完整诊断（含模型 limits 与来源）· 本地 token |
 | `/permissions` · `/plan` · `/allow` · `/deny` | 权限 |
 | `/hooks` · `/hooks recent` | Hooks |
-| `/doctor` | 本地诊断 |
+| `/doctor` | 本地诊断；显示模型 metadata 健康状态、limits、来源和 warning |
 | `/thinking on\|off` | 是否渲染思考链 |
 | `/websearch [on\|off\|auto]` | 查看或切换本会话 Web search 意图 |
 
