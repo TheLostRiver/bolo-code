@@ -209,42 +209,6 @@ async function main() {
     }
   }
 
-  // The root controller alone crosses into a legacy panel. It clears its own
-  // rows before the panel writes, then restores the same root afterwards.
-  {
-    const fixture = await createFixture(80)
-    try {
-      const root = fixture.controller.root
-      await fixture.controller.suspendForLegacyPanel()
-      assert(fixture.controller.isSuspended(), 'controller enters suspended mode')
-      fixture.controller.writeOutput('legacy panel fixture\n')
-      await fixture.terminal.flush()
-      await fixture.controller.resumeFromLegacyPanel()
-      await fixture.terminal.flush()
-
-      assert(
-        !fixture.controller.isSuspended(),
-        'controller resumes after the legacy panel',
-      )
-      assert(
-        fixture.controller.root === root,
-        'legacy panel bridge does not replace the root tree',
-      )
-      assert(
-        fixture.controller.getTerminalStats().externalWrites > 0,
-        'legacy panel output still passes through the Bolo adapter',
-      )
-      assert(
-        fixture.controller.getTerminalStats().concurrentWriteViolations === 0,
-        'retained and legacy writers never overlap',
-      )
-      assertPhysicalFrame(fixture.terminal, 80, 'resumed frame')
-    } finally {
-      await fixture.controller.stop()
-      fixture.terminal.dispose()
-    }
-  }
-
   // Resize uses Pi's full viewport redraw but the Bolo adapter strips CSI 3J,
   // so old-width cells disappear without deleting primary-buffer scrollback.
   {
@@ -533,8 +497,8 @@ async function main() {
         'interactive new session configured Composer model/status before input',
       )
       assert(
-        newController?.getTerminalStats().externalWrites === 0,
-        'interactive new-session input never crossed the legacy writer bridge',
+        (newController?.getTerminalStats().inputEvents ?? 0) > 0,
+        'interactive new-session input is owned by the retained adapter',
       )
 
       const resumeInteractive = await runInteractiveExit((write, signal) =>
@@ -560,8 +524,8 @@ async function main() {
           `value=${JSON.stringify(resumeController?.composer.getState().value)}`,
       )
       assert(
-        resumeController?.getTerminalStats().externalWrites === 0,
-        'interactive resume input never crossed the legacy writer bridge',
+        (resumeController?.getTerminalStats().inputEvents ?? 0) > 0,
+        'interactive resume input is owned by the retained adapter',
       )
       assert(
         rawTransitions.slice(-4).join(',') === 'true,false,true,false',

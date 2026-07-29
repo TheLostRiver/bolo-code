@@ -475,11 +475,6 @@ async function main(): Promise<void> {
       stats.filteredScrollbackClears >= 8,
       'the adapter filters every resize scrollback clear',
     )
-    assert(stats.externalWrites === 0, 'long session keeps one writer')
-    assert(
-      stats.concurrentWriteViolations === 0,
-      'long session never overlaps terminal owners',
-    )
     assert(
       !fixture.writes.join('').includes('\u001b[3J'),
       'long-session output never deletes native scrollback',

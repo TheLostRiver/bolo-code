@@ -31,11 +31,19 @@ function assertOmits(
 }
 
 async function main(): Promise<void> {
-  const [newSessionSource, resumeSource, runtimeSource] =
+  const [
+    newSessionSource,
+    resumeSource,
+    runtimeSource,
+    retainedSource,
+    adapterSource,
+  ] =
     await Promise.all([
       readSource('packages/cli/src/newSessionCli.ts'),
       readSource('packages/cli/src/resumeCli.ts'),
       readSource('packages/cli/src/runtimeCli.ts'),
+      readSource('packages/cli/src/tui/retainedTui.ts'),
+      readSource('packages/cli/src/tui/boloTerminalAdapter.ts'),
     ])
 
   assertOmits(newSessionSource, 'new-session composition', [
@@ -57,6 +65,20 @@ async function main(): Promise<void> {
     'resolveCliTuiEngine',
     'runRuntimePager',
     'BOLO_TUI_ENGINE',
+  ])
+  assertOmits(retainedSource, 'retained controller', [
+    'suspendForLegacyPanel',
+    'resumeFromLegacyPanel',
+    'isSuspended',
+    'setExternalOwner',
+    'writeExternal',
+  ])
+  assertOmits(adapterSource, 'retained terminal adapter', [
+    'externalOwner',
+    'externalWrites',
+    'concurrentWriteViolations',
+    'setExternalOwner',
+    'writeExternal',
   ])
 
   const dynamic = createCliOnEvent({

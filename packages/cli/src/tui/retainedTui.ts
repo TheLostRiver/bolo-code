@@ -102,9 +102,6 @@ export type CliTuiController = {
   runPagerOverlay(
     options: RetainedPagerOverlayOptions,
   ): Promise<RuntimePagerSuccess>
-  suspendForLegacyPanel(): Promise<void>
-  resumeFromLegacyPanel(): Promise<void>
-  isSuspended(): boolean
   writeOutput(text: string): void
   writeError(text: string): void
   getRenderEpoch(): number
@@ -319,7 +316,6 @@ export function createRetainedTuiController(options: {
   let state = createCliTuiViewState()
   let started = false
   let stopped = false
-  let suspended = false
   let streamedAssistantText = false
   let turnActivityEnabled = true
   let root: RetainedRoot
@@ -327,7 +323,7 @@ export function createRetainedTuiController(options: {
   let overlayHandle: OverlayHandle | undefined
 
   const requestRender = (): void => {
-    if (started && !stopped && !suspended) tui.requestRender()
+    if (started && !stopped) tui.requestRender()
   }
   const requestComponentRender = (): void => {
     root.childChanged()
@@ -339,7 +335,7 @@ export function createRetainedTuiController(options: {
     onInputSettled: () => adapter.setInputEnabled(false),
     clearScreen: () => {
       adapter.clearScreen()
-      if (started && !stopped && !suspended) tui.requestRender(true)
+      if (started && !stopped) tui.requestRender(true)
     },
   })
   const activityView = new RetainedActivity(requestComponentRender)
@@ -487,7 +483,7 @@ export function createRetainedTuiController(options: {
   }
 
   const flush = async (): Promise<void> => {
-    if (!started || stopped || suspended) return
+    if (!started || stopped) return
     const revision = root.currentRevision()
     tui.requestRender()
     await root.waitForRevision(revision)
@@ -511,9 +507,6 @@ export function createRetainedTuiController(options: {
     readInput(inputOptions) {
       if (stopped) {
         return Promise.resolve({ type: 'aborted' })
-      }
-      if (suspended) {
-        throw new Error('retained Composer cannot begin input while suspended')
       }
       const pending = composer.readInput(inputOptions)
       if (!composer.isReading()) return pending
@@ -563,10 +556,8 @@ export function createRetainedTuiController(options: {
       if (stopped) return
       stopped = true
       const activeOverlayHandle = overlayHandle
-      const shouldResumeAdapter = suspended
       const shouldStopTui = started
       overlayHandle = undefined
-      suspended = false
       started = false
       runCleanupSteps([
         () => activity.finish(),
@@ -574,9 +565,6 @@ export function createRetainedTuiController(options: {
         () => activeOverlayHandle?.hide(),
         () => composer.cancelInput(),
         () => adapter.setInputEnabled(false),
-        () => {
-          if (shouldResumeAdapter) adapter.setExternalOwner(false)
-        },
         () => {
           if (shouldStopTui) tui.stop()
         },
@@ -623,32 +611,7 @@ export function createRetainedTuiController(options: {
       }
       return overlay.runPager(overlayOptions)
     },
-    async suspendForLegacyPanel() {
-      if (!started || stopped || suspended) return
-      root.setVisible(false)
-      const revision = root.currentRevision()
-      tui.requestRender()
-      await root.waitForRevision(revision)
-      adapter.setExternalOwner(true)
-      suspended = true
-    },
-    async resumeFromLegacyPanel() {
-      if (!started || stopped || !suspended) return
-      adapter.setExternalOwner(false)
-      suspended = false
-      root.setVisible(true)
-      const revision = root.currentRevision()
-      tui.requestRender(true)
-      await root.waitForRevision(revision)
-    },
-    isSuspended() {
-      return suspended
-    },
     writeOutput(text) {
-      if (suspended) {
-        adapter.writeExternal(text)
-        return
-      }
       root.appendCompatibilityOutput(text)
       requestRender()
     },

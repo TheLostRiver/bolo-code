@@ -419,20 +419,13 @@ async function main(): Promise<void> {
     )
     assertFrameFits(fixture, 38, 'resized active Composer')
 
-    const valueBeforeSuspend = fixture.controller.composer.getState().value
-    await fixture.controller.suspendForLegacyPanel()
-    assert(!fixture.input.isRaw, 'legacy panel suspend releases retained raw input')
-    fixture.input.send('ignored while suspended')
-    await fixture.controller.resumeFromLegacyPanel()
-    assert(fixture.input.isRaw, 'resume reacquires a pending retained input session')
-    assert(
-      fixture.controller.composer.getState().value === valueBeforeSuspend,
-      'suspended retained input fails silent and preserves value',
-    )
+    const valueBeforeContinuation =
+      fixture.controller.composer.getState().value
     fixture.input.send('!')
     assert(
-      fixture.controller.composer.getState().value === `${valueBeforeSuspend}!`,
-      'resumed focus routes input back to the same Composer',
+      fixture.controller.composer.getState().value ===
+        `${valueBeforeContinuation}!`,
+      'resize keeps focus routed to the same retained Composer',
     )
     fixture.input.send('\u0003')
     const secondResult = await secondInput
@@ -462,11 +455,6 @@ async function main(): Promise<void> {
       fixture.controller.getTerminalStats().writes - writesBeforeBurst < 80,
       'character burst is coalesced instead of redrawing per token',
     )
-    assert(
-      fixture.controller.getTerminalStats().concurrentWriteViolations === 0,
-      'Composer, Activity and transcript keep one terminal writer',
-    )
-
     const failingInput = new RawInputHarness(true)
     const failingFixture = await createFixture(80, 96, failingInput)
     widthFixtures.push(failingFixture)

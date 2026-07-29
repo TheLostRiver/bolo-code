@@ -27,20 +27,16 @@ export type BoloTerminalOutput = {
 
 export type BoloTerminalStats = {
   writes: number
-  externalWrites: number
   inputEvents: number
   pasteTransactions: number
   filteredScrollbackClears: number
-  concurrentWriteViolations: number
 }
 
 export type BoloTerminalAdapter = Terminal & {
   readonly renderEpoch: number
   getStats(): BoloTerminalStats
-  setExternalOwner(active: boolean): void
   setInputEnabled(active: boolean): void
   isInputEnabled(): boolean
-  writeExternal(data: string): void
   waitForRender(afterEpoch: number, timeoutMs?: number): Promise<void>
 }
 
@@ -79,7 +75,6 @@ export function createBoloTerminalAdapter(options: {
   let inputDataHandler: ((data: string | Buffer) => void) | undefined
   let inputBuffer: StdinBuffer | undefined
   let started = false
-  let externalOwner = false
   let inputRequested = false
   let inputActive = false
   let inputWasRaw = false
@@ -87,11 +82,9 @@ export function createBoloTerminalAdapter(options: {
   const waiters = new Set<RenderWaiter>()
   const stats: BoloTerminalStats = {
     writes: 0,
-    externalWrites: 0,
     inputEvents: 0,
     pasteTransactions: 0,
     filteredScrollbackClears: 0,
-    concurrentWriteViolations: 0,
   }
 
   const settleRenderWaiters = () => {
@@ -112,10 +105,6 @@ export function createBoloTerminalAdapter(options: {
 
   const emitRetained = (data: string): void => {
     if (!data) return
-    if (externalOwner) {
-      stats.concurrentWriteViolations += 1
-      return
-    }
     const safe = sanitize(data)
     if (!safe) return
     stats.writes += 1
@@ -152,7 +141,6 @@ export function createBoloTerminalAdapter(options: {
       inputActive ||
       !inputRequested ||
       !started ||
-      externalOwner ||
       !inputHandler
     ) {
       return
@@ -168,12 +156,12 @@ export function createBoloTerminalAdapter(options: {
 
     const buffer = new StdinBuffer()
     buffer.on('data', (data) => {
-      if (!inputActive || externalOwner || !inputHandler) return
+      if (!inputActive || !inputHandler) return
       stats.inputEvents += 1
       inputHandler(data)
     })
     buffer.on('paste', (data) => {
-      if (!inputActive || externalOwner || !inputHandler) return
+      if (!inputActive || !inputHandler) return
       stats.pasteTransactions += 1
       inputHandler(`${BRACKETED_PASTE_START}${data}${BRACKETED_PASTE_END}`)
     })
@@ -237,7 +225,6 @@ export function createBoloTerminalAdapter(options: {
         started = false
         resizeHandler = undefined
         inputHandler = undefined
-        externalOwner = false
       },
       ...pendingWaiters.map((waiter) => () => {
         clearTimeout(waiter.timer)
@@ -252,9 +239,7 @@ export function createBoloTerminalAdapter(options: {
       if (started) return
       started = true
       inputHandler = onInput
-      resizeHandler = () => {
-        if (!externalOwner) onResize()
-      }
+      resizeHandler = onResize
       options.output.on?.('resize', resizeHandler)
       acquireInput()
     },
@@ -304,11 +289,6 @@ export function createBoloTerminalAdapter(options: {
     getStats() {
       return { ...stats }
     },
-    setExternalOwner(active) {
-      if (active) releaseInput()
-      externalOwner = active
-      if (!active) acquireInput()
-    },
     setInputEnabled(active) {
       inputRequested = active
       if (active) acquireInput()
@@ -316,14 +296,6 @@ export function createBoloTerminalAdapter(options: {
     },
     isInputEnabled() {
       return inputActive
-    },
-    writeExternal(data) {
-      if (!data) return
-      if (!externalOwner) stats.concurrentWriteViolations += 1
-      const safe = sanitize(data)
-      if (!safe) return
-      stats.externalWrites += 1
-      options.writeOut(safe)
     },
     waitForRender(afterEpoch, timeoutMs = 1_000) {
       if (renderEpoch > afterEpoch) return Promise.resolve()
