@@ -11,6 +11,33 @@ export type TextPagerContent = {
   content: string
 }
 
+export type LazyTextPagerLoadRequest = {
+  page: number
+  columns: number
+  pageSize: number
+  signal?: AbortSignal
+}
+
+export type LazyTextPagerLoadResult =
+  | {
+      ok: true
+      page: number
+      lines: string[]
+      hasNext: boolean
+      pageCount?: number
+    }
+  | {
+      ok: false
+      reason: string
+      message: string
+    }
+
+export type LazyTextPagerSource = {
+  loadPage(
+    request: LazyTextPagerLoadRequest,
+  ): Promise<LazyTextPagerLoadResult>
+}
+
 export type FormatTextPagerScreenOptions = {
   title: string
   content: string
@@ -26,6 +53,18 @@ export type RenderedTextPagerScreen = {
   page: number
   pageCount: number
   pageSize: number
+}
+
+export type FormatLazyTextPagerScreenOptions = {
+  title: string
+  lines?: readonly string[]
+  page: number
+  pageCount?: number
+  columns?: number
+  color?: boolean
+  loading?: boolean
+  error?: string
+  fallbackContent?: string
 }
 
 function normalizePositive(value: number | undefined, fallback: number): number {
@@ -85,4 +124,58 @@ export function formatTextPagerScreen(
     pageCount,
     pageSize,
   }
+}
+
+export function formatLazyTextPagerScreen(
+  options: FormatLazyTextPagerScreenOptions,
+): string[] {
+  const columns = normalizePositive(options.columns, 80)
+  const gutter = Math.min(
+    Math.max(0, columns - 1),
+    resolveTuiContentGutter(columns),
+  )
+  const indent = ' '.repeat(gutter)
+  const contentWidth = Math.max(1, columns - gutter)
+  const color = options.color !== false
+  const accent = color ? '\u001b[38;5;81m' : ''
+  const error = color ? '\u001b[38;5;203m' : ''
+  const dim = color ? '\u001b[38;5;244m' : ''
+  const reset = color ? '\u001b[0m' : ''
+  const title = clipTerminalText(
+    options.title.trim() || 'Details',
+    contentWidth,
+  )
+  const divider = '─'.repeat(
+    Math.max(1, Math.min(contentWidth, measureTerminalText(title) + 8)),
+  )
+  let body: string[]
+  if (options.loading) {
+    body = [`${dim}Loading page ${options.page + 1}...${reset}`]
+  } else if (options.error) {
+    body = [
+      `${error}${clipTerminalText(options.error, contentWidth)}${reset}`,
+    ]
+    if (options.fallbackContent) {
+      body.push(
+        ...wrapTerminalText(
+          options.fallbackContent,
+          contentWidth,
+        ).slice(0, 8),
+      )
+    }
+  } else {
+    body = [...(options.lines ?? [])]
+  }
+  const total =
+    options.pageCount === undefined ? '?' : String(options.pageCount)
+  const footer = clipTerminalText(
+    `${options.page + 1}/${total} · ↑/↓ page · q/Esc close`,
+    contentWidth,
+  )
+  return [
+    `${indent}${accent}${title}${reset}`,
+    `${indent}${dim}${divider}${reset}`,
+    ...body.map((line) => `${indent}${line}`),
+    `${indent}${dim}${footer}${reset}`,
+  ]
 }

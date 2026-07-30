@@ -16,6 +16,7 @@ import type {
   CliTuiToolBlock,
   CliTuiViewState,
   CliTuiWarningBlock,
+  ToolResultReference,
 } from '../../../shared/src/index.ts'
 import {
   createCliToolDisplayState,
@@ -444,6 +445,8 @@ export type RetainedToolPagerContent = {
   key: string
   title: string
   content: string
+  callId: string
+  fullResult?: ToolResultReference
 }
 
 export class RetainedTranscript implements Component {
@@ -572,6 +575,14 @@ export class RetainedTranscript implements Component {
             : 'result'
       }`,
       content,
+      callId: block.callId,
+      ...(block.presentation?.fullResult
+        ? {
+            fullResult: {
+              ...block.presentation.fullResult,
+            },
+          }
+        : {}),
     }
   }
 

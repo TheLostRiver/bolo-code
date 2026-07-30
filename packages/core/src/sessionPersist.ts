@@ -24,6 +24,7 @@ import {
   nowIso,
   type ChatMessage,
   type SessionPhase,
+  type ToolPresentation,
 } from '../../shared/src/index.ts'
 import {
   parsePermissionMode,
@@ -132,6 +133,8 @@ export type PersistableSession = {
   durableTasks?: DurableTaskRecord[]
   /** DR4B2：interrupted work 的 append-only resolution 投影。 */
   durableResolutions?: DurableResolutionRecord[]
+  /** OUT-3：renderer presentation side-channel；不进入 snapshot/provider messages。 */
+  toolPresentations?: Map<string, ToolPresentation>
   onEvent?: (e: { type: 'error'; message: string }) => void
 }
 

@@ -141,6 +141,7 @@ import {
   projectDurableControls,
   projectDurableTasks,
   projectDurableResolutions,
+  projectToolPresentationsFromEntries,
 } from './sessionTranscript.ts'
 import {
   applyDurableTurnEvent,
@@ -331,6 +332,20 @@ export {
   DEFAULT_MAX_TOOL_RESULT_CHARS,
   truncateToolResultOutput,
 } from './toolExecution.ts'
+export {
+  DEFAULT_TOOL_RESULT_CHUNK_BYTES,
+  MAX_TOOL_RESULT_CHUNK_BYTES,
+  cleanupToolResultSession,
+  readToolResultFileChunk,
+  resolveToolResultFilePath,
+  resolveToolResultSessionDirectory,
+  writeToolResultFile,
+  type ToolResultChunkReader,
+  type ToolResultChunkReadRequest,
+  type ToolResultChunkReadResult,
+  type ToolResultReadFailureReason,
+  type ToolResultSessionCleanupResult,
+} from './toolResultStore.ts'
 export {
   appendFileChange,
   createEmptyFileDiffLog,
@@ -605,6 +620,7 @@ export {
   appendTaskEntry,
   appendTaskResultEntry,
   appendResolutionEntry,
+  appendToolPresentationEntry,
   dualWriteSessionTranscript,
   writeTranscriptAfterCompact,
   resolveTranscriptPathFromJson,
@@ -625,6 +641,7 @@ export {
   projectDurableControls,
   projectDurableTasks,
   projectDurableResolutions,
+  projectToolPresentationsFromEntries,
   normalizeSessionTitle,
   normalizeSystemNoteText,
   buildTitleEntry,
@@ -635,6 +652,7 @@ export {
   buildTaskEntry,
   buildTaskResultEntry,
   buildResolutionEntry,
+  buildToolPresentationEntry,
   scanTranscriptLite,
   DEFAULT_LITE_SCAN_BYTES,
   getTranscriptWriteState,
@@ -656,6 +674,7 @@ export {
   type TranscriptTaskEntry,
   type TranscriptTaskResultEntry,
   type TranscriptResolutionEntry,
+  type TranscriptToolPresentationEntry,
   type TranscriptMetaInput,
   type TranscriptLiteScan,
 } from './sessionTranscript.ts'
@@ -948,6 +967,8 @@ export type BoloSession = {
   durableTasks: DurableTaskRecord[]
   /** DR4B2：由 transcript resolution entries 投影；不删除原 lifecycle。 */
   durableResolutions: DurableResolutionRecord[]
+  /** OUT-3：工具展示 side-channel；不进入 provider messages/snapshot。 */
+  toolPresentations: Map<string, ToolPresentation>
   /**
    * 权威 system 段（对照 HC systemPrompt）。
    * callModel 时由 prepareModelMessages 前缀；对话历史尽量不混入 system。
@@ -1222,6 +1243,12 @@ function mapLoopEvent(session: BoloSession, e: QueryLoopEvent) {
     emit(session, { type: 'done', terminal: e.terminal })
     return
   }
+  if (e.type === 'tool_end' && e.presentation) {
+    session.toolPresentations.set(
+      e.id,
+      structuredClone(e.presentation),
+    )
+  }
   emit(session, e as SessionEvent)
 }
 
@@ -1395,6 +1422,7 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
     durableControls: [],
     durableTasks: [],
     durableResolutions: [],
+    toolPresentations: new Map(),
     hookDiagLog: createHookDiagLog(),
     postCompactReinjection: true,
     onEvent: opts.onEvent ?? (() => {}),
@@ -2690,6 +2718,8 @@ export async function resumeSession(
     session.durableControls = projectDurableControls(entries)
     session.durableTasks = projectDurableTasks(entries)
     session.durableResolutions = projectDurableResolutions(entries)
+    session.toolPresentations =
+      projectToolPresentationsFromEntries(entries)
     if (session.backgroundAgents) {
       restoreBackgroundAgentStoreFromDurableTasks(
         session.backgroundAgents,

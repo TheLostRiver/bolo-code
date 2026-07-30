@@ -423,6 +423,7 @@ export {
   type CliTuiSummaryBlock,
   type CliTuiTerminal,
   type CliTuiToolBlock,
+  type CliTuiToolPresentationRecord,
   type CliTuiTurnState,
   type CliTuiTurnStatus,
   type CliTuiUserBlock,

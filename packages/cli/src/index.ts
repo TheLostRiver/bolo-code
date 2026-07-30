@@ -100,18 +100,29 @@ export {
   type RetainedSlashDisplayProjection,
 } from './tui/slashCommandSurface.ts'
 export {
+  formatLazyTextPagerScreen,
   formatTextPagerScreen,
+  type FormatLazyTextPagerScreenOptions,
   type FormatTextPagerScreenOptions,
+  type LazyTextPagerLoadRequest,
+  type LazyTextPagerLoadResult,
+  type LazyTextPagerSource,
   type RenderedTextPagerScreen,
   type TextPagerContent,
 } from './tui/textPager.ts'
 export {
+  RetainedOverlayHost,
   type RetainedCatalogOverlayHandle,
   type RetainedCatalogOverlayIdentity,
   type RetainedCatalogOverlayOptions,
   type RetainedCatalogOverlayUpdate,
   type RetainedTextPagerOverlayOptions,
+  type RetainedLazyTextPagerOverlayOptions,
 } from './tui/retainedOverlay.ts'
+export {
+  createToolResultFilePagerSource,
+  type ToolResultFilePagerOptions,
+} from './tui/fileTextPager.ts'
 export {
   type CliCommandSurfaceTimers,
 } from './tui/commandSurfaceEffect.ts'

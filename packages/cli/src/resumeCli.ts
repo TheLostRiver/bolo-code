@@ -611,7 +611,13 @@ export async function resumeFromIdOrPath(
   session.askUserQuestion = askUserQuestion
   attachSessionEventPrinter(session, printer)
   if (controller) {
-    controller.restoreMessages(session.messages)
+    controller.restoreMessages(
+      session.messages,
+      [...session.toolPresentations].map(([callId, presentation]) => ({
+        callId,
+        presentation,
+      })),
+    )
     configureSessionComposer(controller, session)
     attachSessionTuiController(session, controller)
   }
@@ -770,6 +776,8 @@ export async function runOnePrompt(
     if (controller && /^\/tools\s*$/u.test(prompt.trim())) {
       terminalReason = 'slash'
       const viewed = await controller.runToolHistoryOverlay({
+        cwd: session.cwd,
+        sessionId: session.id,
         ...(options?.signal ? { signal: options.signal } : {}),
       })
       return {

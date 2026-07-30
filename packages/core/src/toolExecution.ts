@@ -9,9 +9,6 @@
  * 无遥测。
  */
 
-import { promises as fs } from 'node:fs'
-import { createHash } from 'node:crypto'
-import path from 'node:path'
 import {
   addAlwaysAllowToolName,
   decidePermission,
@@ -40,7 +37,6 @@ import {
   type ToolResultReference,
 } from '../../shared/src/index.ts'
 import type { LoadedSkill } from '../../skills/src/index.ts'
-import { getWorkspaceSessionsDir } from '../../config/src/index.ts'
 import {
   createBuiltinTools,
   findToolByName,
@@ -53,6 +49,7 @@ import {
 import type { QueryDeps } from './deps.ts'
 import type { QueryLoopEvent } from './queryLoop.ts'
 import type { SessionSafeBoundary } from './sessionCoordinator.ts'
+import { writeToolResultFile } from './toolResultStore.ts'
 
 /** 单条 tool_result 写入 transcript 的字符上限（C6 类；可配置） */
 export const DEFAULT_MAX_TOOL_RESULT_CHARS = 50_000
@@ -68,53 +65,6 @@ export function truncateToolResultOutput(
 ): { text: string; truncated: boolean; omittedChars: number } {
   const r = truncateMiddle(output, { maxChars: Math.max(0, maxChars) })
   return { text: r.text, truncated: r.truncated, omittedChars: r.omittedChars }
-}
-
-async function maybeSpillTruncatedToolResult(opts: {
-  cwd: string
-  sessionId: string
-  toolUseId: string
-  fullOutput: string
-}): Promise<ToolResultReference | undefined> {
-  try {
-    const root = path.resolve(
-      getWorkspaceSessionsDir(opts.cwd),
-      'tool-results',
-    )
-    const safeSegment = (value: string, fallback: string): string => {
-      const normalized = value.normalize('NFC')
-      const readable = normalized
-        .replace(/[^a-zA-Z0-9._-]+/gu, '_')
-        .replace(/^[._-]+|[._-]+$/gu, '')
-        .slice(0, 72)
-      const digest = createHash('sha256')
-        .update(normalized)
-        .digest('hex')
-        .slice(0, 10)
-      return `${readable || fallback}-${digest}`
-    }
-    const sessionDir = path.resolve(
-      root,
-      safeSegment(opts.sessionId, 'session'),
-    )
-    const filePath = path.resolve(
-      sessionDir,
-      `${safeSegment(opts.toolUseId, 'tool')}.txt`,
-    )
-    const relative = path.relative(root, filePath)
-    if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
-      return undefined
-    }
-    await fs.mkdir(sessionDir, { recursive: true })
-    await fs.writeFile(filePath, opts.fullOutput, 'utf8')
-    return {
-      kind: 'session-file',
-      path: filePath,
-      bytes: Buffer.byteLength(opts.fullOutput, 'utf8'),
-    }
-  } catch {
-    return undefined
-  }
 }
 
 export type ToolUseBlock = {
@@ -993,11 +943,11 @@ export async function runToolUse(
   if (trunc.truncated) {
     let note = trunc.text
     if (ctx.spillTruncatedToolResults !== false) {
-      fullResult = await maybeSpillTruncatedToolResult({
+      fullResult = await writeToolResultFile({
         cwd: ctx.cwd,
         sessionId: ctx.sessionId,
         toolUseId,
-        fullOutput: content,
+        content,
       })
       if (fullResult) {
         note += `\n[full result: ${fullResult.path}]`

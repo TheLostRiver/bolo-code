@@ -23,6 +23,7 @@ import {
   type CliCommandToastInput,
   type CliCommandToastState,
   type CliTuiSessionEvent,
+  type CliTuiToolPresentationRecord,
   type CliTuiViewAction,
   type CliTuiViewState,
   type CliToolDisplayMode,
@@ -68,6 +69,7 @@ import {
   type RetainedPickerOverlayMode,
   type RetainedTextPagerOverlayOptions,
 } from './retainedOverlay.ts'
+import { createToolResultFilePagerSource } from './fileTextPager.ts'
 import {
   RetainedTranscript,
   type RetainedToolCatalogItem,
@@ -110,11 +112,16 @@ export type CliTuiController = {
   showCommandToast(toast: CliCommandToastInput): CliCommandToastState
   getCommandSurfaceState(): CliCommandSurfaceState
   resetCommandSurface(): void
-  restoreMessages(messages: readonly ChatMessage[]): void
+  restoreMessages(
+    messages: readonly ChatMessage[],
+    toolPresentations?: readonly CliTuiToolPresentationRecord[],
+  ): void
   getState(): CliTuiViewState
   toggleToolDisplayMode(): CliToolDisplayMode | undefined
   runToolHistoryOverlay(options?: {
     signal?: AbortSignal
+    cwd?: string
+    sessionId?: string
   }): Promise<RetainedToolHistoryResult>
   start(): Promise<void>
   stop(): Promise<void>
@@ -542,6 +549,8 @@ export function createRetainedTuiController(options: {
 
   const runToolHistoryOverlay = async (toolOptions?: {
     signal?: AbortSignal
+    cwd?: string
+    sessionId?: string
   }): Promise<RetainedToolHistoryResult> => {
     const items = root.getToolCatalogItems()
     if (!items.length) {
@@ -568,10 +577,27 @@ export function createRetainedTuiController(options: {
     if (!picked.ok) return { ok: false, reason: 'cancel' }
     const pager = root.getToolPagerContent(picked.id)
     if (!pager) return { ok: false, reason: 'cancel' }
-    const result = await overlay.runTextPager({
-      ...pager,
-      ...(toolOptions?.signal ? { signal: toolOptions.signal } : {}),
-    })
+    const result =
+      pager.fullResult && toolOptions?.cwd && toolOptions.sessionId
+        ? await overlay.runLazyTextPager({
+            key: pager.key,
+            title: pager.title,
+            fallbackContent: pager.content,
+            loadPage: createToolResultFilePagerSource({
+              cwd: toolOptions.cwd,
+              sessionId: toolOptions.sessionId,
+              reference: pager.fullResult,
+            }).loadPage,
+            ...(toolOptions.signal ? { signal: toolOptions.signal } : {}),
+          })
+        : await overlay.runTextPager({
+            key: pager.key,
+            title: pager.title,
+            content: pager.content,
+            ...(toolOptions?.signal
+              ? { signal: toolOptions.signal }
+              : {}),
+          })
     return {
       ok: true,
       blockId: picked.id,
@@ -740,8 +766,12 @@ export function createRetainedTuiController(options: {
         action: { type: 'reset' },
       })
     },
-    restoreMessages(messages) {
-      apply({ type: 'restore_messages', messages })
+    restoreMessages(messages, toolPresentations) {
+      apply({
+        type: 'restore_messages',
+        messages,
+        ...(toolPresentations ? { toolPresentations } : {}),
+      })
     },
     getState() {
       return state

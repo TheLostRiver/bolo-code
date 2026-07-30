@@ -49,8 +49,10 @@ import type {
   DiffPaneBrowseResult,
 } from './diffPane.ts'
 import {
+  formatLazyTextPagerScreen,
   formatTextPagerScreen,
   resolveEmbeddedTextPagerPageSize,
+  type LazyTextPagerSource,
   type TextPagerContent,
 } from './textPager.ts'
 import {
@@ -171,6 +173,16 @@ export type RetainedTextPagerOverlayOptions =
       onInterrupt?: () => void
     }
 
+export type RetainedLazyTextPagerOverlayOptions =
+  OverlaySessionBase & {
+    key: string
+    title: string
+    fallbackContent?: string
+    pageSize?: number
+    loadPage: LazyTextPagerSource['loadPage']
+    onInterrupt?: () => void
+  }
+
 export type RetainedOverlayPresentation =
   | 'none'
   | 'modal'
@@ -185,13 +197,26 @@ type PagerSource =
   | ({
       kind: 'text'
     } & TextPagerContent)
+  | {
+      kind: 'lazy-text'
+      key: string
+      title: string
+      fallbackContent?: string
+      loadPage: LazyTextPagerSource['loadPage']
+    }
 
 type PagerSession = OverlaySessionBase & {
   mode: 'pager'
   source: PagerSource
   page: number
-  pageCount: number
+  pageCount?: number
   pageSize: number
+  lazyGeneration?: number
+  lazyColumns?: number
+  lazyPhase?: 'loading' | 'ready' | 'error'
+  lazyLines?: string[]
+  lazyHasNext?: boolean
+  lazyError?: string
   resolve: (result: RuntimePagerSuccess) => void
   onInterrupt?: () => void
 }
@@ -737,6 +762,63 @@ export class RetainedOverlayHost implements Component, Focusable {
     })
   }
 
+  runLazyTextPager(
+    options: RetainedLazyTextPagerOverlayOptions,
+  ): Promise<RuntimePagerSuccess> {
+    if (this.active) {
+      return Promise.reject(
+        new Error(`overlay already active: ${this.active.mode}`),
+      )
+    }
+    if (options.signal?.aborted) {
+      return Promise.resolve({
+        ok: true,
+        reason: 'interrupt',
+        page: 0,
+        pageCount: 1,
+      })
+    }
+    const pageSize =
+      options.pageSize ??
+      resolveEmbeddedTextPagerPageSize(this.options.getRows())
+    return new Promise<RuntimePagerSuccess>((resolve) => {
+      const session: PagerSession = {
+        mode: 'pager',
+        source: {
+          kind: 'lazy-text',
+          key: options.key,
+          title: options.title,
+          loadPage: options.loadPage,
+          ...(options.fallbackContent
+            ? { fallbackContent: options.fallbackContent }
+            : {}),
+        },
+        page: 0,
+        pageSize,
+        lazyGeneration: 0,
+        lazyPhase: 'loading',
+        resolve,
+        ...(options.signal ? { signal: options.signal } : {}),
+        ...(options.onInterrupt
+          ? { onInterrupt: options.onInterrupt }
+          : {}),
+      }
+      if (options.signal) {
+        session.onAbort = () => this.finishPager('interrupt')
+        options.signal.addEventListener('abort', session.onAbort, {
+          once: true,
+        })
+      }
+      this.active = session
+      this.open({ mode: 'pager' })
+      this.loadLazyPagerPage(
+        session,
+        0,
+        this.options.getColumns(),
+      )
+    })
+  }
+
   cancel(): void {
     if (this.active?.mode === 'permission') {
       this.finishPermission('deny')
@@ -893,9 +975,37 @@ export class RetainedOverlayHost implements Component, Focusable {
     if (active.mode === 'pager') {
       const pagerKey = toRuntimePagerKey(key)
       if (pagerKey === 'none') return
+      if (active.source.kind === 'lazy-text') {
+        if (
+          pagerKey === 'quit' ||
+          pagerKey === 'ctrl-c' ||
+          pagerKey === 'eof'
+        ) {
+          if (pagerKey === 'ctrl-c') active.onInterrupt?.()
+          this.finishPager(
+            pagerKey === 'ctrl-c' ? 'interrupt' : 'quit',
+          )
+          return
+        }
+        if (active.lazyPhase !== 'ready') return
+        const nextPage =
+          pagerKey === 'previous'
+            ? Math.max(0, active.page - 1)
+            : active.lazyHasNext
+              ? active.page + 1
+              : active.page
+        if (nextPage !== active.page) {
+          this.loadLazyPagerPage(
+            active,
+            nextPage,
+            this.options.getColumns(),
+          )
+        }
+        return
+      }
       const next = applyRuntimePagerKey(
         active.page,
-        active.pageCount,
+        active.pageCount ?? 1,
         pagerKey,
       )
       active.page = next.page
@@ -999,6 +1109,26 @@ export class RetainedOverlayHost implements Component, Focusable {
       }).split('\n')
     }
     if (active.mode === 'pager') {
+      if (active.source.kind === 'lazy-text') {
+        const columns = Math.max(1, Math.floor(width))
+        if (active.lazyColumns !== columns) {
+          this.loadLazyPagerPage(active, active.page, columns)
+        }
+        return formatLazyTextPagerScreen({
+          title: active.source.title,
+          lines: active.lazyLines,
+          page: active.page,
+          pageCount: active.pageCount,
+          columns,
+          color: this.options.color,
+          loading: active.lazyPhase === 'loading',
+          error:
+            active.lazyPhase === 'error'
+              ? active.lazyError ?? 'Full result unavailable.'
+              : undefined,
+          fallbackContent: active.source.fallbackContent,
+        })
+      }
       const rendered =
         active.source.kind === 'runtime'
           ? renderRuntimeText(active.source.view, {
@@ -1204,8 +1334,76 @@ export class RetainedOverlayHost implements Component, Focusable {
       ok: true,
       reason,
       page: active.page,
-      pageCount: active.pageCount,
+      pageCount: active.pageCount ?? active.page + 1,
     })
+  }
+
+  private loadLazyPagerPage(
+    session: PagerSession,
+    page: number,
+    columns: number,
+  ): void {
+    if (
+      this.active !== session ||
+      session.source.kind !== 'lazy-text'
+    ) {
+      return
+    }
+    const generation = (session.lazyGeneration ?? 0) + 1
+    session.lazyGeneration = generation
+    session.lazyColumns = Math.max(1, Math.floor(columns))
+    session.lazyPhase = 'loading'
+    session.lazyError = undefined
+    session.page = Math.max(0, Math.floor(page))
+    this.options.requestRender()
+    void session.source
+      .loadPage({
+        page: session.page,
+        columns: session.lazyColumns,
+        pageSize: session.pageSize,
+        ...(session.signal ? { signal: session.signal } : {}),
+      })
+      .then((result) => {
+        if (
+          this.active !== session ||
+          session.lazyGeneration !== generation
+        ) {
+          return
+        }
+        if (!result.ok) {
+          session.lazyPhase = 'error'
+          session.lazyLines = undefined
+          session.lazyHasNext = false
+          session.pageCount = session.page + 1
+          session.lazyError =
+            `Full result unavailable (${result.reason}): ${result.message}`
+          this.options.requestRender()
+          return
+        }
+        session.lazyPhase = 'ready'
+        session.page = result.page
+        session.lazyLines = [...result.lines]
+        session.lazyHasNext = result.hasNext
+        session.pageCount = result.pageCount
+        this.options.requestRender()
+      })
+      .catch((error: unknown) => {
+        if (
+          this.active !== session ||
+          session.lazyGeneration !== generation
+        ) {
+          return
+        }
+        session.lazyPhase = 'error'
+        session.lazyLines = undefined
+        session.lazyHasNext = false
+        session.pageCount = session.page + 1
+        session.lazyError =
+          `Full result unavailable: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        this.options.requestRender()
+      })
   }
 }
 

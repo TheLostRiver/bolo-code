@@ -323,7 +323,11 @@ export type CliTuiViewAction =
     }
   | { type: 'session_event'; event: CliTuiSessionEvent }
   | { type: 'end_turn'; terminal?: CliTuiTerminal }
-  | { type: 'restore_messages'; messages: readonly ChatMessage[] }
+  | {
+      type: 'restore_messages'
+      messages: readonly ChatMessage[]
+      toolPresentations?: readonly CliTuiToolPresentationRecord[]
+    }
   | { type: 'set_composer_mode'; mode: CliTuiComposerMode }
   | { type: 'set_overlay'; overlay: CliTuiOverlayState }
   | { type: 'command_surface'; action: CliCommandSurfaceAction }
@@ -945,7 +949,10 @@ export function reduceCliTuiViewState(
     case 'end_turn':
       return finishActiveTurn(state, action.terminal)
     case 'restore_messages': {
-      const restored = createCliTuiViewStateFromMessages(action.messages)
+      const restored = createCliTuiViewStateFromMessages(
+        action.messages,
+        action.toolPresentations,
+      )
       return {
         ...restored,
         commandSurface: reduceCliCommandSurfaceState(
@@ -1024,8 +1031,17 @@ function replayEvent(
  */
 export function createCliTuiViewStateFromMessages(
   messages: readonly ChatMessage[],
+  toolPresentations: readonly CliTuiToolPresentationRecord[] = [],
 ): CliTuiViewState {
   const resultByCallId = new Map<string, string>()
+  const presentationByCallId = new Map<string, ToolPresentation>()
+  for (const item of toolPresentations) {
+    if (!item.callId.trim()) continue
+    presentationByCallId.set(
+      item.callId,
+      structuredClone(item.presentation),
+    )
+  }
   for (const message of messages) {
     if (message.role === 'tool' && message.tool_call_id) {
       resultByCallId.set(message.tool_call_id, message.content)
@@ -1090,6 +1106,11 @@ export function createCliTuiViewStateFromMessages(
           name: call.name,
           output,
           ok: !isPersistedToolError(output),
+          ...(presentationByCallId.has(call.id)
+            ? {
+                presentation: presentationByCallId.get(call.id),
+              }
+            : {}),
         })
       }
     }
@@ -1097,4 +1118,9 @@ export function createCliTuiViewStateFromMessages(
 
   closeTurn()
   return state
+}
+
+export type CliTuiToolPresentationRecord = {
+  callId: string
+  presentation: ToolPresentation
 }

@@ -9,9 +9,11 @@
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import {
+  isToolPresentation,
   nowIso,
   validateTodoList,
   type ChatMessage,
+  type ToolPresentation,
   type TodoItem,
 } from '../../shared/src/index.ts'
 import type {
@@ -239,6 +241,13 @@ export type TranscriptResolutionEntry = TranscriptEntryBase & {
   detail?: string
 }
 
+/** OUT-3：工具展示投影；不进 provider messages，按 callId last-wins。 */
+export type TranscriptToolPresentationEntry = TranscriptEntryBase & {
+  type: 'tool_presentation'
+  callId: string
+  presentation: ToolPresentation
+}
+
 export type TranscriptEntry =
   | TranscriptMetaEntry
   | TranscriptSessionStateEntry
@@ -253,6 +262,7 @@ export type TranscriptEntry =
   | TranscriptTaskEntry
   | TranscriptTaskResultEntry
   | TranscriptResolutionEntry
+  | TranscriptToolPresentationEntry
 
 export type TranscriptMetaInput = {
   sessionId: string
@@ -748,6 +758,57 @@ export async function appendTodoEntry(
   const entry = buildTodoEntry(opts)
   await appendTranscriptLine(file, entry)
   return entry
+}
+
+export function buildToolPresentationEntry(options: {
+  sessionId: string
+  callId: string
+  presentation: ToolPresentation
+  timestamp?: string
+}): TranscriptToolPresentationEntry {
+  const callId = options.callId.trim()
+  let unsafeCallId = !callId || callId.length > 512
+  for (let index = 0; index < callId.length && !unsafeCallId; index += 1) {
+    const code = callId.charCodeAt(index)
+    unsafeCallId = code < 32 || (code >= 127 && code <= 159)
+  }
+  if (unsafeCallId) {
+    throw new Error('buildToolPresentationEntry: callId is invalid')
+  }
+  if (!isToolPresentation(options.presentation)) {
+    throw new Error('buildToolPresentationEntry: presentation is invalid')
+  }
+  return {
+    type: 'tool_presentation',
+    sessionId: options.sessionId,
+    timestamp: options.timestamp ?? nowIso(),
+    callId,
+    presentation: structuredClone(options.presentation),
+  }
+}
+
+export async function appendToolPresentationEntry(
+  file: string,
+  options: {
+    sessionId: string
+    callId: string
+    presentation: ToolPresentation
+  },
+): Promise<TranscriptToolPresentationEntry> {
+  const entry = buildToolPresentationEntry(options)
+  await appendTranscriptLine(file, entry)
+  return entry
+}
+
+export function projectToolPresentationsFromEntries(
+  entries: readonly TranscriptEntry[],
+): Map<string, ToolPresentation> {
+  const projected = new Map<string, ToolPresentation>()
+  for (const entry of entries) {
+    if (entry.type !== 'tool_presentation') continue
+    projected.set(entry.callId, structuredClone(entry.presentation))
+  }
+  return projected
 }
 
 /** 取 entries 中最后一条 todo 快照；无则空表 */
@@ -1284,9 +1345,22 @@ type TranscriptWriteState = {
   appendedMessageCount: number
   /** 最后一条已落盘的 resolved runtime metadata 指纹 */
   runtimeStateKey?: string
+  /** OUT-3：每个 callId 最后一条已落盘 presentation 指纹。 */
+  toolPresentationKeys: Map<string, string>
 }
 
 const transcriptState = new WeakMap<object, TranscriptWriteState>()
+
+function presentationFingerprintMap(
+  presentations: ReadonlyMap<string, ToolPresentation>,
+): Map<string, string> {
+  return new Map(
+    [...presentations].map(([callId, item]) => [
+      callId,
+      JSON.stringify(item),
+    ]),
+  )
+}
 
 export function getTranscriptWriteState(
   session: object,
@@ -1304,6 +1378,11 @@ export function setTranscriptWriteState(
     appendedMessageCount:
       state.appendedMessageCount ?? prev?.appendedMessageCount ?? 0,
     runtimeStateKey: state.runtimeStateKey ?? prev?.runtimeStateKey,
+    toolPresentationKeys: new Map(
+      state.toolPresentationKeys ??
+        prev?.toolPresentationKeys ??
+        [],
+    ),
   })
 }
 
@@ -1388,6 +1467,8 @@ async function rewriteTranscriptFromMessagesUnlocked(
     TranscriptTaskEntry | TranscriptTaskResultEntry
   > = []
   let preservedResolutions: TranscriptResolutionEntry[] = []
+  let preservedToolPresentations =
+    projectToolPresentationsFromEntries(existingEntries)
   if (opts && 'title' in opts && opts.title !== undefined) {
     preservedTitle = normalizeSessionTitle(opts.title)
   }
@@ -1491,6 +1572,14 @@ async function rewriteTranscriptFromMessagesUnlocked(
         .map((entry) => ({ ...entry }))
     }
   }
+  if (session.toolPresentations !== undefined) {
+    preservedToolPresentations = new Map(
+      [...session.toolPresentations].map(([callId, item]) => [
+        callId,
+        structuredClone(item),
+      ]),
+    )
+  }
 
   const lines: string[] = []
   lines.push(
@@ -1563,6 +1652,17 @@ async function rewriteTranscriptFromMessagesUnlocked(
   }
   for (const resolution of preservedResolutions) {
     lines.push(JSON.stringify(resolution))
+  }
+  for (const [callId, item] of preservedToolPresentations) {
+    lines.push(
+      JSON.stringify(
+        buildToolPresentationEntry({
+          sessionId: session.id,
+          callId,
+          presentation: item,
+        }),
+      ),
+    )
   }
   const body = lines.length ? lines.join('\n') + '\n' : ''
   const tmp = path.join(
@@ -2103,6 +2203,30 @@ export async function loadTranscriptFile(
         }
         continue
       }
+      if (o.type === 'tool_presentation') {
+        if (
+          typeof o.sessionId !== 'string' ||
+          typeof o.callId !== 'string' ||
+          !o.callId.trim() ||
+          !isToolPresentation(o.presentation)
+        ) {
+          continue
+        }
+        try {
+          entries.push(
+            buildToolPresentationEntry({
+              sessionId: o.sessionId,
+              callId: o.callId,
+              presentation: o.presentation,
+              timestamp:
+                typeof o.timestamp === 'string' ? o.timestamp : nowIso(),
+            }),
+          )
+        } catch {
+          // 非法 presentation 行 fail-closed 跳过。
+        }
+        continue
+      }
       if (o.type === 'compact_boundary') {
         entries.push({
           type: 'compact_boundary',
@@ -2450,6 +2574,9 @@ export async function writeTranscriptAfterCompact(
     filePath: transcriptPath,
     appendedMessageCount: session.messages.length,
     ...(runtimeStateKey ? { runtimeStateKey } : {}),
+    toolPresentationKeys: presentationFingerprintMap(
+      session.toolPresentations ?? new Map(),
+    ),
   })
   return { transcriptPath }
 }
@@ -2470,7 +2597,12 @@ export async function dualWriteSessionTranscript(
   const prev = transcriptState.get(session)
   let lastCount = prev?.appendedMessageCount
   let lastRuntimeStateKey = prev?.runtimeStateKey
-  if (lastCount === undefined || lastRuntimeStateKey === undefined) {
+  let lastToolPresentationKeys = prev?.toolPresentationKeys
+  if (
+    lastCount === undefined ||
+    lastRuntimeStateKey === undefined ||
+    lastToolPresentationKeys === undefined
+  ) {
     try {
       const { entries } = await loadTranscriptFile(transcriptPath)
       if (lastCount === undefined) {
@@ -2481,12 +2613,19 @@ export async function dualWriteSessionTranscript(
           messagesFromTranscriptEntries(entries).meta,
         )
       }
+      if (lastToolPresentationKeys === undefined) {
+        lastToolPresentationKeys = presentationFingerprintMap(
+          projectToolPresentationsFromEntries(entries),
+        )
+      }
     } catch (error) {
       if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') throw error
       lastCount ??= 0
+      lastToolPresentationKeys ??= new Map()
     }
   }
   lastCount ??= 0
+  lastToolPresentationKeys ??= new Map()
   const total = session.messages.length
   const metaBase = metaInputFromSession(session, {
     createdAt: opts?.createdAt,
@@ -2494,6 +2633,9 @@ export async function dualWriteSessionTranscript(
   const sessionStateEntry = buildSessionStateEntry(session)
   const currentRuntimeStateKey = resolvedModelStateKey(
     sessionStateEntry?.resolvedModel,
+  )
+  const currentToolPresentationKeys = presentationFingerprintMap(
+    session.toolPresentations ?? new Map(),
   )
 
   // messages 变短：全量重建（内存已是 compact 后链）；仅显式传入时写 compact_boundary
@@ -2510,6 +2652,7 @@ export async function dualWriteSessionTranscript(
       ...(currentRuntimeStateKey
         ? { runtimeStateKey: currentRuntimeStateKey }
         : {}),
+      toolPresentationKeys: currentToolPresentationKeys,
     })
     return { transcriptPath, appended: total, rewritten: true }
   }
@@ -2525,6 +2668,24 @@ export async function dualWriteSessionTranscript(
     lastRuntimeStateKey = currentRuntimeStateKey
   }
 
+  for (const [callId, item] of session.toolPresentations ?? []) {
+    const fingerprint = currentToolPresentationKeys.get(callId)
+    if (
+      fingerprint !== undefined &&
+      fingerprint === lastToolPresentationKeys.get(callId)
+    ) {
+      continue
+    }
+    await appendToolPresentationEntry(transcriptPath, {
+      sessionId: session.id,
+      callId,
+      presentation: item,
+    })
+    if (fingerprint !== undefined) {
+      lastToolPresentationKeys.set(callId, fingerprint)
+    }
+  }
+
   // 磁盘 message 数已 ≥ 内存：视为已同步（resume 后无新消息再 save）
   if (lastCount >= total) {
     setTranscriptWriteState(session, {
@@ -2533,6 +2694,7 @@ export async function dualWriteSessionTranscript(
       ...(lastRuntimeStateKey
         ? { runtimeStateKey: lastRuntimeStateKey }
         : {}),
+      toolPresentationKeys: lastToolPresentationKeys,
     })
     return { transcriptPath, appended: 0, rewritten: false }
   }
@@ -2545,6 +2707,7 @@ export async function dualWriteSessionTranscript(
     filePath: transcriptPath,
     appendedMessageCount: total,
     ...(lastRuntimeStateKey ? { runtimeStateKey: lastRuntimeStateKey } : {}),
+    toolPresentationKeys: lastToolPresentationKeys,
   })
   return { transcriptPath, appended, rewritten: false }
 }
