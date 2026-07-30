@@ -163,6 +163,18 @@ export function newId(prefix: string): string {
 }
 
 export {
+  DEFAULT_TOOL_PREVIEW_MAX_CHARS,
+  classifyToolPresentation,
+  createToolPresentation,
+  isToolPresentation,
+  type CreateToolPresentationInput,
+  type ToolPresentation,
+  type ToolPresentationKind,
+  type ToolPreviewMode,
+  type ToolResultReference,
+} from './toolPresentation.ts'
+
+export {
   RUNTIME_COMMAND_ACTIONS,
   RUNTIME_COMMAND_ERROR_CODES,
   RUNTIME_CONTROL_BOUNDARIES,

@@ -66,6 +66,7 @@ import {
   type SessionEndReason,
   type SessionPhase,
   type SessionStartSource,
+  type ToolPresentation,
 } from '../../shared/src/index.ts'
 import {
   composePrepareMessages,
@@ -318,6 +319,12 @@ export {
 // formatDurationMs：modelCost 与 subagent 同名；index 只 re-export subagent 的 formatDurationMs
 export { runTools, partitionToolCalls } from './toolOrchestration.ts'
 export { runToolUse } from './toolExecution.ts'
+export type {
+  RunToolUseContext,
+  RunToolUseResult,
+  ToolExecutionEvent,
+  ToolUseBlock,
+} from './toolExecution.ts'
 export { StreamingToolExecutor } from './streamingToolExecutor.ts'
 export type { PermissionMode, SessionPermissionRules } from '../../permissions/src/index.ts'
 export {
@@ -734,6 +741,7 @@ export type SessionEvent =
       name: string
       output: string
       ok: boolean
+      presentation?: ToolPresentation
       path?: string
       added?: number
       removed?: number

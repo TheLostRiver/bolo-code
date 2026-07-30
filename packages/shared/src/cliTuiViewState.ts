@@ -6,6 +6,7 @@
  */
 
 import type { ChatMessage, SessionPhase } from './index.ts'
+import type { ToolPresentation } from './toolPresentation.ts'
 import { COMPACT_SUMMARY_MARKER } from './turnTimeline.ts'
 import {
   createCliCommandSurfaceState,
@@ -85,6 +86,7 @@ export type CliTuiToolBlock = CliTuiBlockBase & {
   }>
   cellCollapsed?: string
   cellExpanded?: string
+  presentation?: ToolPresentation
 }
 
 export type CliTuiSearchCitation = {
@@ -246,6 +248,7 @@ export type CliTuiSessionEvent =
       }>
       cellCollapsed?: string
       cellExpanded?: string
+      presentation?: ToolPresentation
     }
   | {
       type: 'web_search'
@@ -524,6 +527,9 @@ function updateToolBlock(
         : {}),
       ...(event.cellExpanded !== undefined
         ? { cellExpanded: event.cellExpanded }
+        : {}),
+      ...(event.presentation !== undefined
+        ? { presentation: event.presentation }
         : {}),
     }
   }

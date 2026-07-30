@@ -10,6 +10,7 @@
  */
 
 import { promises as fs } from 'node:fs'
+import { createHash } from 'node:crypto'
 import path from 'node:path'
 import {
   addAlwaysAllowToolName,
@@ -30,7 +31,14 @@ import {
   truncateMiddle,
   toolOutputBudgetBytes,
 } from '../../compact/src/index.ts'
-import { nowIso, type ChatMessage, type HooksConfig } from '../../shared/src/index.ts'
+import {
+  createToolPresentation,
+  nowIso,
+  type ChatMessage,
+  type HooksConfig,
+  type ToolPresentation,
+  type ToolResultReference,
+} from '../../shared/src/index.ts'
 import type { LoadedSkill } from '../../skills/src/index.ts'
 import { getWorkspaceSessionsDir } from '../../config/src/index.ts'
 import {
@@ -64,16 +72,46 @@ export function truncateToolResultOutput(
 
 async function maybeSpillTruncatedToolResult(opts: {
   cwd: string
+  sessionId: string
   toolUseId: string
   fullOutput: string
-}): Promise<string | undefined> {
+}): Promise<ToolResultReference | undefined> {
   try {
-    const dir = path.join(getWorkspaceSessionsDir(opts.cwd), 'tool-results')
-    await fs.mkdir(dir, { recursive: true })
-    const safeId = opts.toolUseId.replace(/[^a-zA-Z0-9._-]+/g, '_')
-    const filePath = path.join(dir, `${safeId || 'tool'}.txt`)
+    const root = path.resolve(
+      getWorkspaceSessionsDir(opts.cwd),
+      'tool-results',
+    )
+    const safeSegment = (value: string, fallback: string): string => {
+      const normalized = value.normalize('NFC')
+      const readable = normalized
+        .replace(/[^a-zA-Z0-9._-]+/gu, '_')
+        .replace(/^[._-]+|[._-]+$/gu, '')
+        .slice(0, 72)
+      const digest = createHash('sha256')
+        .update(normalized)
+        .digest('hex')
+        .slice(0, 10)
+      return `${readable || fallback}-${digest}`
+    }
+    const sessionDir = path.resolve(
+      root,
+      safeSegment(opts.sessionId, 'session'),
+    )
+    const filePath = path.resolve(
+      sessionDir,
+      `${safeSegment(opts.toolUseId, 'tool')}.txt`,
+    )
+    const relative = path.relative(root, filePath)
+    if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+      return undefined
+    }
+    await fs.mkdir(sessionDir, { recursive: true })
     await fs.writeFile(filePath, opts.fullOutput, 'utf8')
-    return filePath
+    return {
+      kind: 'session-file',
+      path: filePath,
+      bytes: Buffer.byteLength(opts.fullOutput, 'utf8'),
+    }
   } catch {
     return undefined
   }
@@ -118,6 +156,7 @@ export type ToolExecutionEvent =
       output: string
       ok: boolean
       isError?: boolean
+      presentation: ToolPresentation
       /** 文件改动摘要（Edit/Write/apply_patch） */
       path?: string
       added?: number
@@ -299,6 +338,7 @@ async function auditAutoClassify(
 
 export type RunToolUseResult = {
   toolResultMessage: ChatMessage
+  presentation: ToolPresentation
   blocked: boolean
   denied: boolean
   /** 工具声明可并发 */
@@ -401,6 +441,14 @@ function endResult(
     concurrencySafe?: boolean
   },
 ): RunToolUseResult {
+  const presentation = createToolPresentation({
+    toolName: name,
+    output: content,
+    retainedOutput: content,
+    truncated: false,
+    ok: flags.ok,
+    isError: flags.isError,
+  })
   emit(ctx, {
     type: 'tool_end',
     id: toolUseId,
@@ -408,12 +456,14 @@ function endResult(
     output: content,
     ok: flags.ok,
     isError: flags.isError,
+    presentation,
   })
   return {
     blocked: flags.blocked,
     denied: flags.denied,
     concurrencySafe: flags.concurrencySafe ?? false,
     toolResultMessage: toolResultMessage(toolUseId, name, content, flags.isError),
+    presentation,
   }
 }
 
@@ -933,6 +983,8 @@ export async function runToolUse(
     result.isError && !result.output.includes('tool_use_error')
       ? formatToolUseError(result.output)
       : result.output
+  const originalContent = content
+  let fullResult: ToolResultReference | undefined
 
   // --- tool_result 字符预算（C6 + AR2A0b per-tool 表驱动）---
   // 优先级：显式 ctx.maxToolResultChars > per-tool 预算表 > 默认 10k
@@ -941,17 +993,29 @@ export async function runToolUse(
   if (trunc.truncated) {
     let note = trunc.text
     if (ctx.spillTruncatedToolResults !== false) {
-      const spillPath = await maybeSpillTruncatedToolResult({
+      fullResult = await maybeSpillTruncatedToolResult({
         cwd: ctx.cwd,
+        sessionId: ctx.sessionId,
         toolUseId,
         fullOutput: content,
       })
-      if (spillPath) {
-        note += `\n[full result: ${spillPath}]`
+      if (fullResult) {
+        note += `\n[full result: ${fullResult.path}]`
       }
     }
     content = note
   }
+
+  const presentation = createToolPresentation({
+    toolName: name,
+    toolInput,
+    output: originalContent,
+    retainedOutput: content,
+    truncated: trunc.truncated,
+    ok: result.ok,
+    isError: result.isError,
+    fullResult,
+  })
 
   // D4/D7/U3：tool_end 摘要 + history cell（UI）；模型 content 仍为 plain
   let summaryLine: string | undefined
@@ -1061,6 +1125,7 @@ export async function runToolUse(
     output: content,
     ok: result.ok,
     isError: result.isError,
+    presentation,
     ...(result.ok && result.meta?.path
       ? {
           path: result.meta.path,
@@ -1155,6 +1220,7 @@ export async function runToolUse(
     blocked: false,
     denied: false,
     concurrencySafe,
+    presentation,
     toolResultMessage: toolResultMessage(
       toolUseId,
       name,

@@ -141,10 +141,16 @@ async function main(): Promise<void> {
         maxToolResultChars: 50,
       },
     )
-    const spillPath = path.join(
-      workspaceSessions,
-      'tool-results',
-      'spill_first-run.txt',
+    const spillRef = spillResult.presentation.fullResult
+    assert(spillRef, 'tool-result spill reference missing')
+    const spillPath = spillRef.path
+    const spillRoot = path.join(workspaceSessions, 'tool-results')
+    const spillRelative = path.relative(spillRoot, spillPath)
+    assert(
+      spillRelative &&
+        !spillRelative.startsWith('..') &&
+        !path.isAbsolute(spillRelative),
+      'tool-result spill escaped workspace session store',
     )
     assert(await exists(spillPath), 'tool-result spill not written to user workspace')
     assert(
