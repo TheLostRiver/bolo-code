@@ -56,7 +56,7 @@ skills   mcp-host  plugins   tools    providers
 
 | 包 | 职责 | 禁止 |
 |----|------|------|
-| `packages/core` | 会话状态机、query 循环、hook 调度、子代理编排、compaction；执行边界生成 `ToolPresentation` 与 session-scoped spill ref | 直接操作 DOM / Electron API |
+| `packages/core` | 会话状态机、query 循环、hook 调度、子代理编排、compaction；执行边界生成 `ToolPresentation` 与 session-scoped spill ref，校验/分块读取/清理目标 session store，并持久化 `tool_presentation` side-channel | 直接操作 DOM / Electron API |
 | `packages/tools` | 内置工具：Bash、读改写文件、apply_patch、搜索等 | 自己决定 allow/deny（必须走 PermissionGate） |
 | `packages/hooks` | Hook 类型、matcher、执行器、退出码语义 | 业务 tool 实现 |
 | `packages/skills` | Skill 发现、加载、注入 prompt/tools | 网络协议 |
@@ -64,7 +64,7 @@ skills   mcp-host  plugins   tools    providers
 | `packages/plugins` | 插件清单、激活、贡献点合并 | 绕过 hook/permission |
 | `packages/providers` | 多模型 API 适配（OpenAI / Anthropic / 兼容端点） | 会话策略 |
 | `packages/shared` | 事件、消息、配置 schema、错误类型；OI-14B `CliTuiViewState` 纯 reducer 与 SessionEvent/resume 投影；OUT-1 `ToolPresentation` 分类/validator/有界 preview；OUT-2 工具展示 state/action/projection 纯契约 | 副作用、terminal/renderer I/O |
-| `packages/cli` | CLI 入口 + TTY controller/adapter（输入、activity、picker、pager）；retained transcript 以 stable block id 维护本地工具展示状态，并提供 `Ctrl+O`/`/tools` 有界预览路径；复用 core 事件、runtime view 与 shared live view-state | 复制 core runtime / 在 renderer 重建第二状态机 / 读取未校验 spill 路径 |
+| `packages/cli` | CLI 入口 + TTY controller/adapter（输入、activity、picker、pager）；retained transcript 以 stable block id 维护本地工具展示状态，`Ctrl+O` 切 bounded preview，`/tools` 对有效 ref 惰性分页全文；复用 core 事件、runtime view 与 shared live view-state | 复制 core runtime / 在 renderer 重建第二状态机 / 直接读取未校验 spill 路径 |
 | `apps/desktop` | Electron GUI | 重业务逻辑（只编排 core） |
 
 ## 4. 核心数据流
@@ -81,8 +81,10 @@ SessionStart(source)
         → execute tool
         → 超预算全文写 session-scoped spill，模型消息仍走原截断语义
         → ToolPresentation(summary/preview/size/ref)
+        → tool_presentation side-channel（不进 provider messages）
         → retained renderer(summary/preview/running tail；本地 stable state)
-        → Ctrl+O 或 /tools 打开 bounded preview
+        → Ctrl+O 切 bounded preview
+        → /tools 对有效 ref 按需分页全文，否则回退 bounded preview
         → PostToolUse(tool)
   → 可选 PreCompact / PostCompact
   → Stop

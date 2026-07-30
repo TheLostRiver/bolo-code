@@ -39,14 +39,25 @@
 | `control` | Durable control 生命周期（`controlId` + `kind/state`；**不进**模型 messages；rewrite 时保留） |
 | `task` | Durable background/subagent 生命周期（独立 `taskId` + `parentTurnId?`；**不进**模型 messages；rewrite 时保留） |
 | `task_result` | Durable task 结果摘要/usage/worktree 路径；必须先于 completed/error/aborted terminal；**不进**模型 messages |
+| `tool_presentation` | 工具摘要/有界 preview/原始规模/受控全文 ref；按 `callId` **last-wins**，**不进**模型 messages 或 JSON snapshot schema；rewrite 时保留 |
 
 `saveSession` **默认**只增量 append / rewrite `.jsonl`；不再默认原子写 JSON。runtime
 metadata 改变时先追加一条去重的 `session_state`，load 时以最后一条有效 state 投影回
 meta；compact rewrite 会把最新 state 折叠进首行 meta，不保留冗余 state。
+`tool_presentation` 使用指纹去重避免 live/保存双写；load/resume 将最后有效条目投影为
+session 的工具展示 map。非法 `callId`、损坏 presentation、跨 session/越界 ref 均
+fail closed；旧 transcript 没有该条目时继续使用 bounded compatibility，不从工具正文
+猜测受信路径。
 `migrateSessionToJsonl` 可将旧 JSON 旁路写出 jsonl（默认不删 JSON）。`setSessionTitle` /
 `/title` 追加 `title` 行；`appendSessionSystemNote` / `/note` 追加 `system_note`（不进模型
 链）。list 对 jsonl 走 `scanTranscriptLite`（轻量计数字段 + 近况 preview）。详见
 `docs/TODO_SESSION_JSONL.md`。
+
+工具全文 spill 位于 workspace session store 的
+`tool-results/<safe-session-segment>/<safe-call-segment>.txt`。读取时会重新校验目标
+session、UTF-8 bytes、regular file、symlink/no-follow 与路径边界；`/tools` 只对通过
+校验的 ref 惰性分页读取。`cleanupToolResultSession()` 已提供目标 session 的安全清理
+原语，但当前没有正式 session delete command/API 调用它。
 
 ### 1.2 Durable Turn v1（DR0–DR1）
 

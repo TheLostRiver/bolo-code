@@ -1,7 +1,7 @@
 # 长工具输出折叠与模型上下文元数据设计
 
-> **状态：** CTX-1 `27a2506`、CTX-2 `6ea3a4f`、CTX-3 `d966d4b`、OUT-1 `78ad65a`、OUT-2 `ab8a634` 已完成；OUT-3 是下一刀。
-> **设计基线：** `dc20807`；当前实施基线：`ab8a634`。
+> **状态：** CTX-1 `27a2506`、CTX-2 `6ea3a4f`、CTX-3 `d966d4b`、OUT-1 `78ad65a`、OUT-2 `ab8a634`、OUT-3 `595b172` 已完成；OUT-4 是下一刀。
+> **设计基线：** `dc20807`；当前实施基线：`595b172`。
 > **路线标识：** `CTX-1..3`、`OUT-1..5`。
 > **进度真源：** [ROADMAP.md](./ROADMAP.md) §0、§13.11。
 > **相关实现：** [COMPACTION.md](./COMPACTION.md) ·
@@ -9,8 +9,8 @@
 
 本文锁定两个相互独立但共同影响 CLI 可靠性的缺口：
 
-1. Read、Bash、MCP 等长工具结果曾会把 retained transcript 填满；OUT-1/2 已补通用
-   presentation、默认折叠与键盘有界预览，file-backed 全文读取与恢复仍待 OUT-3。
+1. Read、Bash、MCP 等长工具结果曾会把 retained transcript 填满；OUT-1..3 已补通用
+   presentation、默认折叠、键盘有界预览、file-backed 全文读取与恢复。
 2. provider/model 上下文窗口与输出上限需要统一解析、随热切更新并可解释来源；旧实现
    只有 workspace 顶层 `contextWindowTokens`。CTX-1..3 已关闭解析、runtime 消费、
    CLI/Desktop 可观测性和最终用户文档缺口。
@@ -27,10 +27,12 @@
 | CTX-3 | ✅ `d966d4b` | `/provider`、`/model`、`/context`、`/doctor`、CLI dashboard、Desktop 与最终用户文档 |
 | OUT-1 | ✅ `78ad65a` | shared/core Tool presentation、原始/保留规模、bounded preview、session-scoped spill ref、live event/view-state |
 | OUT-2 | ✅ `ab8a634` | renderer-local stable state、默认折叠、running/error cap、`Ctrl+O`、`/tools` bounded preview pager |
-| OUT-3..5 | **▶ NEXT：OUT-3** | file-backed 全文 pager/resume、鼠标与只读调用聚合 |
+| OUT-3 | ✅ `595b172` | 受控分块读取、惰性全文 pager、`tool_presentation` side-channel/resume、安全 cleanup primitive |
+| OUT-4..5 | **▶ NEXT：OUT-4** | SGR mouse 与相邻只读调用聚合 |
 
-模型元数据轨已统一解析、消费和展示；OUT-1/2 已提供 renderer-neutral 数据真源和
-默认有界展示。当前 `/tools` 只查看内存中的 bounded preview，不能读取 spill 全文。
+模型元数据轨已统一解析、消费和展示；OUT-1..3 已提供 renderer-neutral 数据真源、
+默认有界展示和按需全文读取。`/tools` 对有效受控 ref 打开惰性全文 pager；无 ref 或
+文件缺失、损坏、越界时明确降级为 bounded preview。
 
 ---
 
@@ -89,11 +91,17 @@ Read/Bash/MCP tool
 - retained renderer 以 stable block id 保存本地 summary/preview 状态；成功长结果默认
   summary，短结果/error 默认 bounded preview，running 使用有界 tail。
 - `Ctrl+O` 可全局切换 summary/preview；retained-only `/tools` 以最新优先 picker
-  打开最多 4,000 字符的 embedded preview pager，并在关闭后恢复 Composer。
+  对有效 ref 打开按需全文 pager，无有效 ref 时打开 bounded preview，并在关闭后恢复
+  Composer。
+- transcript 以 `tool_presentation` side-channel 按 call id last-wins 保存 presentation/
+  ref；它不进 provider messages 或 snapshot schema，compact rewrite 保留，resume 恢复。
+- file pager 按受控 UTF-8 chunk 读取，处理 CJK/emoji/cell width、跨 chunk ANSI/OSC
+  与超长单行；未读到 EOF 前不伪造总页数。
 
 仍缺失的能力：
 
-- file-backed pager、resume side-channel 与 session spill cleanup 尚未接入。
+- 正式 session delete command/API 尚不存在，因此安全 cleanup primitive 还没有删除
+  会话的产品调用方。
 - `cellCollapsed/cellExpanded` 只覆盖 diff/Todo，不是通用工具输出协议。
 - `BOLO_DIFF_CELL/BOLO_DIFF_VERBOSE` 是进程级静态环境开关，不是单块交互状态。
 - retained transcript 尚无鼠标 hit region。
@@ -137,8 +145,8 @@ CTX-2 已关闭的 runtime 缺口：
 
 CTX-1 建立可复用的配置与解析真源，CTX-2 完成作用域和生命周期接线，CTX-3 已让
 slash/doctor/Desktop 明确展示数值与来源并发布最终用户配置口径。OUT-1 已建立长工具
-输出 presentation 真源，OUT-2 已完成默认折叠与键盘有界预览；当前剩余缺口属于
-OUT-3..5 的全文读取、恢复、鼠标与聚合。
+输出 presentation 真源，OUT-2 已完成默认折叠与键盘有界预览，OUT-3 已完成按需全文
+读取与恢复；当前剩余缺口属于 OUT-4/5 的鼠标与聚合。
 
 ---
 
@@ -519,13 +527,13 @@ resume           → 重建 presentation，默认 summary
 ### 11.1 键盘
 
 - `Ctrl+O`：全局 summary/preview 切换，沿用 Pi 的成熟心智模型。
-- `/tools`：打开最近工具结果 picker；上下选择，Enter 打开 bounded preview pager，
-  Esc 返回。OUT-3 完成后，具备有效受控 ref 的条目才升级为 file-backed 全文 pager。
+- `/tools`：打开最近工具结果 picker；上下选择，Enter 对有效受控 ref 打开 file-backed
+  全文 pager，无有效 ref 时打开 bounded preview；Esc 返回。
 - pager 继续沿用现有 `n/j/↓/→`、`p/k/↑/←`、`q/Esc`。
 - running turn 中 Esc/Ctrl+C 的中断优先级保持现有契约，不能被工具查看抢走。
 
 `/tools` 使用现有 structured catalog/overlay 路径，不把 transcript 变成长期 focus
-owner，也不把最多 4,000 字符的当前预览误称为全文。
+owner；只有通过 session-bound 校验的 file ref 才标为全文，降级路径仍明确称为 preview。
 
 ### 11.2 鼠标
 
@@ -559,19 +567,22 @@ pipe、CI、dumb terminal 不启用 mouse reporting。
 sessions/workspaces/<hash>/tool-results/<sessionId>/<callId>.txt
 ```
 
-- call id 仍需文件名清洗。
-- reference 保存绝对规范路径、bytes；读取时重新校验仍在 session tool-results 根内。
-- 旧 `tool-results/<callId>.txt` 只读兼容，不迁移、不覆盖。
-- 删除 session 时清理对应目录；清理失败 warning，不影响其它会话。
+- session/call id 经 NFC、safe segment 与短 SHA-256 共同派生目录/文件名，避免清洗碰撞。
+- reference 保存绝对路径与 UTF-8 bytes；每次读取重新校验 workspace root、目标 session
+  direct child、bytes、regular file 与 symlink/no-follow 边界。
+- 旧 flat ref 或无法证明属于当前 session 的 ref 不迁移、不读取，明确降级 bounded preview。
+- `cleanupToolResultSession()` 只逐个删除目标 session 的 direct regular files，遇到
+  symlink/子目录/越界 fail closed；当前没有正式 session delete consumer。
 
 ### 12.2 File-backed pager
 
-现有 text pager 只接收完整 `content` 字符串。OUT-3 增加 source union：
+OUT-3 为现有 inline pager 增加 `LazyTextPagerSource`；生产入口为
+`createToolResultFilePagerSource({ cwd, sessionId, reference })`：
 
 ```ts
 type TextPagerSource =
   | { kind: 'inline'; content: string }
-  | { kind: 'session-file'; path: string; bytes: number }
+  | { kind: 'lazy'; loadPage(request): Promise<LazyTextPagerLoadResult> }
 ```
 
 file source 必须：
@@ -579,7 +590,8 @@ file source 必须：
 - 按页或按块读取；
 - 对行边界与 UTF-8 多字节安全；
 - 不因打开 100MB 文件一次性分配 100MB 字符串；
-- 文件缺失、权限失败、校验越界时在 pager 内显示可行动错误；
+- 文件缺失、权限失败、bytes mismatch、session mismatch 或校验越界时在 pager 内显示
+  明确错误，并保留 bounded preview 降级路径；
 - close/interrupt 后释放 handle/cache 并恢复 Composer focus。
 
 ---
@@ -588,9 +600,10 @@ file source 必须：
 
 ### 13.1 Session side-channel
 
-OUT-3 增加可选 transcript entry，按 call id 保存 presentation metadata 与受控 ref。
-它不进入 provider messages。resume 优先使用 side-channel；旧 session 则从 tool message
-重建摘要，无法证明全文 ref 时不显示“查看全文”。
+OUT-3 已增加可选 `tool_presentation` transcript entry，按 call id last-wins 保存
+presentation metadata 与受控 ref。指纹去重避免 dual-write 重复；compact rewrite
+保留最后投影。它不进入 provider messages 或 snapshot schema。resume 优先使用
+side-channel；旧 session 仍走 bounded compatibility，无法证明全文 ref 时不显示“全文”。
 
 不得从任意 tool output 文本中正则提取路径作为受信引用。
 
@@ -671,11 +684,20 @@ current-config-first、matching snapshot fallback、热切失败回滚及 prompt
   OUT-2 专项、typecheck、完整 `npm test`、dist/pack/install、预算与 Electron live
   smoke 全部通过。
 
-### OUT-3 · file-backed pager 与 resume
+### OUT-3 · file-backed pager 与 resume ✅ `595b172`
 
-- 复用 OUT-1 已落地的 session-scoped spill。
-- file pager source。
-- transcript side-channel、旧 session fallback、session cleanup。
+- core store 统一 safe segment/hash、bounded UTF-8 chunk read 与 no-follow
+  read/write；path escape、session mismatch、bytes mismatch、invalid UTF-8、symlink
+  均 fail closed。
+- `/tools` 对有效 `fullResult` 使用 lazy file pager，覆盖 CJK/emoji/cell width、
+  超长单行、跨 chunk ANSI/OSC、resize/navigation generation 与 EOF 前未知总页数；
+  missing/corrupt 时显示错误并保留 bounded preview。
+- `tool_presentation` transcript side-channel 不进入 provider messages/snapshot，
+  按 call id last-wins、指纹去重、compact rewrite 保留并在 resume 投影回 session。
+- 已交付只清理目标 session direct regular files 的安全 primitive；正式 session
+  deletion consumer 尚不存在，因此不宣称删除会话会自动清理 spill。
+- OUT-3 专项、typecheck、完整 `npm test`、dist/pack/install、预算与 Electron live
+  smoke 全部通过。
 
 ### OUT-4 · SGR mouse
 

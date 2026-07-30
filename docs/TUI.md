@@ -12,7 +12,8 @@
 > OI-16 已限制 text pager 的物理高度；OI-17 已把 REPL pager 并入 Composer 邻接
 > 根布局，并保留其它交互为 modal overlay；OUT-1 `78ad65a` 已提供
 > `ToolPresentation`，OUT-2 `ab8a634` 已完成工具结果默认折叠、`Ctrl+O` 与
-> retained-only `/tools` bounded preview pager；
+> retained-only `/tools` bounded preview pager；OUT-3 `595b172` 已完成受控 spill
+> 的按需全文 pager 与 resume side-channel；
 > OI-H3 真人 Windows Terminal 走查继续单列。
 > **框架选择：** OI-14A 已选定精确版本的 Pi TUI direct bundle，不再继续扩展自研
 > `TerminalSurface + contentPrefixer + tiny Markdown`。分切片复用 renderer/Markdown/
@@ -64,9 +65,11 @@
 |------|------|
 | `packages/shared/src/cliTuiViewState.ts` | **OI-14B**：有序 live blocks、稳定 id、SessionEvent/resume 投影、composer/overlay/elapsed 纯状态真源 |
 | `packages/shared/src/cliToolDisplay.ts` | **OUT-2**：默认 display state、summary/preview 切换与有界 compatibility projection 纯 helper |
+| `packages/core/src/toolResultStore.ts` | **OUT-3**：session-bound spill 路径、no-follow 读写、bounded UTF-8 chunk read 与安全 cleanup primitive |
 | `packages/shared/src/runtimePager.ts` | **OI-14F–H**：pager key/state/result 纯 reducer，由 retained OverlayHost 消费 |
 | `tui/boloTerminalAdapter.ts` | **OI-14C–H**：dynamic TTY 唯一原始 writer 与 stdin owner；resize/render epoch/scrollback、Pi `StdinBuffer`、raw/mode-2004 与异常 acquisition/cleanup |
-| `tui/retainedTui.ts` | **OI-14C–H / OI-17**：稳定 Pi root/controller、theme/viewport/welcome、view-state、transcript/activity/composer/footer、内嵌 pager/modal 双视图根布局、精确 stream fallback 与 final flush |
+| `tui/retainedTui.ts` | **OI-14C–H / OI-17 / OUT-3**：稳定 Pi root/controller、theme/viewport/welcome、view-state、transcript/activity/composer/footer、内嵌 pager/modal/lazy file pager 根布局、精确 stream fallback 与 final flush |
+| `tui/fileTextPager.ts` | **OUT-3**：有效 `fullResult` 的惰性视觉分页、cell-width wrap、流式 ANSI/OSC 过滤与 unknown-page-count |
 | `tui/retainedTranscript.ts` | **OI-14D / OUT-2**：按 stable block id 缓存 User/Assistant/Thought/Tool/Search/Error/Warning/Summary 组件和 renderer-local 工具 display state；Pi Markdown、整宽用户块、物理 gutter 与父级 section gap |
 | `tui/retainedComposer.ts` | **OI-14E**：稳定 Bolo Composer/Footer；复用输入 reducer、slash/hint/history，补 undo、Pi keys 与 `CURSOR_MARKER` |
 | `tui/retainedActivity.ts` | **OI-14E**：把既有分段 activity 的当前帧投影为 retained child，不直接写 stdout |
@@ -243,8 +246,11 @@ segment elapsed 决定，不再依赖是否展示过 reasoning 文本；消费�
   默认 summary，短结果/error 使用 bounded preview，running 使用有界 tail。单块完成态
   最多 24 行、running 最多 12 行，不能把任意大 output 挂入 component tree。
 - `Ctrl+O` 全局切换 summary/preview；retained-only `/tools` 以最新工具优先打开
-  picker 和最多 4,000 字符的 embedded preview pager。当前不读取 `fullResult.path`；
-  file-backed 全文、resume side-channel 与 spill cleanup 属于 OUT-3。
+  picker。有效 `fullResult` 由 core 校验后按 UTF-8 chunk 惰性分页全文；无有效 ref 或
+  missing/corrupt 时显示明确错误并保留 bounded preview。关闭后恢复 Composer。
+- `tool_presentation` transcript side-channel 不进入 provider messages/snapshot，
+  compact rewrite 保留并支持 resume；cleanup primitive 已有，但尚无正式 session
+  delete consumer。
 - 当前已实现会话输入框内的 slash completion；尚无 PowerShell/Bash 外壳级 shell
   completion、鼠标输入或跨进程持久命令历史，它们不是 OI-10 的完成条件。
 
@@ -527,6 +533,14 @@ summary、全局 preview、新工具继承、视觉 hard cap、stable id、`Ctrl
 优先级、`/tools` picker→pager、spill path 不读取以及 Composer draft/cursor/focus
 恢复；工具展示专项、既有 retained/overlay/composer/slash/session 回归、typecheck、
 完整 `npm test`、dist/pack/install、预算与 Electron launch 均已通过。
+
+OUT-3 新增的 `test:tool-output-file-pager` 覆盖 bounded UTF-8 chunk read、
+CJK/emoji/cell-width、超长单行、跨 chunk ANSI/OSC、missing/corrupt/bytes mismatch、
+path escape/session mismatch/symlink、resize/navigation 迟到结果、transcript
+last-wins/去重/rewrite、resume projection 与 sibling cleanup。提交点完整门禁实测：
+bundle 1,834,618 bytes、较基线 +449,553 bytes、cold `+60.4ms`、CPU `469.0ms`、
+render heap `+21.1MB`、cleanup retained `+1.5MB`；dist/pack/install、Desktop bundle
+与 Electron launch 全绿。真人 Windows Terminal 字体、颜色、动画与鼠标手感仍未验。
 
 **仍需真人验收：** Windows Terminal 中的字体观感、实际光标位置、窗口 resize、
 鼠标/剪贴板真实多行粘贴、Ctrl+J/历史/删除组合键、权限切换和长回答滚动。自动测试

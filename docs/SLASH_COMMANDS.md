@@ -74,7 +74,8 @@
 | `/deny [ToolName \| path:GLOB \| bash:PATTERN \| prefix:PFX]` | 会话 **always-deny**（硬规则，赢过 bypass/allow）；无参列出 |
 
 REPL 额外：`/exit` `/quit` 由 CLI 处理（退出循环，不进总线）；`/tools` 只在 retained
-TTY 中打开最新工具优先的 picker 和 bounded preview pager，不写 session messages，
+TTY 中打开最新工具优先的 picker；有效 ref 按需打开全文 pager，否则回退 bounded
+preview；打开/翻页不新增 session 或 provider messages，
 plain/non-TTY 保持原有 core unknown-command 行为。`/exit` 与 `/tools` 在裸 `/` 可见，
 hidden `/quit` 只在明确输入 `/q…` 时出现。
 
@@ -106,8 +107,9 @@ hidden `/quit` 只在明确输入 `/q…` 时出现。
 
 - resume 与新会话的 readline 均经 `runOnePrompt` → `submitUserInput`。
 - retained TTY 中 `Ctrl+O` 在 overlay 未激活时全局切换工具 summary/preview；
-  `/tools` picker 的 Enter 打开最多 4,000 字符的 embedded preview pager，Esc 关闭后
-  恢复 Composer draft/cursor/focus。OUT-3 前不读取 `fullResult.path`。
+  `/tools` picker 的 Enter 对有效 `fullResult` 打开按需全文 pager，无有效 ref 或
+  missing/corrupt 时明确回退 bounded preview；Esc 关闭后恢复 Composer
+  draft/cursor/focus。resume 通过 `tool_presentation` side-channel 恢复有效 ref。
 - Ctrl-C 优先向 coordinator active turn 提交 durable interrupt；REPL 在询问新输入前持久化 queue promotion，再透传原 `turnId/querySource`。
 - 持久化写失败时 queue/steer fail-closed；已触发的 interrupt 会明确提示 persistence warning。重启不会自动重放 pending/ready control。
 - `agents.overflow: "queue"` 是真实 durable FIFO：queued 先写 admitted，取得 slot 时写 running；`/bg cancel` 会先移除 executable closure，再尝试写 result→aborted。
