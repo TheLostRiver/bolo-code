@@ -186,9 +186,9 @@ John Gruber Markdown BSD 条款均已随包声明；许可真源见
 
 | 指标 | 实测 | 预算（超出即需解释） |
 |---|---|---|
-| CLI 产物体积 | 1,781,852 bytes / 202 模块（CTX-3 `d966d4b`；较 1,385,065B 基线 +396,787B） | 基线 +1,500,000 bytes |
-| CLI `--help` cold-start | CTX-3 文档批复测：empty Node 101.0ms · Bolo 153.7ms · 增量 52.6ms | 增量 ≤ 100ms |
-| retained 500 blocks / 10,000 行 | CTX-3 文档批复测：CPU 594.0ms · render heap +21.0MB · cleanup retained +1.5MB | CPU ≤ 3s · heap ≤ 128MB · cleanup ≤ 64MB |
+| CLI 产物体积 | 1,790,551 bytes / 202 模块（OUT-1 `78ad65a`；较 1,385,065B 基线 +405,486B） | 基线 +1,500,000 bytes |
+| CLI `--help` cold-start | OUT-1 完整门禁：empty Node 111.9ms · Bolo 193.4ms · 增量 81.5ms | 增量 ≤ 100ms |
+| retained 500 blocks / 10,000 行 | OUT-1 完整门禁：CPU 703.0ms · render heap +21.1MB · cleanup retained +1.5MB | CPU ≤ 3s · heap ≤ 128MB · cleanup ≤ 64MB |
 | 桌面主进程产物 | ~1.17 MB | < 3 MB |
 | compact 管道（20 轮 / 100 消息） | 2–3 ms · heap +0.1 MB | < 8 s · < 320 MB（灾难阈） |
 | compact 压缩比 | ×12.9（20 轮）· ×51.9（80 轮） | ≥ ×3 |
@@ -210,6 +210,7 @@ compact 回归由 `test-compact-benchmark.ts` 守；CLI 体积与产物契约由
 | 密钥过界 | 不回传 renderer/transcript；按**值**判断，`detail`/`message` 里回显的 key 同样抹除 | `test-desktop-secret-boundary.ts` |
 | HTML 注入 | renderer 全程 `textContent`，模型输出绝不当 HTML | `test-timeline-cards.ts` |
 | 工具越权 | MCP 工具可按 `allowTools`/`excludeTools` 限权；启用搜索不搭售远程抓取 | `test-mcp-tool-filter.ts` |
+| 工具全文引用 | spill 按 workspace/session 隔离；清洗后的 session/call id 附短哈希且路径不得逃出 store | `test-tool-presentation.ts` |
 | 搜索 endpoint | SearXNG 只读显式配置；公开 HTTP、凭据/query/fragment 与畸形继承配置 fail closed；上游诊断 tuple 受清洗/去重/预算约束 | `test-searxng-search.ts` |
 | 无人时的权限 | headless 下 `askPermission` 默认 `deny`（fail-closed） | `test-session-permission-boundary.ts` |
 | 数据销毁 | 读不出旧文件时**中止**而非覆盖（写盘与迁移两条路径各自守） | `test-transcript-rewrite-preserve.ts` · `test-session-migration.ts` |
@@ -228,6 +229,7 @@ compact 回归由 `test-compact-benchmark.ts` 守；CLI 体积与产物契约由
 | **`AskUserQuestion` 的真 TTY 交互** | ❌ 未验证 | 控件逻辑测试注入 `readKey`，覆盖不到真实 raw-mode 与 REPL 抢 stdin |
 | **CLI TUI retained renderer** | ✅ 唯一 dynamic renderer · ⚠️ 真人观感未验证 | OI-14D–H 已让 retained transcript/Markdown、常驻 Composer/activity/footer 与单一交互状态机在 24–220 列、500 blocks/10,000 行、chunk/resize/paste/new/resume、ANSI/OSC 8、CJK/emoji、list/table/code、permission/question/picker/diff/pager 下转绿；final flush、故障注入、Abort/SIGINT/raw Ctrl+C、进程退出 cleanup、性能预算、静态 owner 与 legacy 物理缺失均有门禁。`e6ec6cb` 串行化 durable SIGINT handler 与下一轮 Composer 输入；`6b7ff99` 让 turn 期间持续持有 raw stdin，以全局 `Esc` 主键 / `Ctrl+C` 兼容键中断，并隐藏主动 abort 的内部 id/warning。OI-16 `5b22c15` 限制 text pager 为最多 18 行正文；OI-17 `cda22fd` 又以 48/80 行真实 composite 证明 REPL pager 紧邻 Composer、关闭后原草稿恢复，同时 modal 和 standalone runtime pager不变。双 TTY/raw-mode 只走 retained；plain/`--print` 与能力不足回落独立保留。Windows Terminal 的字体、颜色、动画和真人按键/鼠标手感仍未肉眼验证 |
 | **CLI slash 命令结果生命周期** | ✅ OI-15A–F + OI-16/OI-17 已关闭 | OI-15A `d681734` 已补 display policy，OI-15B `d6bd087` 已补单 panel/toast 与完整清理 primitive，OI-15C `26f796f` 已迁移只读查询到 panel/text pager；OI-15D `21ee1e2` / `87054df` 已迁移 Skills/Plugins catalog 到 stable-key OverlayHost，覆盖执行前 loading、结构化结果、`key/generation/session/cwd` stale guard、20× replace、40 项目录 18→10 行 resize、分页键与 Composer 恢复。OI-15E `1d49d53` 已迁移 retained toast/history：20×短动作单槽、Usage error toast、插件 install/uninstall durable error、reload warning toast。OI-15F `d1e26bb` 已统一 Provider/Effort/Diff action-picker/diff payload，禁止 normal slash 写 compatibility，并保留 visual-only/plain fallback；OI-16 `5b22c15` 关闭 pager 高度膨胀，OI-17 `cda22fd` 关闭底部锚定空洞。完整测试、dist/install、预算、Electron smoke 与零新增依赖均已验证 |
+| **长工具输出折叠/全文查看** | ⚠️ OUT-1 数据契约完成，OUT-2/3 待实现 | `78ad65a` 已提供 bounded `ToolPresentation`、原始/保留规模、session-scoped spill ref 与 live event/view-state；模型 tool message 保持原截断语义。但 retained renderer 尚未默认折叠普通长工具结果，也不能从结构化 ref 打开 file-backed 全文 pager；用户仍可能看到长结果占满 transcript |
 | **未知/自定义模型 limits** | ⚠️ 未配置时使用显式 fallback | CTX-1..3 已让 provider 默认、exact model、catalog、legacy/matching snapshot 按字段解析，并让 CLI/Desktop 显示 ctx/out 与来源。未知模型仍可运行；若未配置真实 limits，会显示 `WARNING`，context/max output 分别回退 128k/8k。兼容网关用户应在 provider 或 `models.<id>` 写明实际能力，不能把 fallback 当成供应商承诺 |
 | **`mcp-external` 搜索** | ⚠️ 仅验过 Exa | Exa 免密层已真连；其它 MCP 搜索服务仍取决于外部端点 |
 | **SearXNG 直连** | ✅ 实例/诊断/可选 setup 已验证 | `2026.7.26-b060c780d` Docker 实例：JSON API、生产 status/session/`WebSearch`、真实 URL 与源码/dist doctor 全链通过；OI-07A 已区分正常空结果、全故障和部分成功，OI-07B doctor 检查版本/能力并要求非空 smoke，OI-07C 的源码/dist managed setup/status/logs/stop 已实跑。Docker 仍须用户预装且不是默认依赖；默认引擎仍可能 429/CAPTCHA/timeout |

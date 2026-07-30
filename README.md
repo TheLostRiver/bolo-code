@@ -18,7 +18,7 @@
 | **接手开发的 Agent / 同事** | **[docs/AGENT_HANDOFF.md](docs/AGENT_HANDOFF.md)**（架构 · 进度 · 改码规矩） |
 | **查总进度与各轨** | **[docs/ROADMAP.md](docs/ROADMAP.md)**（进度真源） |
 | **查 CLI TUI 重构** | **[docs/CLI_TUI_REFACTOR_PLAN.md](docs/CLI_TUI_REFACTOR_PLAN.md)**（OI-14 retained renderer · OI-15 slash lifecycle · OI-16 pager 高度 · OI-17 邻接布局）· [选型证据](docs/CLI_TUI_RENDERER_DECISION.md) |
-| **查长工具输出 / 模型上下文方案** | **[docs/TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md](docs/TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md)**（CTX-1..3 已完成 · OUT-1 下一刀） |
+| **查长工具输出 / 模型上下文方案** | **[docs/TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md](docs/TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md)**（CTX-1..3、OUT-1 已完成 · OUT-2 下一刀） |
 | **查分层边界** | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 
 ---
@@ -30,7 +30,7 @@
 | Headless 核心 | ~82–90% | queryLoop · 权限 · tools · STE；partial stream fail-closed |
 | **Agent 能力面（工具集）** | **~82–88%** | 15 个常驻/可选工具 + **Web search**（hosted、MCP、SearXNG 均已活体验证） |
 | 会话 / CLI | ~92–97% | **零步骤首次启动** · 用户级 workspace JSONL · 旧项目会话兼容 · durable runtime · query/action CLI · TTY pager · pipe/JSON automation |
-| **CLI TUI** | **~85–92%** | OI-14 retained 主体、OI-15A–F command lifecycle、OI-16 pager 高度与 OI-17 REPL 邻接布局已完成；OUT-1..5 长工具输出折叠/全文查看已准入、尚未实现 |
+| **CLI TUI** | **~85–92%** | OI-14 retained 主体、OI-15A–F command lifecycle、OI-16 pager 高度与 OI-17 REPL 邻接布局已完成；OUT-1 Tool presentation 契约已落地，OUT-2..5 折叠/全文查看待实现 |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
 | Subagent | ~89–95% | `config.agents` + `agents/*.md` · durable task/result · overflow FIFO/cancel · safe delivery · worktree 保全 |
 | 文件 Diff 日用 | ~95%+ | D0–D7 · U0–U4 |
@@ -54,11 +54,11 @@ OverlayHost/交互面板、OI-14G 默认切换/可靠性/性能、OI-14H legacy 
 OI-15A slash display policy、OI-15B retained single-slot command surface、OI-15C
 read-only panel/pager migration、OI-15D Skills/Plugins stable-key overlay、OI-15E
   toast/error policy、OI-15F compatibility cleanup、OI-16 Doctor pager height、
-  OI-17 REPL pager adjacency**。OI-09–OI-13 的
+  OI-17 REPL pager adjacency、OUT-1 ToolPresentation 契约**。OI-09–OI-13 的
 slash/context/paste/Thought/权限/welcome 局部能力仍然有效，但不再作为整个 TUI
 renderer 稳定的证据。
 
-**当前状态：CTX-1..3 ✅ → OUT-1..5；下一刀是 OUT-1。**
+**当前状态：CTX-1..3、OUT-1 ✅ → OUT-2..5；下一刀是 OUT-2。**
 用户实测确认长 Read/工具结果会占满 transcript。CTX-1 `27a2506` 已让 provider/model
 limits 能被解析、按 exact model 深合并、字段级告警并归一为带 source 的
 `ResolvedModelMetadata`；CTX-2 `6ea3a4f` 已让 workspace/session/snapshot、
@@ -66,6 +66,10 @@ create/resume/hot-switch、dynamic compact、skills、dashboard 与 provider out
 baseline 消费同一 metadata；CTX-3 `d966d4b` 已让 `/context`、`/doctor`、`/model`、
 `/provider list/use`、CLI dashboard 与 Desktop header/settings 显示 context/output
 有效值及逐字段来源，unknown/fallback/invalid 状态会显式警告。
+OUT-1 `78ad65a` 已在 shared/core 建立 `ToolPresentation`、4,000 字符有界 preview、
+原始/保留规模和结构化全文引用；截断全文按 session 隔离落盘，live tool event 与 CLI
+view-state 透传同一 presentation，模型 tool message 仍保持原截断语义。retained
+renderer 尚未消费这些元数据做默认折叠或全文 pager，这些交互从 OUT-2 开始。
 正式契约见
 [docs/TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md](docs/TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md)。
 OI-15A–F、OI-16 与 OI-17 自动实现仍保持关闭。OI-15A 已在 core 建立

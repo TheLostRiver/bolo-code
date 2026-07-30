@@ -56,14 +56,14 @@ skills   mcp-host  plugins   tools    providers
 
 | 包 | 职责 | 禁止 |
 |----|------|------|
-| `packages/core` | 会话状态机、query 循环、hook 调度、子代理编排、compaction | 直接操作 DOM / Electron API |
+| `packages/core` | 会话状态机、query 循环、hook 调度、子代理编排、compaction；执行边界生成 `ToolPresentation` 与 session-scoped spill ref | 直接操作 DOM / Electron API |
 | `packages/tools` | 内置工具：Bash、读改写文件、apply_patch、搜索等 | 自己决定 allow/deny（必须走 PermissionGate） |
 | `packages/hooks` | Hook 类型、matcher、执行器、退出码语义 | 业务 tool 实现 |
 | `packages/skills` | Skill 发现、加载、注入 prompt/tools | 网络协议 |
 | `packages/mcp` | MCP client、tools/resources 映射 | UI |
 | `packages/plugins` | 插件清单、激活、贡献点合并 | 绕过 hook/permission |
 | `packages/providers` | 多模型 API 适配（OpenAI / Anthropic / 兼容端点） | 会话策略 |
-| `packages/shared` | 事件、消息、配置 schema、错误类型；OI-14B `CliTuiViewState` 纯 reducer 与 SessionEvent/resume 投影 | 副作用、terminal/renderer I/O |
+| `packages/shared` | 事件、消息、配置 schema、错误类型；OI-14B `CliTuiViewState` 纯 reducer 与 SessionEvent/resume 投影；OUT-1 `ToolPresentation` 分类/validator/有界 preview 契约 | 副作用、terminal/renderer I/O |
 | `packages/cli` | CLI 入口 + TTY controller/adapter（输入、activity、picker、pager）；复用 core 事件、runtime view 与 shared live view-state | 复制 core runtime / 在 renderer 重建第二状态机 |
 | `apps/desktop` | Electron GUI | 重业务逻辑（只编排 core） |
 
@@ -79,6 +79,8 @@ SessionStart(source)
         PreToolUse(tool)
         → PermissionRequest(tool)   // 若需审批
         → execute tool
+        → 超预算全文写 session-scoped spill，模型消息仍走原截断语义
+        → ToolPresentation(summary/preview/size/ref)
         → PostToolUse(tool)
   → 可选 PreCompact / PostCompact
   → Stop

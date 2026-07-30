@@ -1,7 +1,7 @@
 # 长工具输出折叠与模型上下文元数据设计
 
-> **状态：** CTX-1 `27a2506`、CTX-2 `6ea3a4f`、CTX-3 `d966d4b` 已完成；OUT-1 是下一刀。
-> **设计基线：** `dc20807`；当前实施基线：`d966d4b`。
+> **状态：** CTX-1 `27a2506`、CTX-2 `6ea3a4f`、CTX-3 `d966d4b`、OUT-1 `78ad65a` 已完成；OUT-2 是下一刀。
+> **设计基线：** `dc20807`；当前实施基线：`78ad65a`。
 > **路线标识：** `CTX-1..3`、`OUT-1..5`。
 > **进度真源：** [ROADMAP.md](./ROADMAP.md) §0、§13.11。
 > **相关实现：** [COMPACTION.md](./COMPACTION.md) ·
@@ -25,10 +25,11 @@
 | CTX-1 | ✅ `27a2506` | config/schema/validator/resolver、深合并、warning、exact catalog 与 source 已落地 |
 | CTX-2 | ✅ `6ea3a4f` | create/resume/hot-switch、dynamic compact、skills/dashboard/provider request 已统一接线 |
 | CTX-3 | ✅ `d966d4b` | `/provider`、`/model`、`/context`、`/doctor`、CLI dashboard、Desktop 与最终用户文档 |
-| OUT-1..5 | **▶ NEXT：OUT-1** | 通用 Tool presentation、折叠、全文 pager、鼠标与只读调用聚合 |
+| OUT-1 | ✅ `78ad65a` | shared/core Tool presentation、原始/保留规模、bounded preview、session-scoped spill ref、live event/view-state |
+| OUT-2..5 | **▶ NEXT：OUT-2** | 默认折叠与键盘路径、全文 pager/resume、鼠标与只读调用聚合 |
 
-模型元数据轨已统一解析、消费和展示。OUT 完成前，长工具结果仍可能占满 retained
-transcript。
+模型元数据轨已统一解析、消费和展示，OUT-1 也已提供 renderer-neutral 数据真源。
+OUT-2 完成前，retained renderer 仍按旧方式展示工具结果，长结果仍可能占满 transcript。
 
 ---
 
@@ -64,30 +65,37 @@ transcript。
 ```text
 Read/Bash/MCP tool
   → result.output（Read 会先把整个 UTF-8 文件读入内存）
+  → core 保留 originalContent
   → truncateToolResultOutput()
-  → 超预算时写 sessions/tool-results/<callId>.txt
-  → tool_end.output（截断后的头尾 + full result 文本标记）
+  → 超预算时写 sessions/workspaces/<hash>/tool-results/<session>/<call>.txt
+  → createToolPresentation(originalContent, retainedContent, spill ref)
+  → tool_end.output + tool_end.presentation
   → ChatMessage(role=tool)
-  → CliTuiViewState.CliTuiToolBlock.output
+  → CliTuiViewState.CliTuiToolBlock.output + presentation
   → retainedTranscript.formatToolBlock()
 ```
 
 已存在的能力：
 
 - core 有 per-tool budget、中段截断和完整结果 spill。
+- shared 有工具分类、单行 summary、4,000-char preview、原始/保留规模与 runtime
+  validator；core 所有终态都投影同一 `ToolPresentation`。
+- spill 已按 workspace/session 隔离，session/call id 采用清洗段与短哈希防碰撞；
+  reference 保存绝对路径和 UTF-8 bytes。
 - file diff 与 TodoWrite 有专用 `cellCollapsed/cellExpanded`。
 - CLI 有 embedded text pager、唯一 OverlayHost 和 Composer focus 恢复。
 - Desktop timeline 有 `collapsed/truncated/status` 展示语义。
 
-缺失的能力：
+仍缺失的能力：
 
-- 普通 Tool block 没有 semantic summary、overflow、原始规模、全文引用。
+- retained renderer 尚未按 presentation 的 summary/preview/overflow 选择默认展示。
+- file-backed pager、resume side-channel 与 session spill cleanup 尚未接入。
 - `cellCollapsed/cellExpanded` 只覆盖 diff/Todo，不是通用工具输出协议。
 - `BOLO_DIFF_CELL/BOLO_DIFF_VERBOSE` 是进程级静态环境开关，不是单块交互状态。
 - retained transcript 不拥有输入焦点或鼠标 hit region。
 - 单个超长 block 不会被历史 tail-window 机制解决。
 
-当前 `dc20807` 的普通工具结果只追加渲染一次；“重复 push 两次”不属于现存缺陷。
+当前 `78ad65a` 的普通工具结果只追加渲染一次；“重复 push 两次”不属于现存缺陷。
 
 ### 2.2 上下文窗口链路
 
@@ -124,8 +132,8 @@ CTX-2 已关闭的 runtime 缺口：
   rewrite 把最新 metadata 折回首行 meta。
 
 CTX-1 建立可复用的配置与解析真源，CTX-2 完成作用域和生命周期接线，CTX-3 已让
-slash/doctor/Desktop 明确展示数值与来源并发布最终用户配置口径。当前剩余缺口属于
-OUT-1..5 的长工具输出 presentation 与交互。
+slash/doctor/Desktop 明确展示数值与来源并发布最终用户配置口径。OUT-1 已建立长工具
+输出 presentation 真源；当前剩余缺口属于 OUT-2..5 的 renderer 交互、全文读取与聚合。
 
 ---
 
@@ -632,13 +640,19 @@ current-config-first、matching snapshot fallback、热切失败回滚及 prompt
   `metadataVisible=true` 且未知模型为 `metadataStatus=warning`。
 - 完整 `npm test`、dist/pack/install、Desktop bundle/launch 与发布预算均已通过。
 
-### OUT-1 · ToolPresentation 契约 ▶ NEXT
+### OUT-1 · ToolPresentation 契约 ✅ `78ad65a`
 
-- shared 类型/分类 policy。
-- core 原始规模、truncated、spill ref、bounded preview。
-- CLI reducer 不再长期保存第二份大正文。
+- shared 类型、分类 policy、runtime validator、单行 summary 与 4,000-char preview。
+- core 在截断前保留原始正文，生成原始/保留 chars/lines、truncated/overflow 与结构化
+  spill ref；模型 tool message 的中段截断和 `[full result: ...]` 兼容文本不变。
+- 新 spill 按 workspace/session 隔离，session/call id 清洗后附短哈希；同 call id
+  跨 session 和同 session 清洗碰撞均有门禁。
+- `runToolUse()` 返回值、`tool_end` 与 shared CLI view-state 透传同一 presentation；
+  旧 session 缺少该字段时继续按旧消息恢复。
+- OUT-1 专项、typecheck、完整 `npm test`、dist/pack/install、预算与 Electron live
+  smoke 全部通过。
 
-### OUT-2 · 默认折叠与键盘路径
+### OUT-2 · 默认折叠与键盘路径 ▶ NEXT
 
 - renderer-local stable block state。
 - 分工具摘要、running tail、error cap。
@@ -646,7 +660,7 @@ current-config-first、matching snapshot fallback、热切失败回滚及 prompt
 
 ### OUT-3 · file-backed pager 与 resume
 
-- session-scoped spill。
+- 复用 OUT-1 已落地的 session-scoped spill。
 - file pager source。
 - transcript side-channel、旧 session fallback、session cleanup。
 
