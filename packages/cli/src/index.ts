@@ -86,6 +86,7 @@ export {
 export {
   createRetainedTuiController,
   type CliTuiController,
+  type RetainedToolHistoryResult,
   type RetainedWelcomeOptions,
 } from './tui/retainedTui.ts'
 export {

@@ -17,6 +17,13 @@ import type {
   CliTuiViewState,
   CliTuiWarningBlock,
 } from '../../../shared/src/index.ts'
+import {
+  createCliToolDisplayState,
+  projectCliToolDisplay,
+  reduceCliToolDisplayState,
+  type CliToolDisplayMode,
+  type CliToolDisplayState,
+} from '../../../shared/src/index.ts'
 import { resolveTuiContentGutter } from './contentLayout.ts'
 import { stripTerminalAnsi } from './terminalText.ts'
 import { resolveTuiTheme } from './theme.ts'
@@ -25,6 +32,10 @@ const RESET = '\x1b[0m'
 const TAIL_WINDOW_BLOCK_THRESHOLD = 100
 const TAIL_WINDOW_MIN_LINES = 80
 const TAIL_WINDOW_VIEWPORT_MULTIPLIER = 3
+const TOOL_INPUT_MAX_CHARS = 240
+const TOOL_INPUT_MAX_LINES = 3
+const TOOL_BLOCK_MAX_VISUAL_LINES = 24
+const RUNNING_TOOL_BLOCK_MAX_VISUAL_LINES = 12
 
 type TranscriptStyles = {
   markdown: MarkdownTheme
@@ -118,6 +129,20 @@ function stringifyToolInput(block: CliTuiToolBlock): string {
   }
 }
 
+function boundedToolInput(block: CliTuiToolBlock): string {
+  const source = stripTerminalAnsi(stringifyToolInput(block))
+    .replace(/\r\n|\r/gu, '\n')
+    .trim()
+  if (!source) return ''
+  const lines = source.split('\n')
+  const lineBounded =
+    lines.length > TOOL_INPUT_MAX_LINES
+      ? [...lines.slice(0, TOOL_INPUT_MAX_LINES - 1), '…'].join('\n')
+      : source
+  if (lineBounded.length <= TOOL_INPUT_MAX_CHARS) return lineBounded
+  return `${lineBounded.slice(0, TOOL_INPUT_MAX_CHARS - 1)}…`
+}
+
 function shouldExpandToolCell(env: NodeJS.ProcessEnv): boolean {
   const value = (env.BOLO_DIFF_CELL ?? '').trim().toLowerCase()
   if (value === '0' || value === 'fold' || value === 'collapsed') return false
@@ -133,30 +158,14 @@ function shouldExpandToolCell(env: NodeJS.ProcessEnv): boolean {
   return verbose === '1' || verbose === 'true' || verbose === 'yes'
 }
 
-function preferredToolResult(
-  block: CliTuiToolBlock,
-  env: NodeJS.ProcessEnv,
-): string {
-  const expand = shouldExpandToolCell(env)
-  if (expand && block.cellExpanded?.trim()) return block.cellExpanded.trim()
-  if (!expand && block.cellCollapsed?.trim()) return block.cellCollapsed.trim()
-  if (block.summaryLine?.trim()) {
-    if (expand && block.ansiUnified?.trim()) {
-      return `${block.summaryLine.trim()}\n${block.ansiUnified.trim()}`
-    }
-    return block.summaryLine.trim()
-  }
-  if (block.output?.trim()) return block.output.trim()
-  return ''
-}
-
 function formatToolBlock(
   block: CliTuiToolBlock,
   styles: TranscriptStyles,
-  env: NodeJS.ProcessEnv,
+  displayState: CliToolDisplayState,
 ): string {
   const running = block.status === 'running'
   const failed = block.status === 'error' || block.ok === false
+  const interrupted = block.status === 'interrupted'
   const path = block.path?.trim() ? ` · ${block.path.trim()}` : ''
   const counts =
     block.added !== undefined || block.removed !== undefined
@@ -164,22 +173,27 @@ function formatToolBlock(
       : ''
   const title = running
     ? `→ ${block.name}`
-    : `${failed ? '✗' : '✓'} ${block.name}${path}${counts}`
+    : `${failed ? '✗' : interrupted ? '■' : '✓'} ${block.name}${path}${counts}`
   const lines = [
-    failed ? styles.errorText(title) : styles.toolTitle(title),
+    failed
+      ? styles.errorText(title)
+      : interrupted
+        ? styles.mutedText(title)
+        : styles.toolTitle(title),
   ]
-  const input = stringifyToolInput(block)
+  const input = boundedToolInput(block)
   if (input) {
     lines.push(styles.mutedText(`input ${input}`))
   }
-  if (running && block.progress?.trim()) {
-    lines.push(styles.mutedText(`… ${block.progress.trim()}`))
-  }
-  if (!running) {
-    const result = preferredToolResult(block, env)
-    if (result) {
-      lines.push(styles.ansi ? result : stripTerminalAnsi(result))
-    }
+  const result = projectCliToolDisplay(block, displayState)
+  if (result.content) {
+    lines.push(
+      running
+        ? styles.mutedText(result.content)
+        : styles.ansi
+          ? result.content
+          : stripTerminalAnsi(result.content),
+    )
   }
   return lines.join('\n')
 }
@@ -218,18 +232,22 @@ class RetainedTranscriptBlock implements Component {
   constructor(
     block: CliTuiBlock,
     private readonly styles: TranscriptStyles,
-    private readonly env: NodeJS.ProcessEnv,
+    private toolDisplayState?: CliToolDisplayState,
   ) {
     this.id = block.id
     this.block = block
     this.build()
   }
 
-  setBlock(block: CliTuiBlock): void {
+  setBlock(
+    block: CliTuiBlock,
+    toolDisplayState?: CliToolDisplayState,
+  ): void {
     if (block.id !== this.id || block.kind !== this.block.kind) {
       throw new Error(`retained transcript block identity changed: ${this.id}`)
     }
     this.block = block
+    this.toolDisplayState = toolDisplayState
     switch (block.kind) {
       case 'user':
       case 'assistant':
@@ -242,7 +260,11 @@ class RetainedTranscriptBlock implements Component {
         break
       case 'tool':
         this.auxiliaryText?.setText(
-          formatToolBlock(block, this.styles, this.env),
+          formatToolBlock(
+            block,
+            this.styles,
+            toolDisplayState ?? createCliToolDisplayState(block),
+          ),
         )
         break
       case 'search':
@@ -262,7 +284,21 @@ class RetainedTranscriptBlock implements Component {
   }
 
   render(width: number): string[] {
-    return this.content.render(Math.max(1, Math.floor(width)))
+    const lines = this.content.render(Math.max(1, Math.floor(width)))
+    if (this.block.kind !== 'tool') return lines
+    const maxLines =
+      this.block.status === 'running'
+        ? RUNNING_TOOL_BLOCK_MAX_VISUAL_LINES
+        : TOOL_BLOCK_MAX_VISUAL_LINES
+    if (lines.length <= maxLines) return lines
+    return [
+      ...lines.slice(0, maxLines - 1),
+      this.styles.mutedText('…'),
+    ]
+  }
+
+  getBlock(): CliTuiBlock {
+    return this.block
   }
 
   private build(): void {
@@ -305,7 +341,12 @@ class RetainedTranscriptBlock implements Component {
       }
       case 'tool':
         this.auxiliaryText = new Text(
-          formatToolBlock(this.block, this.styles, this.env),
+          formatToolBlock(
+            this.block,
+            this.styles,
+            this.toolDisplayState ??
+              createCliToolDisplayState(this.block),
+          ),
           0,
           0,
         )
@@ -388,10 +429,30 @@ class RetainedTranscriptBlock implements Component {
   }
 }
 
+type RetainedToolDisplayEntry = {
+  state: CliToolDisplayState
+  status: CliTuiToolBlock['status']
+  overridden: boolean
+}
+
+export type RetainedToolCatalogItem = {
+  id: string
+  label: string
+}
+
+export type RetainedToolPagerContent = {
+  key: string
+  title: string
+  content: string
+}
+
 export class RetainedTranscript implements Component {
   private readonly styles: TranscriptStyles
   private readonly blockCache = new Map<string, RetainedTranscriptBlock>()
+  private readonly toolDisplayStates =
+    new Map<string, RetainedToolDisplayEntry>()
   private orderedBlocks: RetainedTranscriptBlock[] = []
+  private globalToolDisplayMode?: CliToolDisplayMode
   // Native scrollback owns the full first render. After a large history has
   // been seeded, xterm reflows it and retained redraws only the live tail.
   private lastRenderedWidth?: number
@@ -412,29 +473,106 @@ export class RetainedTranscript implements Component {
     const seen = new Set<string>()
     for (const turn of state.turns) {
       for (const block of turn.blocks) {
+        const toolDisplayState =
+          block.kind === 'tool'
+            ? this.resolveToolDisplayState(block)
+            : undefined
         let component = this.blockCache.get(block.id)
         if (!component) {
           component = new RetainedTranscriptBlock(
             block,
             this.styles,
-            this.options.env,
+            toolDisplayState,
           )
           this.blockCache.set(block.id, component)
         } else {
-          component.setBlock(block)
+          component.setBlock(block, toolDisplayState)
         }
         seen.add(block.id)
         nextBlocks.push(component)
       }
     }
     for (const id of this.blockCache.keys()) {
-      if (!seen.has(id)) this.blockCache.delete(id)
+      if (!seen.has(id)) {
+        this.blockCache.delete(id)
+        this.toolDisplayStates.delete(id)
+      }
     }
     this.orderedBlocks = nextBlocks
   }
 
   getBlockComponent(blockId: string): Component | undefined {
     return this.blockCache.get(blockId)
+  }
+
+  toggleToolDisplayMode(): CliToolDisplayMode | undefined {
+    if (this.toolDisplayStates.size === 0) return undefined
+    const mode =
+      this.globalToolDisplayMode === 'preview' ? 'summary' : 'preview'
+    this.globalToolDisplayMode = mode
+    for (const [id, entry] of this.toolDisplayStates) {
+      const state = reduceCliToolDisplayState(entry.state, {
+        type: 'set_mode',
+        mode,
+      })
+      this.toolDisplayStates.set(id, {
+        ...entry,
+        state,
+        overridden: true,
+      })
+      const component = this.blockCache.get(id)
+      const block = component?.getBlock()
+      if (block?.kind === 'tool') component?.setBlock(block, state)
+    }
+    return mode
+  }
+
+  getToolCatalogItems(): RetainedToolCatalogItem[] {
+    const items: RetainedToolCatalogItem[] = []
+    for (let index = this.orderedBlocks.length - 1; index >= 0; index -= 1) {
+      const block = this.orderedBlocks[index]!.getBlock()
+      if (block.kind !== 'tool') continue
+      const summary = projectCliToolDisplay(block, { mode: 'summary' })
+        .content
+        .replace(/\s+/gu, ' ')
+        .trim()
+        .slice(0, 180)
+      const status =
+        block.status === 'running'
+          ? 'running'
+          : block.status === 'error' || block.ok === false
+            ? 'failed'
+            : block.status
+      items.push({
+        id: block.id,
+        label: `${summary || block.name} · ${status}`,
+      })
+    }
+    return items
+  }
+
+  getToolPagerContent(
+    blockId: string,
+  ): RetainedToolPagerContent | undefined {
+    const component = this.blockCache.get(blockId)
+    const block = component?.getBlock()
+    if (block?.kind !== 'tool') return undefined
+    const preview = projectCliToolDisplay(block, { mode: 'preview' })
+    const content =
+      preview.content ||
+      projectCliToolDisplay(block, { mode: 'summary' }).content
+    if (!content) return undefined
+    return {
+      key: `tool:${block.id}`,
+      title: `${block.name} · ${
+        block.status === 'running'
+          ? 'running'
+          : block.status === 'error' || block.ok === false
+            ? 'failed'
+            : 'result'
+      }`,
+      content,
+    }
   }
 
   invalidate(): void {
@@ -533,5 +671,38 @@ export class RetainedTranscript implements Component {
       TAIL_WINDOW_MIN_LINES,
       Math.floor(rows) * TAIL_WINDOW_VIEWPORT_MULTIPLIER,
     )
+  }
+
+  private resolveToolDisplayState(
+    block: CliTuiToolBlock,
+  ): CliToolDisplayState {
+    const existing = this.toolDisplayStates.get(block.id)
+    if (existing) {
+      if (!existing.overridden && existing.status !== block.status) {
+        const state = createCliToolDisplayState(block)
+        this.toolDisplayStates.set(block.id, {
+          state,
+          status: block.status,
+          overridden: false,
+        })
+        return state
+      }
+      existing.status = block.status
+      return existing.state
+    }
+
+    const envOverride =
+      block.cellExpanded?.trim() &&
+      shouldExpandToolCell(this.options.env)
+        ? 'preview'
+        : undefined
+    const override = this.globalToolDisplayMode ?? envOverride
+    const state = createCliToolDisplayState(block, override)
+    this.toolDisplayStates.set(block.id, {
+      state,
+      status: block.status,
+      overridden: override !== undefined,
+    })
+    return state
   }
 }

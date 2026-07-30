@@ -25,6 +25,7 @@ import {
   type CliTuiSessionEvent,
   type CliTuiViewAction,
   type CliTuiViewState,
+  type CliToolDisplayMode,
   type RuntimePagerSuccess,
 } from '../../../shared/src/index.ts'
 import type { AskUserQuestionOutcome } from '../../../tools/src/index.ts'
@@ -69,6 +70,8 @@ import {
 } from './retainedOverlay.ts'
 import {
   RetainedTranscript,
+  type RetainedToolCatalogItem,
+  type RetainedToolPagerContent,
 } from './retainedTranscript.ts'
 import { resolveTuiContentGutter } from './contentLayout.ts'
 import { createTurnActivityIndicator } from './turnActivity.ts'
@@ -86,6 +89,14 @@ export type RetainedWelcomeOptions = Omit<
   'columns' | 'env'
 >
 
+export type RetainedToolHistoryResult =
+  | { ok: false; reason: 'empty' | 'cancel' }
+  | {
+      ok: true
+      blockId: string
+      pager: RuntimePagerSuccess
+    }
+
 export type CliTuiController = {
   readonly root: Component
   readonly composer: RetainedComposer
@@ -101,6 +112,10 @@ export type CliTuiController = {
   resetCommandSurface(): void
   restoreMessages(messages: readonly ChatMessage[]): void
   getState(): CliTuiViewState
+  toggleToolDisplayMode(): CliToolDisplayMode | undefined
+  runToolHistoryOverlay(options?: {
+    signal?: AbortSignal
+  }): Promise<RetainedToolHistoryResult>
   start(): Promise<void>
   stop(): Promise<void>
   flush(): Promise<void>
@@ -235,6 +250,22 @@ class RetainedRoot extends Container {
     this.composer.setMode(state.composer.mode)
     this.commandSurface.setState(state.commandSurface)
     this.markDirty()
+  }
+
+  toggleToolDisplayMode(): CliToolDisplayMode | undefined {
+    const mode = this.transcript.toggleToolDisplayMode()
+    if (mode) this.markDirty()
+    return mode
+  }
+
+  getToolCatalogItems(): RetainedToolCatalogItem[] {
+    return this.transcript.getToolCatalogItems()
+  }
+
+  getToolPagerContent(
+    blockId: string,
+  ): RetainedToolPagerContent | undefined {
+    return this.transcript.getToolPagerContent(blockId)
   }
 
   setVisible(visible: boolean): void {
@@ -487,6 +518,13 @@ export function createRetainedTuiController(options: {
   const modalOverlayView = new RetainedOverlayView(overlay, 'modal')
   embeddedPagerView = new RetainedOverlayView(overlay, 'embedded-pager')
   root.setEmbeddedPager(embeddedPagerView)
+  const removeToolDisplayInputListener = tui.addInputListener((data) => {
+    if (overlay.isActive() || parseKey(data) !== 'ctrl+o') return
+    const mode = root.toggleToolDisplayMode()
+    if (!mode) return
+    requestRender()
+    return { consume: true }
+  })
   const removeRunningInterruptInputListener = tui.addInputListener((data) => {
     const handler = runningInterruptHandler
     if (
@@ -501,6 +539,45 @@ export function createRetainedTuiController(options: {
     handler()
     return { consume: true }
   })
+
+  const runToolHistoryOverlay = async (toolOptions?: {
+    signal?: AbortSignal
+  }): Promise<RetainedToolHistoryResult> => {
+    const items = root.getToolCatalogItems()
+    if (!items.length) {
+      apply({
+        type: 'command_surface',
+        action: {
+          type: 'show_toast',
+          toast: {
+            key: 'tools:empty',
+            content: 'No tool results yet.',
+            tone: 'info',
+            ttlMs: 5_000,
+          },
+        },
+      })
+      return { ok: false, reason: 'empty' }
+    }
+    const picked = await overlay.runPicker({
+      mode: 'picker',
+      items,
+      title: 'Tool results',
+      ...(toolOptions?.signal ? { signal: toolOptions.signal } : {}),
+    })
+    if (!picked.ok) return { ok: false, reason: 'cancel' }
+    const pager = root.getToolPagerContent(picked.id)
+    if (!pager) return { ok: false, reason: 'cancel' }
+    const result = await overlay.runTextPager({
+      ...pager,
+      ...(toolOptions?.signal ? { signal: toolOptions.signal } : {}),
+    })
+    return {
+      ok: true,
+      blockId: picked.id,
+      pager: result,
+    }
+  }
 
   const finishThinkingSegment = (record: boolean): void => {
     const elapsedMs = activity.finishThinkingSegment()
@@ -669,6 +746,15 @@ export function createRetainedTuiController(options: {
     getState() {
       return state
     },
+    toggleToolDisplayMode() {
+      const mode = root.toggleToolDisplayMode()
+      if (mode) requestRender()
+      return mode
+    },
+    runToolHistoryOverlay(toolOptions) {
+      if (stopped) return Promise.resolve({ ok: false, reason: 'cancel' })
+      return runToolHistoryOverlay(toolOptions)
+    },
     async start() {
       if (started || stopped) return
       started = true
@@ -712,6 +798,7 @@ export function createRetainedTuiController(options: {
           runningInterruptHandler = undefined
         },
         () => removeRunningInterruptInputListener(),
+        () => removeToolDisplayInputListener(),
         () => commandSurfaceEffect.dispose(),
         () => composer.cancelInput(),
         () => adapter.setInputEnabled(false),

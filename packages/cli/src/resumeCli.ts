@@ -767,6 +767,21 @@ export async function runOnePrompt(
   const before = session.messages.length
   let catalogOverlay: RetainedCatalogOverlayHandle | undefined
   try {
+    if (controller && /^\/tools\s*$/u.test(prompt.trim())) {
+      terminalReason = 'slash'
+      const viewed = await controller.runToolHistoryOverlay({
+        ...(options?.signal ? { signal: options.signal } : {}),
+      })
+      return {
+        terminalReason: 'slash',
+        assistantText:
+          viewed.ok
+            ? '(tool result closed)'
+            : viewed.reason === 'empty'
+              ? 'No tool results yet.'
+              : '(tool results closed)',
+      }
+    }
     const preview = controller
       ? previewSlashCommandDisplay(prompt)
       : undefined

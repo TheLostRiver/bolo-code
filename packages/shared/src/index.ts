@@ -175,6 +175,20 @@ export {
 } from './toolPresentation.ts'
 
 export {
+  CLI_TOOL_PREVIEW_MAX_CHARS,
+  CLI_TOOL_PREVIEW_MAX_LINES,
+  CLI_TOOL_RUNNING_TAIL_MAX_CHARS,
+  CLI_TOOL_RUNNING_TAIL_MAX_LINES,
+  createCliToolDisplayState,
+  projectCliToolDisplay,
+  reduceCliToolDisplayState,
+  type CliToolDisplayAction,
+  type CliToolDisplayMode,
+  type CliToolDisplayProjection,
+  type CliToolDisplayState,
+} from './cliToolDisplay.ts'
+
+export {
   RUNTIME_COMMAND_ACTIONS,
   RUNTIME_COMMAND_ERROR_CODES,
   RUNTIME_CONTROL_BOUNDARIES,

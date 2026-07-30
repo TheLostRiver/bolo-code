@@ -16,6 +16,11 @@ export const CLI_LOCAL_SLASH_COMMANDS: readonly SlashCommandCandidate[] = [
     source: 'builtin',
     hidden: true,
   },
+  {
+    name: 'tools',
+    description: 'Browse tool results from this TUI session',
+    source: 'builtin',
+  },
 ]
 
 /**
