@@ -20,8 +20,9 @@
 - `getSlashCommandCandidates(session)` 从 `SLASH_COMMANDS`、Plugin command 与
   user-invocable Skill 投影只读展示对象；按真实 dispatch precedence 去重：
   built-in → Plugin → Skill。`user-invocable: false` Skill 不进入候选。
-- CLI 通过 `getCliSlashCommandCandidates(session)` 追加自己拥有的 `/exit` 与 hidden
-  `/quit`；输入框只消费 `SlashCommandCandidate[]`，不依赖整个 session 或执行函数。
+- CLI 通过 `getCliSlashCommandCandidates(session)` 追加自己拥有的 `/exit`、hidden
+  `/quit` 与 retained-only `/tools`；输入框只消费 `SlashCommandCandidate[]`，不依赖
+  整个 session 或执行函数。
 - 裸 `/` 显示全部可见命令；继续输入使用大小写不敏感的 exact/prefix 过滤，精确命中
   优先。不做 substring/fuzzy；`//`、参数和普通文本关闭菜单。
 - 菜单打开时 `↑/↓` 循环选择，Tab/Enter 只补为 `/<name> `，Esc 关闭并保留输入；
@@ -72,8 +73,10 @@
 | `/allow [ToolName \| path:GLOB \| bash:PATTERN]` | 会话 always-allow：工具名 / 路径 glob / Bash 模式（前缀·通配·`:*`）；无参列出 |
 | `/deny [ToolName \| path:GLOB \| bash:PATTERN \| prefix:PFX]` | 会话 **always-deny**（硬规则，赢过 bypass/allow）；无参列出 |
 
-REPL 额外：`/exit` `/quit` 由 CLI 处理（退出循环，不进总线）；`/exit` 在裸 `/`
-可见，hidden `/quit` 只在明确输入 `/q…` 时出现。
+REPL 额外：`/exit` `/quit` 由 CLI 处理（退出循环，不进总线）；`/tools` 只在 retained
+TTY 中打开最新工具优先的 picker 和 bounded preview pager，不写 session messages，
+plain/non-TTY 保持原有 core unknown-command 行为。`/exit` 与 `/tools` 在裸 `/` 可见，
+hidden `/quit` 只在明确输入 `/q…` 时出现。
 
 ## 体验打磨（SL-polish）
 
@@ -102,6 +105,9 @@ REPL 额外：`/exit` `/quit` 由 CLI 处理（退出循环，不进总线）；
 ## CLI
 
 - resume 与新会话的 readline 均经 `runOnePrompt` → `submitUserInput`。
+- retained TTY 中 `Ctrl+O` 在 overlay 未激活时全局切换工具 summary/preview；
+  `/tools` picker 的 Enter 打开最多 4,000 字符的 embedded preview pager，Esc 关闭后
+  恢复 Composer draft/cursor/focus。OUT-3 前不读取 `fullResult.path`。
 - Ctrl-C 优先向 coordinator active turn 提交 durable interrupt；REPL 在询问新输入前持久化 queue promotion，再透传原 `turnId/querySource`。
 - 持久化写失败时 queue/steer fail-closed；已触发的 interrupt 会明确提示 persistence warning。重启不会自动重放 pending/ready control。
 - `agents.overflow: "queue"` 是真实 durable FIFO：queued 先写 admitted，取得 slot 时写 running；`/bg cancel` 会先移除 executable closure，再尝试写 result→aborted。

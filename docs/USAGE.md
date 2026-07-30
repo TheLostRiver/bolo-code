@@ -206,6 +206,12 @@ exact/prefix 过滤。菜单打开时 `↑/↓` 选择，Tab/Enter 只补成 `/<
 Agent/slash 正文按终端宽度保留稳定 gutter，底栏显示 model/mode、快捷键和
 `↓input ↑output` token。完整键位见 [TUI.md](./TUI.md) §3。
 
+工具结果在 retained TTY 中默认保持有界：成功长结果显示一行摘要，短结果和错误显示
+有界预览，运行中的工具只显示有界 tail。按 `Ctrl+O` 可在全部工具块的 summary 与
+bounded preview 间切换；输入 `/tools` 可按最近优先选择历史工具，Enter 打开最多
+4,000 字符的 embedded preview pager，`q`/`Esc` 关闭后恢复原 Composer 草稿、光标和
+焦点。当前 pager 不读取 spill 全文；file-backed 全文查看属于 OUT-3。
+
 活动行每次把完整内容与擦尾控制合成一次原位写入，不会先清空再绘制；glyph 与耗时
 以 250ms 节奏刷新。需要授权时，Bash 面板会显示实际 command、cwd、前后台与 timeout，
 再让用户用 `↑/↓` 或 `y/a/n` 选择 allow once、always 或 deny；Always 作用于本会话
@@ -397,6 +403,7 @@ PowerShell/Bash 外壳补全。
 |------|------|
 | `/exit` · `/quit` | 关闭交互 REPL；`/quit` 是只在明确前缀时显示的隐藏别名 |
 | `/help` | 命令列表 |
+| `/tools` | retained TTY 最近工具 picker；Enter 打开 bounded preview pager，Esc 返回原输入；不写 session messages |
 | `/provider` · `/provider use <id>` · `/provider add …` | 后端列表 / 热切 / preset；list/use 显示 ctx/out 与来源 |
 | `/model` · `/model name` · `/model id/name` | 模型；显示并重新解析 ctx/out 与来源 |
 | `/effort` · `/effort high` | 推理强度（方言 wire；输入 `/effort ` 可见当前合法档位） |

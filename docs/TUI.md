@@ -10,7 +10,9 @@
 > stable-key catalog overlay，OI-15E 已迁移 toast/error，OI-15F 已完成
 > normal slash compatibility cleanup 与统一 action-picker/diff payload；
 > OI-16 已限制 text pager 的物理高度；OI-17 已把 REPL pager 并入 Composer 邻接
-> 根布局，并保留其它交互为 modal overlay；
+> 根布局，并保留其它交互为 modal overlay；OUT-1 `78ad65a` 已提供
+> `ToolPresentation`，OUT-2 `ab8a634` 已完成工具结果默认折叠、`Ctrl+O` 与
+> retained-only `/tools` bounded preview pager；
 > OI-H3 真人 Windows Terminal 走查继续单列。
 > **框架选择：** OI-14A 已选定精确版本的 Pi TUI direct bundle，不再继续扩展自研
 > `TerminalSurface + contentPrefixer + tiny Markdown`。分切片复用 renderer/Markdown/
@@ -61,10 +63,11 @@
 | 文件 | 角色 |
 |------|------|
 | `packages/shared/src/cliTuiViewState.ts` | **OI-14B**：有序 live blocks、稳定 id、SessionEvent/resume 投影、composer/overlay/elapsed 纯状态真源 |
+| `packages/shared/src/cliToolDisplay.ts` | **OUT-2**：默认 display state、summary/preview 切换与有界 compatibility projection 纯 helper |
 | `packages/shared/src/runtimePager.ts` | **OI-14F–H**：pager key/state/result 纯 reducer，由 retained OverlayHost 消费 |
 | `tui/boloTerminalAdapter.ts` | **OI-14C–H**：dynamic TTY 唯一原始 writer 与 stdin owner；resize/render epoch/scrollback、Pi `StdinBuffer`、raw/mode-2004 与异常 acquisition/cleanup |
 | `tui/retainedTui.ts` | **OI-14C–H / OI-17**：稳定 Pi root/controller、theme/viewport/welcome、view-state、transcript/activity/composer/footer、内嵌 pager/modal 双视图根布局、精确 stream fallback 与 final flush |
-| `tui/retainedTranscript.ts` | **OI-14D**：按 stable block id 缓存 User/Assistant/Thought/Tool/Search/Error/Warning/Summary 组件；Pi Markdown、整宽用户块、物理 gutter 与父级 section gap |
+| `tui/retainedTranscript.ts` | **OI-14D / OUT-2**：按 stable block id 缓存 User/Assistant/Thought/Tool/Search/Error/Warning/Summary 组件和 renderer-local 工具 display state；Pi Markdown、整宽用户块、物理 gutter 与父级 section gap |
 | `tui/retainedComposer.ts` | **OI-14E**：稳定 Bolo Composer/Footer；复用输入 reducer、slash/hint/history，补 undo、Pi keys 与 `CURSOR_MARKER` |
 | `tui/retainedActivity.ts` | **OI-14E**：把既有分段 activity 的当前帧投影为 retained child，不直接写 stdout |
 | `tui/retainedOverlay.ts` | **OI-14F–H / OI-17**：唯一交互状态机；permission/question/picker/catalog/diff 走 modal，REPL pager 走根布局无状态视图，standalone runtime pager仍走全屏 modal；保留 Composer identity/focus 与单一 stdin/writer owner |
@@ -84,7 +87,7 @@
 | `tui/permissionPanel.ts` · `askPermissionTty.ts` | command/cwd/关键参数 view-model、once/always/deny reducer 与文本回落 |
 | `packages/core/src/runtimeTextView.ts` | AR1C：纯 runtime text page renderer；CLI 与 slash 共用 |
 | `tui/runtimePager.ts` | AR1C/OI-14F–H：standalone retained OverlayHost pager；复用 shared pager reducer |
-| `slashCandidates.ts` | core 候选与 CLI-local `/exit`/`/quit` 的无副作用合并层 |
+| `slashCandidates.ts` | core 候选与 CLI-local `/exit`/`/quit`/`/tools` 的无副作用合并层 |
 | `runtimeCli.ts` | AR1：顶层 runtime query/action consumer 与 automation 输出 |
 | `newSessionCli.ts` · `resumeCli.ts` · `main.ts` | 入口 |
 
@@ -144,6 +147,7 @@ composer 与 footer 由同一个常驻 layout tree 计算，terminal auto-wrap �
 | `↑/↓` | slash 菜单打开时循环选择候选；否则浏览本进程最近 100 条输入 |
 | `Tab` | slash 菜单打开时补全选中项；否则插入两个空格 |
 | `Esc` | turn 运行时请求 interrupt；空闲时关闭 slash 菜单并保留输入 |
+| `Ctrl+O` | overlay 未激活时全局切换工具 summary/bounded preview；不改变模型或 session 数据 |
 | `Backspace/Delete` | 删除前/后一个 grapheme |
 | `Ctrl+A/E` | 整个输入 buffer 首/尾 |
 | `Ctrl+U/K/W` | 删除光标前/后/前一个词 |
@@ -235,6 +239,12 @@ segment elapsed 决定，不再依赖是否展示过 reasoning 文本；消费�
   cursor move 或用户回显，旧自动化无需清洗 TUI。
 - `formatSessionEventChunks()` 等追加式 plain formatter 继续保留；retained 时间线复用事件语义，
   不在 CLI 重建 core 状态机。
+- 工具 block 在 retained renderer 内按 stable id 保存 summary/preview 状态；成功长结果
+  默认 summary，短结果/error 使用 bounded preview，running 使用有界 tail。单块完成态
+  最多 24 行、running 最多 12 行，不能把任意大 output 挂入 component tree。
+- `Ctrl+O` 全局切换 summary/preview；retained-only `/tools` 以最新工具优先打开
+  picker 和最多 4,000 字符的 embedded preview pager。当前不读取 `fullResult.path`；
+  file-backed 全文、resume side-channel 与 spill cleanup 属于 OUT-3。
 - 当前已实现会话输入框内的 slash completion；尚无 PowerShell/Bash 外壳级 shell
   completion、鼠标输入或跨进程持久命令历史，它们不是 OI-10 的完成条件。
 
@@ -511,6 +521,12 @@ chunk/resize/resume 同值转绿；OI-14E 已让 Composer/activity/footer 与输
 静态 owner guard；见
 [CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md) §9 和
 [CLI_TUI_RENDERER_DECISION.md](./CLI_TUI_RENDERER_DECISION.md)。
+
+OUT-2 新增的 `test:tool-output-folding` 覆盖长/短/error/running/旧 event、默认
+summary、全局 preview、新工具继承、视觉 hard cap、stable id、`Ctrl+O` overlay
+优先级、`/tools` picker→pager、spill path 不读取以及 Composer draft/cursor/focus
+恢复；工具展示专项、既有 retained/overlay/composer/slash/session 回归、typecheck、
+完整 `npm test`、dist/pack/install、预算与 Electron launch 均已通过。
 
 **仍需真人验收：** Windows Terminal 中的字体观感、实际光标位置、窗口 resize、
 鼠标/剪贴板真实多行粘贴、Ctrl+J/历史/删除组合键、权限切换和长回答滚动。自动测试

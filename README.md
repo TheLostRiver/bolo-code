@@ -18,7 +18,7 @@
 | **接手开发的 Agent / 同事** | **[docs/AGENT_HANDOFF.md](docs/AGENT_HANDOFF.md)**（架构 · 进度 · 改码规矩） |
 | **查总进度与各轨** | **[docs/ROADMAP.md](docs/ROADMAP.md)**（进度真源） |
 | **查 CLI TUI 重构** | **[docs/CLI_TUI_REFACTOR_PLAN.md](docs/CLI_TUI_REFACTOR_PLAN.md)**（OI-14 retained renderer · OI-15 slash lifecycle · OI-16 pager 高度 · OI-17 邻接布局）· [选型证据](docs/CLI_TUI_RENDERER_DECISION.md) |
-| **查长工具输出 / 模型上下文方案** | **[docs/TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md](docs/TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md)**（CTX-1..3、OUT-1 已完成 · OUT-2 下一刀） |
+| **查长工具输出 / 模型上下文方案** | **[docs/TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md](docs/TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md)**（CTX-1..3、OUT-1..2 已完成 · OUT-3 下一刀） |
 | **查分层边界** | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 
 ---
@@ -30,7 +30,7 @@
 | Headless 核心 | ~82–90% | queryLoop · 权限 · tools · STE；partial stream fail-closed |
 | **Agent 能力面（工具集）** | **~82–88%** | 15 个常驻/可选工具 + **Web search**（hosted、MCP、SearXNG 均已活体验证） |
 | 会话 / CLI | ~92–97% | **零步骤首次启动** · 用户级 workspace JSONL · 旧项目会话兼容 · durable runtime · query/action CLI · TTY pager · pipe/JSON automation |
-| **CLI TUI** | **~85–92%** | OI-14 retained 主体、OI-15A–F command lifecycle、OI-16 pager 高度与 OI-17 REPL 邻接布局已完成；OUT-1 Tool presentation 契约已落地，OUT-2..5 折叠/全文查看待实现 |
+| **CLI TUI** | **~88–94%** | OI-14 retained 主体、OI-15A–F command lifecycle、OI-16/17 pager 布局与 OUT-1/2 工具展示契约、默认折叠、键盘预览路径已完成；file-backed 全文、鼠标与只读调用聚合仍待 OUT-3..5 |
 | 扩展面 | ~80–88% | MCP · Skills · Plugins |
 | Subagent | ~89–95% | `config.agents` + `agents/*.md` · durable task/result · overflow FIFO/cancel · safe delivery · worktree 保全 |
 | 文件 Diff 日用 | ~95%+ | D0–D7 · U0–U4 |
@@ -54,12 +54,13 @@ OverlayHost/交互面板、OI-14G 默认切换/可靠性/性能、OI-14H legacy 
 OI-15A slash display policy、OI-15B retained single-slot command surface、OI-15C
 read-only panel/pager migration、OI-15D Skills/Plugins stable-key overlay、OI-15E
   toast/error policy、OI-15F compatibility cleanup、OI-16 Doctor pager height、
-  OI-17 REPL pager adjacency、OUT-1 ToolPresentation 契约**。OI-09–OI-13 的
+  OI-17 REPL pager adjacency、OUT-1 ToolPresentation 契约、OUT-2 默认折叠与键盘
+  查看路径**。OI-09–OI-13 的
 slash/context/paste/Thought/权限/welcome 局部能力仍然有效，但不再作为整个 TUI
 renderer 稳定的证据。
 
-**当前状态：CTX-1..3、OUT-1 ✅ → OUT-2..5；下一刀是 OUT-2。**
-用户实测确认长 Read/工具结果会占满 transcript。CTX-1 `27a2506` 已让 provider/model
+**当前状态：CTX-1..3、OUT-1..2 ✅ → OUT-3..5；下一刀是 OUT-3。**
+用户实测确认长 Read/工具结果会占满 transcript 后，CTX-1 `27a2506` 已让 provider/model
 limits 能被解析、按 exact model 深合并、字段级告警并归一为带 source 的
 `ResolvedModelMetadata`；CTX-2 `6ea3a4f` 已让 workspace/session/snapshot、
 create/resume/hot-switch、dynamic compact、skills、dashboard 与 provider output
@@ -68,8 +69,12 @@ baseline 消费同一 metadata；CTX-3 `d966d4b` 已让 `/context`、`/doctor`�
 有效值及逐字段来源，unknown/fallback/invalid 状态会显式警告。
 OUT-1 `78ad65a` 已在 shared/core 建立 `ToolPresentation`、4,000 字符有界 preview、
 原始/保留规模和结构化全文引用；截断全文按 session 隔离落盘，live tool event 与 CLI
-view-state 透传同一 presentation，模型 tool message 仍保持原截断语义。retained
-renderer 尚未消费这些元数据做默认折叠或全文 pager，这些交互从 OUT-2 开始。
+view-state 透传同一 presentation，模型 tool message 仍保持原截断语义。OUT-2
+`ab8a634` 已让 retained renderer 以 stable block id 保持本地展示状态：成功长结果
+默认 summary，短结果与 error 显示有界 preview，running 显示有界 tail；`Ctrl+O`
+全局切换 summary/preview，retained-only `/tools` 按最近工具优先打开 picker 和最多
+4,000 字符的 embedded preview pager，关闭后恢复 Composer 草稿、光标与焦点。
+从结构化 ref 按页读取 spill 全文、resume side-channel 与 spill cleanup 仍属于 OUT-3。
 正式契约见
 [docs/TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md](docs/TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md)。
 OI-15A–F、OI-16 与 OI-17 自动实现仍保持关闭。OI-15A 已在 core 建立
@@ -108,9 +113,10 @@ OI-17 `cda22fd` 修复了这个定位漏测：REPL 内 text/runtime pager 现在
 CTX/OUT 新轨不会恢复 legacy surface，也不会引入其它 Agent 的依赖。CTX-1 已把 provider
 默认与 exact model limits 归一为同一 `ResolvedModelMetadata`；CTX-2 已让 create、
 resume、热切、compact、skills、dashboard 和 provider request 使用同一结果；CTX-3
-已让 slash/doctor/Desktop 显示数值来源并收口最终用户文档。OUT 增加通用 Tool
-presentation、renderer-local 折叠、file-backed 全文 pager、键鼠路径与第二阶段只读
-调用聚合。模型元数据轨已关闭；OUT 完成前，长工具结果展示限制仍然存在。
+已让 slash/doctor/Desktop 显示数值来源并收口最终用户文档。OUT-1/2 已增加通用 Tool
+presentation、renderer-local 默认折叠与键盘有界预览路径；OUT-3..5 继续交付
+file-backed 全文 pager/resume、鼠标与第二阶段只读调用聚合。模型元数据轨已关闭；
+当前默认 transcript 已有界，真正全文查看和恢复能力仍未完成。
 
 OI-14 的单 retained renderer、常驻 Composer、Markdown、OverlayHost、物理终端门禁
 与 plain/non-TTY fallback 保持不变；OI-15 不增加新 renderer 或其它 Agent 的运行时
@@ -274,6 +280,7 @@ plain 路径；TTY 但 raw mode 不可用时自动回落 readline。需要显式
 |------|------|
 | 输入 `/` · `/d` | 显示全部命令 · 实时过滤并补全 `/doctor` |
 | `/help` | 命令列表 |
+| `/tools` | retained TTY 最近工具 picker；Enter 打开最多 4,000 字符的有界预览，Esc 返回原输入 |
 | `/provider` · `/provider add` · `/provider use` | 后端热切 / preset |
 | `/model` · `/effort` · `/ultrathink` | 模型 · 推理强度 · CX8 糖 |
 | `/agents` · `/bg` · `/bg cancel <taskId>` | Subagent 后台 FIFO/status；只取消 queued；resume 后含 interrupted 诊断 |

@@ -1,7 +1,7 @@
 # 长工具输出折叠与模型上下文元数据设计
 
-> **状态：** CTX-1 `27a2506`、CTX-2 `6ea3a4f`、CTX-3 `d966d4b`、OUT-1 `78ad65a` 已完成；OUT-2 是下一刀。
-> **设计基线：** `dc20807`；当前实施基线：`78ad65a`。
+> **状态：** CTX-1 `27a2506`、CTX-2 `6ea3a4f`、CTX-3 `d966d4b`、OUT-1 `78ad65a`、OUT-2 `ab8a634` 已完成；OUT-3 是下一刀。
+> **设计基线：** `dc20807`；当前实施基线：`ab8a634`。
 > **路线标识：** `CTX-1..3`、`OUT-1..5`。
 > **进度真源：** [ROADMAP.md](./ROADMAP.md) §0、§13.11。
 > **相关实现：** [COMPACTION.md](./COMPACTION.md) ·
@@ -9,8 +9,8 @@
 
 本文锁定两个相互独立但共同影响 CLI 可靠性的缺口：
 
-1. Read、Bash、MCP 等长工具结果会把 retained transcript 填满；当前没有通用折叠、
-   单块展开或全文查看契约。
+1. Read、Bash、MCP 等长工具结果曾会把 retained transcript 填满；OUT-1/2 已补通用
+   presentation、默认折叠与键盘有界预览，file-backed 全文读取与恢复仍待 OUT-3。
 2. provider/model 上下文窗口与输出上限需要统一解析、随热切更新并可解释来源；旧实现
    只有 workspace 顶层 `contextWindowTokens`。CTX-1..3 已关闭解析、runtime 消费、
    CLI/Desktop 可观测性和最终用户文档缺口。
@@ -26,10 +26,11 @@
 | CTX-2 | ✅ `6ea3a4f` | create/resume/hot-switch、dynamic compact、skills/dashboard/provider request 已统一接线 |
 | CTX-3 | ✅ `d966d4b` | `/provider`、`/model`、`/context`、`/doctor`、CLI dashboard、Desktop 与最终用户文档 |
 | OUT-1 | ✅ `78ad65a` | shared/core Tool presentation、原始/保留规模、bounded preview、session-scoped spill ref、live event/view-state |
-| OUT-2..5 | **▶ NEXT：OUT-2** | 默认折叠与键盘路径、全文 pager/resume、鼠标与只读调用聚合 |
+| OUT-2 | ✅ `ab8a634` | renderer-local stable state、默认折叠、running/error cap、`Ctrl+O`、`/tools` bounded preview pager |
+| OUT-3..5 | **▶ NEXT：OUT-3** | file-backed 全文 pager/resume、鼠标与只读调用聚合 |
 
-模型元数据轨已统一解析、消费和展示，OUT-1 也已提供 renderer-neutral 数据真源。
-OUT-2 完成前，retained renderer 仍按旧方式展示工具结果，长结果仍可能占满 transcript。
+模型元数据轨已统一解析、消费和展示；OUT-1/2 已提供 renderer-neutral 数据真源和
+默认有界展示。当前 `/tools` 只查看内存中的 bounded preview，不能读取 spill 全文。
 
 ---
 
@@ -85,17 +86,20 @@ Read/Bash/MCP tool
 - file diff 与 TodoWrite 有专用 `cellCollapsed/cellExpanded`。
 - CLI 有 embedded text pager、唯一 OverlayHost 和 Composer focus 恢复。
 - Desktop timeline 有 `collapsed/truncated/status` 展示语义。
+- retained renderer 以 stable block id 保存本地 summary/preview 状态；成功长结果默认
+  summary，短结果/error 默认 bounded preview，running 使用有界 tail。
+- `Ctrl+O` 可全局切换 summary/preview；retained-only `/tools` 以最新优先 picker
+  打开最多 4,000 字符的 embedded preview pager，并在关闭后恢复 Composer。
 
 仍缺失的能力：
 
-- retained renderer 尚未按 presentation 的 summary/preview/overflow 选择默认展示。
 - file-backed pager、resume side-channel 与 session spill cleanup 尚未接入。
 - `cellCollapsed/cellExpanded` 只覆盖 diff/Todo，不是通用工具输出协议。
 - `BOLO_DIFF_CELL/BOLO_DIFF_VERBOSE` 是进程级静态环境开关，不是单块交互状态。
-- retained transcript 不拥有输入焦点或鼠标 hit region。
+- retained transcript 尚无鼠标 hit region。
 - 单个超长 block 不会被历史 tail-window 机制解决。
 
-当前 `78ad65a` 的普通工具结果只追加渲染一次；“重复 push 两次”不属于现存缺陷。
+当前 `ab8a634` 的普通工具结果只追加渲染一次；“重复 push 两次”不属于现存缺陷。
 
 ### 2.2 上下文窗口链路
 
@@ -133,7 +137,8 @@ CTX-2 已关闭的 runtime 缺口：
 
 CTX-1 建立可复用的配置与解析真源，CTX-2 完成作用域和生命周期接线，CTX-3 已让
 slash/doctor/Desktop 明确展示数值与来源并发布最终用户配置口径。OUT-1 已建立长工具
-输出 presentation 真源；当前剩余缺口属于 OUT-2..5 的 renderer 交互、全文读取与聚合。
+输出 presentation 真源，OUT-2 已完成默认折叠与键盘有界预览；当前剩余缺口属于
+OUT-3..5 的全文读取、恢复、鼠标与聚合。
 
 ---
 
@@ -514,11 +519,13 @@ resume           → 重建 presentation，默认 summary
 ### 11.1 键盘
 
 - `Ctrl+O`：全局 summary/preview 切换，沿用 Pi 的成熟心智模型。
-- `/tools`：打开最近工具结果 picker；上下选择，Enter 打开全文 pager，Esc 返回。
+- `/tools`：打开最近工具结果 picker；上下选择，Enter 打开 bounded preview pager，
+  Esc 返回。OUT-3 完成后，具备有效受控 ref 的条目才升级为 file-backed 全文 pager。
 - pager 继续沿用现有 `n/j/↓/→`、`p/k/↑/←`、`q/Esc`。
 - running turn 中 Esc/Ctrl+C 的中断优先级保持现有契约，不能被工具查看抢走。
 
-`/tools` 使用现有 structured catalog/overlay 路径，不把 transcript 变成长期 focus owner。
+`/tools` 使用现有 structured catalog/overlay 路径，不把 transcript 变成长期 focus
+owner，也不把最多 4,000 字符的当前预览误称为全文。
 
 ### 11.2 鼠标
 
@@ -652,11 +659,17 @@ current-config-first、matching snapshot fallback、热切失败回滚及 prompt
 - OUT-1 专项、typecheck、完整 `npm test`、dist/pack/install、预算与 Electron live
   smoke 全部通过。
 
-### OUT-2 · 默认折叠与键盘路径 ▶ NEXT
+### OUT-2 · 默认折叠与键盘路径 ✅ `ab8a634`
 
-- renderer-local stable block state。
-- 分工具摘要、running tail、error cap。
-- `Ctrl+O`、`/tools` picker、embedded pager 与 focus 恢复。
+- shared 纯 helper 定义默认 display state/action/projection；retained transcript 用
+  renderer-local `Map<blockId, state>` 保持 stable block 状态，不回写 session/messages。
+- 成功长结果默认 summary，短结果/error 使用 bounded preview，running 使用有界 tail；
+  inline 工具输入、正文和视觉行数均有 hard cap，旧 event 走 bounded compatibility。
+- `Ctrl+O` 全局切换 summary/preview；retained-only `/tools` 以最新工具优先 picker
+  打开最多 4,000 字符的 embedded preview pager，Esc 恢复 draft/cursor/focus。
+- plain/non-TTY、模型 tool message、session 持久化和 spill 路径读取保持不变；
+  OUT-2 专项、typecheck、完整 `npm test`、dist/pack/install、预算与 Electron live
+  smoke 全部通过。
 
 ### OUT-3 · file-backed pager 与 resume
 

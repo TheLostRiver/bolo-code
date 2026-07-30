@@ -22,7 +22,7 @@
 | **文件 Diff · 日用契约** | **~95%+** | **D0–D7 已收口**；见 [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) |
 | **文件 Diff · 交互 UI** | **~90–95%** | **U0–U4 已落地**；U5 真·Ink/IDE 可选（AR4 证据门控） |
 | **斜杠** | **~87–93%** | OI-10 命令级发现/补全 + OI-12A argument hint 已完成；OI-15A–F 已建立完整 display policy/retained 单槽，并迁移 panel/pager/catalog/action-picker/diff/toast/history，normal slash 不再进入 compatibility bucket |
-| **CLI TUI** | **~85–92%** | OI-14 retained renderer、OI-15A–F command surface/lifecycle、OI-16 pager 高度与 OI-17 REPL 邻接布局已完成；**OUT-1 ToolPresentation 契约 ✅ `78ad65a`，OUT-2..5 默认折叠/全文 pager 待实现**；OI-H3 真人 Windows Terminal 主观观感仍未验 |
+| **CLI TUI** | **~88–94%** | OI-14 retained renderer、OI-15A–F command surface/lifecycle、OI-16/17 pager 布局与 **OUT-1 ToolPresentation ✅ `78ad65a`、OUT-2 默认折叠/键盘预览 ✅ `ab8a634`** 已完成；OUT-3..5 file-backed 全文、鼠标与聚合待实现；OI-H3 真人 Windows Terminal 主观观感仍未验 |
 | **Electron GUI** | **~80–88%** | 壳 + 流式 + 权限 + 多 provider（CX7）+ runtime v1 + **会话切换/恢复 + composer controls + model/effort 设置 + control/tool progress 投影** + AskUserQuestion；真人点击/视觉仍未验 |
 | **Hooks · 日用契约** | **~96–98%** | **H0–H5 已落地**（SessionEnd · exit 语义 · updatedInput · `/hooks recent`） |
 | **Compact · 日用管道** | **~96–98%** | **C0–C5 + AR2 全段已落地**（hybrid 计数 · 中段截断 · 防重摘要 · range/watermark 契约 · 切分不拆对穷举验证 · 写失败完整回退 · durable 条目不丢 · **估算按字符类别分档**（CJK 1.3 / 散文 4.5 / 其余 3.5；实测推翻了「密文 = token 密」的旧前提，最差高估 109% → 19.5%）· 管道基准）；中段压缩与远端压缩均**显式关闭**（§13.10.2 · [ADR](./ADR_COMPACT_REMOTE.md)） |
@@ -31,9 +31,9 @@
 | **Provider UX · 便利层** | **~95–98%** | **CX0–CX8 已落地**（ultrathink 默认 off）· [PROVIDER_UX.md](./PROVIDER_UX.md) |
 | **产品整体（相对 HC）** | **~68–82%** | Headless 日用高；CLI TUI 渲染可靠性按 OI-14 重新计入 |
 
-**已闭环主线：** headless 日用 → Diff（D0–D7 / U0–U4）· Hooks（H0–H5）· Compact（C0–C5）· Provider（P0–P4.1）· Effort（E0–E9）· Provider UX（CX0–CX8）· 可靠性（R0–R4）· **Durable Runtime（DR0–DR4）** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR3 Desktop 产品接线** · **OI-07 SearXNG 上游诊断、`search doctor` 与可选 Docker setup** · **OI-08B CLI 零步骤首次启动** · **OI-14A–H retained renderer 重构** · **OI-15A–F slash command surface/lifecycle** · **OI-16 Doctor pager height** · **OI-17 REPL pager adjacency** · **OUT-1 ToolPresentation 契约**。OI-09–OI-13 的 slash/context/paste/Thought/权限/welcome 等局部切片保留为完成历史，但不再作为整个 renderer 稳定的独立证据。OI-H3 继续独立保持 `BLOCKED: HUMAN`。切片明细 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
+**已闭环主线：** headless 日用 → Diff（D0–D7 / U0–U4）· Hooks（H0–H5）· Compact（C0–C5）· Provider（P0–P4.1）· Effort（E0–E9）· Provider UX（CX0–CX8）· 可靠性（R0–R4）· **Durable Runtime（DR0–DR4）** · **Autonomous Road AR1 CLI/TUI runtime UX** · **AR3 Desktop 产品接线** · **OI-07 SearXNG 上游诊断、`search doctor` 与可选 Docker setup** · **OI-08B CLI 零步骤首次启动** · **OI-14A–H retained renderer 重构** · **OI-15A–F slash command surface/lifecycle** · **OI-16 Doctor pager height** · **OI-17 REPL pager adjacency** · **OUT-1 ToolPresentation 契约** · **OUT-2 默认折叠与键盘查看路径**。OI-09–OI-13 的 slash/context/paste/Thought/权限/welcome 等局部切片保留为完成历史，但不再作为整个 renderer 稳定的独立证据。OI-H3 继续独立保持 `BLOCKED: HUMAN`。切片明细 → [ROADMAP_HISTORY.md](./ROADMAP_HISTORY.md)。
 
-**当前队列：CTX-1..3、OUT-1 ✅ → OUT-2..5；下一刀是 OUT-2。** 用户实测确认长 Read/工具结果会占满
+**当前队列：CTX-1..3、OUT-1..2 ✅ → OUT-3..5；下一刀是 OUT-3。** 用户实测确认长 Read/工具结果会占满
 transcript。CTX-1 `27a2506` 已建立 provider 默认/exact model limits、user/project
 深合并、字段级 warning、小型 exact catalog 与带逐字段 source 的纯 resolver；CTX-2
 `6ea3a4f` 已把 resolved metadata 接入 workspace/session/snapshot、create/resume/
@@ -45,9 +45,12 @@ hot-switch、dynamic compact、skills、dashboard 与 provider output baseline�
 [TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md](./TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md)。
 OUT-1 `78ad65a` 已建立共享 `ToolPresentation` 分类/validator、原始与保留规模、
 4,000-char bounded preview、session-scoped spill ref，并让 core live event 与 CLI
-view-state 透传同一对象；模型 tool message 和 plain 输出语义不变。下一刀 OUT-2
-让 retained renderer 消费该契约，实现默认折叠、running/error 有界展示、`Ctrl+O` 与
-键盘全文入口；file-backed pager、鼠标和相邻只读调用聚合继续分属 OUT-3..5。OI-15A–F、
+view-state 透传同一对象；模型 tool message 和 plain 输出语义不变。OUT-2 `ab8a634`
+已让 retained renderer 消费该契约，以 stable block state 实现成功长结果默认 summary、
+短结果/error bounded preview、running tail、`Ctrl+O` 全局切换与 retained-only
+`/tools` 最近工具 picker；当前 embedded pager 只查看最多 4,000 字符的有界 preview。
+下一刀 OUT-3 才从受控 ref 按需读取全文，并补 resume side-channel 与 session spill
+cleanup；鼠标和相邻只读调用聚合继续分属 OUT-4/5。OI-15A–F、
 OI-16 与 OI-17 自动实现仍保持关闭。OI-14 已建立
 单 retained renderer/OverlayHost；OI-15 准入时普通 slash 结果仍可能通过
 `appendCompatibilityOutput()` 持续拼接并固定在 transcript 与 Composer 之间。
@@ -99,7 +102,7 @@ ownership/reliability/runtime 回归与完整 `npm test` 均已通过。
 
 **已插队并收口：** **AR-T · Agent 能力面**（§14）。准入证据：基础设施深度（DR0–DR4 + AR1）已远超能力广度——彼时 agent 无法跨步骤记住计划，也无法启动任何活过一次工具调用的进程。AR2 压缩深化顺延，A0a/A0b 成果不受影响。
 
-**agent 可闭环开放项：OUT-2..5。** OI-H1/H2/H3 是明确真人项，LSP
+**agent 可闭环开放项：OUT-3..5。** OI-H1/H2/H3 是明确真人项，LSP
 继续由证据门控。CTX-1 的 provider/model limits 配置/resolver、CTX-2
 create/resume/hot-switch 单一消费链与 CTX-3 数值来源可观测性/用户文档均已完成。
 OUT 建立有界 Tool presentation、renderer-local 折叠、全文 pager、鼠标和第二阶段
@@ -488,7 +491,7 @@ AR2 提交顺序：**A0a → A0b → A1 契约/测试 → A2 接线 → B1 regis
 | 31 | **OI-16 · Doctor pager height** | text pager 18 行正文上限 · 短内容实际高度 · host 生命周期专项 | `/doctor` 在高终端分成可导航页；footer 保持在组件内；短页不补空行 | 24/48/80 行真实 host 物理高度 + page/footer/navigation/close + plain byte-stable + full/dist/install/预算/Electron smoke | ✅ `5b22c15`；高度修复关闭，未覆盖 composite 坐标 |
 | 32 | **OI-17 · REPL pager adjacency** | 单 host 状态机 · embedded/modal 无状态视图 · 根布局焦点接线 | REPL pager 紧邻 Composer；modal 与 standalone runtime pager不变；关闭后原草稿续写 | 48/80 行真实 xterm composite 坐标 + footer/page/close/focus + modal/runtime/ownership/reliability/full gate | ✅ `cda22fd`；第二张真人截图准入、自动闭环 |
 | 33 | **CTX-1..3 · provider/model 上下文元数据** | 1 config/schema/深合并/validator/resolver ✅ `27a2506` · 2 create/resume/hot-switch/dynamic compact/skills ✅ `6ea3a4f` · 3 doctor/context/model/provider/Desktop/docs ✅ `d966d4b` | provider 默认 + exact model limits；32k/128k/200k/1m 热切立即生效；窗口与输出上限显示来源；旧顶层与旧 session 兼容 | config priority/invalid/unknown + create/resume/switch rollback + compact/skills/dashboard/provider request + observability/Desktop + full/dist | **✅ CTX-1..3 自动闭环**；完整门禁、dist/pack/install、Electron live smoke 全绿，未知模型显示 warning/fallback |
-| 34 | **OUT-1..5 · 长工具输出摘要/折叠/全文查看** | 1 shared ToolPresentation ✅ `78ad65a` · 2 renderer-local fold/键盘 · 3 file pager/resume · 4 SGR mouse · 5 连续只读调用聚合 | 成功长输出默认有界摘要；运行 tail/错误 cap；点击或键盘查看全文并恢复 Composer；plain 不变 | long/ANSI/CJK/resize/stream/resume/spill/path safety + xterm mouse/paste/focus + perf/full/dist | **▶ NEXT：OUT-2**；OUT-1 已完成 shared/core 契约、session-scoped spill ref、live event/view-state 与完整门禁 |
+| 34 | **OUT-1..5 · 长工具输出摘要/折叠/全文查看** | 1 shared ToolPresentation ✅ `78ad65a` · 2 renderer-local fold/键盘 preview ✅ `ab8a634` · 3 file pager/resume · 4 SGR mouse · 5 连续只读调用聚合 | 成功长输出默认有界摘要；运行 tail/错误 cap；点击或键盘查看全文并恢复 Composer；plain 不变 | long/ANSI/CJK/resize/stream/resume/spill/path safety + xterm mouse/paste/focus + perf/full/dist | **▶ NEXT：OUT-3**；OUT-2 已完成默认折叠、`Ctrl+O`、`/tools` 有界 preview pager 与 Composer 恢复，真正 file-backed 全文仍待 OUT-3 |
 
 固定 checkpoint：
 
