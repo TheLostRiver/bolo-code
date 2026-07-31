@@ -59,14 +59,30 @@ export const COST_TIER_NANO: ModelCostRates = {
   cacheWritePerMTok: 0.125,
 }
 
+import { resolveModelCatalogEntry, catalogCostRates } from '../../shared/src/modelCatalog.ts'
+
 /**
- * 按 model 名启发式选价表（小写匹配）。
- * 不绑死厂商；仅便于 /cost 本地粗算。
+ * 按 model 名计价：P1 目录精确命中优先（方案 PROVIDER_EXPANSION_PLAN §3），
+ * 未命中回落启发式子串匹配（下方既有逻辑）。
  */
 export function resolveModelCostRates(
   model: string | undefined | null,
 ): { rates: ModelCostRates; tier: string; known: boolean } {
   const m = (model ?? '').trim().toLowerCase()
+  const catalog = resolveModelCatalogEntry(m)
+  if (catalog?.cost) {
+    const rates = catalogCostRates(catalog)
+    return {
+      rates: {
+        inputPerMTok: rates.inputPerMTok,
+        outputPerMTok: rates.outputPerMTok,
+        cacheReadPerMTok: rates.cacheReadPerMTok,
+        cacheWritePerMTok: rates.cacheWritePerMTok,
+      },
+      tier: `catalog:${catalog.provider}`,
+      known: true,
+    }
+  }
   if (!m) {
     return { rates: COST_TIER_DEFAULT, tier: 'default', known: false }
   }

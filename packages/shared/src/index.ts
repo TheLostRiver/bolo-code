@@ -441,3 +441,11 @@ export {
   tuiThemeLabel,
   type TuiThemeId,
 } from './theme.ts'
+export {
+  MODEL_CATALOG,
+  MODEL_CATALOG_COUNT,
+  catalogCostRates,
+  resolveModelCatalogEntry,
+  type ModelCatalogEntry,
+  type ModelCostEntry,
+} from './modelCatalog.ts'

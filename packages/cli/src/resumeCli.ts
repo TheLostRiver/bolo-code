@@ -21,6 +21,7 @@ import {
   type SessionSnapshot,
 } from '../../core/src/index.ts'
 import type { ChatMessage } from '../../shared/src/index.ts'
+import { resolveModelCatalogEntry } from '../../shared/src/index.ts'
 import {
   runAsyncCleanupSteps,
   runWithAsyncCleanup,
@@ -469,7 +470,14 @@ export function configureSessionComposer(
       ...(session.usage ? { usage: session.usage } : {}),
       ...(session.resolvedModel?.contextWindowTokens
         ? { contextWindowTokens: session.resolvedModel.contextWindowTokens }
-        : {}),
+        : // P1：resolvedModel 缺失时回落内置目录（方案 PROVIDER_EXPANSION_PLAN §3）
+          (() => {
+            const entry = resolveModelCatalogEntry(
+              session.model,
+              session.providerId,
+            )
+            return entry ? { contextWindowTokens: entry.contextWindow } : {}
+          })()),
     },
   })
 }
