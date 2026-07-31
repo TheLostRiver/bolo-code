@@ -1172,6 +1172,26 @@ if (composerEffort) {
   })
 }
 
+// 键盘导航（S6）：Esc 关模态并聚焦输入；Ctrl/Cmd+L 聚焦输入
+document.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Escape') {
+    if (settingsEl && !settingsEl.hidden) {
+      settingsEl.hidden = true
+      promptEl.focus()
+      return
+    }
+    if (askEl && !askEl.hidden) {
+      askEl.hidden = true
+      promptEl.focus()
+      return
+    }
+  }
+  if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'l') {
+    ev.preventDefault()
+    promptEl.focus()
+  }
+})
+
 void (async () => {
   await runtimeClient.connect()
   await refreshStatus()

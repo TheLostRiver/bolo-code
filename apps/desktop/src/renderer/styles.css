@@ -357,6 +357,13 @@ button {
 .msg h2 { font-size: 15.5px; }
 .msg h3 { font-size: 14px; }
 
+.log:empty::after {
+  content: 'Start a conversation — message below, or /help for commands.';
+  color: var(--muted);
+  font-size: 13px;
+  opacity: 0.6;
+}
+
 /* ── 工具卡片 ─────────────────────────────────────── */
 
 .card {
