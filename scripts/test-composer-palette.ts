@@ -106,6 +106,33 @@ function main() {
   })
   assert.ok(footer.text.includes('\u001b[48;2;'), 'footer 含 kbd 背景色')
 
+  // ---- 中间宽度降级档：短 chip（仅 modeText，去 usage） ----
+  const midWidth = renderTuiInputFooter({
+    state,
+    columns: 70,
+    color: true,
+    palette,
+    status: {
+      permissionMode: 'default',
+      model: 'm',
+      effortLevel: 'e',
+      usage: { inputTokens: 96000, outputTokens: 1200 },
+    },
+  })
+  assert.ok(midWidth.text.includes('default'), '短 chip 含 modeText')
+  assert.ok(!midWidth.text.includes('↓96k'), '短 chip 去掉 usage')
+
+  // ---- 极窄：仅快捷键组 ----
+  const narrow = renderTuiInputFooter({
+    state,
+    columns: 60,
+    color: true,
+    palette,
+    status: { permissionMode: 'default' },
+  })
+  assert.ok(narrow.text.includes('Enter'), '窄宽度保留快捷键')
+  assert.ok(!narrow.text.includes('default'), '窄宽度去掉 chip')
+
   console.log('PASS: composer palette consumption')
 }
 
