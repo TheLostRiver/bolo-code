@@ -166,7 +166,7 @@ Markdown。这仍然不要求用户安装 `node_modules`，但它们是随产物
 | `tsx` | 跑 `scripts/*.ts` 测试 | 只在开发/测试期 |
 | `electron-builder` | Windows NSIS 安装包 | 构建工具 |
 | `@xterm/headless` | OI-14 真实 cell/auto-wrap/resize 测试 | 仅测试 |
-| `@earendil-works/pi-tui@0.82.1` | OI-14 retained renderer/Markdown/输入与 overlay 基础设施 | OI-14C–G 按具体构建子模块内嵌进单文件；不含 Editor、ProcessTerminal 或 native terminal loader |
+| `@earendil-works/pi-tui@0.82.1` | OI-14 retained renderer/Markdown/输入与 overlay 基础设施 | OI-14C–G 按具体构建子模块内嵌进单文件；不含 Editor、ProcessTerminal 或 native terminal loader；`terminal-image.js` 由本地 stub（`packages/cli/src/tui/piTerminalImageStub.ts`）整体替换，不进入 bundle |
 
 Pi 版本、MIT 许可、传递依赖、Node/Windows/资产与体积数据见
 [CLI_TUI_RENDERER_DECISION.md](./CLI_TUI_RENDERER_DECISION.md)。当前 bundle 实际

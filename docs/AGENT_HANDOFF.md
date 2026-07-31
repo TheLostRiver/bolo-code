@@ -98,6 +98,11 @@ pager/picker/panel、`TerminalSurface`、raw editor/spacer、字符串 prefix/ti
 追加式 formatter。不要重新引入第二 owner、engine flag 或字符串布局补丁。
 OI-14A 已锁定 `@earendil-works/pi-tui@0.82.1`，由 Bolo terminal adapter
 承接 Pi renderer/components；不要擅自切到 Pi `ProcessTerminal` 或引入动态 native 资产。
+**pi-tui 直连已收口**：源码层只允许 `packages/cli/src/tui/piCompat.ts` 导入
+`@earendil-works/pi-tui`（`scripts/test-pi-compat-boundary.ts` 门禁），其余 TUI 代码
+一律从 `piCompat.ts` 导入；构建期 `scripts/build-dist.ts` 再把 pi-tui 的
+`terminal-image.js` 整体替换为本地 stub（`piTerminalImageStub.ts`），升级/替换/fork
+pi-tui 时只改这两个文件。
 OI-14B `269b39c` 已建立 `packages/shared/src/cliTuiViewState.ts`；OI-14C
 `1798a7c` 已由 `retainedTui.ts` 直接消费该状态，并建立 adapter/root/resize/welcome。
 OI-14D `8b060e5` 已沿用 stable block id 和原始 source
