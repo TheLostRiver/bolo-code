@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-theme="light">
+<html lang="zh-CN" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta
@@ -11,10 +11,10 @@
   </head>
   <body>
     <!--
-      三栏骨架（docs/DESKTOP_DESIGN.md §2.1）：
-        左 = 会话列表   中 = 当前会话时间线   右 = 按需 toggle 的产物面板
-
-      右栏刻意**不常驻**：常驻会把中间对话挤窄，而对话才是主体。
+      S1 骨架（方案 docs/DESKTOP_GUI_PLAN.md §S1）：
+      左 = 会话栏（窄、Codex 风条目）  中 = 消息流 + 底部 composer
+      右栏 Details 保持 hidden（id 兼容 app.js，后续切片再定去留）
+      注意：以下 id 为 app.js 契约，重写时必须保留（test-desktop-launch 检查 #log/#session-list）
     -->
     <div class="app">
       <aside class="sidebar" aria-label="Sessions">
@@ -30,7 +30,6 @@
             +
           </button>
         </div>
-        <!-- 列表项由 packages 的 buildSessionListView 决定内容与排序 -->
         <ul id="session-list" class="session-list" aria-label="Session list"></ul>
       </aside>
 
@@ -55,11 +54,7 @@
             <button type="button" id="btn-settings" class="ghost">Settings</button>
           </div>
           <div class="status-stack">
-            <div
-              id="runtime-status"
-              class="status runtime-status"
-              aria-live="polite"
-            >
+            <div id="runtime-status" class="status runtime-status" aria-live="polite">
               Runtime connecting…
             </div>
             <div id="status" class="status">loading…</div>
@@ -69,19 +64,22 @@
         <main id="log" class="log" aria-live="polite" aria-label="Conversation"></main>
 
         <footer class="input-bar">
-          <input
-            id="prompt"
-            type="text"
-            placeholder="Message or /help …"
-            autocomplete="off"
-          />
-          <div class="composer-actions" role="toolbar" aria-label="Message actions">
-            <button id="composer-send" type="button">Send</button>
-            <button id="composer-queue" type="button" class="ghost">Queue</button>
-            <button id="composer-steer" type="button" class="ghost">Steer</button>
-            <button id="composer-interrupt" type="button" class="ghost danger">
-              Interrupt
-            </button>
+          <div class="composer-shell">
+            <textarea
+              id="prompt"
+              rows="1"
+              placeholder="Message or /help …"
+              autocomplete="off"
+              spellcheck="false"
+            ></textarea>
+            <div class="composer-actions" role="toolbar" aria-label="Message actions">
+              <button id="composer-send" type="button">Send</button>
+              <button id="composer-queue" type="button" class="ghost">Queue</button>
+              <button id="composer-steer" type="button" class="ghost">Steer</button>
+              <button id="composer-interrupt" type="button" class="ghost danger">
+                Interrupt
+              </button>
+            </div>
           </div>
         </footer>
       </section>
@@ -117,6 +115,7 @@
         </div>
       </div>
     </div>
+
     <div id="settings" class="perm" hidden>
       <div class="perm-card settings-card">
         <h3>Session settings</h3>
