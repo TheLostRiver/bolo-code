@@ -68,15 +68,19 @@ function main() {
     themed.text.includes('\u001b[38;2;215;245;239m'),
     'footer 值用 inputFg（模型/effort 亮青白）',
   )
-  // 极光版 badge：model/effort 骑上边框（╭╮ 线框包裹）+ context 进度条
-  assert.ok(themed.text.includes('╭'), 'badge 圆角线框起点')
-  assert.ok(themed.text.includes('╮'), 'badge 圆角线框终点')
-  assert.ok(themed.text.includes('●'), 'badge 圆点')
+  // 极光版 badge：model/effort 骑上边框（纯背景胶囊 + teal 圆点）+ context 进度条
+  assert.ok(themed.text.includes('●'), 'badge teal 圆点')
   assert.ok(themed.text.includes('model sonnet-4.5'), 'model badge')
   assert.ok(themed.text.includes('effort high'), 'effort badge')
   assert.ok(themed.text.includes('context'), 'context badge')
   assert.ok(themed.text.includes('38% · 96k/256k'), 'context 百分比与用量')
   assert.ok(themed.text.includes('█'), '进度条填充字符')
+  assert.ok(!themed.text.includes('╭●'), 'badge 无 ╭ 角字符（纯背景胶囊）')
+  assert.ok(
+    !themed.text.includes('model sonnet-4.5╮') &&
+      !themed.text.includes('effort high╮'),
+    'badge 无 ╮ 角字符（纯背景胶囊）',
+  )
   // 单行 footer：kbd 键帽 + │ 竖线分隔 + 右侧胶囊
   assert.ok(themed.text.includes('Enter'), 'kbd Enter')
   assert.ok(themed.text.includes('send'), 'action send')

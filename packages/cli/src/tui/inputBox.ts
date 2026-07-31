@@ -471,13 +471,11 @@ function sanitizeTuiStatusText(text: string | undefined): string {
 }
 
 function renderBadge(label: string, value: string, colors: ComposerColors): string {
-  // ╭╮ 圆角线框 + 背景块 + teal 圆点：对齐原型 badge（border 1px + radius）
-  // 紧凑布局（label 后单空格）保证 80 列下 model+effort 两个 badge 同框
-  const frame = `${colors.badgeBorder}╭${colors.reset}`
-  const dot = `${colors.accent}●${colors.reset}`
-  const body = `${colors.kbdBg}${colors.kbdFg}${label} ${value}${colors.reset}`
-  const end = `${colors.badgeBorder}╮${colors.reset}`
-  return `${frame}${dot}${body}${end}`
+  // 纯背景胶囊（对齐原型 badge）：背景块 + 内边距 + teal 圆点，无角字符
+  // 终端里 ╭╮ 圆角在单行高度下呈"小尾巴"观感，故省略；背景块即"包裹"
+  const dot = `${colors.kbdBg}${colors.accent}●${colors.reset}`
+  const body = `${colors.kbdBg}${colors.kbdFg} ${label} ${value} ${colors.reset}`
+  return `${dot}${body}`
 }
 
 function renderContextBadge(
@@ -495,10 +493,10 @@ function renderContextBadge(
   const bar = `${colors.accent}${'█'.repeat(filled)}${colors.muted}${'░'.repeat(
     barWidth - filled,
   )}${colors.reset}`
-  const text = `${colors.kbdBg}${colors.kbdFg}context ${bar} ${pct}% · ${formatTuiTokenCount(
+  const text = `${colors.kbdBg}${colors.kbdFg} context ${bar} ${pct}% · ${formatTuiTokenCount(
     status.usage.inputTokens,
-  )}/${formatTuiTokenCount(total)}${colors.reset}`
-  return `${colors.badgeBorder}╭${colors.reset}${text}${colors.badgeBorder}╮${colors.reset}`
+  )}/${formatTuiTokenCount(total)} ${colors.reset}`
+  return text
 }
 
 function renderBadgeTopBorder(options: {
@@ -637,7 +635,7 @@ function footerSegmentsWidth(
   let width = 0
   for (const segment of segments) {
     width += measureTerminalText(segment.text)
-    // palette 模式 key 键帽渲染时带 ╭╮ 线框（+2 字符），宽度计算必须计入
+    // palette 模式 key 键帽渲染时带两侧内边距空格（+2 字符），宽度计算必须计入
     if (segment.tone === 'key' && colors?.kbdBg) width += 2
   }
   return width
@@ -670,10 +668,10 @@ function renderFooterSegments(
 ): string {
   return segments
     .map((segment) => {
-      // palette 模式键帽：╭╮ 圆角线框 + 背景块（对齐原型 kbd border）
-      // 紧凑布局（无内边距），与 footerSegmentsWidth 的 +2 补偿一致
+      // palette 模式键帽：纯背景胶囊（背景块 + 内边距），与 footerSegmentsWidth
+      // 的 +2 内边距补偿一致；不使用 ╭╮ 角字符（单行下呈"小尾巴"观感）
       if (segment.tone === 'key' && colors.kbdBg) {
-        return `${colors.borderDim}╭${colors.reset}${colors.kbdBg}${colors.kbdFg}${segment.text}${colors.reset}${colors.borderDim}╮${colors.reset}`
+        return `${colors.kbdBg}${colors.kbdFg} ${segment.text} ${colors.reset}`
       }
       const start = toneStart(segment.tone, colors)
       return start ? `${start}${segment.text}${colors.reset}` : segment.text
