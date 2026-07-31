@@ -163,6 +163,24 @@ async function activateSessionEntry(sessionId) {
  * 这里只把它给的行放进 DOM —— 薄壳纪律：renderer 不重算业务状态。
  * 尤其「等待审批」置顶这件事不能在这层再排一次，否则两处规则会漂移。
  */
+/** updatedAt（ISO）→ 人类可读相对时间；无效/未来时间回退原串 */
+function formatRelativeTime(iso) {
+  if (!iso) return ''
+  const then = new Date(iso).getTime()
+  if (!Number.isFinite(then)) return iso
+  const diffMs = Date.now() - then
+  if (diffMs < 0) return iso
+  const sec = Math.floor(diffMs / 1000)
+  if (sec < 60) return 'just now'
+  const min = Math.floor(sec / 60)
+  if (min < 60) return `${min}m`
+  const hour = Math.floor(min / 60)
+  if (hour < 24) return `${hour}h`
+  const day = Math.floor(hour / 24)
+  if (day < 7) return `${day}d`
+  return iso.slice(0, 10)
+}
+
 async function refreshSessions() {
   if (!sessionListEl || !window.bolo?.listSessions) return
   let entries = []
@@ -170,8 +188,7 @@ async function refreshSessions() {
     entries = await window.bolo.listSessions()
   } catch {
     return // 取不到就保持上一次的列表，不清空成「一个会话都没有」
-  }
-  sessionListEl.replaceChildren()
+  }  sessionListEl.replaceChildren()
   for (const e of entries) {
     const li = document.createElement('li')
     li.className = 'session-item'
@@ -196,15 +213,38 @@ async function refreshSessions() {
 
     const meta = document.createElement('div')
     meta.className = 'session-meta'
+    const left = document.createElement('span')
+    left.className = 'session-meta-left'
     const badge = document.createElement('span')
     badge.className = 'badge'
     badge.dataset.status = e.status
     badge.textContent = e.status.replace(/_/g, ' ')
-    meta.appendChild(badge)
+    left.appendChild(badge)
+    if (e.model) {
+      const model = document.createElement('span')
+      model.className = 'session-model'
+      model.textContent = e.model
+      model.title = `model: ${e.model}`
+      left.appendChild(model)
+    }
+    meta.appendChild(left)
+    const right = document.createElement('span')
+    right.className = 'session-meta-right'
+    const time = document.createElement('span')
+    time.className = 'session-time'
+    time.textContent = formatRelativeTime(e.updatedAt)
+    time.title = e.updatedAt
+    right.appendChild(time)
     const count = document.createElement('span')
-    count.textContent = `${e.messageCount} msg`
-    meta.appendChild(count)
+    count.className = 'session-count'
+    count.textContent = `${e.messageCount}`
+    count.title = `${e.messageCount} messages`
+    right.appendChild(count)
+    meta.appendChild(right)
     li.appendChild(meta)
+
+    if (e.needsAttention) li.setAttribute('data-attention', 'true')
+    if (e.cwd) li.title = e.cwd
 
     sessionListEl.appendChild(li)
   }

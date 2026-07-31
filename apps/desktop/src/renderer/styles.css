@@ -112,6 +112,7 @@ button {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  position: relative;
 }
 
 .session-item:hover {
@@ -122,6 +123,88 @@ button {
 .session-item.active {
   background: var(--panel-2);
   color: var(--fg);
+}
+
+.session-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.session-item[data-attention='true'] .badge {
+  color: var(--attention);
+}
+
+.session-title {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  color: var(--fg);
+}
+
+.session-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.session-meta-left,
+.session-meta-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.session-model {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 90px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  opacity: 0.8;
+}
+
+.session-time {
+  font-variant-numeric: tabular-nums;
+}
+
+.session-count {
+  font-variant-numeric: tabular-nums;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 6px;
+  font-size: 10.5px;
+}
+
+.badge {
+  font-size: 10.5px;
+  opacity: 0.85;
+}
+
+.badge[data-status='running'] {
+  color: var(--accent);
+}
+
+.badge[data-status='waiting_permission'] {
+  color: var(--attention);
+}
+
+.badge[data-status='error'] {
+  color: var(--danger);
 }
 
 /* ── 主区 ───────────────────────────────────────── */
