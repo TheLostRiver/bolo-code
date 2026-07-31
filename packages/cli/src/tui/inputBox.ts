@@ -501,9 +501,8 @@ function renderBadgeTopBorder(options: {
   const modelBadge = status.model
     ? renderBadge('model', status.model, colors)
     : ''
-  const effortBadge = status.effortLevel
-    ? renderBadge('effort', status.effortLevel, colors)
-    : ''
+  // 推理等级缺省 auto（与 footer 语义一致），真实会话未设置时也可见
+  const effortBadge = renderBadge('effort', status.effortLevel?.trim() || 'auto', colors)
   const contextBadge = renderContextBadge(status, colors)
 
   // 组合候选：full → 只 model → 只 model+context → 回退
@@ -540,6 +539,7 @@ export type ComposerAnsiPalette = Record<keyof TuiPalette, string>
 
 export type ComposerColors = {
   border: string
+  borderDim: string
   prompt: string
   dim: string
   reset: string
@@ -567,6 +567,7 @@ export function buildComposerColors(options: {
   if (!color || !palette) {
     return {
       border: color ? '\u001b[38;5;244m' : '',
+      borderDim: color ? '\u001b[38;5;244m' : '',
       prompt: color ? '\u001b[38;5;81m' : '',
       dim: color ? '\u001b[2m' : '',
       reset: color ? '\u001b[0m' : '',
@@ -582,6 +583,7 @@ export function buildComposerColors(options: {
   }
   return {
     border: palette.border,
+    borderDim: palette.borderDim,
     prompt: palette.accent,
     dim: '\u001b[2m',
     reset: '\u001b[0m',
@@ -598,7 +600,7 @@ export function buildComposerColors(options: {
 
 type FooterSegment = {
   text: string
-  tone?: 'bold' | 'dim' | 'accent' | 'muted' | 'key' | 'value'
+  tone?: 'bold' | 'dim' | 'accent' | 'muted' | 'key' | 'value' | 'gsep'
 }
 
 function footerSegmentsWidth(segments: readonly FooterSegment[]): number {
@@ -619,6 +621,8 @@ function toneStart(tone: FooterSegment['tone'], colors: ComposerColors): string 
       return colors.kbdBg ? `${colors.kbdBg}${colors.kbdFg}` : colors.kbdFg
     case 'value':
       return colors.inputFg
+    case 'gsep':
+      return colors.borderDim
     default:
       return ''
   }
@@ -924,21 +928,106 @@ export function renderTuiInputFooter(options: {
   const color = options.color !== false
   const colors = buildComposerColors({ color, palette: options.palette })
   const lines: string[] = []
-  const status = renderStatusFooter({
-    status: options.status,
-    width: frameWidth,
-    colors,
-  })
-  if (stripTerminalAnsi(status).trim()) lines.push(status)
-  lines.push(
-    renderShortcutFooter({
-      menuOpen: options.state.slashMenu !== null,
+  if (colors.badgeBg) {
+    // palette 模式：单行 = 快捷键组（kbd 键帽 + │ 竖线分隔）+ 右侧 mode/usage 胶囊
+    const line = renderPaletteFooter({
+      status: options.status,
       mode: options.mode,
+      menuOpen: options.state.slashMenu !== null,
       width: frameWidth,
       colors,
-    }),
-  )
+    })
+    if (line) lines.push(line)
+  } else {
+    // 旧两行模式（无 palette 字节兼容）
+    const status = renderStatusFooter({
+      status: options.status,
+      width: frameWidth,
+      colors,
+    })
+    if (stripTerminalAnsi(status).trim()) lines.push(status)
+    lines.push(
+      renderShortcutFooter({
+        menuOpen: options.state.slashMenu !== null,
+        mode: options.mode,
+        width: frameWidth,
+        colors,
+      }),
+    )
+  }
   return { text: lines.join('\n'), lines }
+}
+
+/**
+ * 极光单行 footer（对齐原型 v3）：
+ *   ▌Enter▌ send │ ▌Ctrl+J▌ newline │ ▌↑↓▌ history │ ▌Ctrl+C▌ exit  ▌default · ↓96k ↑1.2k▌
+ * 模型/推理等级已在顶边 badge，本行不再重复 status；宽度不足时逐级降级。
+ */
+function renderPaletteFooter(options: {
+  status?: TuiInputStatus
+  mode?: 'idle' | 'running'
+  menuOpen: boolean
+  width: number
+  colors: ComposerColors
+}): string {
+  const { status, mode, menuOpen, width, colors } = options
+  const sep: FooterSegment = { text: ' │ ', tone: 'gsep' }
+  let keys: FooterSegment[]
+  if (menuOpen) {
+    keys = [
+      keySegment('↑↓'),
+      actionSegment(' select'),
+      sep,
+      keySegment('Tab/Enter'),
+      actionSegment(' complete'),
+      sep,
+      keySegment('Esc'),
+      actionSegment(' close'),
+    ]
+  } else if (mode === 'running') {
+    keys = [
+      actionSegment('Working'),
+      sep,
+      keySegment('Esc'),
+      actionSegment(' interrupt'),
+    ]
+  } else {
+    keys = [
+      keySegment('Enter'),
+      actionSegment(' send'),
+      sep,
+      keySegment('Ctrl+J'),
+      actionSegment(' newline'),
+      sep,
+      keySegment('↑↓'),
+      actionSegment(' history'),
+      sep,
+      keySegment('Ctrl+C'),
+      actionSegment(' exit'),
+    ]
+  }
+  // 右侧胶囊：permissionMode · usage（对齐原型 mode-chip）
+  const modeText = status?.permissionMode?.trim() || 'default'
+  const usage = status?.usage
+  const chipText = usage
+    ? `${modeText} · ↓${formatTuiTokenCount(
+        usage.inputTokens,
+      )} ↑${formatTuiTokenCount(usage.outputTokens)}`
+    : modeText
+  const chip: FooterSegment[] = [keySegment(chipText)]
+  const available = Math.max(0, width - 2)
+  const keysWidth = footerSegmentsWidth(keys)
+  const chipWidth = footerSegmentsWidth(chip)
+  if (keysWidth + chipWidth + 2 <= available) {
+    const gap = available - keysWidth - chipWidth
+    return `  ${renderFooterSegments(keys, colors)}${' '.repeat(
+      gap,
+    )}${renderFooterSegments(chip, colors)}`
+  }
+  if (keysWidth <= available) {
+    return `  ${renderFooterSegments(keys, colors)}`
+  }
+  return ''
 }
 
 export function renderTuiInputBox(options: {
@@ -1003,7 +1092,12 @@ export function renderTuiInputBox(options: {
     const ghost = inputLine.ghostText
       ? `${colors.ghost}${inputLine.ghostText}${reset}`
       : ''
-    const content = `${prompt}${marker}${reset}${inputText}${ghost}${' '.repeat(
+    // 输入文字仅在 palette 模式上 inputFg 色；无 palette 保持旧字节（无样式）
+    const inputColor = colors.inputBg ? colors.inputFg : ''
+    const body = inputColor
+      ? `${inputColor}${inputText}${reset}`
+      : inputText
+    const content = `${prompt}${marker}${reset}${body}${ghost}${' '.repeat(
       Math.max(0, contentWidth - inputLine.width),
     )}`
     lines.push(

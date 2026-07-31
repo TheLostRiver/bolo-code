@@ -63,6 +63,12 @@ function main() {
   assert.ok(themed.text.includes('context'), 'context badge')
   assert.ok(themed.text.includes('38% · 96k/256k'), 'context 百分比与用量')
   assert.ok(themed.text.includes('█'), '进度条填充字符')
+  // 单行 footer：kbd 键帽 + │ 竖线分隔 + 右侧胶囊
+  assert.ok(themed.text.includes('Enter'), 'kbd Enter')
+  assert.ok(themed.text.includes('send'), 'action send')
+  assert.ok(themed.text.includes(' │ '), '竖线分隔')
+  assert.ok(themed.text.includes('default · ↓96k ↑1.2k'), 'mode/usage 胶囊')
+  assert.ok(!themed.text.includes(' · effort '), 'palette 单行不再重复 status 行')
 
   // ---- 回退渲染字节不变 ----
   const legacy = renderTuiInputBox({
@@ -79,6 +85,7 @@ function main() {
   assert.ok(legacy.text.includes('\u001b[38;5;244m'), 'legacy border 灰')
   assert.ok(legacy.text.includes('\u001b[38;5;81m'), 'legacy prompt 青')
   assert.ok(legacy.text.includes('Message'), 'legacy 无 badge 时保留标题行')
+  assert.ok(legacy.text.includes(' · effort '), 'legacy 仍为两行 status footer')
 
   // ---- plain：零 ANSI ----
   const plainPalette = buildPaletteAnsi(getTuiPalette('plain'), true, false)
