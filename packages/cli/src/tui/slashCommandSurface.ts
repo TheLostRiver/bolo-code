@@ -15,7 +15,7 @@ export type RetainedSlashDisplayProjection =
   | {
       kind: 'action-picker'
       picker: {
-        action: 'provider' | 'effort'
+        action: 'provider' | 'effort' | 'theme'
         title: string
         items: readonly { id: string; label: string }[]
         initialIndex?: number
