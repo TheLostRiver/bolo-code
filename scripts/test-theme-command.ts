@@ -17,6 +17,7 @@ import {
 } from '../packages/config/src/index.ts'
 import { TUI_THEME_IDS } from '../packages/shared/src/index.ts'
 import { resolveTuiTheme } from '../packages/cli/src/tui/theme.ts'
+import { layoutPaths } from '../packages/config/src/paths.ts'
 
 async function main() {
   const session = await createSession({
@@ -83,8 +84,17 @@ async function main() {
     await fs.rm(tmp, { recursive: true, force: true })
   }
 
-  // ---- 无 config 时同步读取返回 undefined（不创建目录） ----
-  assert.equal(getPersistedTuiThemeSync({ layout: undefined }), undefined)
+  // ---- 无 config 时同步读取返回 undefined（不创建目录；隔离临时目录） ----
+  const tmpEmpty = await fs.mkdtemp(path.join(os.tmpdir(), 'bolo-theme-empty-'))
+  try {
+    assert.equal(
+      getPersistedTuiThemeSync({ layout: layoutPaths(tmpEmpty) }),
+      undefined,
+      'no config file → undefined',
+    )
+  } finally {
+    await fs.rm(tmpEmpty, { recursive: true, force: true })
+  }
 
   // ---- 解析优先级：显式 theme 参数优先于 env ----
   assert.equal(
