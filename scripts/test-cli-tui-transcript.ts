@@ -250,6 +250,9 @@ async function main() {
   // 用 env 注入而非 setCapabilities：pi-tui 内部模块（markdown.js）持有自己的
   // capabilities 缓存，setCapabilities 只作用于本地 stub 会造成双轨不一致；
   // env 探测让 stub 与原版读到同一份能力值（WT_SESSION → hyperlinks: true）。
+  // 注：在 TMUX/TERM=tmux* 环境下原版会走 tmux 分支（hyperlinks 可能为 false），
+  // 该 OSC 8 断言仅适用于非 tmux 测试环境（Windows Terminal / 常规 shell）。
+  const savedWtSession = process.env.WT_SESSION
   process.env.WT_SESSION = 'pi-compat-test'
   try {
     const transcript = new RetainedTranscript({ env: { NO_COLOR: '1' } })
@@ -452,7 +455,8 @@ async function main() {
 
     console.log('PASS: CLI retained transcript Markdown')
   } finally {
-    delete process.env.WT_SESSION
+    if (savedWtSession === undefined) delete process.env.WT_SESSION
+    else process.env.WT_SESSION = savedWtSession
     for (const fixture of widthFixtures.reverse()) {
       await dispose(fixture)
     }
