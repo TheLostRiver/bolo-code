@@ -8,6 +8,7 @@ import type { SlashCommandCandidate } from '../../../core/src/index.ts'
 import type { CliTuiComposerMode } from '../../../shared/src/index.ts'
 import {
   applyTuiInputKey,
+  type ComposerAnsiPalette,
   configureTuiInputState,
   createTuiInputState,
   insertTuiInputText,
@@ -85,6 +86,7 @@ export class RetainedComposer implements Component, Focusable {
   constructor(
     private readonly options: {
       color: boolean
+      palette?: ComposerAnsiPalette
       requestRender: () => void
       onInputSettled: () => void
       onInputMutation: () => void
@@ -222,6 +224,7 @@ export class RetainedComposer implements Component, Focusable {
       columns: width,
       status: this.status,
       color: this.options.color,
+      palette: this.options.palette,
       mode: editing ? 'idle' : 'running',
       includeFooter: false,
       ...(editing && this.focused && this.pending
@@ -259,6 +262,7 @@ export class RetainedComposerFooter implements Component {
   constructor(
     private readonly composer: RetainedComposer,
     private readonly color: boolean,
+    private readonly palette?: ComposerAnsiPalette,
   ) {}
 
   invalidate(): void {}
@@ -269,6 +273,7 @@ export class RetainedComposerFooter implements Component {
       columns: width,
       status: this.composer.getStatus(),
       color: this.color,
+      palette: this.palette,
       mode: this.composer.getMode() === 'editing' ? 'idle' : 'running',
     }).lines
   }

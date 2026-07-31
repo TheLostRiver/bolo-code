@@ -16,6 +16,7 @@ import {
   wrapTerminalText,
 } from './terminalText.ts'
 import { resolveTuiDockWidth } from './frame.ts'
+import type { TuiPalette } from './theme.ts'
 
 export type TuiInputState = {
   value: string
@@ -459,47 +460,112 @@ export function formatTuiTokenCount(value: number): string {
   return `${scaled.toFixed(precision).replace(/\.0$/u, '')}${suffix}`
 }
 
+export type ComposerAnsiPalette = Record<keyof TuiPalette, string>
+
+export type ComposerColors = {
+  border: string
+  prompt: string
+  dim: string
+  reset: string
+  kbdFg: string
+  kbdBg: string
+  accent: string
+  muted: string
+  inputFg: string
+  ghost: string
+}
+
+/**
+ * 由主题 palette 构建输入框配色；缺省（无 palette）回退旧色值，
+ * 保证未接主题的调用方与既有测试输出字节不变。
+ */
+export function buildComposerColors(options: {
+  color: boolean
+  palette?: ComposerAnsiPalette
+}): ComposerColors {
+  const { color, palette } = options
+  if (!color || !palette) {
+    return {
+      border: color ? '\u001b[38;5;244m' : '',
+      prompt: color ? '\u001b[38;5;81m' : '',
+      dim: color ? '\u001b[2m' : '',
+      reset: color ? '\u001b[0m' : '',
+      kbdFg: color ? '\u001b[1m' : '',
+      kbdBg: '',
+      accent: color ? '\u001b[38;5;81m' : '',
+      muted: color ? '\u001b[2m' : '',
+      inputFg: color ? '\u001b[1m' : '',
+      ghost: color ? '\u001b[2m' : '',
+    }
+  }
+  return {
+    border: palette.border,
+    prompt: palette.accent,
+    dim: '\u001b[2m',
+    reset: '\u001b[0m',
+    kbdFg: palette.chipFg,
+    kbdBg: palette.chipBg,
+    accent: palette.accent,
+    muted: palette.muted,
+    inputFg: palette.inputFg,
+    ghost: palette.ghost,
+  }
+}
+
 type FooterSegment = {
   text: string
-  tone?: 'bold' | 'dim'
+  tone?: 'bold' | 'dim' | 'accent' | 'muted' | 'key' | 'value'
 }
 
 function footerSegmentsWidth(segments: readonly FooterSegment[]): number {
   return measureTerminalText(segments.map((segment) => segment.text).join(''))
 }
 
+function toneStart(tone: FooterSegment['tone'], colors: ComposerColors): string {
+  switch (tone) {
+    case 'bold':
+      return '\u001b[1m'
+    case 'dim':
+      return '\u001b[2m'
+    case 'accent':
+      return colors.accent
+    case 'muted':
+      return colors.muted
+    case 'key':
+      return colors.kbdBg ? `${colors.kbdBg}${colors.kbdFg}` : colors.kbdFg
+    case 'value':
+      return colors.inputFg
+    default:
+      return ''
+  }
+}
+
 function renderFooterSegments(
   segments: readonly FooterSegment[],
-  color: boolean,
+  colors: ComposerColors,
 ): string {
-  if (!color) return segments.map((segment) => segment.text).join('')
   return segments
     .map((segment) => {
-      const start =
-        segment.tone === 'bold'
-          ? '\u001b[1m'
-          : segment.tone === 'dim'
-            ? '\u001b[2m'
-            : ''
-      return start ? `${start}${segment.text}\u001b[0m` : segment.text
+      const start = toneStart(segment.tone, colors)
+      return start ? `${start}${segment.text}${colors.reset}` : segment.text
     })
     .join('')
 }
 
 function valueSegment(text: string): FooterSegment {
-  return { text, tone: 'bold' }
+  return { text, tone: 'value' }
 }
 
 function separatorSegment(text = ' · '): FooterSegment {
-  return { text, tone: 'dim' }
+  return { text, tone: 'muted' }
 }
 
 function renderStatusFooter(options: {
   status?: TuiInputStatus
   width: number
-  color: boolean
+  colors: ComposerColors
 }): string {
-  const { status, width, color } = options
+  const { status, width, colors } = options
   if (!status) return ''
   const mode = status.permissionMode?.trim() || 'default'
   const provider = status.providerId?.trim() || status.providerKind?.trim() || ''
@@ -566,26 +632,26 @@ function renderStatusFooter(options: {
       : usageSegments.length > 0
         ? Math.max(0, available - usageWidth)
         : 0
-  return `  ${renderFooterSegments(selected, color)}${' '.repeat(
+  return `  ${renderFooterSegments(selected, colors)}${' '.repeat(
     gap,
-  )}${renderFooterSegments(usageSegments, color)}`
+  )}${renderFooterSegments(usageSegments, colors)}`
 }
 
 function keySegment(text: string): FooterSegment {
-  return { text, tone: 'bold' }
+  return { text, tone: 'key' }
 }
 
 function actionSegment(text: string): FooterSegment {
-  return { text, tone: 'dim' }
+  return { text, tone: 'muted' }
 }
 
 function renderShortcutFooter(options: {
   menuOpen: boolean
   mode?: 'idle' | 'running'
   width: number
-  color: boolean
+  colors: ComposerColors
 }): string {
-  const { menuOpen, mode, width, color } = options
+  const { menuOpen, mode, width, colors } = options
   const enterSend = [keySegment('Enter'), actionSegment(' send')]
   const interrupt = [keySegment('Esc'), actionSegment(' interrupt')]
   const candidates: FooterSegment[][] = menuOpen
@@ -655,7 +721,7 @@ function renderShortcutFooter(options: {
     candidates.find(
       (candidate) => footerSegmentsWidth(candidate) <= available,
     ) ?? []
-  return `  ${renderFooterSegments(selected, color)}`
+  return `  ${renderFooterSegments(selected, colors)}`
 }
 
 function formatSlashCandidateLabel(candidate: SlashCommandCandidate): string {
@@ -671,22 +737,15 @@ function renderSlashMenuRows(options: {
   menu: TuiSlashMenuState
   frameWidth: number
   maxRows: number
-  color: boolean
-  border: string
-  prompt: string
-  dim: string
-  reset: string
+  colors: ComposerColors
 }): string[] {
   const {
     menu,
     frameWidth,
     maxRows,
-    color,
-    border,
-    prompt,
-    dim,
-    reset,
+    colors,
   } = options
+  const { border, prompt, dim, reset } = colors
   const rows: string[] = []
   rows.push(
     `${border}${borderLine('├', '┤', frameWidth, `Commands · ${menu.items.length}`)}${reset}`,
@@ -730,8 +789,8 @@ function renderSlashMenuRows(options: {
       )} ${clipTerminalText(candidate.description, descriptionWidth)}`
     }
     const body = padTerminalText(`${marker}${content}`, bodyWidth)
-    const selectedStart = color && selected ? '\u001b[7m' : ''
-    const selectedEnd = color && selected ? reset : ''
+    const selectedStart = colors && selected ? '\u001b[7m' : ''
+    const selectedEnd = colors && selected ? reset : ''
     const tone = selected ? prompt : ''
     rows.push(
       `${border}│${reset} ${selectedStart}${tone}${body}${selectedEnd} ${border}│${reset}`,
@@ -772,16 +831,18 @@ export function renderTuiInputFooter(options: {
   columns?: number
   status?: TuiInputStatus
   color?: boolean
+  palette?: ComposerAnsiPalette
   mode?: 'idle' | 'running'
 }): RenderedTuiInputFooter {
   const columns = Math.max(24, Math.floor(options.columns ?? 80))
   const frameWidth = resolveTuiDockWidth(columns)
   const color = options.color !== false
+  const colors = buildComposerColors({ color, palette: options.palette })
   const lines: string[] = []
   const status = renderStatusFooter({
     status: options.status,
     width: frameWidth,
-    color,
+    colors,
   })
   if (stripTerminalAnsi(status).trim()) lines.push(status)
   lines.push(
@@ -789,7 +850,7 @@ export function renderTuiInputFooter(options: {
       menuOpen: options.state.slashMenu !== null,
       mode: options.mode,
       width: frameWidth,
-      color,
+      colors,
     }),
   )
   return { text: lines.join('\n'), lines }
@@ -800,6 +861,7 @@ export function renderTuiInputBox(options: {
   columns?: number
   status?: TuiInputStatus
   color?: boolean
+  palette?: ComposerAnsiPalette
   maxBodyRows?: number
   maxMenuRows?: number
   title?: string
@@ -828,10 +890,8 @@ export function renderTuiInputBox(options: {
   if (!visible.length) visible.push({ text: '', width: 0 })
 
   const color = options.color !== false
-  const border = color ? '\u001b[38;5;244m' : ''
-  const prompt = color ? '\u001b[38;5;81m' : ''
-  const dim = color ? '\u001b[2m' : ''
-  const reset = color ? '\u001b[0m' : ''
+  const colors = buildComposerColors({ color, palette: options.palette })
+  const { border, prompt, dim, reset } = colors
   const lines: string[] = []
   lines.push(
     `${border}${borderLine('╭', '╮', frameWidth, options.title ?? 'Message')}${reset}`,
@@ -863,11 +923,7 @@ export function renderTuiInputBox(options: {
         menu: options.state.slashMenu,
         frameWidth,
         maxRows: Math.max(1, options.maxMenuRows ?? 6),
-        color,
-        border,
-        prompt,
-        dim,
-        reset,
+        colors,
       }),
     )
   }
@@ -880,6 +936,7 @@ export function renderTuiInputBox(options: {
         columns,
         status: options.status,
         color,
+        palette: options.palette,
         mode: options.mode,
       }).lines,
     )

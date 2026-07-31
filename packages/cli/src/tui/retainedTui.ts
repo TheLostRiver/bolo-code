@@ -9,6 +9,8 @@ import {
   type OverlayHandle,
 } from './piCompat.ts'
 import { getBoloHomeDir } from '../../../config/src/paths.ts'
+import { buildPaletteAnsi, resolveTuiTheme } from './theme.ts'
+import type { ComposerAnsiPalette } from './inputBox.ts'
 import {
   createCliCommandSurfaceState,
   createCliTuiViewState,
@@ -217,6 +219,7 @@ class RetainedRoot extends Container {
     composer: RetainedComposer,
     activity: RetainedActivity,
     color: boolean,
+    palette: ComposerAnsiPalette | undefined,
     getViewportRows: () => number,
   ) {
     super()
@@ -231,6 +234,7 @@ class RetainedRoot extends Container {
     this.footer = new RetainedComposerFooter(
       composer,
       color,
+      palette,
     )
     this.addChild(this.welcome)
     this.addChild(this.transcript)
@@ -418,6 +422,9 @@ export function createRetainedTuiController(options: {
 }): CliTuiController {
   const env = options.env ?? process.env
   const color = options.color ?? env.NO_COLOR === undefined
+  // 主题 palette：默认极光；/theme 预览时由命令层替换此值并触发重渲染
+  const theme = resolveTuiTheme({ env })
+  const palette = buildPaletteAnsi(theme.palette, theme.trueColor, color)
   const adapter: BoloTerminalAdapter = createBoloTerminalAdapter({
     writeOut: options.writeOut,
     input: options.input,
@@ -446,6 +453,7 @@ export function createRetainedTuiController(options: {
   }
   const composer = new RetainedComposer({
     color,
+    palette,
     requestRender: requestComponentRender,
     onInputSettled: () => {
       if (!runningInterruptHandler) adapter.setInputEnabled(false)
@@ -468,6 +476,7 @@ export function createRetainedTuiController(options: {
     composer,
     activityView,
     color,
+    palette,
     () => adapter.rows,
   )
   root.setVisible(options.rootVisible !== false)
