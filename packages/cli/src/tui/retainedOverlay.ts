@@ -86,6 +86,7 @@ export type RetainedPickerOverlayMode =
   | 'picker'
   | 'provider'
   | 'effort'
+  | 'theme'
 
 export type RetainedCatalogOverlayIdentity = {
   readonly key: string
@@ -124,6 +125,8 @@ type PickerSession = OverlaySessionBase & {
   title?: string
   index: number
   resolve: (result: ArrowPickResult) => void
+  /** /theme 等实时预览钩子：索引变化时回调（不确认不落盘） */
+  onPreview?: (index: number) => void
 }
 
 type CatalogSession = OverlaySessionBase & {
@@ -235,7 +238,8 @@ function isPickerSession(
   return (
     session?.mode === 'picker' ||
     session?.mode === 'provider' ||
-    session?.mode === 'effort'
+    session?.mode === 'effort' ||
+    session?.mode === 'theme'
   )
 }
 
@@ -448,6 +452,7 @@ export class RetainedOverlayHost implements Component, Focusable {
     title?: string
     initialIndex?: number
     signal?: AbortSignal
+    onPreview?: (index: number) => void
   }): Promise<ArrowPickResult> {
     if (this.active) {
       return Promise.reject(
@@ -483,6 +488,7 @@ export class RetainedOverlayHost implements Component, Focusable {
         resolve,
         ...(options.title ? { title: options.title } : {}),
         ...(options.signal ? { signal: options.signal } : {}),
+        ...(options.onPreview ? { onPreview: options.onPreview } : {}),
       }
       if (options.signal) {
         session.onAbort = () =>
@@ -904,8 +910,9 @@ export class RetainedOverlayHost implements Component, Focusable {
           reason: 'cancel',
           message: 'cancelled',
         })
-      } else if (key !== 'none') {
-        this.options.requestRender()
+      } else {
+        if (key !== 'none') this.options.requestRender()
+        active.onPreview?.(active.index)
       }
       return
     }

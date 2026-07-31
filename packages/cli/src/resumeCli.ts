@@ -46,6 +46,7 @@ import {
 } from './tui/arrowPicker.ts'
 import { runRetainedArrowPicker } from './tui/retainedPicker.ts'
 import { getCliSlashCommandCandidates } from './slashCandidates.ts'
+import { getPersistedTuiThemeSync } from '../../config/src/index.ts'
 import {
   createRetainedTuiController,
   type CliTuiController,
@@ -507,6 +508,13 @@ export function createCliOnEvent(opts: {
           fallbackColumns: opts.columns,
           showThinking: opts.showThinking,
           ...(opts.explainError ? { explainError: opts.explainError } : {}),
+          // 持久化主题：env.BOLO_THEME 优先，否则读 /theme 写入的 config
+          ...(opts.env?.BOLO_THEME
+            ? {}
+            : (() => {
+                const persisted = getPersistedTuiThemeSync()
+                return persisted ? { theme: persisted } : {}
+              })()),
         })
       : undefined
   const printer =
@@ -686,10 +694,11 @@ export async function runOnePrompt(
     writeOut(line)
   }
   const runInteractivePicker = async (picker: {
-    mode: 'provider' | 'effort'
+    mode: 'provider' | 'effort' | 'theme'
     items: ArrowPickItem[]
     title: string
     initialIndex?: number
+    onPreview?: (index: number) => void
   }): Promise<ArrowPickResult> => {
     if (controller) {
       return await controller.runPickerOverlay({
@@ -721,7 +730,7 @@ export async function runOnePrompt(
     controller.printer.onEvent(event)
   }
   const applyActionPickerSelection = async (
-    action: 'provider' | 'effort',
+    action: 'provider' | 'effort' | 'theme',
     id: string,
   ): Promise<{ ok: boolean; message: string }> => {
     if (action === 'provider') {
@@ -729,6 +738,14 @@ export async function runOnePrompt(
       return switched.ok
         ? { ok: true, message: switched.message }
         : { ok: false, message: switched.reason }
+    }
+
+    if (action === 'theme') {
+      const { setTuiThemeConfig } = await import('../../config/src/index.ts')
+      const applied = await setTuiThemeConfig({ theme: id })
+      return applied.ok
+        ? { ok: true, message: applied.message }
+        : { ok: false, message: applied.reason }
     }
 
     if (id === 'auto') {
@@ -880,6 +897,15 @@ export async function runOnePrompt(
                   ? { initialIndex: projection.picker.initialIndex }
                   : {}),
                 ...(options?.signal ? { signal: options.signal } : {}),
+                // /theme 实时预览：选中变化即换色，不确认不落盘
+                ...(projection.picker.action === 'theme'
+                  ? {
+                      onPreview: (index: number) =>
+                        controller.previewTheme(
+                          projection.picker.items[index]!.id,
+                        ),
+                    }
+                  : {}),
               })
               if (picked.ok) {
                 const applied = await applyActionPickerSelection(
@@ -901,6 +927,10 @@ export async function runOnePrompt(
               }
               if (picked.reason === 'cancel') {
                 const message = `${projection.picker.action} pick cancelled`
+                // 取消：恢复进入 /theme 前的 palette
+                if (projection.picker.action === 'theme') {
+                  controller.resetThemePreview()
+                }
                 controller.showCommandToast({
                   key: `slash:${projection.picker.action}:cancel`,
                   content: message,

@@ -9,7 +9,12 @@ import {
   type OverlayHandle,
 } from './piCompat.ts'
 import { getBoloHomeDir } from '../../../config/src/paths.ts'
-import { buildPaletteAnsi, resolveTuiTheme } from './theme.ts'
+import {
+  buildPaletteAnsi,
+  getTuiPalette,
+  isTuiThemeId,
+  resolveTuiTheme,
+} from './theme.ts'
 import type { ComposerAnsiPalette } from './inputBox.ts'
 import {
   createCliCommandSurfaceState,
@@ -143,7 +148,12 @@ export type CliTuiController = {
     title?: string
     initialIndex?: number
     signal?: AbortSignal
+    onPreview?: (index: number) => void
   }): Promise<ArrowPickResult>
+  /** /theme 预览：临时切换 palette 并重渲染（不落盘） */
+  previewTheme(id: string): void
+  /** 取消 /theme：恢复进入会话时的 palette */
+  resetThemePreview(): void
   openCatalogOverlay(
     options: RetainedCatalogOverlayOptions,
   ): RetainedCatalogOverlayHandle
@@ -419,12 +429,14 @@ export function createRetainedTuiController(options: {
   commandSurfaceTimers?: CliCommandSurfaceTimers
   /** Standalone overlays (for example runtime pager) do not render the REPL root. */
   rootVisible?: boolean
+  /** 持久化主题 id（/theme 写入 config）；env.BOLO_THEME 优先 */
+  theme?: string
 }): CliTuiController {
   const env = options.env ?? process.env
   const color = options.color ?? env.NO_COLOR === undefined
-  // 主题 palette：默认极光；/theme 预览时由命令层替换此值并触发重渲染
-  const theme = resolveTuiTheme({ env })
-  const palette = buildPaletteAnsi(theme.palette, theme.trueColor, color)
+  // 主题 palette：默认极光；/theme 预览时临时替换并触发重渲染，取消后恢复
+  const theme = resolveTuiTheme({ env, theme: options.theme })
+  let palette = buildPaletteAnsi(theme.palette, theme.trueColor, color)
   const adapter: BoloTerminalAdapter = createBoloTerminalAdapter({
     writeOut: options.writeOut,
     input: options.input,
@@ -865,6 +877,22 @@ export function createRetainedTuiController(options: {
         })
       }
       return overlay.runPicker(overlayOptions)
+    },
+    /** /theme 预览：临时切换 palette 并重渲染（不落盘） */
+    previewTheme(id: string) {
+      if (isTuiThemeId(id)) {
+        palette = buildPaletteAnsi(
+          getTuiPalette(id),
+          theme.trueColor,
+          color,
+        )
+        requestComponentRender()
+      }
+    },
+    /** 取消 /theme：恢复进入会话时的 palette */
+    resetThemePreview() {
+      palette = buildPaletteAnsi(theme.palette, theme.trueColor, color)
+      requestComponentRender()
     },
     openCatalogOverlay(overlayOptions) {
       if (stopped) {

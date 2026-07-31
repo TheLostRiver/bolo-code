@@ -8,7 +8,11 @@
  * - env 覆盖保持向后兼容：BOLO_THEME / BOLO_MASCOT / NO_COLOR / BOLO_PLAIN。
  */
 
-export type TuiThemeId = 'default' | 'amber' | 'neon' | 'dim' | 'plain'
+import {
+  type TuiThemeId,
+} from '../../../shared/src/index.ts'
+
+export { TUI_THEME_IDS, isTuiThemeId, type TuiThemeId } from '../../../shared/src/index.ts'
 
 export type Rgb = readonly [number, number, number]
 
@@ -144,18 +148,6 @@ const PALETTES: Record<TuiThemeId, TuiPalette> = {
   neon: NEON,
   dim: DIM,
   plain: PLAIN_PALETTE,
-}
-
-export const TUI_THEME_IDS: readonly TuiThemeId[] = [
-  'default',
-  'amber',
-  'neon',
-  'dim',
-  'plain',
-]
-
-export function isTuiThemeId(value: unknown): value is TuiThemeId {
-  return typeof value === 'string' && TUI_THEME_IDS.includes(value as TuiThemeId)
 }
 
 export function getTuiPalette(id: TuiThemeId): TuiPalette {

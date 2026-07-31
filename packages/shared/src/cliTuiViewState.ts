@@ -192,6 +192,7 @@ export type CliTuiOverlayState =
   | { mode: 'picker' }
   | { mode: 'provider' }
   | { mode: 'effort' }
+  | { mode: 'theme' }
   | { mode: 'diff' }
   | { mode: 'pager' }
 

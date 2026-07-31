@@ -45,6 +45,10 @@ import {
   type HookEvent,
   type RuntimeCommand,
   type RuntimeCommandResult,
+  TUI_THEME_IDS,
+  isTuiThemeId,
+  tuiThemeLabel,
+  type TuiThemeId,
 } from '../../shared/src/index.ts'
 import {
   estimateSystemSectionsTokens,
@@ -344,7 +348,7 @@ export type SlashOverlayViewModel =
     }
   | {
       readonly kind: 'action-picker'
-      readonly action: 'provider' | 'effort'
+      readonly action: 'provider' | 'effort' | 'theme'
       readonly title: string
       readonly items: readonly SlashOverlayItem[]
       readonly initialIndex?: number
@@ -4336,6 +4340,71 @@ const effortDisplay: SlashCommandDef['display'] = (args, result) => {
     : toastDisplay('slash:effort:update')
 }
 
+function themePickerItems(): SlashOverlayItem[] {
+  return TUI_THEME_IDS.map((id) => ({ id, label: tuiThemeLabel(id) }))
+}
+
+function currentThemeIndex(): number {
+  const raw = process.env.BOLO_THEME?.trim().toLowerCase()
+  if (raw && isTuiThemeId(raw)) {
+    return TUI_THEME_IDS.indexOf(raw as TuiThemeId)
+  }
+  return 0
+}
+
+function cmdTheme(_session: SlashSession, args: string): SlashDispatchResult {
+  const raw = args.trim().toLowerCase()
+  if (
+    raw === 'list' ||
+    raw === 'show' ||
+    raw === 'ls' ||
+    raw === 'help' ||
+    raw === '?'
+  ) {
+    const lines = TUI_THEME_IDS.map(
+      (id) => `  ${id} — ${tuiThemeLabel(id)}`,
+    )
+    return { ok: true, message: `TUI themes:\n${lines.join('\n')}` }
+  }
+  if (raw && !isTuiThemeId(raw)) {
+    return {
+      ok: false,
+      message: `unknown theme "${raw}" (default | amber | neon | dim | plain)`,
+    }
+  }
+  const initialIndex = raw && isTuiThemeId(raw) ? TUI_THEME_IDS.indexOf(raw as TuiThemeId) : currentThemeIndex()
+  return {
+    ok: true,
+    message: 'Select theme (↑/↓ preview · Enter apply · q cancel)',
+    overlayView: {
+      kind: 'action-picker' as const,
+      action: 'theme' as const,
+      title: 'Select theme',
+      items: themePickerItems(),
+      initialIndex: Math.max(0, initialIndex),
+    },
+  }
+}
+
+const themeDisplay: SlashCommandDef['display'] = (args, result) => {
+  if (!result.ok) return toastDisplay('slash:theme:error', 'error', 8_000)
+  if (
+    result.overlayView?.kind === 'action-picker' &&
+    result.overlayView.action === 'theme'
+  ) {
+    return overlayDisplay('slash:theme', 'picker')
+  }
+  const action = args.trim().toLowerCase()
+  return !action ||
+    action === 'list' ||
+    action === 'show' ||
+    action === 'ls' ||
+    action === 'help' ||
+    action === '?'
+    ? panelDisplay('slash:theme', { overflow: 'pager' })
+    : toastDisplay('slash:theme:error')
+}
+
 const backgroundDisplay: SlashCommandDef['display'] = (args, result) => {
   if (!result.ok) return toastDisplay('slash:bg:error', 'error', 8_000)
   return args.trim().toLowerCase().startsWith('cancel ')
@@ -4590,6 +4659,15 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     display: effortDisplay,
     group: 'model',
     run: cmdEffort,
+  },
+  {
+    name: 'theme',
+    summary:
+      'Pick / list TUI theme (default=aurora, amber, neon, dim, plain); ↑/↓ live preview',
+    usage: '[list]',
+    display: themeDisplay,
+    group: 'model',
+    run: cmdTheme,
   },
   {
     name: 'ultrathink',

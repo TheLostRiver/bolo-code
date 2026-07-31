@@ -434,3 +434,10 @@ export {
 
 // AR3E：secret 不越过进程/持久化边界
 export { redactSecretsDeep } from './secretBoundary.ts'
+export {
+  TUI_THEME_IDS,
+  TUI_THEME_LABELS,
+  isTuiThemeId,
+  tuiThemeLabel,
+  type TuiThemeId,
+} from './theme.ts'

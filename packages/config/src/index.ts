@@ -115,6 +115,14 @@ export {
 } from './addProviderProfile.ts'
 
 export {
+  setTuiThemeConfig,
+  getPersistedTuiTheme,
+  getPersistedTuiThemeSync,
+  type SetTuiThemeOptions,
+  type SetTuiThemeResult,
+} from './themeConfig.ts'
+
+export {
   ensureLayout,
   ensureUserLayout,
   ensureProjectLayout,

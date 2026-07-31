@@ -112,8 +112,13 @@ export type BoloConfigJson = {
    * 缺省：enabled、maxConcurrent=3、defaultModel=inherit、maxSpawnDepth=0。
    */
   agents?: AgentsConfigJson
-  /** Explicit local/direct search backends. Absent means no local network tool. */
+  /** 显式本地搜索后端。缺省表示无本地网络工具 */
   search?: SearchConfigJson
+  /**
+   * TUI 主题 id（default=极光 / amber / neon / dim / plain）。
+   * 环境变量 `BOLO_THEME` 覆盖本字段；缺省 default。
+   */
+  theme?: string
 }
 
 /** config.json → agents 段（可序列化） */
