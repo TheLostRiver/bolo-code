@@ -162,6 +162,19 @@ flowchart TB
 | `anthropic` | anthropic | `https://api.anthropic.com` | `anthropic-output` | `ANTHROPIC_API_KEY` |
 | `deepseek` | openai-compatible | `https://api.deepseek.com` | `deepseek-chat` | `DEEPSEEK_API_KEY` |
 | `siliconflow` | openai-compatible | `https://api.siliconflow.cn/v1` | `deepseek-chat` | `SILICONFLOW_API_KEY` |
+| `openrouter` | openai-compatible | `https://openrouter.ai/api/v1` | detect | `OPENROUTER_API_KEY` |
+| `groq` | openai-compatible | `https://api.groq.com/openai/v1` | detect | `GROQ_API_KEY` |
+| `together` | openai-compatible | `https://api.together.xyz/v1` | detect | `TOGETHER_API_KEY` |
+| `mistral` | openai-compatible | `https://api.mistral.ai/v1` | detect | `MISTRAL_API_KEY` |
+| `xai` | openai-compatible | `https://api.x.ai/v1` | detect | `XAI_API_KEY` |
+| `nvidia` | openai-compatible | `https://integrate.api.nvidia.com/v1` | detect | `NVIDIA_API_KEY` |
+| `fireworks` | openai-compatible | `https://api.fireworks.ai/inference/v1` | detect | `FIREWORKS_API_KEY` |
+| `cerebras` | openai-compatible | `https://api.cerebras.ai/v1` | detect | `CEREBRAS_API_KEY` |
+| `huggingface` | openai-compatible | `https://router.huggingface.co/v1` | detect | `HF_TOKEN` |
+| `vercel-ai-gateway` | openai-compatible | `https://ai-gateway.vercel.sh/v1` | detect | `VERCEL_AI_GATEWAY_TOKEN` |
+| `cloudflare-ai-gateway` | openai-compatible | `https://gateway.ai.cloudflare.com/v1` | detect | `CLOUDFLARE_AI_GATEWAY_TOKEN` |
+
+> P0A（方案 `PROVIDER_EXPANSION_PLAN.md`）：国际兼容 preset 扩容至 16 家（2026-07）；P0B 国内组后续。
 
 行为：
 
