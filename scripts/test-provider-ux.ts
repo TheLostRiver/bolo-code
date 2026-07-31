@@ -56,9 +56,33 @@ async function withTempHome<T>(fn: (home: string) => Promise<T>): Promise<T> {
 async function main() {
   // ── CX1 presets ──
   const presets = listProviderPresets()
-  assert(presets.length >= 5, 'at least 5 presets')
+  // P0A：5 家既有 + 11 家国际兼容 = 16 家（方案 PROVIDER_EXPANSION_PLAN P0A）
+  assert(presets.length >= 16, `at least 16 presets, got ${presets.length}`)
   assert(getProviderPreset('ds')?.id === 'deepseek', 'alias ds')
   assert(getProviderPreset('claude')?.id === 'anthropic', 'alias claude')
+  // 新别名
+  assert(getProviderPreset('or')?.id === 'openrouter', 'alias or')
+  assert(getProviderPreset('grok')?.id === 'xai', 'alias grok')
+  // 新增国际 preset 完整性：id 唯一 + apiKeyEnv 非空 + kind 合法
+  const ids = new Set<string>()
+  for (const p of presets) {
+    assert(!ids.has(p.id), `duplicate preset id ${p.id}`)
+    ids.add(p.id)
+    assert(p.kind === 'openai-compatible' || p.kind === 'openai-responses' || p.kind === 'anthropic', `kind ${p.id}`)
+    assert(p.baseUrl && p.baseUrl.startsWith('https://'), `baseUrl ${p.id}`)
+    assert(p.apiKeyEnv && p.apiKeyEnv.length > 0, `apiKeyEnv ${p.id}`)
+  }
+  assert(ids.has('openrouter'), 'openrouter present')
+  assert(ids.has('groq'), 'groq present')
+  assert(ids.has('together'), 'together present')
+  assert(ids.has('mistral'), 'mistral present')
+  assert(ids.has('xai'), 'xai present')
+  assert(ids.has('nvidia'), 'nvidia present')
+  assert(ids.has('fireworks'), 'fireworks present')
+  assert(ids.has('cerebras'), 'cerebras present')
+  assert(ids.has('huggingface'), 'huggingface present')
+  assert(ids.has('vercel-ai-gateway'), 'vercel-ai-gateway present')
+  assert(ids.has('cloudflare-ai-gateway'), 'cloudflare-ai-gateway present')
   const cfg = providerConfigFromPreset(getProviderPreset('deepseek')!)
   assert(cfg.kind === 'openai-compatible', 'ds kind')
   assert(cfg.apiKeyEnv === 'DEEPSEEK_API_KEY', 'ds env')
@@ -95,6 +119,25 @@ async function main() {
       scope: 'user',
     })
     assert(!dup.ok, 'dup without overwrite fails')
+
+    // P0A：新国际 preset 的真实 add 路径（openrouter 抽样）
+    const orAdded = await addProviderProfileToConfigFile({
+      presetId: 'openrouter',
+      scope: 'user',
+    })
+    assert(orAdded.ok, `add openrouter: ${!orAdded.ok ? orAdded.reason : ''}`)
+    if (orAdded.ok) {
+      const orDisk = await loadConfigJson(layout)
+      assert(
+        orDisk.providers?.openrouter?.baseUrl === 'https://openrouter.ai/api/v1',
+        'openrouter baseUrl on disk',
+      )
+      assert(
+        orDisk.providers?.openrouter?.apiKeyEnv === 'OPENROUTER_API_KEY',
+        'openrouter env on disk',
+      )
+      assert(!orDisk.providers?.openrouter?.apiKey, 'openrouter no plaintext key')
+    }
 
     const asOther = await addProviderProfileToConfigFile({
       presetId: 'openai',
