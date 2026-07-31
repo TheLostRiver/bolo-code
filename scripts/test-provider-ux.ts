@@ -154,6 +154,25 @@ async function main() {
       assert(!orDisk.providers?.openrouter?.apiKey, 'openrouter no plaintext key')
     }
 
+    // P0B：国内 preset 真实 add 路径（moonshot 抽样，凑 3 家 add E2E）
+    const msAdded = await addProviderProfileToConfigFile({
+      presetId: 'moonshot',
+      scope: 'user',
+    })
+    assert(msAdded.ok, `add moonshot: ${!msAdded.ok ? msAdded.reason : ''}`)
+    if (msAdded.ok) {
+      const msDisk = await loadConfigJson(layout)
+      assert(
+        msDisk.providers?.moonshot?.baseUrl === 'https://api.moonshot.cn/v1',
+        'moonshot baseUrl on disk',
+      )
+      assert(
+        msDisk.providers?.moonshot?.apiKeyEnv === 'MOONSHOT_API_KEY',
+        'moonshot env on disk',
+      )
+      assert(!msDisk.providers?.moonshot?.apiKey, 'moonshot no plaintext key')
+    }
+
     const asOther = await addProviderProfileToConfigFile({
       presetId: 'openai',
       asId: 'work-oai',
