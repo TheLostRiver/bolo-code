@@ -357,6 +357,96 @@ button {
 .msg h2 { font-size: 15.5px; }
 .msg h3 { font-size: 14px; }
 
+/* ── 工具卡片 ─────────────────────────────────────── */
+
+.card {
+  align-self: flex-start;
+  width: 100%;
+  max-width: 860px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  font-size: 12.5px;
+  color: var(--fg);
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+}
+
+.card-kind {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--accent);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+.card[data-status='error'] .card-title {
+  color: var(--danger);
+}
+
+.card[data-status='running'] .card-kind {
+  color: var(--accent);
+}
+
+.card-body {
+  margin: 0;
+  padding: 10px 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.truncated-note {
+  padding: 4px 12px 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.file-change-cell {
+  align-self: flex-start;
+  width: 100%;
+  max-width: 860px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.file-change-details summary {
+  cursor: pointer;
+  font-size: 12.5px;
+}
+
+.file-change-body {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  background: var(--panel-2);
+  border-radius: var(--radius-sm);
+  font-family: var(--mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
 /* ── Composer ───────────────────────────────────── */
 
 .input-bar {
@@ -477,7 +567,28 @@ button {
   word-break: break-word;
 }
 
-/* ── 模态（权限 / 询问 / 设置） ───────────────────── */
+/* ── 内联卡片（权限 / 询问：输入框上方，非全屏遮罩） ─────── */
+
+.perm.inline {
+  margin: 0 16px;
+}
+
+.perm.inline .perm-card {
+  background: var(--panel);
+  border: 1px solid var(--border-strong);
+  border-left: 3px solid var(--attention);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.perm.inline .perm-card .perm-actions {
+  justify-content: flex-start;
+}
+
+/* ── 模态（设置） ───────────────────────────────────── */
 
 .perm {
   position: fixed;

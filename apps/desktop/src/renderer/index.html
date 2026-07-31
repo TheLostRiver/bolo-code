@@ -63,6 +63,27 @@
 
         <main id="log" class="log" aria-live="polite" aria-label="Conversation"></main>
 
+        <div id="perm" class="perm inline" hidden>
+          <div class="perm-card">
+            <pre id="perm-text"></pre>
+            <div class="perm-actions">
+              <button type="button" id="perm-allow">Allow</button>
+              <button type="button" id="perm-always">Always</button>
+              <button type="button" id="perm-deny">Deny</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="ask" class="perm inline" hidden>
+          <div class="perm-card">
+            <div id="ask-questions"></div>
+            <div class="perm-actions">
+              <button type="button" id="ask-cancel">Cancel</button>
+              <button type="button" id="ask-submit">Answer</button>
+            </div>
+          </div>
+        </div>
+
         <footer class="input-bar">
           <div class="composer-shell">
             <textarea
@@ -98,27 +119,6 @@
         </div>
         <div id="panel-body" class="panel-body"></div>
       </aside>
-    </div>
-
-    <div id="perm" class="perm" hidden>
-      <div class="perm-card">
-        <pre id="perm-text"></pre>
-        <div class="perm-actions">
-          <button type="button" id="perm-allow">Allow</button>
-          <button type="button" id="perm-always">Always</button>
-          <button type="button" id="perm-deny">Deny</button>
-        </div>
-      </div>
-    </div>
-
-    <div id="ask" class="perm" hidden>
-      <div class="perm-card">
-        <div id="ask-questions"></div>
-        <div class="perm-actions">
-          <button type="button" id="ask-cancel">Cancel</button>
-          <button type="button" id="ask-submit">Answer</button>
-        </div>
-      </div>
     </div>
 
     <div id="settings" class="perm" hidden>
