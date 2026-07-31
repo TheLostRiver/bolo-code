@@ -83,7 +83,7 @@
 | `tui/terminalText.ts` | 字段级 ANSI/CJK/emoji cell-width helper；block wrap 由 retained Markdown/layout 负责 |
 | `tui/turnActivity.ts` | reasoning/tool/search/retry 分段生命周期、动画与独立计时 |
 | `tui/arrowPicker.ts` | 箭头选择 reducer/formatter 与非动态编号文本回落 |
-| `tui/theme.ts` | F-T9：主题 |
+| `tui/theme.ts` | 主题系统：5 主题（default=极光/amber/neon/dim/plain）+ 12 语义 RGB token + truecolor/256 降级；`/theme` 预览/持久化（`shared/src/theme.ts` 为 id 契约） |
 | `tui/banner.ts` · `statusLine.ts` | 启动/状态 |
 | `tui/formatSessionEvent.ts` | non-TTY/plain user/reasoning/tool/assistant 追加式 formatter |
 | `tui/diffPane.ts` | retained diff overlay 消费的结果类型 |
@@ -384,7 +384,7 @@ apps/desktop/renderer   ← U3：`<details>` cell · 权限 files 列表
 | `BOLO_DIFF_CELL=fold` | 强制折叠（默认） |
 | `BOLO_DIFF_GUTTER=0` | 关闭旧/新行号 gutter（默认开） |
 | `BOLO_DIFF_SYNTAX=0` | 关闭轻量关键字/字符串高亮（默认开，plain 主题关） |
-| `BOLO_DIFF_THEME` / `BOLO_THEME` | `default` · `dim` · `plain`（兼听 `NO_COLOR`） |
+| `BOLO_DIFF_THEME` / `BOLO_THEME` | `default`(极光) · `amber` · `neon` · `dim` · `plain`（兼听 `NO_COLOR`） |
 | `BOLO_TUI_INPUT=0` | 关闭动态输入、activity 与时间线，使用 readline fallback |
 | `BOLO_TUI_LAYOUT=0` | 关闭 TUI layout/dynamic path |
 | `BOLO_ASCII=1` | 欢迎页图形和分隔符使用 ASCII |

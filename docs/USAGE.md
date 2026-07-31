@@ -254,6 +254,11 @@ pipe、`--print`、JSON 与非 TTY 的 plain 文本契约不会因此改变。
 `BOLO_MASCOT=0` 可隐藏水晶；`BOLO_ASCII=1` 使用 ASCII 水晶；`NO_COLOR` 只去颜色并
 保留欢迎页结构，显式 `BOLO_THEME=plain` / `BOLO_PLAIN=1` 才简化欢迎页。
 
+**主题（5 个）**：`/theme` 交互式切换（↑/↓ 实时预览 · Enter 确认持久化 · Esc 取消），
+也支持 `BOLO_THEME` 环境变量或 config.json 的 `theme` 字段（env 优先）。
+可选：`default`（极光，teal/violet）· `amber`（琥珀）· `neon`（霓虹）· `dim`（低对比）·
+`plain`（零 ANSI）。切换写入 user config，下次启动自动生效。
+
 OI-14H 起，双 TTY/raw-mode 会话只使用 retained renderer：transcript/Markdown、
 常驻 Composer、Thinking/Running activity、model/effort/usage footer、REPL pager
 视图与唯一 modal OverlayHost 位于同一 retained 架构；slash/hint/history/undo、多行 paste、首 token
