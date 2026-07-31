@@ -9,6 +9,9 @@ const statusEl = document.getElementById('status')
 const runtimeStatusEl = document.getElementById('runtime-status')
 const logEl = document.getElementById('log')
 const promptEl = document.getElementById('prompt')
+const composerModel = document.getElementById('composer-model')
+const composerEffort = document.getElementById('composer-effort')
+const composerUsage = document.getElementById('composer-usage')
 const sendBtn = document.getElementById('composer-send')
 const queueBtn = document.getElementById('composer-queue')
 const steerBtn = document.getElementById('composer-steer')
@@ -528,17 +531,17 @@ function fillModelSuggestions(models) {
   }
 }
 
-function fillEffortChoices(choosable, active) {
-  if (!setEffort) return
+function fillEffortChoices(choosable, active, target = setEffort) {
+  if (!target) return
   const choices = ['auto', ...choosable.filter((value) => value !== 'auto')]
-  setEffort.innerHTML = ''
+  target.innerHTML = ''
   for (const effort of choices) {
     const option = document.createElement('option')
     option.value = effort
     option.textContent = effort
-    setEffort.appendChild(option)
+    target.appendChild(option)
   }
-  setEffort.value = choices.includes(active) ? active : 'auto'
+  target.value = choices.includes(active) ? active : 'auto'
 }
 
 function restoreEffortValue(value) {
@@ -586,11 +589,49 @@ async function refreshProviders() {
     if (setModel) setModel.value = data.model || ''
     fillModelSuggestions(data.modelSuggestions || [])
     fillEffortChoices(data.choosable || [], data.effortLevel || 'auto')
+    fillEffortChoices(data.choosable || [], data.effortLevel || 'auto', composerEffort)
+    // composer 内联模型选择：建议列表 + 当前模型
+    if (composerModel) {
+      composerModel.innerHTML = ''
+      const suggestions = data.modelSuggestions || []
+      const all = [data.model, ...suggestions].filter(Boolean)
+      const seen = new Set()
+      for (const m of all) {
+        if (seen.has(m)) continue
+        seen.add(m)
+        const option = document.createElement('option')
+        option.value = m
+        option.textContent = m
+        if (m === data.model) option.selected = true
+        composerModel.appendChild(option)
+      }
+    }
     updateModelMetadataHint(data.modelMetadata)
+    updateUsageLine(data)
     updateEffortHint(data)
   } catch (e) {
     /* ignore list errors in header */
   }
+}
+
+function updateUsageLine(s) {
+  if (!composerUsage) return
+  if (!s?.usage) {
+    composerUsage.textContent = ''
+    return
+  }
+  const u = s.usage
+  const parts = []
+  if (u.inputTokens) parts.push(`↓${formatCount(u.inputTokens)}`)
+  if (u.outputTokens) parts.push(`↑${formatCount(u.outputTokens)}`)
+  composerUsage.textContent = parts.join(' ')
+}
+
+function formatCount(n) {
+  if (n == null || !Number.isFinite(n)) return ''
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}m`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`
+  return String(n)
 }
 
 async function refreshStatus() {
@@ -599,6 +640,7 @@ async function refreshStatus() {
     statusEl.textContent = formatStatusLine(s)
     updateModelMetadataHint(s.modelMetadata)
     updateEffortHint(s)
+    updateUsageLine(s)
   } catch (e) {
     statusEl.textContent = `error: ${e?.message ?? e}`
   }
@@ -1111,6 +1153,24 @@ promptEl.addEventListener('keydown', (ev) => {
     void performComposerAction('submit')
   }
 })
+
+// 多行自适应：随内容撑高（上限 180px，见 CSS max-height）
+promptEl.addEventListener('input', () => {
+  promptEl.style.height = 'auto'
+  promptEl.style.height = `${Math.min(promptEl.scrollHeight, 180)}px`
+})
+
+// composer 内联模型/effort：变更即保存（复用 settings 的保存链）
+if (composerModel) {
+  composerModel.addEventListener('change', () => {
+    void applyModelEffortSettings(composerModel.value, composerEffort?.value)
+  })
+}
+if (composerEffort) {
+  composerEffort.addEventListener('change', () => {
+    void applyModelEffortSettings(composerModel?.value, composerEffort.value)
+  })
+}
 
 void (async () => {
   await runtimeClient.connect()
