@@ -33,6 +33,8 @@ export type TuiPalette = {
   badgeBorder: Rgb
   /** 输入文字 */
   inputFg: Rgb
+  /** 输入框内部背景（整行深色块，区分 transcript） */
+  inputBg: Rgb
   /** 幽灵文本/占位（slash hint、空态） */
   ghost: Rgb
   /** 次要信息：footer 动作、进度条轨道、gutter */
@@ -75,6 +77,7 @@ const AURORA: TuiPalette = {
   badgeFg: [230, 255, 250], // #e6fffa
   badgeBorder: [20, 184, 166], // #14b8a6
   inputFg: [215, 245, 239], // #d7f5ef
+  inputBg: [14, 26, 33], // #0e1a21
   ghost: [49, 84, 92], // #31545c
   muted: [109, 148, 143], // #6d948f
   chipFg: [153, 246, 228], // #99f6e4
@@ -90,6 +93,7 @@ const AMBER: TuiPalette = {
   badgeFg: [254, 243, 199], // #fef3c7
   badgeBorder: [217, 154, 43], // #d99a2b
   inputFg: [253, 232, 200], // #fde8c8
+  inputBg: [29, 23, 16], // #1d1710
   ghost: [95, 74, 38], // #5f4a26
   muted: [156, 132, 79], // #9c844f
   chipFg: [254, 215, 170], // #fed7aa
@@ -105,6 +109,7 @@ const NEON: TuiPalette = {
   badgeFg: [253, 244, 255], // #fdf4ff
   badgeBorder: [167, 139, 250], // #a78bfa
   inputFg: [243, 232, 255], // #f3e8ff
+  inputBg: [20, 14, 32], // #140e20
   ghost: [70, 52, 99], // #463463
   muted: [146, 119, 184], // #9277b8
   chipFg: [233, 213, 255], // #e9d5ff
@@ -120,6 +125,7 @@ const DIM: TuiPalette = {
   badgeFg: [209, 213, 219], // #d1d5db
   badgeBorder: [75, 85, 99], // #4b5563
   inputFg: [209, 213, 219], // #d1d5db
+  inputBg: [17, 24, 39], // #111827
   ghost: [75, 85, 99], // #4b5563
   muted: [107, 114, 128], // #6b7280
   chipFg: [209, 213, 219], // #d1d5db
@@ -136,6 +142,7 @@ const PLAIN_PALETTE: TuiPalette = {
   badgeFg: [0, 0, 0],
   badgeBorder: [0, 0, 0],
   inputFg: [0, 0, 0],
+  inputBg: [0, 0, 0],
   ghost: [0, 0, 0],
   muted: [0, 0, 0],
   chipFg: [0, 0, 0],
@@ -207,6 +214,7 @@ export function buildPaletteAnsi(
       badgeFg: '',
       badgeBorder: '',
       inputFg: '',
+      inputBg: '',
       ghost: '',
       muted: '',
       chipFg: '',
@@ -222,6 +230,7 @@ export function buildPaletteAnsi(
     badgeFg: fmtFg(palette.badgeFg, trueColor),
     badgeBorder: fmtFg(palette.badgeBorder, trueColor),
     inputFg: fmtFg(palette.inputFg, trueColor),
+    inputBg: fmtBg(palette.inputBg, trueColor),
     ghost: fmtFg(palette.ghost, trueColor),
     muted: fmtFg(palette.muted, trueColor),
     chipFg: fmtFg(palette.chipFg, trueColor),

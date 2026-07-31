@@ -549,6 +549,8 @@ export type ComposerColors = {
   muted: string
   inputFg: string
   ghost: string
+  /** 输入行整块背景（palette 模式深色输入区） */
+  inputBg: string
   /** badge 背景（palette 模式的哨兵：非空 = 启用 badge 顶边） */
   badgeBg: string
 }
@@ -574,6 +576,7 @@ export function buildComposerColors(options: {
       muted: color ? '\u001b[2m' : '',
       inputFg: color ? '\u001b[1m' : '',
       ghost: color ? '\u001b[2m' : '',
+      inputBg: '',
       badgeBg: '',
     }
   }
@@ -588,6 +591,7 @@ export function buildComposerColors(options: {
     muted: palette.muted,
     inputFg: palette.inputFg,
     ghost: palette.ghost,
+    inputBg: palette.inputBg,
     badgeBg: palette.badgeBg,
   }
 }
@@ -680,7 +684,8 @@ function renderStatusFooter(options: {
   const usage = status.usage
   const usageSegments = usage
     ? [
-        valueSegment(
+        // chip 胶囊样式（与 mode chip / 键帽同族）
+        keySegment(
           `${usage.estimated ? '~' : ''}↓${formatTuiTokenCount(
             usage.inputTokens,
           )} ↑${formatTuiTokenCount(usage.outputTokens)}`,
@@ -971,7 +976,7 @@ export function renderTuiInputBox(options: {
 
   const color = options.color !== false
   const colors = buildComposerColors({ color, palette: options.palette })
-  const { border, prompt, dim, reset } = colors
+  const { border, prompt, reset } = colors
   const lines: string[] = []
   lines.push(
     // palette 模式：border-crossing badge 顶边；否则回退旧标题行
@@ -996,13 +1001,13 @@ export function renderTuiInputBox(options: {
           )
         : inputLine.text
     const ghost = inputLine.ghostText
-      ? `${dim}${inputLine.ghostText}${reset}`
+      ? `${colors.ghost}${inputLine.ghostText}${reset}`
       : ''
-    const body = `${inputText}${ghost}${' '.repeat(
+    const content = `${prompt}${marker}${reset}${inputText}${ghost}${' '.repeat(
       Math.max(0, contentWidth - inputLine.width),
     )}`
     lines.push(
-      `${border}│${reset} ${prompt}${marker}${reset}${body} ${border}│${reset}`,
+      `${border}│${reset}${colors.inputBg} ${content} ${reset}${border}│${reset}`,
     )
   }
   if (options.state.slashMenu) {
