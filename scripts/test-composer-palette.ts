@@ -4,6 +4,7 @@
  */
 import { strict as assert } from 'node:assert'
 import { buildPaletteAnsi, getTuiPalette, resolveTuiTheme } from '../packages/cli/src/tui/theme.ts'
+import { measureTerminalText } from '../packages/cli/src/tui/terminalText.ts'
 import {
   buildComposerColors,
   renderTuiInputBox,
@@ -15,6 +16,17 @@ import { createTuiInputState } from '../packages/cli/src/tui/inputBox.ts'
 function auroraPalette(): ComposerAnsiPalette {
   const theme = resolveTuiTheme({ theme: 'default' })
   return buildPaletteAnsi(theme.palette, theme.trueColor, theme.ansi)
+}
+
+function assertLinesFit(
+  rendered: { lines: string[] },
+  columns: number,
+  label: string,
+): void {
+  for (const line of rendered.lines) {
+    const width = measureTerminalText(line)
+    assert.ok(width <= columns, `${label}: line width ${width} > ${columns}`)
+  }
 }
 
 function main() {
@@ -71,6 +83,7 @@ function main() {
   assert.ok(themed.text.includes(' │ '), '竖线分隔')
   assert.ok(themed.text.includes('default · ↓96k ↑1.2k'), 'mode/usage 胶囊')
   assert.ok(!themed.text.includes(' · effort '), 'palette 不再重复 status 行')
+  assertLinesFit(themed, 80, '80 列 themed')
 
   // ---- 回退渲染字节不变 ----
   const legacy = renderTuiInputBox({
@@ -123,6 +136,7 @@ function main() {
   })
   assert.ok(midWidth.text.includes('default · ↓96k ↑1.2k'), '两行模式 chip 保留 usage')
   assert.ok(midWidth.lines.length >= 2, '70 列两行布局')
+  assertLinesFit(midWidth, 70, '70 列 midWidth')
 
   // ---- 窄宽度：keys 行 + chip 行均保留（两行模式上限） ----
   const narrow = renderTuiInputFooter({
@@ -135,6 +149,7 @@ function main() {
   assert.ok(narrow.text.includes('Enter'), '窄宽度保留快捷键')
   assert.ok(narrow.text.includes('default'), '窄宽度 chip 行保留')
   assert.ok(narrow.lines.length >= 2, '74 列两行布局')
+  assertLinesFit(narrow, 74, '74 列 narrow')
 
   console.log('PASS: composer palette consumption')
 }

@@ -480,9 +480,9 @@ function renderContextBadge(
   const bar = `${colors.accent}${'█'.repeat(filled)}${colors.muted}${'░'.repeat(
     barWidth - filled,
   )}${colors.reset}`
-  const text = `${colors.kbdBg}${colors.kbdFg} context ${bar} ${pct}% · ${formatTuiTokenCount(
+  const text = `${colors.kbdBg}${colors.kbdFg}context ${bar} ${pct}% · ${formatTuiTokenCount(
     status.usage.inputTokens,
-  )}/${formatTuiTokenCount(total)} ${colors.reset}`
+  )}/${formatTuiTokenCount(total)}${colors.reset}`
   return `${colors.badgeBorder}╭${colors.reset}${text}${colors.badgeBorder}╮${colors.reset}`
 }
 
@@ -652,8 +652,9 @@ function renderFooterSegments(
   return segments
     .map((segment) => {
       // palette 模式键帽：╭╮ 圆角线框 + 背景块（对齐原型 kbd border）
+      // 紧凑布局（无内边距），与 footerSegmentsWidth 的 +2 补偿一致
       if (segment.tone === 'key' && colors.kbdBg) {
-        return `${colors.borderDim}╭${colors.reset}${colors.kbdBg}${colors.kbdFg} ${segment.text} ${colors.reset}${colors.borderDim}╮${colors.reset}`
+        return `${colors.borderDim}╭${colors.reset}${colors.kbdBg}${colors.kbdFg}${segment.text}${colors.reset}${colors.borderDim}╮${colors.reset}`
       }
       const start = toneStart(segment.tone, colors)
       return start ? `${start}${segment.text}${colors.reset}` : segment.text
