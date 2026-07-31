@@ -463,8 +463,8 @@ function sanitizeTuiStatusText(text: string | undefined): string {
   if (!text) return ''
   return (
     stripTerminalAnsi(text)
-      // 剥离 ESC/CSI/OSC 之外的裸控制字符（含 \r，防单行字段回车覆盖）
-      .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/gu, '')
+      // 剥离全部 C0/C1 控制字符（含 \t\n\r，防单行字段回车/换行覆盖）
+      .replace(/[\u0000-\u001f\u007f-\u009f]/gu, '')
       // trim 保持旧语义：纯空白串回退默认值（调用点 || 'auto' 等）
       .trim()
   )
@@ -697,9 +697,9 @@ function renderStatusFooter(options: {
   const { status, width, colors } = options
   if (!status) return ''
   const mode = sanitizeTuiStatusText(status.permissionMode) || 'default'
-  const provider = sanitizeTuiStatusText(
-    status.providerId || status.providerKind,
-  )
+  const provider =
+    sanitizeTuiStatusText(status.providerId) ||
+    sanitizeTuiStatusText(status.providerKind)
   const model = sanitizeTuiStatusText(status.model)
   const target =
     provider && model
