@@ -1,6 +1,8 @@
 # Desktop GUI 重写方案（对标 Codex App）
 
-> 状态：方案稿（v0，待实施）。真源：本文件 + `docs/DESKTOP_DESIGN.md`（旧版，被本方案取代）+ `docs/ARCHITECTURE.md`。
+> 状态：**S1–S6 已实施**（2026-07，见 §4）；S7 真人打磨待办（BLOCKED: HUMAN）。
+> 实施偏差：S2 的"会话删除"需 main IPC 扩展，超出"只重写 renderer"红线 → 标记 BLOCKED，
+> 待红线调整或单独立项后实施。
 > 目标：**推翻现有 renderer（当前仅测试用），按 OpenAI Codex 桌面版的视觉与功能重写**。
 > 红线：不引入 pi 依赖；renderer 保持零新运行时依赖（原生 Web 技术，无框架）；复用全部既有 runtime/IPC 接线。
 
@@ -96,6 +98,18 @@ runtime 事件 → `projectSessionRuntimeEventView` 窄投影 → store → 组�
 | **S5 工具卡片与权限** | tool 卡片折叠 + 内联权限确认（替代遮罩） | 权限流（allow/always/deny）端到端；tool 输出有界 |
 | **S6 设置与细节** | 设置面板重做 + 顶栏状态胶囊 + 空态/加载态 + 键盘导航 | 设置读写测试不变；Tab 焦点可达所有控件 |
 | **S7 打磨（真人）** | 动画/微交互/无障碍/Codex 细节对照 | 真人走查清单（对应 OI-H2 升级版） |
+
+### S7 真人走查清单（BLOCKED: HUMAN，自动化无法替代）
+
+1. **布局**：窗口缩放（800–1600px）无溢出/遮挡；侧栏折叠态可用
+2. **配色**：dark/light 双主题切换即时；消息/卡片/输入框对比度可读
+3. **流式**：真实模型回复增量渲染无闪烁/跳动；代码块随流式成型
+4. **权限**：内联权限卡片出现位置/按钮可达；allow/always/deny 生效
+5. **设置**：模态内 Tab 顺序合理；cwd/mock 修改后会话重建提示可见
+6. **键盘**：Esc 关模态、Ctrl+L 聚焦输入、Enter/Shift+Enter 语义正确
+7. **细节对照 Codex**：会话条目 hover/active、状态胶囊、空态文案、滚动条
+
+走查结果与截图存档：`docs/desktop-walkthrough/`（真人执行后提交）。
 
 每刀：packages 契约先行（如需要）→ renderer 实现 → 定向脚本/自动化 → typecheck → 完整 `npm test`（desktop bundle/launch 必绿）→ 文档/提交。
 
