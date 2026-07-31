@@ -82,7 +82,7 @@ async function main() {
     legalComments: 'none',
     logLevel: 'warning',
   })
-  for (const name of ['index.html', 'app.js', 'styles.css']) {
+  for (const name of ['index.html', 'app.js', 'markdown.js', 'styles.css']) {
     await fs.copyFile(
       path.join(appDir, 'src', 'renderer', name),
       path.join(rendererOut, name),

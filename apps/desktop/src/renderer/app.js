@@ -3,6 +3,7 @@
  */
 
 import { createRuntimeClient } from './runtime-client.js'
+import { renderMarkdownInto } from './markdown.js'
 
 const statusEl = document.getElementById('status')
 const runtimeStatusEl = document.getElementById('runtime-status')
@@ -343,7 +344,12 @@ async function reloadTimeline() {
 function appendMsg(role, text) {
   const div = document.createElement('div')
   div.className = `msg ${role}`
-  div.textContent = text
+  // assistant/user 消息走 markdown（DOM 渲染，XSS 安全）；system 保持纯文本
+  if (role === 'assistant' || role === 'user') {
+    renderMarkdownInto(div, text)
+  } else {
+    div.textContent = text
+  }
   logEl.appendChild(div)
   logEl.scrollTop = logEl.scrollHeight
   return div
@@ -417,6 +423,7 @@ function ensureStreamBubble() {
   if (!streamEl) {
     streamEl = appendMsg('assistant', '')
     streamBuf = ''
+    streamDirty = false
   }
   return streamEl
 }
@@ -424,6 +431,24 @@ function ensureStreamBubble() {
 function endStreamBubble() {
   streamEl = null
   streamBuf = ''
+  streamDirty = false
+}
+
+// 流式 markdown：rAF 节流重渲染整个缓冲（消息量小，简单可靠）
+let streamDirty = false
+let streamRaf = 0
+function scheduleStreamRender() {
+  if (streamDirty || streamRaf) return
+  streamDirty = true
+  streamRaf = requestAnimationFrame(() => {
+    streamRaf = 0
+    if (!streamDirty || !streamEl) return
+    streamDirty = false
+    const bubble = streamEl
+    bubble.replaceChildren()
+    renderMarkdownInto(bubble, streamBuf)
+    logEl.scrollTop = logEl.scrollHeight
+  })
 }
 
 function formatStatusLine(s) {
@@ -794,10 +819,9 @@ window.bolo.onEvent((e) => {
   // 靠 turn 结束后 reloadMessages() 全量重拉掩盖。
   // 名字对不上不会报错，只会静默失效，故由 test-desktop-event-contract.ts 守住。
   if (e.type === 'text' && e.text) {
-    const el = ensureStreamBubble()
+    ensureStreamBubble()
     streamBuf += e.text
-    el.textContent = streamBuf
-    logEl.scrollTop = logEl.scrollHeight
+    scheduleStreamRender()
   }
   if (e.type === 'tool_start' && e.name) {
     const row = appendMsg('system', `→ ${e.name}`)
