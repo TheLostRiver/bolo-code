@@ -46,6 +46,8 @@ function main() {
       model: 'sonnet-4.5',
       effortLevel: 'high',
       providerKind: 'mock',
+      usage: { inputTokens: 96000, outputTokens: 1200 },
+      contextWindowTokens: 256000,
     },
   })
   assert.ok(themed.text.includes('\u001b[38;2;45;212;191m'), 'box 含 teal prompt')
@@ -54,6 +56,13 @@ function main() {
     themed.text.includes('\u001b[38;2;215;245;239m'),
     'footer 值用 inputFg（模型/effort 亮青白）',
   )
+  // 极光版 badge：model/effort 骑上边框 + context 进度条
+  assert.ok(themed.text.includes('●'), 'badge 圆点')
+  assert.ok(themed.text.includes('model sonnet-4.5'), 'model badge')
+  assert.ok(themed.text.includes('effort high'), 'effort badge')
+  assert.ok(themed.text.includes('context'), 'context badge')
+  assert.ok(themed.text.includes('38% · 96k/256k'), 'context 百分比与用量')
+  assert.ok(themed.text.includes('█'), '进度条填充字符')
 
   // ---- 回退渲染字节不变 ----
   const legacy = renderTuiInputBox({
@@ -69,6 +78,7 @@ function main() {
   })
   assert.ok(legacy.text.includes('\u001b[38;5;244m'), 'legacy border 灰')
   assert.ok(legacy.text.includes('\u001b[38;5;81m'), 'legacy prompt 青')
+  assert.ok(legacy.text.includes('Message'), 'legacy 无 badge 时保留标题行')
 
   // ---- plain：零 ANSI ----
   const plainPalette = buildPaletteAnsi(getTuiPalette('plain'), true, false)

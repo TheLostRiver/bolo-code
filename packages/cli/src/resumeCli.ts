@@ -467,6 +467,9 @@ export function configureSessionComposer(
       model: session.model,
       effortLevel: session.effortLevel,
       ...(session.usage ? { usage: session.usage } : {}),
+      ...(session.resolvedModel?.contextWindowTokens
+        ? { contextWindowTokens: session.resolvedModel.contextWindowTokens }
+        : {}),
     },
   })
 }

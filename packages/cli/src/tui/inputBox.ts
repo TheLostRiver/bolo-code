@@ -58,6 +58,8 @@ export type TuiInputStatus = {
   model?: string
   effortLevel?: string
   usage?: TuiInputUsage
+  /** CTX 轨：模型上下文窗口（token），用于 context 占比 badge */
+  contextWindowTokens?: number
 }
 
 export type TuiInputUsage = {
@@ -448,6 +450,80 @@ function borderLine(
   return `${left}${text}${'─'.repeat(Math.max(0, inner - measureTerminalText(text)))}${right}`
 }
 
+/* ------------------------------------------------------------------ */
+/* 极光版 border-crossing badge：model/effort 骑上边框左侧，context    */
+/* 进度条骑上边框右侧；宽度不足时逐级降级，最终回退旧标题行。          */
+/* ------------------------------------------------------------------ */
+
+function renderBadge(label: string, value: string, colors: ComposerColors): string {
+  const dot = `${colors.accent}●${colors.reset}`
+  const body = `${colors.kbdBg}${colors.kbdFg} ${label} ${value} ${colors.reset}`
+  return `${dot}${body}`
+}
+
+function renderContextBadge(
+  status: TuiInputStatus | undefined,
+  colors: ComposerColors,
+): string | undefined {
+  if (!status?.usage || !status.contextWindowTokens) return undefined
+  const total = Math.max(1, status.contextWindowTokens)
+  const pct = Math.min(
+    100,
+    Math.max(0, Math.round((status.usage.inputTokens / total) * 100)),
+  )
+  const barWidth = 8
+  const filled = Math.round((barWidth * pct) / 100)
+  const bar = `${colors.accent}${'█'.repeat(filled)}${colors.muted}${'░'.repeat(
+    barWidth - filled,
+  )}${colors.reset}`
+  const text = `${colors.kbdBg}${colors.kbdFg} context ${bar} ${pct}% · ${formatTuiTokenCount(
+    status.usage.inputTokens,
+  )}/${formatTuiTokenCount(total)} ${colors.reset}`
+  return text
+}
+
+function renderBadgeTopBorder(options: {
+  frameWidth: number
+  status?: TuiInputStatus
+  colors: ComposerColors
+  title?: string
+}): string {
+  const { frameWidth, status, colors, title } = options
+  const inner = frameWidth - 2
+  const fallback = `${colors.border}${borderLine(
+    '╭',
+    '╮',
+    frameWidth,
+    title ?? 'Message',
+  )}${colors.reset}`
+  if (!status) return fallback
+
+  const modelBadge = status.model
+    ? renderBadge('model', status.model, colors)
+    : ''
+  const effortBadge = status.effortLevel
+    ? renderBadge('effort', status.effortLevel, colors)
+    : ''
+  const contextBadge = renderContextBadge(status, colors)
+
+  // 组合候选：full → 只 model → 只 model+context → 回退
+  const candidates: string[][] = [
+    [modelBadge, effortBadge].filter(Boolean),
+    [modelBadge].filter(Boolean),
+  ]
+  for (const leftBadges of candidates) {
+    const leftText = leftBadges.length ? ` ${leftBadges.join(' ')} ` : ''
+    const rightText = contextBadge ? ` ${contextBadge} ` : ''
+    const total =
+      measureTerminalText(leftText) + measureTerminalText(rightText)
+    if (total <= inner) {
+      const mid = '─'.repeat(Math.max(0, inner - total))
+      return `${colors.border}╭${colors.reset}${leftText}${colors.border}${mid}${colors.reset}${rightText}${colors.border}╮${colors.reset}`
+    }
+  }
+  return fallback
+}
+
 export function formatTuiTokenCount(value: number): string {
   const normalized = Number.isFinite(value)
     ? Math.max(0, Math.round(value))
@@ -473,6 +549,8 @@ export type ComposerColors = {
   muted: string
   inputFg: string
   ghost: string
+  /** badge 背景（palette 模式的哨兵：非空 = 启用 badge 顶边） */
+  badgeBg: string
 }
 
 /**
@@ -496,6 +574,7 @@ export function buildComposerColors(options: {
       muted: color ? '\u001b[2m' : '',
       inputFg: color ? '\u001b[1m' : '',
       ghost: color ? '\u001b[2m' : '',
+      badgeBg: '',
     }
   }
   return {
@@ -509,6 +588,7 @@ export function buildComposerColors(options: {
     muted: palette.muted,
     inputFg: palette.inputFg,
     ghost: palette.ghost,
+    badgeBg: palette.badgeBg,
   }
 }
 
@@ -894,7 +974,15 @@ export function renderTuiInputBox(options: {
   const { border, prompt, dim, reset } = colors
   const lines: string[] = []
   lines.push(
-    `${border}${borderLine('╭', '╮', frameWidth, options.title ?? 'Message')}${reset}`,
+    // palette 模式：border-crossing badge 顶边；否则回退旧标题行
+    colors.badgeBg
+      ? renderBadgeTopBorder({
+          frameWidth,
+          status: options.status,
+          colors,
+          title: options.title,
+        })
+      : `${border}${borderLine('╭', '╮', frameWidth, options.title ?? 'Message')}${reset}`,
   )
   for (let index = 0; index < visible.length; index++) {
     const marker = start + index === 0 ? '❯ ' : '  '
