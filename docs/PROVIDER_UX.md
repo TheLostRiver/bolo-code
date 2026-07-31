@@ -173,8 +173,22 @@ flowchart TB
 | `huggingface` | openai-compatible | `https://router.huggingface.co/v1` | detect | `HF_TOKEN` |
 | `vercel-ai-gateway` | openai-compatible | `https://ai-gateway.vercel.sh/v1` | detect | `VERCEL_AI_GATEWAY_TOKEN` |
 | `cloudflare-ai-gateway` | openai-compatible | `https://gateway.ai.cloudflare.com/v1` | detect | `CLOUDFLARE_AI_GATEWAY_TOKEN` |
+| `moonshot` | openai-compatible | `https://api.moonshot.cn/v1` | detect | `MOONSHOT_API_KEY` |
+| `zhipu` | openai-compatible | `https://open.bigmodel.cn/api/paas/v4` | detect | `ZHIPU_API_KEY` |
+| `zai` | openai-compatible | `https://api.z.ai/api/v1` | detect | `ZAI_API_KEY` |
+| `qwen` | openai-compatible | `https://dashscope.aliyuncs.com/compatible-mode/v1` | detect | `DASHSCOPE_API_KEY` |
+| `doubao` | openai-compatible | `https://ark.cn-beijing.volces.com/api/v3` | detect | `ARK_API_KEY` |
+| `minimax` | openai-compatible | `https://api.minimax.chat/v1` | detect | `MINIMAX_API_KEY` |
+| `minimax-cn` | openai-compatible | `https://api.minimaxi.com/v1` | detect | `MINIMAX_CN_API_KEY` |
+| `baidu` | openai-compatible | `https://qianfan.baidubce.com/v2` | detect | `QIANFAN_API_KEY` |
+| `baichuan` | openai-compatible | `https://api.baichuan-ai.com/v1` | detect | `BAICHUAN_API_KEY` |
+| `stepfun` | openai-compatible | `https://api.stepfun.com/v1` | detect | `STEPFUN_API_KEY` |
+| `hunyuan` | openai-compatible | `https://api.hunyuan.cloud.tencent.com/v1` | detect | `HUNYUAN_API_KEY` |
+| `lingyi` | openai-compatible | `https://api.lingyiwanwu.com/v1` | detect | `LINGYI_API_KEY` |
+| `deepinfra` | openai-compatible | `https://api.deepinfra.com/v1/openai` | detect | `DEEPINFRA_API_KEY` |
+| `perplexity` | openai-compatible | `https://api.perplexity.ai` | detect | `PERPLEXITY_API_KEY` |
 
-> P0A（方案 `PROVIDER_EXPANSION_PLAN.md`）：国际兼容 preset 扩容至 16 家（2026-07）；P0B 国内组后续。
+> P0A+P0B（方案 `PROVIDER_EXPANSION_PLAN.md`）：preset 扩容至 **30 家**（2026-07）；P1 元数据表后续。
 
 行为：
 

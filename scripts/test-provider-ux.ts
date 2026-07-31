@@ -56,8 +56,8 @@ async function withTempHome<T>(fn: (home: string) => Promise<T>): Promise<T> {
 async function main() {
   // ── CX1 presets ──
   const presets = listProviderPresets()
-  // P0A：5 家既有 + 11 家国际兼容 = 16 家（方案 PROVIDER_EXPANSION_PLAN P0A）
-  assert(presets.length >= 16, `at least 16 presets, got ${presets.length}`)
+  // P0A+P0B：16 国际 + 14 国内/聚合 = 30 家（方案 PROVIDER_EXPANSION_PLAN）
+  assert(presets.length >= 30, `at least 30 presets, got ${presets.length}`)
   assert(getProviderPreset('ds')?.id === 'deepseek', 'alias ds')
   assert(getProviderPreset('claude')?.id === 'anthropic', 'alias claude')
   // 新别名
@@ -83,6 +83,21 @@ async function main() {
   assert(ids.has('huggingface'), 'huggingface present')
   assert(ids.has('vercel-ai-gateway'), 'vercel-ai-gateway present')
   assert(ids.has('cloudflare-ai-gateway'), 'cloudflare-ai-gateway present')
+  // P0B 国内组
+  assert(ids.has('moonshot'), 'moonshot present')
+  assert(ids.has('zhipu'), 'zhipu present')
+  assert(ids.has('zai'), 'zai present')
+  assert(ids.has('qwen'), 'qwen present')
+  assert(ids.has('doubao'), 'doubao present')
+  assert(ids.has('minimax'), 'minimax present')
+  assert(ids.has('minimax-cn'), 'minimax-cn present')
+  assert(ids.has('baidu'), 'baidu present')
+  assert(ids.has('baichuan'), 'baichuan present')
+  assert(ids.has('stepfun'), 'stepfun present')
+  assert(ids.has('hunyuan'), 'hunyuan present')
+  assert(ids.has('lingyi'), 'lingyi present')
+  assert(ids.has('deepinfra'), 'deepinfra present')
+  assert(ids.has('perplexity'), 'perplexity present')
   const cfg = providerConfigFromPreset(getProviderPreset('deepseek')!)
   assert(cfg.kind === 'openai-compatible', 'ds kind')
   assert(cfg.apiKeyEnv === 'DEEPSEEK_API_KEY', 'ds env')
