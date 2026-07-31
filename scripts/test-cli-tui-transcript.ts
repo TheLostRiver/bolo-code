@@ -6,7 +6,7 @@ import { EventEmitter } from 'node:events'
 import {
   getCapabilities,
   setCapabilities,
-} from '@earendil-works/pi-tui/dist/terminal-image.js'
+} from '../packages/cli/src/tui/piCompat.ts'
 import {
   createRetainedTuiController,
   resolveTuiContentGutter,

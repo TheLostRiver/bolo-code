@@ -1,4 +1,4 @@
-import type { Component } from '@earendil-works/pi-tui/dist/tui.js'
+import type { Component } from './piCompat.ts'
 import type {
   CliCommandPanelState,
   CliCommandSurfaceState,

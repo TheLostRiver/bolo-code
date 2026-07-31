@@ -1,9 +1,9 @@
 import {
   CURSOR_MARKER,
+  parseKey,
   type Component,
   type Focusable,
-} from '@earendil-works/pi-tui/dist/tui.js'
-import { parseKey } from '@earendil-works/pi-tui/dist/keys.js'
+} from './piCompat.ts'
 import type { SlashCommandCandidate } from '../../../core/src/index.ts'
 import type { CliTuiComposerMode } from '../../../shared/src/index.ts'
 import {

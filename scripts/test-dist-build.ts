@@ -204,12 +204,17 @@ async function main() {
     '@earendil-works/pi-tui/dist/components/editor.js',
     '@earendil-works/pi-tui/dist/native-modifiers.js',
     '@earendil-works/pi-tui/dist/terminal.js',
+    '@earendil-works/pi-tui/dist/terminal-image.js',
   ]) {
     assert(
       !bundle.includes(forbidden),
       `retained TUI must not bundle unused Pi module: ${forbidden}`,
     )
   }
+  assert(
+    bundle.includes('piTerminalImageStub'),
+    'single-file bundle replaces Pi terminal-image with the local stub',
+  )
 
   // ── 7) 产物可执行 ──
   const { stdout } = await execFileAsync(process.execPath, [distEntry, '--help'], {

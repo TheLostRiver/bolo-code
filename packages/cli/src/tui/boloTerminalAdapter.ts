@@ -1,5 +1,4 @@
-import type { Terminal } from '@earendil-works/pi-tui/dist/terminal.js'
-import { StdinBuffer } from '@earendil-works/pi-tui/dist/stdin-buffer.js'
+import { StdinBuffer, type Terminal } from './piCompat.ts'
 import { runCleanupSteps } from '../cleanup.ts'
 
 export type BoloTerminalInput = {

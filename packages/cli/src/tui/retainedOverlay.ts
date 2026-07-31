@@ -1,10 +1,10 @@
 import {
+  Input,
+  parseKey,
   type Component,
   type Focusable,
   type OverlayHandle,
-} from '@earendil-works/pi-tui/dist/tui.js'
-import { parseKey } from '@earendil-works/pi-tui/dist/keys.js'
-import { Input } from '@earendil-works/pi-tui/dist/components/input.js'
+} from './piCompat.ts'
 import type {
   AskQuestion,
   AskUserQuestionSelection,

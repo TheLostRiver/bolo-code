@@ -1,13 +1,11 @@
-import { Box } from '@earendil-works/pi-tui/dist/components/box.js'
 import {
-  Markdown,
-  type MarkdownTheme,
-} from '@earendil-works/pi-tui/dist/components/markdown.js'
-import { Text } from '@earendil-works/pi-tui/dist/components/text.js'
-import {
+  Box,
   Container,
+  Markdown,
+  Text,
   type Component,
-} from '@earendil-works/pi-tui/dist/tui.js'
+  type MarkdownTheme,
+} from './piCompat.ts'
 import type {
   CliTuiBlock,
   CliTuiErrorBlock,

@@ -2,12 +2,12 @@ import path from 'node:path'
 import {
   Container,
   TUI,
+  Text,
+  parseKey,
   type Component,
   type Focusable,
   type OverlayHandle,
-} from '@earendil-works/pi-tui/dist/tui.js'
-import { Text } from '@earendil-works/pi-tui/dist/components/text.js'
-import { parseKey } from '@earendil-works/pi-tui/dist/keys.js'
+} from './piCompat.ts'
 import { getBoloHomeDir } from '../../../config/src/paths.ts'
 import {
   createCliCommandSurfaceState,

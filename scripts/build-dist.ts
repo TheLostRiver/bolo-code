@@ -12,12 +12,38 @@
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { build } from 'esbuild'
+import { build, type Plugin } from 'esbuild'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(here, '..')
 const outDir = path.join(repoRoot, 'dist')
 const outFile = path.join(outDir, 'bolo.mjs')
+
+// pi-tui 的 tui.js 内部引用 terminal-image.js（tmux execSync 探测 + 图片编解码死代码）。
+// Bolo 不渲染图片：构建期把该模块整体替换为本地 stub（packages/cli/src/tui/piTerminalImageStub.ts），
+// 砍掉隐藏子进程调用面与死代码，同时保留 capabilities/cell 尺寸/图片行识别语义。
+// 仅对 pi-tui 的导入生效；其它包的同名模块不受影响。
+const piTerminalImageStubPath = path.join(
+  repoRoot,
+  'packages',
+  'cli',
+  'src',
+  'tui',
+  'piTerminalImageStub.ts',
+)
+
+const piTerminalImageStubPlugin: Plugin = {
+  name: 'pi-terminal-image-stub',
+  setup(build) {
+    build.onResolve({ filter: /terminal-image\.js$/ }, (args) => {
+      const fromPi =
+        args.path.startsWith('@earendil-works/pi-tui') ||
+        args.resolveDir.includes(path.join('node_modules', '@earendil-works', 'pi-tui'))
+      if (!fromPi) return
+      return { path: piTerminalImageStubPath }
+    })
+  },
+}
 
 async function main() {
   await fs.rm(outDir, { recursive: true, force: true })
@@ -34,6 +60,7 @@ async function main() {
     platform: 'node',
     target: 'node20',
     format: 'esm',
+    plugins: [piTerminalImageStubPlugin],
     // Node 内置模块保持 external；其余全部打进产物。
     // 不列第三方 external —— 列了就等于引入运行时依赖。
     packages: 'bundle',
