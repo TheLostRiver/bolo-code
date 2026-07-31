@@ -1024,6 +1024,16 @@ function renderPaletteFooter(options: {
       gap,
     )}${renderFooterSegments(chip, colors)}`
   }
+  // 降级 1：短 chip（仅 modeText，去 usage）
+  const shortChip: FooterSegment[] = [keySegment(modeText)]
+  const shortChipWidth = footerSegmentsWidth(shortChip)
+  if (keysWidth + shortChipWidth + 2 <= available) {
+    const gap = available - keysWidth - shortChipWidth
+    return `  ${renderFooterSegments(keys, colors)}${' '.repeat(
+      gap,
+    )}${renderFooterSegments(shortChip, colors)}`
+  }
+  // 降级 2：仅快捷键组
   if (keysWidth <= available) {
     return `  ${renderFooterSegments(keys, colors)}`
   }
