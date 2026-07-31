@@ -215,6 +215,10 @@ async function main() {
     bundle.includes('piTerminalImageStub'),
     'single-file bundle replaces Pi terminal-image with the local stub',
   )
+  assert(
+    bundle.includes('a=d,d=I'),
+    'bundle carries the stub delete sequence, not just the module comment',
+  )
 
   // ── 7) 产物可执行 ──
   const { stdout } = await execFileAsync(process.execPath, [distEntry, '--help'], {

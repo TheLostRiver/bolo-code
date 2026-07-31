@@ -36,9 +36,12 @@ const piTerminalImageStubPlugin: Plugin = {
   name: 'pi-terminal-image-stub',
   setup(build) {
     build.onResolve({ filter: /terminal-image\.js$/ }, (args) => {
+      // esbuild 在 Windows 上 resolveDir 用反斜杠，先归一化再判断，
+      // 保证任意平台的相对导入（tui.js/markdown.js 的 `./terminal-image.js`）都能命中。
+      const resolveDir = args.resolveDir.replaceAll('\\', '/')
       const fromPi =
         args.path.startsWith('@earendil-works/pi-tui') ||
-        args.resolveDir.includes(path.join('node_modules', '@earendil-works', 'pi-tui'))
+        resolveDir.includes('node_modules/@earendil-works/pi-tui')
       if (!fromPi) return
       return { path: piTerminalImageStubPath }
     })

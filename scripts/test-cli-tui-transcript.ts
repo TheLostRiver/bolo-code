@@ -4,10 +4,6 @@
  */
 import { EventEmitter } from 'node:events'
 import {
-  getCapabilities,
-  setCapabilities,
-} from '../packages/cli/src/tui/piCompat.ts'
-import {
   createRetainedTuiController,
   resolveTuiContentGutter,
   type CliTuiController,
@@ -251,12 +247,10 @@ async function main() {
   let random: Fixture | undefined
   let resumed: Fixture | undefined
   const widthFixtures: Fixture[] = []
-  const originalCapabilities = getCapabilities()
-  setCapabilities({
-    images: null,
-    trueColor: true,
-    hyperlinks: true,
-  })
+  // 用 env 注入而非 setCapabilities：pi-tui 内部模块（markdown.js）持有自己的
+  // capabilities 缓存，setCapabilities 只作用于本地 stub 会造成双轨不一致；
+  // env 探测让 stub 与原版读到同一份能力值（WT_SESSION → hyperlinks: true）。
+  process.env.WT_SESSION = 'pi-compat-test'
   try {
     const transcript = new RetainedTranscript({ env: { NO_COLOR: '1' } })
     let identityState = reduceCliTuiViewState(
@@ -458,7 +452,7 @@ async function main() {
 
     console.log('PASS: CLI retained transcript Markdown')
   } finally {
-    setCapabilities(originalCapabilities)
+    delete process.env.WT_SESSION
     for (const fixture of widthFixtures.reverse()) {
       await dispose(fixture)
     }
