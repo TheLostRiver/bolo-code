@@ -455,6 +455,16 @@ function borderLine(
 /* 进度条骑上边框右侧；宽度不足时逐级降级，最终回退旧标题行。          */
 /* ------------------------------------------------------------------ */
 
+/**
+ * status 字段渲染前净化：剥离 ANSI/控制序列（纵深防御）。
+ * 当前数据源均为本地配置，无远端回填路径；保留此闸防未来接入。
+ */
+function sanitizeTuiStatusText(text: string | undefined): string {
+  if (!text) return ''
+  return stripTerminalAnsi(text)
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/gu, '')
+}
+
 function renderBadge(label: string, value: string, colors: ComposerColors): string {
   // ╭╮ 圆角线框 + 背景块 + teal 圆点：对齐原型 badge（border 1px + radius）
   // 紧凑布局（label 后单空格）保证 80 列下 model+effort 两个 badge 同框
@@ -503,10 +513,14 @@ function renderBadgeTopBorder(options: {
   if (!status) return fallback
 
   const modelBadge = status.model
-    ? renderBadge('model', status.model, colors)
+    ? renderBadge('model', sanitizeTuiStatusText(status.model), colors)
     : ''
   // 推理等级缺省 auto（与 footer 语义一致），真实会话未设置时也可见
-  const effortBadge = renderBadge('effort', status.effortLevel?.trim() || 'auto', colors)
+  const effortBadge = renderBadge(
+    'effort',
+    sanitizeTuiStatusText(status.effortLevel) || 'auto',
+    colors,
+  )
   const contextBadge = renderContextBadge(status, colors)
 
   // 组合候选：full → 只 model → 只 model+context → 回退
@@ -1029,7 +1043,7 @@ function renderPaletteFooter(options: {
     ]
   }
   // 右侧胶囊：permissionMode · usage（对齐原型 mode-chip）
-  const modeText = status?.permissionMode?.trim() || 'default'
+  const modeText = sanitizeTuiStatusText(status?.permissionMode) || 'default'
   const usage = status?.usage
   const chipText = usage
     ? `${modeText} · ↓${formatTuiTokenCount(
