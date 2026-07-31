@@ -39,10 +39,11 @@ const piTerminalImageStubPlugin: Plugin = {
       // esbuild 在 Windows 上 resolveDir 用反斜杠，先归一化再判断，
       // 保证任意平台的相对导入（tui.js/markdown.js 的 `./terminal-image.js`）都能命中。
       const resolveDir = args.resolveDir.replaceAll('\\', '/')
-      // 路径段边界限定：避免误命中 `@earendil-works/pi-tui-xxx` 之类同前缀变体
-      const fromPi =
-        args.path.startsWith('@earendil-works/pi-tui/') ||
-        resolveDir.includes('node_modules/@earendil-works/pi-tui/')
+      // 段边界正则：命中 `@earendil-works/pi-tui` 或 `.../pi-tui/...`，
+      // 排除 `@earendil-works/pi-tui-xxx` 同前缀变体；包根（无 /dist 段）同样覆盖。
+      const fromPi = /@earendil-works\/pi-tui(?:\/|$)/.test(
+        `${args.path} ${resolveDir}`,
+      )
       if (!fromPi) return
       return { path: piTerminalImageStubPath }
     })
