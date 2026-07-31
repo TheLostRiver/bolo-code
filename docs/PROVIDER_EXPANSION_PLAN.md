@@ -1,6 +1,9 @@
 # Provider 面追赶方案（P0 支持面 + P1 模型元数据）
 
-> 状态：方案稿（v0，待实施）。真源：本文件 + `docs/PROVIDERS.md` + `docs/PROVIDER_UX.md`。
+> 状态：**P0/P1 已实施**（2026-07，见 §2.3/§3.4 验收）；P2 OAuth 暂缓；P3/P4/P5 排队。
+> 实施偏差：P1 目录放 `packages/shared/src/modelCatalog.ts`（core 的 /cost 不依赖
+> providers，放 shared 供 core/cli 共用，与 theme.ts 同模式）。
+> 真源：本文件 + `docs/PROVIDERS.md` + `docs/PROVIDER_UX.md`。
 > 对标：`E:\Tools\pi`（pi agent）的 `packages/ai` provider 层。
 > 范围：**本轮实施 P0（支持面扩展）与 P1（模型元数据内置表）**；
 > **P2 OAuth 暂缓**；P3（非兼容协议适配）、P4（Transport 优化）、动态模型刷新
@@ -85,7 +88,7 @@ export type ProviderPreset = {
 
 ### 3.2 方案
 
-新建 `packages/providers/src/modelCatalog.ts`（纯数据，不发网）：
+新建 `packages/shared/src/modelCatalog.ts`（纯数据，不发网；实施位置见顶部偏差记录）：
 
 ```ts
 export type ModelCatalogEntry = {
