@@ -56,7 +56,9 @@ function main() {
     themed.text.includes('\u001b[38;2;215;245;239m'),
     'footer 值用 inputFg（模型/effort 亮青白）',
   )
-  // 极光版 badge：model/effort 骑上边框 + context 进度条
+  // 极光版 badge：model/effort 骑上边框（╭╮ 线框包裹）+ context 进度条
+  assert.ok(themed.text.includes('╭'), 'badge 圆角线框起点')
+  assert.ok(themed.text.includes('╮'), 'badge 圆角线框终点')
   assert.ok(themed.text.includes('●'), 'badge 圆点')
   assert.ok(themed.text.includes('model sonnet-4.5'), 'model badge')
   assert.ok(themed.text.includes('effort high'), 'effort badge')
@@ -68,7 +70,7 @@ function main() {
   assert.ok(themed.text.includes('send'), 'action send')
   assert.ok(themed.text.includes(' │ '), '竖线分隔')
   assert.ok(themed.text.includes('default · ↓96k ↑1.2k'), 'mode/usage 胶囊')
-  assert.ok(!themed.text.includes(' · effort '), 'palette 单行不再重复 status 行')
+  assert.ok(!themed.text.includes(' · effort '), 'palette 不再重复 status 行')
 
   // ---- 回退渲染字节不变 ----
   const legacy = renderTuiInputBox({
@@ -106,7 +108,7 @@ function main() {
   })
   assert.ok(footer.text.includes('\u001b[48;2;'), 'footer 含 kbd 背景色')
 
-  // ---- 中间宽度降级档：短 chip（仅 modeText，去 usage） ----
+  // ---- 中间宽度：chip 第二行右对齐（两行模式） ----
   const midWidth = renderTuiInputFooter({
     state,
     columns: 70,
@@ -119,19 +121,20 @@ function main() {
       usage: { inputTokens: 96000, outputTokens: 1200 },
     },
   })
-  assert.ok(midWidth.text.includes('default'), '短 chip 含 modeText')
-  assert.ok(!midWidth.text.includes('↓96k'), '短 chip 去掉 usage')
+  assert.ok(midWidth.text.includes('default · ↓96k ↑1.2k'), '两行模式 chip 保留 usage')
+  assert.ok(midWidth.lines.length >= 2, '70 列两行布局')
 
-  // ---- 极窄：仅快捷键组 ----
+  // ---- 窄宽度：keys 行 + chip 行均保留（两行模式上限） ----
   const narrow = renderTuiInputFooter({
     state,
-    columns: 60,
+    columns: 74,
     color: true,
     palette,
     status: { permissionMode: 'default' },
   })
   assert.ok(narrow.text.includes('Enter'), '窄宽度保留快捷键')
-  assert.ok(!narrow.text.includes('default'), '窄宽度去掉 chip')
+  assert.ok(narrow.text.includes('default'), '窄宽度 chip 行保留')
+  assert.ok(narrow.lines.length >= 2, '74 列两行布局')
 
   console.log('PASS: composer palette consumption')
 }

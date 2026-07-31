@@ -456,9 +456,13 @@ function borderLine(
 /* ------------------------------------------------------------------ */
 
 function renderBadge(label: string, value: string, colors: ComposerColors): string {
+  // ╭╮ 圆角线框 + 背景块 + teal 圆点：对齐原型 badge（border 1px + radius）
+  // 紧凑布局（label 后单空格）保证 80 列下 model+effort 两个 badge 同框
+  const frame = `${colors.badgeBorder}╭${colors.reset}`
   const dot = `${colors.accent}●${colors.reset}`
-  const body = `${colors.kbdBg}${colors.kbdFg} ${label} ${value} ${colors.reset}`
-  return `${dot}${body}`
+  const body = `${colors.kbdBg}${colors.kbdFg}${label} ${value}${colors.reset}`
+  const end = `${colors.badgeBorder}╮${colors.reset}`
+  return `${frame}${dot}${body}${end}`
 }
 
 function renderContextBadge(
@@ -479,7 +483,7 @@ function renderContextBadge(
   const text = `${colors.kbdBg}${colors.kbdFg} context ${bar} ${pct}% · ${formatTuiTokenCount(
     status.usage.inputTokens,
   )}/${formatTuiTokenCount(total)} ${colors.reset}`
-  return text
+  return `${colors.badgeBorder}╭${colors.reset}${text}${colors.badgeBorder}╮${colors.reset}`
 }
 
 function renderBadgeTopBorder(options: {
@@ -551,6 +555,8 @@ export type ComposerColors = {
   ghost: string
   /** 输入行整块背景（palette 模式深色输入区） */
   inputBg: string
+  /** badge 边框色（╭╮ 圆角线框） */
+  badgeBorder: string
   /** badge 背景（palette 模式的哨兵：非空 = 启用 badge 顶边） */
   badgeBg: string
 }
@@ -578,6 +584,7 @@ export function buildComposerColors(options: {
       inputFg: color ? '\u001b[1m' : '',
       ghost: color ? '\u001b[2m' : '',
       inputBg: '',
+      badgeBorder: color ? '\u001b[38;5;244m' : '',
       badgeBg: '',
     }
   }
@@ -594,6 +601,7 @@ export function buildComposerColors(options: {
     inputFg: palette.inputFg,
     ghost: palette.ghost,
     inputBg: palette.inputBg,
+    badgeBorder: palette.badgeBorder,
     badgeBg: palette.badgeBg,
   }
 }
@@ -603,8 +611,17 @@ type FooterSegment = {
   tone?: 'bold' | 'dim' | 'accent' | 'muted' | 'key' | 'value' | 'gsep'
 }
 
-function footerSegmentsWidth(segments: readonly FooterSegment[]): number {
-  return measureTerminalText(segments.map((segment) => segment.text).join(''))
+function footerSegmentsWidth(
+  segments: readonly FooterSegment[],
+  colors?: ComposerColors,
+): number {
+  let width = 0
+  for (const segment of segments) {
+    width += measureTerminalText(segment.text)
+    // palette 模式 key 键帽渲染时带 ╭╮ 线框（+2 字符），宽度计算必须计入
+    if (segment.tone === 'key' && colors?.kbdBg) width += 2
+  }
+  return width
 }
 
 function toneStart(tone: FooterSegment['tone'], colors: ComposerColors): string {
@@ -634,6 +651,10 @@ function renderFooterSegments(
 ): string {
   return segments
     .map((segment) => {
+      // palette 模式键帽：╭╮ 圆角线框 + 背景块（对齐原型 kbd border）
+      if (segment.tone === 'key' && colors.kbdBg) {
+        return `${colors.borderDim}╭${colors.reset}${colors.kbdBg}${colors.kbdFg} ${segment.text} ${colors.reset}${colors.borderDim}╮${colors.reset}`
+      }
       const start = toneStart(segment.tone, colors)
       return start ? `${start}${segment.text}${colors.reset}` : segment.text
     })
@@ -697,12 +718,12 @@ function renderStatusFooter(options: {
       ]
     : []
   const available = Math.max(0, width - 2)
-  const usageWidth = footerSegmentsWidth(usageSegments)
+  const usageWidth = footerSegmentsWidth(usageSegments, colors)
   let selected: FooterSegment[] = []
   for (const candidate of identityCandidates) {
     const gap = candidate.length > 0 && usageSegments.length > 0 ? 2 : 0
     if (
-      footerSegmentsWidth(candidate) + gap + usageWidth <=
+      footerSegmentsWidth(candidate, colors) + gap + usageWidth <=
       available
     ) {
       selected = candidate
@@ -714,7 +735,7 @@ function renderStatusFooter(options: {
     const clipped = clipTerminalText(target, available)
     selected = clipped ? [valueSegment(clipped)] : []
   }
-  const leftWidth = footerSegmentsWidth(selected)
+  const leftWidth = footerSegmentsWidth(selected, colors)
   const gap =
     selected.length > 0 && usageSegments.length > 0
       ? Math.max(2, available - leftWidth - usageWidth)
@@ -808,7 +829,7 @@ function renderShortcutFooter(options: {
   const available = Math.max(0, width - 2)
   const selected =
     candidates.find(
-      (candidate) => footerSegmentsWidth(candidate) <= available,
+      (candidate) => footerSegmentsWidth(candidate, colors) <= available,
     ) ?? []
   return `  ${renderFooterSegments(selected, colors)}`
 }
@@ -929,15 +950,14 @@ export function renderTuiInputFooter(options: {
   const colors = buildComposerColors({ color, palette: options.palette })
   const lines: string[] = []
   if (colors.badgeBg) {
-    // palette 模式：单行 = 快捷键组（kbd 键帽 + │ 竖线分隔）+ 右侧 mode/usage 胶囊
-    const line = renderPaletteFooter({
+    // palette 模式：快捷键组（╭╮ 线框 kbd + │ 竖线）+ 右侧 mode/usage 胶囊
+    lines.push(...renderPaletteFooter({
       status: options.status,
       mode: options.mode,
       menuOpen: options.state.slashMenu !== null,
       width: frameWidth,
       colors,
-    })
-    if (line) lines.push(line)
+    }))
   } else {
     // 旧两行模式（无 palette 字节兼容）
     const status = renderStatusFooter({
@@ -959,9 +979,10 @@ export function renderTuiInputFooter(options: {
 }
 
 /**
- * 极光单行 footer（对齐原型 v3）：
- *   ▌Enter▌ send │ ▌Ctrl+J▌ newline │ ▌↑↓▌ history │ ▌Ctrl+C▌ exit  ▌default · ↓96k ↑1.2k▌
- * 模型/推理等级已在顶边 badge，本行不再重复 status；宽度不足时逐级降级。
+ * 极光 footer（对齐原型 v3）：
+ *   ╭Enter╮ send │ ╭Ctrl+J╮ newline │ ╭↑↓╮ history │ ╭Ctrl+C╮ exit
+ *   ╭default · ↓96k ↑1.2k╮（右对齐，宽终端合并为单行）
+ * 模型/推理等级已在顶边 badge，本行不再重复 status。
  */
 function renderPaletteFooter(options: {
   status?: TuiInputStatus
@@ -969,7 +990,7 @@ function renderPaletteFooter(options: {
   menuOpen: boolean
   width: number
   colors: ComposerColors
-}): string {
+}): string[] {
   const { status, mode, menuOpen, width, colors } = options
   const sep: FooterSegment = { text: ' │ ', tone: 'gsep' }
   let keys: FooterSegment[]
@@ -1016,28 +1037,24 @@ function renderPaletteFooter(options: {
     : modeText
   const chip: FooterSegment[] = [keySegment(chipText)]
   const available = Math.max(0, width - 2)
-  const keysWidth = footerSegmentsWidth(keys)
-  const chipWidth = footerSegmentsWidth(chip)
+  const keysWidth = footerSegmentsWidth(keys, colors)
+  const chipWidth = footerSegmentsWidth(chip, colors)
+  const keysRow = `  ${renderFooterSegments(keys, colors)}`
+  // 宽终端：单行（keys 左 + chip 右）
   if (keysWidth + chipWidth + 2 <= available) {
     const gap = available - keysWidth - chipWidth
-    return `  ${renderFooterSegments(keys, colors)}${' '.repeat(
-      gap,
-    )}${renderFooterSegments(chip, colors)}`
+    return [
+      `${keysRow}${' '.repeat(gap)}${renderFooterSegments(chip, colors)}`,
+    ]
   }
-  // 降级 1：短 chip（仅 modeText，去 usage）
-  const shortChip: FooterSegment[] = [keySegment(modeText)]
-  const shortChipWidth = footerSegmentsWidth(shortChip)
-  if (keysWidth + shortChipWidth + 2 <= available) {
-    const gap = available - keysWidth - shortChipWidth
-    return `  ${renderFooterSegments(keys, colors)}${' '.repeat(
-      gap,
-    )}${renderFooterSegments(shortChip, colors)}`
+  // 80 列常规：两行（keys 行 + chip 右对齐行），chip 不丢
+  const rows: string[] = []
+  if (keysWidth <= available) rows.push(keysRow)
+  if (chipWidth <= available) {
+    const gap = available - chipWidth
+    rows.push(`  ${' '.repeat(gap)}${renderFooterSegments(chip, colors)}`)
   }
-  // 降级 2：仅快捷键组
-  if (keysWidth <= available) {
-    return `  ${renderFooterSegments(keys, colors)}`
-  }
-  return ''
+  return rows
 }
 
 export function renderTuiInputBox(options: {
