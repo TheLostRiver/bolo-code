@@ -2,8 +2,9 @@
 
 > 状态：方案稿（v0，待实施）。真源：本文件 + `docs/PROVIDERS.md` + `docs/PROVIDER_UX.md`。
 > 对标：`E:\Tools\pi`（pi agent）的 `packages/ai` provider 层。
-> 范围：**只做 P0（支持面扩展）与 P1（模型元数据内置表）**。OAuth、Gemini/Bedrock 协议适配、
-> websocket-cached transport 一律不在本方案内（见 §5 不做清单）。
+> 范围：**本轮实施 P0（支持面扩展）与 P1（模型元数据内置表）**；
+> **P2 OAuth 暂缓**；P3（非兼容协议适配）、P4（Transport 优化）、动态模型刷新
+> **保留为后续阶段**（§5 路线，按需求/证据排队），不砍不弃。
 
 ## 0. 一句话目标
 
@@ -52,7 +53,7 @@ export type ProviderPreset = {
 | 既有 | openai / openai-responses / anthropic / deepseek / siliconflow | 保留不动 |
 | 国际兼容 | openrouter / groq / together / mistral / xai / nvidia / fireworks / cerebras / huggingface / vercel-ai-gateway / cloudflare-ai-gateway | OpenAI 兼容，`kind: openai-compatible`，各自 baseUrl/apiKeyEnv/模型清单 |
 | 国内兼容 | moonshot / kimi-coding / minimax / minimax-cn / qwen / qwen-token-plan / zai / zai-coding-cn / xiaomi / xiaomi-token-plan-cn / doubao(volcengine) / baidu / zhipu(glm) / baichuan | 同上；`effortDialect` 不明确的一律留空走 detect |
-| 特殊协议 | google(vertex/generative) / bedrock / mistral-conversations | **本方案不做**（§5），先以「中转兼容端点」方式覆盖 |
+| 特殊协议 | google(vertex/generative) / bedrock / mistral-conversations | 属 **P3 后续阶段**（§5 排队），本轮先以「中转兼容端点」方式覆盖 |
 
 > 每家 1 条数据 ≈ 10–15 行；总增量 ~400 行纯数据。
 > 模型清单只列**已验证可用**的模型 id（宁缺毋滥，避免给用户错误建议）。
@@ -128,15 +129,23 @@ P0A（国际 preset） → P0B（国内 preset） → P1（元数据表 + 消费
 - P0 不依赖 P1；P1 的 provider 字段依赖 P0 的 preset id 稳定（先 P0 后 P1）
 - 每刀遵守项目 checkpoint：红灯测试 → 实现 → 定向 → typecheck → 完整 `npm test` → 文档分批提交
 
-## 5. 本轮不做（明确清单 + 重开条件）
+## 5. 阶段路线与暂缓项（不砍不弃，按序排队）
 
-| 项 | 不做理由 | 重开条件 |
-|----|----------|----------|
-| OAuth（Anthropic 订阅登录） | 大工程（PKCE + 存储 + 刷新），只服务一家 | 用户明确要求；或 API key 之外的登录成为主流诉求 |
-| Gemini / Bedrock / 其它非兼容协议 | 无法走兼容端点，需新协议适配 | ≥ 1 个真实用户场景（按证据门控） |
-| 动态模型刷新（在线拉取 + 缓存） | 静态表已覆盖常用模型；联网拉取有隐私/依赖面 | ≥ 2 次元数据过期误报反馈 |
-| websocket-cached transport | 现 SSE/WS 已够用 | 真实性能痛点（延迟/吞吐实测） |
-| pi 式 80+ 全量 | 长尾厂商无真实需求 | 用户反馈具体厂商诉求 |
+| 阶段 | 内容 | 状态 | 启动条件 |
+|------|------|------|----------|
+| **P0A** | 国际兼容 preset 扩容（15 家） | 本轮 | 方案确认后开工 |
+| **P0B** | 国内兼容 preset 扩容（10–15 家） | 本轮 | P0A 完成 |
+| **P1** | 模型元数据内置表 + `/cost`/context 接线 | 本轮 | P0 完成 |
+| **P2** | OAuth（Anthropic 订阅登录：PKCE + 存储 + 刷新） | **暂缓**（用户指示） | 用户重新要求；或 API key 之外的登录成为主流诉求 |
+| **P3** | 非兼容协议适配：Gemini / Bedrock / mistral-conversations | 排队 | ≥ 1 个真实用户场景（证据门控） |
+| **P4** | Transport 优化：websocket-cached / auto 协商 | 排队 | 真实性能痛点（延迟/吞吐实测） |
+| **P5** | 动态模型刷新（在线拉取 + 缓存 + 离线回退，参考 pi `models.generated`） | 排队 | ≥ 2 次元数据过期误报反馈 |
+
+**明确不做**（真正砍掉的，仅此一项）：
+
+| 项 | 不做理由 |
+|----|----------|
+| 为追平 pi 的数字而堆 80+ 全量厂商 | 长尾厂商无真实需求；按 P0A/P0B 的预设数据驱动模式按需扩展即可 |
 
 ## 6. 参考
 
