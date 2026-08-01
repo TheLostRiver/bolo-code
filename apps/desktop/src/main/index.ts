@@ -396,6 +396,50 @@ function createWindow() {
                runtime = document.documentElement.dataset.runtimeState || 'missing'
              }
 
+             // 模态可关闭性：hidden 属性可能被 display:flex 覆盖（历史 bug），
+             // 必须用 getComputedStyle 验证视觉状态。此段必须位于任何
+             // settingsButton.click()（metadata 段）之前，否则 settings 已打开，
+             // “初始隐藏”断言会与打开状态竞态。
+             const modalEl = (id) => document.getElementById(id)
+             const visualHidden = (id) => {
+               const e = modalEl(id)
+               return !e || getComputedStyle(e).display === 'none'
+             }
+             const modalsInitiallyHidden =
+               visualHidden('settings') && visualHidden('perm') && visualHidden('ask')
+             let settingsOpened = false
+             let settingsClosedByCancel = false
+             if (modalsInitiallyHidden) {
+               const sb = document.getElementById('btn-settings')
+               if (!sb) throw new Error('smoke: btn-settings missing')
+               sb.click()
+               const openStarted = Date.now()
+               while (
+                 !settingsOpened &&
+                 Date.now() - openStarted < 10000
+               ) {
+                 settingsOpened = !visualHidden('settings')
+                 if (!settingsOpened) await wait(25)
+               }
+               if (!settingsOpened) {
+                 throw new Error('smoke: settings did not open')
+               }
+               const cancel = document.getElementById('set-cancel')
+               if (!cancel) throw new Error('smoke: set-cancel missing')
+               cancel.click()
+               const closeStarted = Date.now()
+               while (
+                 !settingsClosedByCancel &&
+                 Date.now() - closeStarted < 10000
+               ) {
+                 settingsClosedByCancel = visualHidden('settings')
+                 if (!settingsClosedByCancel) await wait(25)
+               }
+               if (!settingsClosedByCancel) {
+                 throw new Error('smoke: settings did not close via Cancel')
+               }
+             }
+
              const selectionTarget = ${JSON.stringify(smokeSelectId)}
              let beforeSessionId = null
              let afterSessionId = null
@@ -473,38 +517,6 @@ function createWindow() {
                    metadataLine.textContent.includes(metadata.context.sourceLabel) &&
                    metadataLine.textContent.includes(metadata.maxOutput.displayTokens) &&
                    metadataLine.textContent.includes(metadata.maxOutput.sourceLabel)
-               }
-             }
-             // 模态可关闭性：hidden 属性可能被 display:flex 覆盖（历史 bug），
-             // 必须用 getComputedStyle 验证视觉状态
-             const visual = (id) =>
-               getComputedStyle(document.getElementById(id)).display === 'none'
-             const modalsInitiallyHidden =
-               visual('settings') && visual('perm') && visual('ask')
-             let settingsOpened = false
-             let settingsClosedByCancel = false
-             if (modalsInitiallyHidden) {
-               const sb = document.getElementById('btn-settings')
-               if (sb) sb.click()
-               const openStarted = Date.now()
-               while (
-                 !settingsOpened &&
-                 Date.now() - openStarted < 10000
-               ) {
-                 settingsOpened = !visual('settings')
-                 if (!settingsOpened) await wait(25)
-               }
-               if (settingsOpened) {
-                 const cancel = document.getElementById('set-cancel')
-                 if (cancel) cancel.click()
-                 const closeStarted = Date.now()
-                 while (
-                   !settingsClosedByCancel &&
-                   Date.now() - closeStarted < 10000
-                 ) {
-                   settingsClosedByCancel = visual('settings')
-                   if (!settingsClosedByCancel) await wait(25)
-                 }
                }
              }
              return JSON.stringify({
