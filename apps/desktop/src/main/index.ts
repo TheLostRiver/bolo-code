@@ -475,6 +475,38 @@ function createWindow() {
                    metadataLine.textContent.includes(metadata.maxOutput.sourceLabel)
                }
              }
+             // 模态可关闭性：hidden 属性可能被 display:flex 覆盖（历史 bug），
+             // 必须用 getComputedStyle 验证视觉状态
+             const visual = (id) =>
+               getComputedStyle(document.getElementById(id)).display === 'none'
+             const modalsInitiallyHidden =
+               visual('settings') && visual('perm') && visual('ask')
+             let settingsOpened = false
+             let settingsClosedByCancel = false
+             if (modalsInitiallyHidden) {
+               const sb = document.getElementById('btn-settings')
+               if (sb) sb.click()
+               const openStarted = Date.now()
+               while (
+                 !settingsOpened &&
+                 Date.now() - openStarted < 10000
+               ) {
+                 settingsOpened = !visual('settings')
+                 if (!settingsOpened) await wait(25)
+               }
+               if (settingsOpened) {
+                 const cancel = document.getElementById('set-cancel')
+                 if (cancel) cancel.click()
+                 const closeStarted = Date.now()
+                 while (
+                   !settingsClosedByCancel &&
+                   Date.now() - closeStarted < 10000
+                 ) {
+                   settingsClosedByCancel = visual('settings')
+                   if (!settingsClosedByCancel) await wait(25)
+                 }
+               }
+             }
              return JSON.stringify({
                log: !!document.getElementById('log'),
                sidebar: !!document.getElementById('session-list'),
@@ -482,6 +514,9 @@ function createWindow() {
                styled: getComputedStyle(document.body).display !== '',
                sheets: document.styleSheets.length,
                runtime,
+               modalsInitiallyHidden,
+               settingsOpened,
+               settingsClosedByCancel,
                selectionTarget,
                beforeSessionId,
                afterSessionId,
@@ -504,6 +539,9 @@ function createWindow() {
           }
           if (r.sheets === 0) missing.push('sheets')
           if (r.runtime !== 'ready') missing.push('runtime')
+          if (r.modalsInitiallyHidden !== true) missing.push('modals-hidden')
+          if (r.settingsOpened !== true) missing.push('settings-open')
+          if (r.settingsClosedByCancel !== true) missing.push('settings-cancel')
           if (
             smokeSelectId &&
             (r.selected !== true ||

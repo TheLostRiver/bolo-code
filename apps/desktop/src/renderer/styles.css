@@ -607,6 +607,11 @@ button {
   z-index: 20;
 }
 
+/* display:flex 会覆盖 [hidden] 的 UA 样式，必须显式恢复（否则模态关不掉） */
+.perm[hidden] {
+  display: none;
+}
+
 .perm-card {
   background: var(--panel);
   border: 1px solid var(--border-strong);
