@@ -23,6 +23,10 @@ import {
   nowIso,
   type ChatMessage,
   type HooksConfig,
+  advanceToolRepetition,
+  createToolRepetitionState,
+  formatToolRepetitionReminder,
+  toolRepetitionStage,
 } from '../../shared/src/index.ts'
 import { createBuiltinTools, type BoloTool } from '../../tools/src/index.ts'
 import type {
@@ -60,6 +64,7 @@ export type TerminalReason =
   | 'aborted'
   | 'user_prompt_blocked'
   | 'error'
+  | 'tool_repetition'
 
 export type Terminal = {
   reason: TerminalReason
@@ -435,6 +440,9 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
   /** C3：本 outer turn 是否已 mid-turn compact */
   let midTurnCompacted = false
   const midTurnEnabled = params.midTurnAutoCompact !== false
+  /** ROB-1：连续相同工具调用检测（turn 级状态） */
+  let repetitionState = createToolRepetitionState()
+  let repetitionWarned = false
 
   while (true) {
     if (params.signal?.aborted) {
@@ -452,6 +460,29 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
       emit(params, { type: 'phase', phase: 'stopping' })
       await runStopHooks(params)
       return finishTerminal(params, terminal)
+    }
+
+    // ROB-1：上一轮工具执行后已推进计数；本轮 provider 调用前判定
+    const repetitionStage = toolRepetitionStage(repetitionState.count)
+    if (repetitionStage === 'abort') {
+      const detail = `identical tool calls repeated ${repetitionState.count} times`
+      emit(params, {
+        type: 'warning',
+        message: `Tool repetition limit reached; stopping the turn (${detail}).`,
+      })
+      const terminal: Terminal = { reason: 'tool_repetition', detail }
+      emit(params, { type: 'phase', phase: 'stopping' })
+      await runStopHooks(params)
+      return finishTerminal(params, terminal)
+    }
+    if (repetitionStage === 'warn' && !repetitionWarned) {
+      repetitionWarned = true
+      const reminder = formatToolRepetitionReminder(
+        repetitionState.count,
+        repetitionState.lastCalls[0],
+      )
+      params.messages.push({ role: 'user', content: reminder })
+      emit(params, { type: 'warning', message: reminder })
     }
 
     await visitSafeBoundary(params, 'before_provider')
@@ -773,6 +804,9 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
     }
 
     await visitSafeBoundary(params, 'after_provider')
+
+    // ROB-1：本轮工具调用指纹推进重复计数（无工具轮会重置）
+    repetitionState = advanceToolRepetition(repetitionState, toolBlocks)
 
     if (toolBlocks.length === 0) {
       streamTools?.discard()

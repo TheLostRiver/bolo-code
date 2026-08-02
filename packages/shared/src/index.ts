@@ -454,6 +454,18 @@ export {
   type ReadToolGroup,
 } from './toolGrouping.ts'
 export {
+  TOOL_REPETITION_ABORT_THRESHOLD,
+  TOOL_REPETITION_WARN_THRESHOLD,
+  advanceToolRepetition,
+  createToolRepetitionState,
+  fingerprintToolCall,
+  formatToolRepetitionReminder,
+  toolRepetitionStage,
+  type ToolCallFingerprint,
+  type ToolRepetitionStage,
+  type ToolRepetitionState,
+} from './toolRepetition.ts'
+export {
   TUI_THEME_IDS,
   TUI_THEME_LABELS,
   isTuiThemeId,
