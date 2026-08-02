@@ -40,6 +40,8 @@ import {
   RUNTIME_PROTOCOL_VERSION,
   isRuntimeQueryEntity,
   queryRuntimeSnapshot,
+  formatBackgroundShellStatusLine,
+  listBackgroundShells,
   type ChatMessage,
   type HooksConfig,
   type HookEvent,
@@ -143,6 +145,8 @@ export type SlashSession = {
   /** 是否把 reasoning_content 写入 assistant history */
   persistReasoning?: boolean
   compactSummarizer?: CompactSummarizer
+  /** ROB-3：后台 shell store（/bg 展示；Bash run_in_background 写入） */
+  backgroundShells?: import('../../shared/src/index.ts').BackgroundShellStore
   /** 会话 skill 全文表；供 /skills 与 /<skill-id> 回落 */
   skills?: LoadedSkill[]
   /** 活跃 subagent 定义；供 /agents · /doctor */
@@ -4021,10 +4025,40 @@ async function cmdBg(
       message: 'Usage: /bg [status] | /bg cancel <taskId>',
     }
   }
+  const agentsStatus = formatBackgroundAgentsStatus(
+    session.backgroundAgents,
+  )
+  const shellsStatus = formatBackgroundShellsStatus(session)
   return {
     ok: true,
-    message: formatBackgroundAgentsStatus(session.backgroundAgents),
+    message: shellsStatus
+      ? `${agentsStatus}${agentsStatus ? '\n' : ''}${shellsStatus}`
+      : agentsStatus,
   }
+}
+
+/**
+ * ROB-3：/bg 的 background shells 段——含 resume 投影的 interrupted（leftover）
+ * 记录与输出路径，提醒用户处置；不自动重启任务。
+ */
+export function formatBackgroundShellsStatus(
+  session: SlashSession,
+): string {
+  if (!session.backgroundShells) return ''
+  const records = listBackgroundShells(session.backgroundShells)
+  if (records.length === 0) return ''
+  const lines = ['Background shells:']
+  for (const record of records) {
+    lines.push(`  ${formatBackgroundShellStatusLine(record)}`)
+    if (record.status === 'interrupted') {
+      lines.push(`    output: ${record.outputPath}`)
+      lines.push(
+        '    (leftover from a previous session; the process may still run — ' +
+          'dispose of it or read its output)',
+      )
+    }
+  }
+  return lines.join('\n')
 }
 
 function cmdSkills(session: SlashSession, args: string): SlashDispatchResult {

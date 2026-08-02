@@ -45,7 +45,7 @@ function rec(overrides?: Partial<BackgroundShellRecord>): BackgroundShellRecord 
 
 async function main() {
   // ── 1) 状态枚举 ──
-  assert(BACKGROUND_SHELL_STATUSES.length === 4, 'four shell statuses')
+  assert(BACKGROUND_SHELL_STATUSES.length === 5, 'five shell statuses')
   assert(isTerminalShellStatus('running') === false, 'running is not terminal')
   assert(isTerminalShellStatus('completed') === true, 'completed is terminal')
   assert(isTerminalShellStatus('failed') === true, 'failed is terminal')

@@ -15,6 +15,8 @@ export const BACKGROUND_SHELL_STATUSES = [
   'completed',
   'failed',
   'killed',
+  /** ROB-3：上次会话遗留（进程未走 endSession 就退出时 resume 投影） */
+  'interrupted',
 ] as const
 
 export type BackgroundShellStatus = (typeof BACKGROUND_SHELL_STATUSES)[number]
@@ -105,6 +107,22 @@ export function markShellKilled(
 }
 
 /**
+ * ROB-3：resume 投影——上次会话遗留的 running 任务标记为 interrupted。
+ * 进程是否还活着无法跨进程证明，因此不宣称 killed/completed；对已终态是 no-op。
+ */
+export function markShellInterrupted(
+  record: BackgroundShellRecord,
+  opts: { endedAt: string },
+): BackgroundShellRecord {
+  if (isTerminalShellStatus(record.status)) return record
+  return {
+    ...record,
+    status: 'interrupted',
+    endedAt: opts.endedAt,
+  }
+}
+
+/**
  * 推进读游标。
  * 允许越过 bytesWritten：stat 与 read 之间文件可能又长了，
  * 以实际读到的字节为准才不会漏读。
@@ -174,6 +192,99 @@ export function formatBackgroundShellStatusLine(
         : ''
       : ''
   const sizeNote = record.killedForSize ? ' [output cap exceeded]' : ''
+  const leftover = record.status === 'interrupted' ? ' [leftover]' : ''
   const label = record.description?.trim() || record.command
-  return `${record.shellId} ${record.status}${code}${sizeNote} · ${label}`
+  return `${record.shellId} ${record.status}${code}${sizeNote}${leftover} · ${label}`
+}
+
+/**
+ * ROB-3：manifest 序列化（会话保存点落盘，供崩溃/重启后恢复提醒）。
+ * 只保留可恢复字段，不序列化运行时句柄。
+ */
+export function serializeBackgroundShellManifest(
+  store: BackgroundShellStore,
+): string {
+  return JSON.stringify({
+    order: store.order,
+    shells: store.shells,
+  })
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isSafeShellId(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= 128 &&
+    !/[\u0000-\u001f\u007f]/u.test(value)
+  )
+}
+
+/**
+ * ROB-3：manifest 反序列化（fail-closed）。
+ * 任何字段不合法都整体返回 undefined，不投影部分记录。
+ */
+export function parseBackgroundShellManifest(
+  text: string,
+): BackgroundShellStore | undefined {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    return undefined
+  }
+  if (!isRecord(parsed) || !Array.isArray(parsed.order)) return undefined
+  if (!isRecord(parsed.shells)) return undefined
+  const shells: Record<string, BackgroundShellRecord> = {}
+  for (const id of parsed.order) {
+    if (!isSafeShellId(id)) return undefined
+    const raw = parsed.shells[id]
+    if (!isRecord(raw)) return undefined
+    if (!isSafeShellId(raw.shellId) || raw.shellId !== id) return undefined
+    if (typeof raw.command !== 'string' || !raw.command) return undefined
+    if (typeof raw.status !== 'string') return undefined
+    if (!BACKGROUND_SHELL_STATUSES.includes(raw.status as BackgroundShellStatus)) {
+      return undefined
+    }
+    if (typeof raw.outputPath !== 'string' || !raw.outputPath) return undefined
+    if (typeof raw.startedAt !== 'string' || !raw.startedAt) return undefined
+    if (typeof raw.readOffset !== 'number' || !Number.isFinite(raw.readOffset)) {
+      return undefined
+    }
+    if (typeof raw.bytesWritten !== 'number' || !Number.isFinite(raw.bytesWritten)) {
+      return undefined
+    }
+    const record: BackgroundShellRecord = {
+      shellId: raw.shellId,
+      command: raw.command,
+      status: raw.status as BackgroundShellStatus,
+      outputPath: raw.outputPath,
+      startedAt: raw.startedAt,
+      readOffset: Math.max(0, Math.floor(raw.readOffset)),
+      bytesWritten: Math.max(0, Math.floor(raw.bytesWritten)),
+      ...(typeof raw.description === 'string' && raw.description
+        ? { description: raw.description }
+        : {}),
+      ...(typeof raw.pid === 'number' && Number.isFinite(raw.pid)
+        ? { pid: raw.pid }
+        : {}),
+      ...(typeof raw.exitCode === 'number' && Number.isFinite(raw.exitCode)
+        ? { exitCode: raw.exitCode }
+        : {}),
+      ...(typeof raw.endedAt === 'string' && raw.endedAt
+        ? { endedAt: raw.endedAt }
+        : {}),
+      ...(typeof raw.killedForSize === 'boolean'
+        ? { killedForSize: raw.killedForSize }
+        : {}),
+    }
+    shells[id] = record
+  }
+  const order = parsed.order.filter(
+    (id): id is string => isSafeShellId(id) && Boolean(shells[id]),
+  )
+  return { order, shells }
 }

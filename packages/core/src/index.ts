@@ -78,6 +78,11 @@ import {
 } from './deps.ts'
 import { queryLoop, type QueryLoopEvent, type Terminal } from './queryLoop.ts'
 import { getSessionTodoStore } from './sessionTodo.ts'
+import {
+  persistBackgroundShellManifest,
+  removeBackgroundShellManifest,
+  restoreBackgroundShellManifest,
+} from './backgroundShellManifest.ts'
 import type { AskPermissionFn } from './toolExecution.ts'
 import {
   appendHookDiag,
@@ -2111,6 +2116,8 @@ export async function endSession(
     try {
       await killAllBackgroundShells(session.backgroundShells)
       await cleanupShellOutputDir(session.cwd, session.id)
+      // ROB-3：正常结束 = 无遗留；清掉 manifest，resume 不再提醒
+      await removeBackgroundShellManifest(session)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       emit(session, {
@@ -2539,6 +2546,10 @@ async function runOwnedPrompt(
     } catch {
       messagesSaved = false
     }
+    // ROB-3：会话保存点顺带落盘后台任务 manifest（崩溃后 resume 可提醒）
+    if (messagesSaved) {
+      await persistBackgroundShellManifest(session).catch(() => {})
+    }
   }
   const turnTerminal = {
     turnId,
@@ -2691,6 +2702,9 @@ export async function resumeSession(
     restoreSystemSections: !reassemble,
     restoreModelRuntime: !registryBacked,
   })
+
+  // ROB-3：resume 投影遗留后台任务（running → interrupted），/bg 展示提醒
+  await restoreBackgroundShellManifest(session, filePath).catch(() => {})
 
   // CX6：若有 registry + 快照 providerId，尝试热切到该后端（缺 key 则保留 create 默认并警告）
   const resumePid =
