@@ -386,7 +386,8 @@ renderer 壳原样复制，共享 `RuntimeClient` 单独打成 browser ESM。不
 | Effort | [EFFORT.md](./EFFORT.md) · [EFFORT_OPTIMIZATION.md](./EFFORT_OPTIMIZATION.md) |
 | Diff | [FILE_DIFF_SPEC.md](./FILE_DIFF_SPEC.md) · [TUI.md](./TUI.md) |
 | **CLI TUI 重构** | **[CLI_TUI_REFACTOR_PLAN.md](./CLI_TUI_REFACTOR_PLAN.md)**（OI-14/OI-15/OI-16/OI-17）· [OI-14A 选型证据](./CLI_TUI_RENDERER_DECISION.md) · [OPEN_ISSUES.md](./OPEN_ISSUES.md) OI-16/OI-17 |
-| **模型上下文 / 长工具输出** | **[TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md](./TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md)**（CTX-1..3、OUT-1..3 已完成 · OUT-4 下一刀） |
+| **模型上下文 / 长工具输出** | **[TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md](./TOOL_OUTPUT_AND_MODEL_CONTEXT_DESIGN.md)**（CTX-1..3、OUT-1..5 已完成） |
+| **Agent 面强化计划** | **[AGENT_ENHANCEMENT_PLAN.md](./AGENT_ENHANCEMENT_PLAN.md)**（ROB/MEM/CMP/TERM/HKP/REN/CBG/EVT/WT · 按成本排序 · ▶ NEXT：ROB-1） |
 | Hooks | [HOOKS.md](./HOOKS.md) |
 | Compact | [COMPACTION.md](./COMPACTION.md) |
 | Subagent | [SUBAGENT.md](./SUBAGENT.md) · [SUBAGENT_SPEC.md](./SUBAGENT_SPEC.md) |
