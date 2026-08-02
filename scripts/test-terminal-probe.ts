@@ -163,6 +163,25 @@ async function main(): Promise<void> {
       'DA2 response fragments inside the query window are swallowed',
     )
 
+    // 窗口内负向断言：鼠标序列与单独 ESC 在查询窗口内照常转发（前缀精确匹配）
+    const eventsAfterFragments = controller.getTerminalStats().inputEvents
+    input.send('\x1b[<0;10;10M')
+    await settle()
+    assert.equal(
+      controller.getTerminalStats().inputEvents,
+      eventsAfterFragments + 1,
+      'mouse sequences are not swallowed inside the window',
+    )
+    input.send('\x1b')
+    await new Promise<void>((resolve) => setTimeout(resolve, 20))
+    await settle()
+    assert.equal(
+      controller.getTerminalStats().inputEvents,
+      eventsAfterFragments + 2,
+      'standalone ESC is not swallowed inside the window',
+    )
+
+    const eventsBeforeResponse = controller.getTerminalStats().inputEvents
     input.send('\x1b[>7721;1;0c')
     await settle()
     const caps = controller.getTerminalCapabilities()
@@ -171,7 +190,7 @@ async function main(): Promise<void> {
     assert.equal(caps.vendorId, 7721)
     assert.equal(
       controller.getTerminalStats().inputEvents,
-      eventsBefore,
+      eventsBeforeResponse,
       'the DA2 response is intercepted and never reaches the input handler',
     )
 
@@ -180,7 +199,7 @@ async function main(): Promise<void> {
     await settle()
     assert.equal(
       controller.getTerminalStats().inputEvents,
-      eventsBefore + 1,
+      eventsBeforeResponse + 1,
       'ordinary keys still reach the input handler',
     )
     await controller.stop()
