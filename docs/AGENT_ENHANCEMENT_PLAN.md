@@ -15,8 +15,8 @@
 | ROB-1 | 工具调用重复检测（stationarity guard） | 低 | core queryLoop + shared 纯契约 | ✅ 本轮 |
 | ROB-2 | 悬空 tool call 修复与结果去重 | 低 | session transcript/load | ✅ 本轮 |
 | CMP-1 | 压缩专用模型与墙钟预算 | 低 | compact 配置/执行器 | ✅ 本轮 |
-| ROB-3 | 后台任务 manifest 与重启恢复提醒 | 低 | backgroundShell 持久化 + `/bg` | ▶ NEXT |
-| TERM-1 | 终端能力探测（品牌特化） | 低 | CLI adapter | 📋 |
+| ROB-3 | 后台任务 manifest 与重启恢复提醒 | 低 | backgroundShell 持久化 + `/bg` | ✅ 本轮 |
+| TERM-1 | 终端能力探测（品牌特化） | 低 | CLI adapter | ▶ NEXT |
 | TERM-2 | 输入 CSI 分片重组 | 低 | CLI adapter/StdinBuffer | 📋 |
 | HKP-1 | hooks 事件面扩展与 fail-open 结果 | 低 | hooks 包 | 📋 |
 | HKP-2 | 权限 auto 模式命令级安全分析 | 低–中 | permissions auto 分类器 | 📋 |
@@ -92,15 +92,26 @@ JSON 快照恢复集成；typecheck、resume/migration/persist/rewrite/first-run
 无 completeText 无 model 键）与 config→session 装配；typecheck、compact/
 auto-compact/config/ptl 回归与完整 `npm test` 通过。
 
-## 4. ROB-3 · 后台任务 manifest 与重启恢复提醒 — 低成本
+## 4. ROB-3 · 后台任务 manifest 与重启恢复提醒 — 低成本 ✅ 本轮
 
 **目标**：后台任务（run_in_background）元数据持久化为 manifest；进程重启后
 `/bg` 能显示「上次会话遗留的后台任务」及输出位置，提醒用户处置，不静默丢状态。
 
-**设计**：backgroundShell store 增加 manifest 落盘（任务 id/命令/启动时间/输出路径/
-状态）；resume 时投影为 interrupted 诊断 + 明确「遗留」标注；不自动重启任务。
+**设计**（已落地）：
+- shared 状态机新增 `interrupted`（终态）：resume 投影遗留任务用；
+  `markShellInterrupted`（running→interrupted，终态 no-op）；
+  `serializeBackgroundShellManifest` / `parseBackgroundShellManifest`
+  （fail-closed：任何字段非法整体拒绝）。
+- manifest 文件 = transcript 同目录 `<id>.background-shells.json`：会话保存点
+  （submitPrompt 的 maybeAutoSaveSession 成功后）落盘；resume 时把 running
+  投影为 interrupted（无法跨进程证明死活，不宣称 killed/completed）；正常
+  endSession（收尸+清理输出后）删除 manifest；不自动重启任务。
+- `/bg` 追加 background shells 段：interrupted 记录显示 `[leftover]`、输出
+  路径与处置提示。
 
-**验收**：manifest 写读、重启投影、输出路径可查；`/bg` 显示。
+**验收**：专项覆盖 interrupted 投影/终态守卫、manifest roundtrip 与六类损坏
+拒绝、真实 spawn → 落盘 → resume 投影 → 清理全链路；typecheck、bash-
+background/runtime/stream-error 与 slash 回归及完整 `npm test` 通过。
 
 ## 5. TERM-1 · 终端能力探测（品牌特化）— 低成本
 
