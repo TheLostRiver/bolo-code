@@ -22,6 +22,7 @@ import {
 } from '../../config/src/index.ts'
 import {
   nowIso,
+  repairToolMessagePairs,
   type ChatMessage,
   type SessionPhase,
   type ToolPresentation,
@@ -1306,6 +1307,14 @@ export async function loadSessionPair(
    */
   recovered?: SessionRecoveryNote
 }> {
+  // ROB-2：任何来源（json / jsonl / 仅 transcript）的消息都统一修复
+  // 悬空 tool_call、孤儿结果与重复结果，再交给调用方。
+  const finalizeSnapshot = (snapshot: SessionSnapshot): SessionSnapshot => {
+    const messages = repairToolMessagePairs(snapshot.messages)
+    return messages === snapshot.messages
+      ? snapshot
+      : { ...snapshot, messages }
+  }
   const resolvedJson = path.resolve(jsonPath)
   const transcriptPath = resolveTranscriptPathFromJson(resolvedJson)
 
@@ -1334,7 +1343,7 @@ export async function loadSessionPair(
     const useTranscript = transcript.messages.length > 0
     return {
       path: resolvedJson,
-      snapshot: {
+      snapshot: finalizeSnapshot({
         ...jsonSnap,
         messages: useTranscript ? transcript.messages : jsonSnap.messages,
         // CTX-2：append-only runtime state 覆盖旁路 JSON 的旧身份；旧 meta 仍只补缺省。
@@ -1353,13 +1362,17 @@ export async function loadSessionPair(
             }),
         cwd: jsonSnap.cwd || transcript.meta?.cwd || opts?.cwd || process.cwd(),
         createdAt: jsonSnap.createdAt || transcript.meta?.createdAt || jsonSnap.createdAt,
-      },
+      }),
       fromTranscript: useTranscript,
     }
   }
 
   if (jsonSnap) {
-    return { path: resolvedJson, snapshot: jsonSnap, fromTranscript: false }
+    return {
+      path: resolvedJson,
+      snapshot: finalizeSnapshot(jsonSnap),
+      fromTranscript: false,
+    }
   }
 
   // 快照坏了、transcript 又一条消息都读不出：没有任何东西被救回来。
@@ -1381,7 +1394,7 @@ export async function loadSessionPair(
     // T3：仅有 jsonl 时 path 指向真实文件，便于 CLI/autoSave 展示与回写
     return {
       path: transcriptPath,
-      snapshot,
+      snapshot: finalizeSnapshot(snapshot),
       fromTranscript: true,
       ...(jsonFailure === undefined
         ? {}

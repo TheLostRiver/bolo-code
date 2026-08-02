@@ -465,6 +465,7 @@ export {
   type ToolRepetitionStage,
   type ToolRepetitionState,
 } from './toolRepetition.ts'
+export { repairToolMessagePairs } from './messageRepair.ts'
 export {
   TUI_THEME_IDS,
   TUI_THEME_LABELS,
