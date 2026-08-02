@@ -212,6 +212,11 @@ bounded preview 间切换；输入 `/tools` 可按最近优先选择历史工具
 ref 打开按需全文 pager，不一次性载入整个 spill；无有效 ref 或文件缺失、损坏时会
 明确提示并回退 bounded preview。`q`/`Esc` 关闭后恢复原 Composer 草稿、光标和焦点。
 resume 会从 `tool_presentation` side-channel 恢复有效全文引用。
+支持 SGR mouse 的终端（xterm、Windows Terminal 等）在等待输入时可直接点击溢出
+摘要行：点击打开该工具的 pager，再次点击同一摘要收起，点击其它摘要切换；有全文
+引用的结果走按页读取，否则显示有界预览。滚轮和普通点击其它区域不产生行为，
+键盘路径（Enter/`/tools`/Esc）始终等价可用。`TERM=dumb`、pipe 或非 raw TTY 不
+启用鼠标 reporting，也不会输出任何鼠标控制序列。
 
 活动行每次把完整内容与擦尾控制合成一次原位写入，不会先清空再绘制；glyph 与耗时
 以 250ms 节奏刷新。需要授权时，Bash 面板会显示实际 command、cwd、前后台与 timeout，

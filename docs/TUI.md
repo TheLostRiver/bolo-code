@@ -151,6 +151,7 @@ composer 与 footer 由同一个常驻 layout tree 计算，terminal auto-wrap �
 | `Tab` | slash 菜单打开时补全选中项；否则插入两个空格 |
 | `Esc` | turn 运行时请求 interrupt；空闲时关闭 slash 菜单并保留输入 |
 | `Ctrl+O` | overlay 未激活时全局切换工具 summary/bounded preview；不改变模型或 session 数据 |
+| 鼠标（SGR 1006） | 等待输入时点击溢出工具摘要行：打开该工具 pager，再次点击同一摘要收起，点击其它摘要切换；滚轮/释放/普通区域无行为，键盘路径等价可用 |
 | `Backspace/Delete` | 删除前/后一个 grapheme |
 | `Ctrl+A/E` | 整个输入 buffer 首/尾 |
 | `Ctrl+U/K/W` | 删除光标前/后/前一个词 |
@@ -183,6 +184,12 @@ adapter 获取 raw stdin 时启用 terminal mode 2004，退出、提交和 abort
 `paste-start` 后跨 data chunk 聚合正文，到 `paste-end` 才规范化 CRLF/CR 并调用一次
 `insertText()`、重绘一次；marker 不进入输入 state，粘贴中的换行也不会触发 submit。
 不支持 bracketed paste 的普通按键/文本路径保持原行为。
+
+OUT-4 起，raw input 获取时同时启用 SGR 1006 鼠标 reporting（`?1000h?1006h`），
+release/stop/异常路径必定 `?1000l?1006l`；`TERM=dumb`、非 raw TTY、pipe/CI 不启用。
+鼠标序列与 bracketed paste 由同一 `StdinBuffer` 区分：SGR 序列作为独立 data 事件
+到达，由 TUI input listener 在键解析之前消费；点击坐标经当前 render 的布局行
+hit region（只注册 overflow 且可开 pager 的 tool block）与 viewport 换算决定动作。
 
 ### 3.3 Turn 时间线
 

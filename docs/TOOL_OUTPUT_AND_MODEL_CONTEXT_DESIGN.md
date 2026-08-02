@@ -1,7 +1,7 @@
 # 长工具输出折叠与模型上下文元数据设计
 
-> **状态：** CTX-1 `27a2506`、CTX-2 `6ea3a4f`、CTX-3 `d966d4b`、OUT-1 `78ad65a`、OUT-2 `ab8a634`、OUT-3 `595b172` 已完成；OUT-4 是下一刀。
-> **设计基线：** `dc20807`；当前实施基线：`595b172`。
+> **状态：** CTX-1 `27a2506`、CTX-2 `6ea3a4f`、CTX-3 `d966d4b`、OUT-1 `78ad65a`、OUT-2 `ab8a634`、OUT-3 `595b172`、OUT-4 已完成；OUT-5 是下一刀。
+> **设计基线：** `dc20807`；当前实施基线：OUT-4 代码/测试批。
 > **路线标识：** `CTX-1..3`、`OUT-1..5`。
 > **进度真源：** [ROADMAP.md](./ROADMAP.md) §0、§13.11。
 > **相关实现：** [COMPACTION.md](./COMPACTION.md) ·
@@ -28,10 +28,12 @@
 | OUT-1 | ✅ `78ad65a` | shared/core Tool presentation、原始/保留规模、bounded preview、session-scoped spill ref、live event/view-state |
 | OUT-2 | ✅ `ab8a634` | renderer-local stable state、默认折叠、running/error cap、`Ctrl+O`、`/tools` bounded preview pager |
 | OUT-3 | ✅ `595b172` | 受控分块读取、惰性全文 pager、`tool_presentation` side-channel/resume、安全 cleanup primitive |
-| OUT-4..5 | **▶ NEXT：OUT-4** | SGR mouse 与相邻只读调用聚合 |
+| OUT-4 | ✅ 本轮 | 自研 SGR 1006 鼠标：shared 解析、adapter 启用/禁用、transcript hit region、点击开/关/切 pager、TERM=dumb/能力不足不启用 |
+| OUT-5 | **▶ NEXT** | 相邻只读调用聚合 |
 
 模型元数据轨已统一解析、消费和展示；OUT-1..3 已提供 renderer-neutral 数据真源、
-默认有界展示和按需全文读取。`/tools` 对有效受控 ref 打开惰性全文 pager；无 ref 或
+默认有界展示和按需全文读取；OUT-4 已让 overflow block 摘要可点击打开/收起全文
+pager（键盘路径等价可用）。`/tools` 对有效受控 ref 打开惰性全文 pager；无 ref 或
 文件缺失、损坏、越界时明确降级为 bounded preview。
 
 ---
@@ -104,7 +106,7 @@ Read/Bash/MCP tool
   会话的产品调用方。
 - `cellCollapsed/cellExpanded` 只覆盖 diff/Todo，不是通用工具输出协议。
 - `BOLO_DIFF_CELL/BOLO_DIFF_VERBOSE` 是进程级静态环境开关，不是单块交互状态。
-- retained transcript 尚无鼠标 hit region。
+- 鼠标 wheel 只解析不产生行为（翻页等后续再做）；鼠标真人手感未验（OI-H3）。
 - 单个超长 block 不会被历史 tail-window 机制解决。
 
 当前 `ab8a634` 的普通工具结果只追加渲染一次；“重复 push 两次”不属于现存缺陷。
@@ -535,25 +537,30 @@ resume           → 重建 presentation，默认 summary
 `/tools` 使用现有 structured catalog/overlay 路径，不把 transcript 变成长期 focus
 owner；只有通过 session-bound 校验的 file ref 才标为全文，降级路径仍明确称为 preview。
 
-### 11.2 鼠标
+### 11.2 鼠标（OUT-4 ✅ 本轮）
 
-OUT-4 自研以下最小层：
+自研最小层已落地：
 
 ```text
 BoloTerminalAdapter
-  → capability/TTY 检测
-  → enable SGR 1006 + button tracking
-  → parse mouse press/release/wheel
-  → RetainedRoot 当前 render hit regions
-  → activate tool block / pager close
+  → capability/TTY 检测（raw TTY + TERM≠dumb）
+  → 与 input 生命周期绑定的 enable SGR 1006 + button tracking
+  → parse mouse press/release/wheel（shared 纯函数）
+  → RetainedRoot 当前 render hit regions（transcript 布局行映射）
+  → activate tool block / pager close（点击开/关/切换）
   → stop/异常时必定 disable mouse mode
 ```
 
-只给 overflow block 注册 hit region。点击摘要打开全文 pager；pager 激活时再次点击来源摘要
-或点击 pager 关闭动作会收起，Esc 永远等价可用。
+只给 overflow 且可开 pager 的 tool block 注册 hit region。点击摘要打开该 block 的
+pager（有受控 ref 时走 file-backed 惰性全文，否则 bounded preview）；pager 激活时
+再次点击同一来源摘要会收起，点击其它 block 会切换，Esc 永远等价可用。点击坐标经
+pi-tui 的 viewportTop 换算为布局行；modal overlay 激活时点击一律忽略。
 
-bracketed paste 与 mouse escape sequence 必须由同一 stdin buffer 正确区分。能力不足、
-pipe、CI、dumb terminal 不启用 mouse reporting。
+bracketed paste 与 mouse escape sequence 由同一 stdin buffer 正确区分（SGR 序列
+以独立 data 事件到达，paste 内容经 200~201 包装不会误判）。能力不足、pipe、CI、
+dumb terminal（`TERM=dumb`）不启用 mouse reporting。wheel/release/drag 只解析
+不产生行为；鼠标不是唯一入口，键盘路径完整可用。真人 Windows Terminal 手感仍属
+OI-H3 人工验收。
 
 ---
 
@@ -699,10 +706,20 @@ current-config-first、matching snapshot fallback、热切失败回滚及 prompt
 - OUT-3 专项、typecheck、完整 `npm test`、dist/pack/install、预算与 Electron live
   smoke 全部通过。
 
-### OUT-4 · SGR mouse
+### OUT-4 · SGR mouse ✅ 本轮
 
-- enable/disable、parser、hit region、click/close、paste 共存。
-- 自动 VT 门禁 + 真人 Windows Terminal 验收项。
+- shared `tuiMouse.ts`：SGR 1006 press/release/wheel/drag 纯解析与 enable/disable
+  常量；非标准按钮、越界坐标 fail closed；paste/Kitty 键序列不误判。
+- adapter：raw input 获取时启用 `?1000h?1006h`，release/stop/异常路径必定
+  `?1000l?1006l`；`TERM=dumb` 不启用。
+- transcript/root：render 时按布局行记录 overflow block 的 hit region（含
+tail-window 截断），controller 经 viewportTop 换算屏幕坐标。
+- 点击打开/关闭/切换 tool pager；有 `setToolPagerContext` 上下文与受控 ref 时走
+  惰性 file pager，否则 bounded preview。
+- 专项覆盖 parser 全 case、adapter 启用/禁用/dumb、点击开/关/切、wheel/release/
+  空白/短块无反应、input 未获取时点击无效、spill 惰性全文与关闭；typecheck、
+  相关 TUI 回归与完整 `npm test` 通过。
+- 鼠标真人手感保留 OI-H3 人工验收；wheel 翻页等行为后续再做。
 
 ### OUT-5 · 连续只读调用聚合
 

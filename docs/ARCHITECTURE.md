@@ -63,8 +63,8 @@ skills   mcp-host  plugins   tools    providers
 | `packages/mcp` | MCP client、tools/resources 映射 | UI |
 | `packages/plugins` | 插件清单、激活、贡献点合并 | 绕过 hook/permission |
 | `packages/providers` | 多模型 API 适配（OpenAI / Anthropic / 兼容端点） | 会话策略 |
-| `packages/shared` | 事件、消息、配置 schema、错误类型；OI-14B `CliTuiViewState` 纯 reducer 与 SessionEvent/resume 投影；OUT-1 `ToolPresentation` 分类/validator/有界 preview；OUT-2 工具展示 state/action/projection 纯契约 | 副作用、terminal/renderer I/O |
-| `packages/cli` | CLI 入口 + TTY controller/adapter（输入、activity、picker、pager）；retained transcript 以 stable block id 维护本地工具展示状态，`Ctrl+O` 切 bounded preview，`/tools` 对有效 ref 惰性分页全文；复用 core 事件、runtime view 与 shared live view-state | 复制 core runtime / 在 renderer 重建第二状态机 / 直接读取未校验 spill 路径 |
+| `packages/shared` | 事件、消息、配置 schema、错误类型；OI-14B `CliTuiViewState` 纯 reducer 与 SessionEvent/resume 投影；OUT-1 `ToolPresentation` 分类/validator/有界 preview；OUT-2 工具展示 state/action/projection 纯契约；OUT-4 `tuiMouse` SGR 1006 纯解析与 enable/disable 常量 | 副作用、terminal/renderer I/O |
+| `packages/cli` | CLI 入口 + TTY controller/adapter（输入、activity、picker、pager）；retained transcript 以 stable block id 维护本地工具展示状态，`Ctrl+O` 切 bounded preview，`/tools` 对有效 ref 惰性分页全文；OUT-4 由 adapter 按 raw input 生命周期启用/禁用鼠标 reporting，controller 消费 shared 解析并命中 render 时的 overflow block hit region 打开/关闭/切换 pager；复用 core 事件、runtime view 与 shared live view-state | 复制 core runtime / 在 renderer 重建第二状态机 / 直接读取未校验 spill 路径 |
 | `apps/desktop` | Electron GUI | 重业务逻辑（只编排 core） |
 
 ## 4. 核心数据流
@@ -85,6 +85,7 @@ SessionStart(source)
         → retained renderer(summary/preview/running tail；本地 stable state)
         → Ctrl+O 切 bounded preview
         → /tools 对有效 ref 按需分页全文，否则回退 bounded preview
+        → 鼠标点击 overflow 摘要开/关/切 pager（SGR 1006，raw input 期间）
         → PostToolUse(tool)
   → 可选 PreCompact / PostCompact
   → Stop
