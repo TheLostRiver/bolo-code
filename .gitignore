@@ -63,6 +63,12 @@ task_plan.md
 # Project-local Codex/PWF integration and state (keep local)
 .codex/
 
+# Local agent tooling, research state, and generated walkthrough captures
+.agents/
+.reasonix/
+.workbuddy/
+docs/desktop-walkthrough/
+
 # Nested Desktop runtime config/session data
 apps/desktop/.bolo/
 
