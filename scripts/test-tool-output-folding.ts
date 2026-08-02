@@ -185,9 +185,10 @@ async function main() {
   const short = toolBlock({
     id: 'turn-1:tool:short-1',
     callId: 'short-1',
+    name: 'Write',
     output: 'short result',
     presentation: {
-      summary: 'Read 路 1 line',
+      summary: 'Write 路 1 line',
       preview: 'short result',
       previewMode: 'head',
       originalChars: 12,
@@ -320,9 +321,10 @@ async function main() {
   const laterLong = toolBlock({
     id: 'turn-1:tool:later-1',
     callId: 'later-1',
+    name: 'Write',
     presentation: {
       ...longPresentation,
-      summary: 'Read · later.txt · 300 lines',
+      summary: 'Write · later.txt · 300 lines',
       preview: 'later inherited preview',
     },
   })

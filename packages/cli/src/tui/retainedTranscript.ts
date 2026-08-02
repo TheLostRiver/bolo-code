@@ -26,6 +26,9 @@ import {
 import { resolveTuiContentGutter } from './contentLayout.ts'
 import { stripTerminalAnsi } from './terminalText.ts'
 import { resolveTuiTheme } from './theme.ts'
+import {
+  groupAdjacentReadTools,
+} from '../../../shared/src/index.ts'
 
 const RESET = '\x1b[0m'
 const TAIL_WINDOW_BLOCK_THRESHOLD = 100
@@ -428,6 +431,80 @@ class RetainedTranscriptBlock implements Component {
   }
 }
 
+class RetainedReadGroup implements Component {
+  private readonly header: Text
+  private readonly memberTexts: Array<{
+    blockId: string
+    text: Text
+  }> = []
+  private readonly memberHits: Array<{
+    blockId: string
+    start: number
+    end: number
+  }> = []
+
+  constructor(
+    members: readonly RetainedTranscriptBlock[],
+    styles: TranscriptStyles,
+  ) {
+    this.header = new Text(
+      styles.mutedText(`⇅ ${members.length} read-only calls`),
+      0,
+      0,
+    )
+    for (const member of members) {
+      const block = member.getBlock()
+      if (block.kind !== 'tool') continue
+      const summary =
+        projectCliToolDisplay(block, { mode: 'summary' }).content ||
+        block.name
+      this.memberTexts.push({
+        blockId: block.id,
+        text: new Text(`  ${summary}`, 0, 0),
+      })
+    }
+  }
+
+  invalidate(): void {
+    this.header.invalidate?.()
+    for (const member of this.memberTexts) member.text.invalidate?.()
+  }
+
+  getMemberHits(): ReadonlyArray<{
+    blockId: string
+    start: number
+    end: number
+  }> {
+    return this.memberHits
+  }
+
+  getMemberBlockIds(): readonly string[] {
+    return this.memberTexts.map((member) => member.blockId)
+  }
+
+  render(width: number): string[] {
+    const safeWidth = Math.max(1, Math.floor(width))
+    const lines = [...this.header.render(safeWidth)]
+    this.memberHits.length = 0
+    let line = lines.length
+    for (const member of this.memberTexts) {
+      const memberLines = member.text.render(safeWidth)
+      this.memberHits.push({
+        blockId: member.blockId,
+        start: line,
+        end: line + memberLines.length,
+      })
+      lines.push(...memberLines)
+      line += memberLines.length
+    }
+    return lines
+  }
+}
+
+type RenderUnit =
+  | { kind: 'block'; component: RetainedTranscriptBlock }
+  | { kind: 'group'; group: RetainedReadGroup }
+
 type RetainedToolDisplayEntry = {
   state: CliToolDisplayState
   status: CliTuiToolBlock['status']
@@ -452,7 +529,8 @@ export class RetainedTranscript implements Component {
   private readonly blockCache = new Map<string, RetainedTranscriptBlock>()
   private readonly toolDisplayStates =
     new Map<string, RetainedToolDisplayEntry>()
-  private orderedBlocks: RetainedTranscriptBlock[] = []
+  private renderUnits: RenderUnit[] = []
+  private groupedBlockIds = new Set<string>()
   private globalToolDisplayMode?: CliToolDisplayMode
   // Native scrollback owns the full first render. After a large history has
   // been seeded, xterm reflows it and retained redraws only the live tail.
@@ -471,27 +549,54 @@ export class RetainedTranscript implements Component {
   }
 
   setState(state: CliTuiViewState): void {
-    const nextBlocks: RetainedTranscriptBlock[] = []
+    const renderUnits: RenderUnit[] = []
+    const groupedBlockIds = new Set<string>()
     const seen = new Set<string>()
+    const ensureBlock = (
+      block: CliTuiBlock,
+      toolDisplayState?: CliToolDisplayState,
+    ): RetainedTranscriptBlock => {
+      let component = this.blockCache.get(block.id)
+      if (!component) {
+        component = new RetainedTranscriptBlock(
+          block,
+          this.styles,
+          toolDisplayState,
+        )
+        this.blockCache.set(block.id, component)
+      } else {
+        component.setBlock(block, toolDisplayState)
+      }
+      seen.add(block.id)
+      return component
+    }
     for (const turn of state.turns) {
-      for (const block of turn.blocks) {
+      const projection = groupAdjacentReadTools(turn.blocks)
+      for (const entry of projection) {
+        if (entry.kind === 'read-group') {
+          const members: RetainedTranscriptBlock[] = []
+          for (const member of entry.members) {
+            this.toolDisplayStates.delete(member.id)
+            groupedBlockIds.add(member.id)
+            members.push(
+              ensureBlock(member, { mode: 'summary' }),
+            )
+          }
+          renderUnits.push({
+            kind: 'group',
+            group: new RetainedReadGroup(members, this.styles),
+          })
+          continue
+        }
+        const block = entry
         const toolDisplayState =
           block.kind === 'tool'
             ? this.resolveToolDisplayState(block)
             : undefined
-        let component = this.blockCache.get(block.id)
-        if (!component) {
-          component = new RetainedTranscriptBlock(
-            block,
-            this.styles,
-            toolDisplayState,
-          )
-          this.blockCache.set(block.id, component)
-        } else {
-          component.setBlock(block, toolDisplayState)
-        }
-        seen.add(block.id)
-        nextBlocks.push(component)
+        renderUnits.push({
+          kind: 'block',
+          component: ensureBlock(block, toolDisplayState),
+        })
       }
     }
     for (const id of this.blockCache.keys()) {
@@ -500,7 +605,8 @@ export class RetainedTranscript implements Component {
         this.toolDisplayStates.delete(id)
       }
     }
-    this.orderedBlocks = nextBlocks
+    this.renderUnits = renderUnits
+    this.groupedBlockIds = groupedBlockIds
   }
 
   getBlockComponent(blockId: string): Component | undefined {
@@ -513,6 +619,7 @@ export class RetainedTranscript implements Component {
       this.globalToolDisplayMode === 'preview' ? 'summary' : 'preview'
     this.globalToolDisplayMode = mode
     for (const [id, entry] of this.toolDisplayStates) {
+      if (this.groupedBlockIds.has(id)) continue
       const state = reduceCliToolDisplayState(entry.state, {
         type: 'set_mode',
         mode,
@@ -531,9 +638,8 @@ export class RetainedTranscript implements Component {
 
   getToolCatalogItems(): RetainedToolCatalogItem[] {
     const items: RetainedToolCatalogItem[] = []
-    for (let index = this.orderedBlocks.length - 1; index >= 0; index -= 1) {
-      const block = this.orderedBlocks[index]!.getBlock()
-      if (block.kind !== 'tool') continue
+    const appendBlock = (block: CliTuiBlock): void => {
+      if (block.kind !== 'tool') return
       const summary = projectCliToolDisplay(block, { mode: 'summary' })
         .content
         .replace(/\s+/gu, ' ')
@@ -549,6 +655,18 @@ export class RetainedTranscript implements Component {
         id: block.id,
         label: `${summary || block.name} · ${status}`,
       })
+    }
+    for (let index = this.renderUnits.length - 1; index >= 0; index -= 1) {
+      const unit = this.renderUnits[index]!
+      if (unit.kind === 'block') {
+        appendBlock(unit.component.getBlock())
+        continue
+      }
+      const members = unit.group.getMemberBlockIds()
+      for (let memberIndex = members.length - 1; memberIndex >= 0; memberIndex -= 1) {
+        const component = this.blockCache.get(members[memberIndex]!)
+        if (component) appendBlock(component.getBlock())
+      }
     }
     return items
   }
@@ -592,7 +710,7 @@ export class RetainedTranscript implements Component {
 
   /**
    * 最近一次 render 产出的可点击 tool block 行区间（相对本组件布局行，
-   * 不含 gutter 分隔行）。只注册 overflow 且可开 pager 的块。
+   * 坐标含块间的 gutter 分隔行）。只注册 overflow 且可开 pager 的块。
    */
   getBlockHitLines(): ReadonlyMap<string, { start: number; end: number }> {
     return this.blockHitLines
@@ -608,7 +726,7 @@ export class RetainedTranscript implements Component {
     if (
       widthChanged &&
       this.seededFullHistory &&
-      this.orderedBlocks.length > TAIL_WINDOW_BLOCK_THRESHOLD
+      this.blockCache.size > TAIL_WINDOW_BLOCK_THRESHOLD
     ) {
       this.tailWindow = true
     }
@@ -622,7 +740,7 @@ export class RetainedTranscript implements Component {
       : this.renderAllBlocks(contentWidth, gutter)
     if (
       !this.tailWindow &&
-      this.orderedBlocks.length > TAIL_WINDOW_BLOCK_THRESHOLD &&
+      this.blockCache.size > TAIL_WINDOW_BLOCK_THRESHOLD &&
       lines.length > this.tailWindowLineBudget()
     ) {
       this.seededFullHistory = true
@@ -634,10 +752,22 @@ export class RetainedTranscript implements Component {
     const lines: string[] = []
     this.blockHitLines = new Map()
     let line = 0
-    for (const component of this.orderedBlocks) {
-      const blockLines = component.render(contentWidth)
-      line = this.appendBlock(lines, blockLines, gutter, line)
-      this.recordHitLines(component, blockLines, line)
+    for (const unit of this.renderUnits) {
+      if (unit.kind === 'block') {
+        const blockLines = unit.component.render(contentWidth)
+        line = this.appendBlock(lines, blockLines, gutter, line)
+        this.recordHitLines(unit.component, blockLines, line)
+        continue
+      }
+      const groupLines = unit.group.render(contentWidth)
+      line = this.appendBlock(lines, groupLines, gutter, line)
+      const groupStart = line - groupLines.length
+      for (const hit of unit.group.getMemberHits()) {
+        this.blockHitLines.set(hit.blockId, {
+          start: groupStart + hit.start,
+          end: groupStart + hit.end,
+        })
+      }
     }
     return lines
   }
@@ -648,31 +778,36 @@ export class RetainedTranscript implements Component {
   ): string[] {
     const budget = this.tailWindowLineBudget()
     const sections: Array<{
-      block: RetainedTranscriptBlock
+      unit: RenderUnit
       lines: string[]
+      truncated: boolean
     }> = []
     let remaining = budget
     for (
-      let index = this.orderedBlocks.length - 1;
+      let index = this.renderUnits.length - 1;
       index >= 0 && remaining > 0;
       index -= 1
     ) {
-      const component = this.orderedBlocks[index]!
-      const blockLines = component.render(contentWidth)
-      if (blockLines.length === 0) continue
+      const unit = this.renderUnits[index]!
+      const unitLines =
+        unit.kind === 'block'
+          ? unit.component.render(contentWidth)
+          : unit.group.render(contentWidth)
+      if (unitLines.length === 0) continue
       const gap = sections.length > 0 ? 1 : 0
       const available = Math.max(0, remaining - gap)
       if (available === 0) break
-      if (blockLines.length > available) {
+      if (unitLines.length > available) {
         sections.unshift({
-          block: component,
-          lines: blockLines.slice(-available),
+          unit,
+          lines: unitLines.slice(-available),
+          truncated: true,
         })
         remaining = 0
         break
       }
-      sections.unshift({ block: component, lines: blockLines })
-      remaining -= blockLines.length + gap
+      sections.unshift({ unit, lines: unitLines, truncated: false })
+      remaining -= unitLines.length + gap
     }
 
     const lines: string[] = []
@@ -680,7 +815,18 @@ export class RetainedTranscript implements Component {
     let line = 0
     for (const section of sections) {
       line = this.appendBlock(lines, section.lines, gutter, line)
-      this.recordHitLines(section.block, section.lines, line)
+      if (section.truncated) continue
+      const sectionStart = line - section.lines.length
+      if (section.unit.kind === 'block') {
+        this.recordHitLines(section.unit.component, section.lines, line)
+        continue
+      }
+      for (const hit of section.unit.group.getMemberHits()) {
+        this.blockHitLines.set(hit.blockId, {
+          start: sectionStart + hit.start,
+          end: sectionStart + hit.end,
+        })
+      }
     }
     return lines
   }

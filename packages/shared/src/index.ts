@@ -446,6 +446,14 @@ export {
   type SgrMouseWheelEvent,
 } from './tuiMouse.ts'
 export {
+  READ_ONLY_GROUP_MIN_MEMBERS,
+  groupAdjacentReadTools,
+  isAbsorbableThinkingBlock,
+  isReadOnlyGroupableToolBlock,
+  type CliTuiBlockProjection,
+  type ReadToolGroup,
+} from './toolGrouping.ts'
+export {
   TUI_THEME_IDS,
   TUI_THEME_LABELS,
   isTuiThemeId,

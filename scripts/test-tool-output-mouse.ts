@@ -93,7 +93,7 @@ type Fixture = {
   writes: string[]
 }
 
-async function createFixture(columns = 76, rows = 32): Promise<Fixture> {
+async function createFixture(columns = 76, rows = 40): Promise<Fixture> {
   const input = new RawInputHarness()
   const output = new ResizableOutput(columns, rows)
   const terminal = new HeadlessTerminalHarness({
@@ -204,6 +204,20 @@ function seedTwoTools(fixture: Fixture): void {  fixture.controller.printer.begi
     output: 'provider bounded result',
     ok: true,
     presentation: longPresentation,
+  })
+  // 写工具切断 OUT-5 的相邻只读聚合，让本测试保持单块布局
+  fixture.controller.printer.onEvent({
+    type: 'tool_start',
+    id: 'write-1',
+    name: 'Write',
+    input: { path: 'out.txt' },
+  })
+  fixture.controller.printer.onEvent({
+    type: 'tool_end',
+    id: 'write-1',
+    name: 'Write',
+    output: 'written',
+    ok: true,
   })
   fixture.controller.printer.onEvent({
     type: 'tool_start',
