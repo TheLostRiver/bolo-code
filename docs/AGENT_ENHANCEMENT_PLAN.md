@@ -13,8 +13,8 @@
 | 任务 | 标题 | 成本 | 落点 | 状态 |
 |------|------|------|------|------|
 | ROB-1 | 工具调用重复检测（stationarity guard） | 低 | core queryLoop + shared 纯契约 | ✅ 本轮 |
-| ROB-2 | 悬空 tool call 修复与结果去重 | 低 | session transcript/load | ▶ NEXT |
-| CMP-1 | 压缩专用模型与墙钟预算 | 低 | compact 配置/执行器 | 📋 |
+| ROB-2 | 悬空 tool call 修复与结果去重 | 低 | session transcript/load | ✅ 本轮 |
+| CMP-1 | 压缩专用模型与墙钟预算 | 低 | compact 配置/执行器 | ▶ NEXT |
 | ROB-3 | 后台任务 manifest 与重启恢复提醒 | 低 | backgroundShell 持久化 + `/bg` | 📋 |
 | TERM-1 | 终端能力探测（品牌特化） | 低 | CLI adapter | 📋 |
 | TERM-2 | 输入 CSI 分片重组 | 低 | CLI adapter/StdinBuffer | 📋 |
@@ -56,16 +56,21 @@
 无工具轮重置；typecheck、相关回归（ptl/model-retry/todo-session/cli-events/
 reasoning-forward）与完整 `npm test` 通过。
 
-## 2. ROB-2 · 悬空 tool call 修复与结果去重 — 低成本
+## 2. ROB-2 · 悬空 tool call 修复与结果去重 — 低成本 ✅ 本轮
 
 **目标**：崩溃/中断遗留的半截 tool_call（有调用无结果、有结果无调用）在恢复时自动
 修复，重复的 tool result 去重，避免 resume 后模型看到残缺或重复的工具消息。
 
-**设计**：加载/恢复路径对消息表做一致性检查：无对应调用的结果丢弃或标记；
-无结果的调用按 interrupted 投影；相邻重复结果去重。fail-closed：无法证明归属的
-条目不进入模型消息。
+**设计**（已落地）：
+- shared `messageRepair.ts` 纯契约 `repairToolMessagePairs`：悬空声明移除（消息只剩
+  调用则整条删除，否则降为纯文本）、孤儿结果丢弃、重复声明保留第一次、重复结果
+  保留第一条；全部 fail-closed；幂等。
+- `loadSessionPair` 三处返回（双文件/JSON/仅 transcript）统一 finalize，覆盖
+  resumeSession 与 resumeSessionFromWorkspace 的所有消息来源。
 
-**验收**：构造残缺消息表（半截调用/重复结果/孤儿结果）各场景断言恢复后消息干净。
+**验收**：专项覆盖悬空/降级/部分悬空/孤儿/重复结果/重复声明/健康对/幂等，以及
+JSON 快照恢复集成；typecheck、resume/migration/persist/rewrite/first-run 回归与
+完整 `npm test` 通过。
 
 ## 3. CMP-1 · 压缩专用模型与墙钟预算 — 低成本
 
