@@ -12,8 +12,8 @@
 
 | 任务 | 标题 | 成本 | 落点 | 状态 |
 |------|------|------|------|------|
-| ROB-1 | 工具调用重复检测（stationarity guard） | 低 | core queryLoop + shared 纯契约 | ▶ NEXT |
-| ROB-2 | 悬空 tool call 修复与结果去重 | 低 | session transcript/load | 📋 |
+| ROB-1 | 工具调用重复检测（stationarity guard） | 低 | core queryLoop + shared 纯契约 | ✅ 本轮 |
+| ROB-2 | 悬空 tool call 修复与结果去重 | 低 | session transcript/load | ▶ NEXT |
 | CMP-1 | 压缩专用模型与墙钟预算 | 低 | compact 配置/执行器 | 📋 |
 | ROB-3 | 后台任务 manifest 与重启恢复提醒 | 低 | backgroundShell 持久化 + `/bg` | 📋 |
 | TERM-1 | 终端能力探测（品牌特化） | 低 | CLI adapter | 📋 |
@@ -36,23 +36,25 @@
 
 ---
 
-## 1. ROB-1 · 工具调用重复检测（stationarity guard）— 低成本
+## 1. ROB-1 · 工具调用重复检测（stationarity guard）— 低成本 ✅ 本轮
 
 **目标**：模型对同一工具以相同参数连续重复调用（如轮询式死循环、卡在同一修复步骤）
 时，本地检测并逐步干预：达到轻阈值注入 reminder 提醒换策略，达到硬阈值中止该 turn，
 避免 token 空转。
 
-**设计**：
-- shared 纯契约：按 turn 维护最近工具调用指纹（工具名 + 规范化参数），
-  `shouldWarnRepeatedToolCalls` / `shouldAbortRepeatedToolCalls` 判定，
-  阈值可配置（默认 nudge 8 / hard-stop 16）。
-- core：在 queryLoop `before_provider` 边界注入 reminder（复用 todo reminder 的
-  注入形态，不影响模型消息 schema）；达到硬阈值时中止本轮并给出明确 terminalReason。
-- 同一参数指纹去规范化（参数 JSON 排序后哈希）；参数变化即重置计数。
-- 用户主动中断（Esc/Ctrl+C）不计数。
+**设计**（已落地）：
+- shared `toolRepetition.ts` 纯契约：`fingerprintToolCall`（工具名 + 参数稳定哈希，
+  键序无关）、`advanceToolRepetition`（按轮推进，序列相同 +1 / 变化或无工具轮重置）、
+  `toolRepetitionStage`（8 提醒 / 16 中止，阈值可配）、`formatToolRepetitionReminder`。
+- core：queryLoop 每轮工具执行后推进计数；`before_provider` 边界判定——达到
+  warn 阈值注入一次 reminder（user 消息 + warning 事件，复用既有渲染通道），
+  达到 abort 阈值以 `tool_repetition` terminal reason 中止并跑 Stop hooks。
+- 计数为 turn 级；用户中断不计数；参数变化立即重置。
 
-**验收**：红灯测试覆盖「连续同参调用触发 reminder」「连续同参调用硬停」「参数变化
-重置」「不同工具不计」「跨 turn 重置」「配置阈值」。
+**验收**：专项覆盖指纹键序无关/参数变化/工具名变化/不可解析参数、状态机递增/
+重置/阈值边界、reminder 文本、queryLoop 连续同参提醒+中止、换策略不触发、
+无工具轮重置；typecheck、相关回归（ptl/model-retry/todo-session/cli-events/
+reasoning-forward）与完整 `npm test` 通过。
 
 ## 2. ROB-2 · 悬空 tool call 修复与结果去重 — 低成本
 
