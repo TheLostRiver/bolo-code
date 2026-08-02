@@ -47,6 +47,8 @@ export type SwitchableProviderSession = {
   provider: LlmProvider
   deps: QueryDeps
   model?: string
+  /** CMP-1：压缩摘要专用模型（wire summarizer 时使用） */
+  compactModel?: string
   providerId?: string
   providerRegistry?: ProviderRegistry
   providerProfile?: ProviderProfile
@@ -191,7 +193,13 @@ function rebindSessionRuntime(
   const nextSummarizer =
     opts?.rebindSummarizer === false
       ? session.compactSummarizer
-      : createCompactSummarizerFromProvider(built.provider)
+      : createCompactSummarizerFromProvider(
+          built.provider,
+          session.compactModel !== undefined &&
+            session.compactModel.trim()
+            ? { model: session.compactModel.trim() }
+            : undefined,
+        )
   const nextClassifier = built.provider.completeText
     ? createAutoClassifyFromCompleteText(
         (messages, o) => built.provider.completeText!(messages, o),

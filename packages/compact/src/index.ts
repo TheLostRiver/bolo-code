@@ -652,10 +652,37 @@ export type FullCompactInput = {
    * 仅改 summarizer 入参副本，不改调用方 messages。
    */
   maxPtlRetries?: number
+  /**
+   * CMP-1：压缩摘要生成的墙钟预算（毫秒）。缺省不设限。
+   * 每次 summarizer 调用（含 PTL 重试）都套该预算；超时按失败回退，
+   * 不改调用方 messages。
+   */
+  summarizeTimeoutMs?: number
 }
 
-export type FullCompactFailure = {
-  ok: false
+/**
+ * CMP-1：为 summarizer 调用套墙钟预算。超时 reject（底层调用继续跑，
+ * 结果被丢弃）；settle 后清理 timer。失败路径由 runFullCompact 的既有
+ * catch 处理（非 PTL → 失败回退，messages 不变）。
+ */
+function withSummarizeTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(
+        new Error(`compact summarizer timed out after ${timeoutMs}ms`),
+      )
+    }, timeoutMs)
+  })
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) clearTimeout(timer)
+  })
+}
+
+export type FullCompactFailure = {  ok: false
   reason: string
   /** 始终为 true：失败不得改调用方 messages */
   messagesUnchanged: true
@@ -738,10 +765,19 @@ export async function runFullCompact(
 
   for (;;) {
     try {
-      const out = await input.summarize({
+      const summarizeCall = input.summarize({
         messages: messagesToSummarize,
         compactPrompt,
       })
+      const out =
+        input.summarizeTimeoutMs !== undefined &&
+        Number.isFinite(input.summarizeTimeoutMs) &&
+        input.summarizeTimeoutMs > 0
+          ? await withSummarizeTimeout(
+              summarizeCall,
+              input.summarizeTimeoutMs,
+            )
+          : await summarizeCall
       raw = out.text?.trim() ?? ''
       break
     } catch (e) {

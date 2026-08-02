@@ -95,6 +95,16 @@ export type BoloConfigJson = {
    */
   maxPtlRetries?: number
   /**
+   * CMP-1：压缩摘要专用模型（可选）。缺省用会话 provider。
+   * 通常是更小/更便宜的模型；必须是当前 provider 认识的模型名。
+   */
+  compactModel?: string
+  /**
+   * CMP-1：压缩摘要生成墙钟预算（毫秒，可选）。缺省不设限。
+   * 超预算时压缩失败回退（保留旧历史）并 warning。
+   */
+  compactTimeoutMs?: number
+  /**
    * S-PORT-2：可选旁路 skill 根目录列表（每根：`<id>/SKILL.md`）。
    * **默认省略/空 = 不扫描**（不静默吃 `~/.agents/skills` 等）。
    * user + project 数组合并去重；相对路径相对**项目 cwd**。

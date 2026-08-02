@@ -913,6 +913,16 @@ export type CreateSessionOptions = {
    * 默认 3；0 = 关闭。
    */
   maxPtlRetries?: number
+  /**
+   * CMP-1：压缩摘要专用模型（可选）。缺省用会话 provider。
+   * 必须是当前 provider 认识的模型名。
+   */
+  compactModel?: string
+  /**
+   * CMP-1：压缩摘要生成墙钟预算（毫秒，可选）。缺省不设限。
+   * 超预算时压缩失败回退（保留旧历史）并 warning。
+   */
+  compactTimeoutMs?: number
   /** 模型名（写入环境段；可从 workspace 传入） */
   model?: string
   /**
@@ -979,8 +989,7 @@ export type BoloSession = {
    * submitPrompt path-scope 刷新 rules 时透传。
    */
   systemPromptUserConfigDir?: string
-  /**
-   * 是否在 submitPrompt 时按 activePaths 重装 path-scoped rules。
+  /** 是否在 submitPrompt 时按 activePaths 重装 path-scoped rules。
    * 默认 true；createSession(systemPrompt:false) 或显式 loadRules:false 时为 false。
    */
   refreshPathScopedRules?: boolean
@@ -989,6 +998,14 @@ export type BoloSession = {
   deps: QueryDeps
   permissionMode: PermissionMode
   askPermission: AskPermissionFn
+  /**
+   * CMP-1：压缩摘要专用模型；wire summarizer 时使用。
+   */
+  compactModel?: string
+  /**
+   * CMP-1：压缩摘要生成墙钟预算（毫秒）；runSessionCompact 传给 runFullCompact。
+   */
+  compactTimeoutMs?: number
   /**
    * AR-T3+：AskUserQuestion 的提问句柄（CLI picker / Desktop 对话框各注入一个）。
    *
@@ -1401,6 +1418,12 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
       opts.maxPtlRetries === undefined
         ? 3
         : Math.max(0, opts.maxPtlRetries),
+    ...(opts.compactModel !== undefined
+      ? { compactModel: opts.compactModel }
+      : {}),
+    ...(opts.compactTimeoutMs !== undefined
+      ? { compactTimeoutMs: opts.compactTimeoutMs }
+      : {}),
     agentDefinitions,
     agentPolicy,
     backgroundAgents: createBackgroundAgentStore({
@@ -1594,6 +1617,10 @@ export type CreateSessionFromWorkspaceOptions = {
   microcompact?: MicrocompactOptions | false
   /** 覆盖 workspace.config.maxPtlRetries */
   maxPtlRetries?: number
+  /** CMP-1：覆盖 workspace.config.compactModel */
+  compactModel?: string
+  /** CMP-1：覆盖 workspace.config.compactTimeoutMs */
+  compactTimeoutMs?: number
   /**
    * CX8：覆盖 ultrathink 模式（session > env > config）。
    */
@@ -1646,6 +1673,10 @@ function buildWorkspaceSessionOptions(
   const maxPtlRetries =
     opts.maxPtlRetries ??
     (mode === 'create' ? workspace.config.maxPtlRetries : undefined)
+  const compactModel =
+    opts.compactModel ?? workspace.config.compactModel
+  const compactTimeoutMs =
+    opts.compactTimeoutMs ?? workspace.config.compactTimeoutMs
 
   return {
     cwd: opts.cwd,
@@ -1656,7 +1687,12 @@ function buildWorkspaceSessionOptions(
     compactSummarizer:
       opts.wireCompactSummarizer === false
         ? undefined
-        : createCompactSummarizerFromProvider(workspace.provider),
+        : createCompactSummarizerFromProvider(
+            workspace.provider,
+            compactModel !== undefined && compactModel.trim()
+              ? { model: compactModel.trim() }
+              : undefined,
+          ),
     skills: workspace.skills,
     ...(workspace.providerModel
       ? { model: workspace.providerModel }
@@ -1675,6 +1711,8 @@ function buildWorkspaceSessionOptions(
     onEvent: opts.onEvent,
     agentPolicy: resolveAgentPolicy(workspace.config.agents),
     ...(autoCompactEnabled !== undefined ? { autoCompactEnabled } : {}),
+    ...(compactModel !== undefined ? { compactModel } : {}),
+    ...(compactTimeoutMs !== undefined ? { compactTimeoutMs } : {}),
     ...(contextWindowTokens !== undefined ? { contextWindowTokens } : {}),
     microcompact:
       opts.microcompact !== undefined
@@ -3050,6 +3088,9 @@ export async function compactSession(
     maxPtlRetries: session.maxPtlRetries,
     hookInstructions: pre.injectText || undefined,
     summarize: session.compactSummarizer,
+    ...(session.compactTimeoutMs !== undefined
+      ? { summarizeTimeoutMs: session.compactTimeoutMs }
+      : {}),
     ...(opts.keepRecentUserTurns != null
       ? { keepRecentUserTurns: opts.keepRecentUserTurns }
       : {}),
