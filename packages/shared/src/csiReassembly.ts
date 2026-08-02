@@ -123,12 +123,7 @@ export class CsiReassembler {
       this.pending = undefined
       return [merged]
     }
-    // 固定窗口：续段不刷新 deadline；已超期则整体丢弃
-    if (now > this.pendingDeadline) {
-      this.pending = undefined
-      this.expiredUntil = now + CSI_REASSEMBLY_EXPIRED_SINK_MS
-      return []
-    }
+    // 固定窗口：续段不刷新 deadline（超时已在入口统一处理），继续累积
     this.pending = merged
     return []
   }
