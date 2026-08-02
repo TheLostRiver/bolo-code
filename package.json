@@ -177,12 +177,12 @@
     "test:bash-timeout-guidance": "tsx scripts/test-bash-timeout-guidance.ts",
     "test:searxng-search": "tsx scripts/test-searxng-search.ts"
   },
-  "dependencies": {},
   "devDependencies": {
     "@earendil-works/pi-tui": "0.82.1",
     "@xterm/headless": "5.5.0",
     "electron-builder": "^26.15.3",
     "esbuild": "^0.28.1",
+    "gsap": "^3.13.0",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2"
   },

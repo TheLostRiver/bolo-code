@@ -92,6 +92,7 @@ async function main() {
     path.join('renderer', 'app.js'),
     path.join('renderer', 'runtime-client.js'),
     path.join('renderer', 'styles.css'),
+    path.join('renderer', 'gsap.min.js'),
   ]) {
     assert(
       await exists(path.join(OUT_DIR, rel)),
@@ -101,6 +102,14 @@ async function main() {
   const runtimeClient = await fs.readFile(
     path.join(OUT_DIR, 'renderer', 'runtime-client.js'),
     'utf8',
+  )
+  const gsapRuntime = await fs.readFile(
+    path.join(OUT_DIR, 'renderer', 'gsap.min.js'),
+    'utf8',
+  )
+  assert(
+    gsapRuntime.includes('gsap') && gsapRuntime.length > 50_000,
+    'the renderer ships the GSAP runtime used by UI motion choreography',
   )
   assert(
     runtimeClient.includes('createRuntimeClient'),

@@ -88,6 +88,12 @@ async function main() {
       path.join(rendererOut, name),
     )
   }
+  // GSAP is a build-time dependency, but the renderer stays a local file:// app.
+  // Ship its UMD runtime beside the native ESM renderer so CSP can keep script-src self.
+  await fs.copyFile(
+    path.join(repoRoot, 'node_modules', 'gsap', 'dist', 'gsap.min.js'),
+    path.join(rendererOut, 'gsap.min.js'),
+  )
 
   // 日志走 stderr：stdout 留给可能的 --json 消费方
   process.stderr.write(
