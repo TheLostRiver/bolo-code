@@ -217,6 +217,10 @@ resume 会从 `tool_presentation` side-channel 恢复有效全文引用。
 引用的结果走按页读取，否则显示有界预览。滚轮和普通点击其它区域不产生行为，
 键盘路径（Enter/`/tools`/Esc）始终等价可用。`TERM=dumb`、pipe 或非 raw TTY 不
 启用鼠标 reporting，也不会输出任何鼠标控制序列。
+连续相邻的只读调用（Read/Grep/Glob 等）会聚合为一个 `⇅ N read-only calls` 组：
+组内每个调用显示一行摘要，点击任一成员行打开该调用的 pager；写工具、正文、
+错误、运行中或失败的调用会切断组。组内成员不参与 `Ctrl+O` 的 summary/preview
+展开，详情始终走 pager 或 `/tools`。
 
 活动行每次把完整内容与擦尾控制合成一次原位写入，不会先清空再绘制；glyph 与耗时
 以 250ms 节奏刷新。需要授权时，Bash 面板会显示实际 command、cwd、前后台与 timeout，

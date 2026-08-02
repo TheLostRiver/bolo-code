@@ -1,7 +1,7 @@
 # 长工具输出折叠与模型上下文元数据设计
 
-> **状态：** CTX-1 `27a2506`、CTX-2 `6ea3a4f`、CTX-3 `d966d4b`、OUT-1 `78ad65a`、OUT-2 `ab8a634`、OUT-3 `595b172`、OUT-4 已完成；OUT-5 是下一刀。
-> **设计基线：** `dc20807`；当前实施基线：OUT-4 代码/测试批。
+> **状态：** CTX-1 `27a2506`、CTX-2 `6ea3a4f`、CTX-3 `d966d4b`、OUT-1 `78ad65a`、OUT-2 `ab8a634`、OUT-3 `595b172`、OUT-4、OUT-5 已完成。
+> **设计基线：** `dc20807`；当前实施基线：OUT-5 代码/测试批。
 > **路线标识：** `CTX-1..3`、`OUT-1..5`。
 > **进度真源：** [ROADMAP.md](./ROADMAP.md) §0、§13.11。
 > **相关实现：** [COMPACTION.md](./COMPACTION.md) ·
@@ -29,7 +29,7 @@
 | OUT-2 | ✅ `ab8a634` | renderer-local stable state、默认折叠、running/error cap、`Ctrl+O`、`/tools` bounded preview pager |
 | OUT-3 | ✅ `595b172` | 受控分块读取、惰性全文 pager、`tool_presentation` side-channel/resume、安全 cleanup primitive |
 | OUT-4 | ✅ 本轮 | 自研 SGR 1006 鼠标：shared 解析、adapter 启用/禁用、transcript hit region、点击开/关/切 pager、TERM=dumb/能力不足不启用 |
-| OUT-5 | **▶ NEXT** | 相邻只读调用聚合 |
+| OUT-5 | ✅ 本轮 | 相邻只读调用聚合：shared 纯分组契约、renderer 组渲染、成员独立 hit/pager、空思考占位吸收 |
 
 模型元数据轨已统一解析、消费和展示；OUT-1..3 已提供 renderer-neutral 数据真源、
 默认有界展示和按需全文读取；OUT-4 已让 overflow block 摘要可点击打开/收起全文
@@ -721,11 +721,23 @@ tail-window 截断），controller 经 viewportTop 换算屏幕坐标。
   相关 TUI 回归与完整 `npm test` 通过。
 - 鼠标真人手感保留 OI-H3 人工验收；wheel 翻页等行为后续再做。
 
-### OUT-5 · 连续只读调用聚合
+### OUT-5 · 连续只读调用聚合 ✅ 本轮
 
-- 只聚合相邻 Read/Grep/Glob/只读 MCP。
-- assistant 正文、写工具、权限请求、错误切断 group。
-- 这是第二阶段；不阻塞单块折叠交付。
+- shared `toolGrouping.ts`：`groupAdjacentReadTools` 纯投影契约，按单 turn 块序列
+  聚合相邻只读 tool block（presentation 分类为 read/search 的终态成功块）；
+  非只读工具（写/Bash/mcp/generic）、running/失败工具、user/assistant/error/
+  warning/summary 与有文本的 reasoning 切断组；**空文本 reasoning（工具循环内的
+  思考耗时占位）成组时被吸收、不足一组时原样保留**。
+- MCP 工具（`mcp__*`）无法从名字判定只读性，按取舍不聚合；权限请求不是
+  transcript 块（走 overlay），由「非只读块切断」近似覆盖。
+- retained renderer：组 = 组头（`⇅ N read-only calls`）+ 每成员单行 summary，
+  成员固定 summary 模式（不参与 `Ctrl+O` 全局展开）；成员独立 hit region，
+  点击成员打开该成员 pager（复用 OUT-4 路径）；`/tools` catalog 与
+  `getToolPagerContent` 按单块身份保持不变；tail-window 部分截断的组不注册 hit。
+- 专项覆盖纯函数全 case（相邻/三元组/写工具/正文/错误/running/失败/mcp/单块/
+  思考吸收与切断/顺序保持）与集成（组渲染、Ctrl+O 不展开、点击成员开 pager、
+  Esc 关闭、catalog 可达）；既有 folding/mouse 测试按新语义调整（用写工具切断
+  相邻聚合保持单块布局）。typecheck 与完整 `npm test` 通过。
 
 ---
 

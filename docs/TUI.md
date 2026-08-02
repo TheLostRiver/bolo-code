@@ -150,7 +150,7 @@ composer 与 footer 由同一个常驻 layout tree 计算，terminal auto-wrap �
 | `↑/↓` | slash 菜单打开时循环选择候选；否则浏览本进程最近 100 条输入 |
 | `Tab` | slash 菜单打开时补全选中项；否则插入两个空格 |
 | `Esc` | turn 运行时请求 interrupt；空闲时关闭 slash 菜单并保留输入 |
-| `Ctrl+O` | overlay 未激活时全局切换工具 summary/bounded preview；不改变模型或 session 数据 |
+| `Ctrl+O` | overlay 未激活时全局切换工具 summary/bounded preview（聚合组内成员固定 summary，不参与切换）；不改变模型或 session 数据 |
 | 鼠标（SGR 1006） | 等待输入时点击溢出工具摘要行：打开该工具 pager，再次点击同一摘要收起，点击其它摘要切换；滚轮/释放/普通区域无行为，键盘路径等价可用 |
 | `Backspace/Delete` | 删除前/后一个 grapheme |
 | `Ctrl+A/E` | 整个输入 buffer 首/尾 |
