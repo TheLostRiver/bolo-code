@@ -253,6 +253,9 @@ function createControllerSpy(spies: ControllerSpies): CliTuiController {
     async flush(): Promise<void> {
       spies.flushes += 1
     },
+    setToolPagerContext(): void {
+      /* spy 不需要鼠标 pager 上下文 */
+    },
   }
   return controller as unknown as CliTuiController
 }

@@ -1,5 +1,9 @@
 import { StdinBuffer, type Terminal } from './piCompat.ts'
 import { runCleanupSteps } from '../cleanup.ts'
+import {
+  SGR_MOUSE_DISABLE,
+  SGR_MOUSE_ENABLE,
+} from '../../../shared/src/index.ts'
 
 export type BoloTerminalInput = {
   isTTY?: boolean
@@ -68,6 +72,7 @@ export function createBoloTerminalAdapter(options: {
   output: BoloTerminalOutput
   fallbackColumns?: number
   fallbackRows?: number
+  env?: NodeJS.ProcessEnv
 }): BoloTerminalAdapter {
   let resizeHandler: (() => void) | undefined
   let inputHandler: ((data: string) => void) | undefined
@@ -77,6 +82,7 @@ export function createBoloTerminalAdapter(options: {
   let inputRequested = false
   let inputActive = false
   let inputWasRaw = false
+  let mouseReportingEnabled = false
   let renderEpoch = 0
   const waiters = new Set<RenderWaiter>()
   const stats: BoloTerminalStats = {
@@ -129,6 +135,12 @@ export function createBoloTerminalAdapter(options: {
       () => buffer?.destroy(),
       () => emitRetained(BRACKETED_PASTE_DISABLE),
       () => {
+        if (mouseReportingEnabled) {
+          mouseReportingEnabled = false
+          emitRetained(SGR_MOUSE_DISABLE)
+        }
+      },
+      () => {
         if (input && !inputWasRaw) input.setRawMode?.(false)
       },
       () => input?.pause(),
@@ -180,6 +192,10 @@ export function createBoloTerminalAdapter(options: {
       inputActive = true
       pasteEnabled = true
       emitRetained(BRACKETED_PASTE_ENABLE)
+      if (options.env?.TERM !== 'dumb') {
+        mouseReportingEnabled = true
+        emitRetained(SGR_MOUSE_ENABLE)
+      }
       input.resume()
     } catch (error) {
       inputActive = false
@@ -193,6 +209,12 @@ export function createBoloTerminalAdapter(options: {
           () => buffer.destroy(),
           () => {
             if (pasteEnabled) emitRetained(BRACKETED_PASTE_DISABLE)
+          },
+          () => {
+            if (mouseReportingEnabled) {
+              mouseReportingEnabled = false
+              emitRetained(SGR_MOUSE_DISABLE)
+            }
           },
           () => {
             if (rawModeAttempted && !wasRaw) input.setRawMode?.(false)

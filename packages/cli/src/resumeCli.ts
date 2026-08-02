@@ -451,6 +451,11 @@ export function attachSessionTuiController(
   ;(
     session as BoloSession & { [TUI_CONTROLLER]?: CliTuiController }
   )[TUI_CONTROLLER] = controller
+  // OUT-4：鼠标点击摘要需要 session-scoped spill 上下文才能打开 file-backed pager
+  controller.setToolPagerContext({
+    cwd: session.cwd,
+    sessionId: session.id,
+  })
 }
 
 export function configureSessionComposer(

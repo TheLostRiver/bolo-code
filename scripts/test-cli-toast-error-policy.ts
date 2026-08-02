@@ -91,6 +91,7 @@ function createControllerSpy(spies: ControllerSpies): {
     async flush(): Promise<void> {
       spies.flushes += 1
     },
+    setToolPagerContext(): void {},
   }
   return {
     controller: controller as unknown as CliTuiController,

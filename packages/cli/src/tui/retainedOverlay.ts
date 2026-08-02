@@ -363,6 +363,25 @@ export class RetainedOverlayHost implements Component, Focusable {
     return this.active !== undefined
   }
 
+  getPresentation(): RetainedOverlayPresentation {
+    return this.presentation(this.active)
+  }
+
+  /** 当前激活 pager 的 source key（如 `tool:<blockId>`）；runtime/非 pager 返回 undefined。 */
+  getActivePagerKey(): string | undefined {
+    const active = this.active
+    if (!active || active.mode !== 'pager') return undefined
+    if (active.source.kind === 'runtime') return undefined
+    return active.source.key
+  }
+
+  /** 仅当当前 overlay 是 pager 时以 quit 收起；返回是否真的收起了。 */
+  dismissActivePager(): boolean {
+    if (this.active?.mode !== 'pager') return false
+    this.finishPager('quit')
+    return true
+  }
+
   runPermission(options: {
     request: AskPermissionRequest
     signal?: AbortSignal

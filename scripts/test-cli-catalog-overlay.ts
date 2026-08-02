@@ -467,6 +467,7 @@ function createControllerSpy(spy: CatalogSpy): CliTuiController {
       spy.compatibility.push(text)
     },
     async flush() {},
+    setToolPagerContext() {},
   } as unknown as CliTuiController
 }
 
@@ -536,6 +537,7 @@ async function testRunOnePromptConsumption(): Promise<void> {
       fallbackCompatibility.push(text)
     },
     async flush() {},
+    setToolPagerContext() {},
   } as unknown as CliTuiController)
   await runOnePrompt(fallbackSession, '/skills crystal', {
     isTty: true,

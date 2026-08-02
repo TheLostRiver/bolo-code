@@ -459,6 +459,7 @@ export class RetainedTranscript implements Component {
   private lastRenderedWidth?: number
   private seededFullHistory = false
   private tailWindow = false
+  private blockHitLines = new Map<string, { start: number; end: number }>()
 
   constructor(
     private readonly options: {
@@ -589,6 +590,14 @@ export class RetainedTranscript implements Component {
     // render(), so parent invalidation must not discard every Markdown cache.
   }
 
+  /**
+   * 最近一次 render 产出的可点击 tool block 行区间（相对本组件布局行，
+   * 不含 gutter 分隔行）。只注册 overflow 且可开 pager 的块。
+   */
+  getBlockHitLines(): ReadonlyMap<string, { start: number; end: number }> {
+    return this.blockHitLines
+  }
+
   render(width: number): string[] {
     const normalizedWidth = Number.isFinite(width)
       ? Math.max(1, Math.floor(width))
@@ -623,8 +632,12 @@ export class RetainedTranscript implements Component {
 
   private renderAllBlocks(contentWidth: number, gutter: string): string[] {
     const lines: string[] = []
+    this.blockHitLines = new Map()
+    let line = 0
     for (const component of this.orderedBlocks) {
-      this.appendBlock(lines, component.render(contentWidth), gutter)
+      const blockLines = component.render(contentWidth)
+      line = this.appendBlock(lines, blockLines, gutter, line)
+      this.recordHitLines(component, blockLines, line)
     }
     return lines
   }
@@ -634,30 +647,40 @@ export class RetainedTranscript implements Component {
     gutter: string,
   ): string[] {
     const budget = this.tailWindowLineBudget()
-    const sections: string[][] = []
+    const sections: Array<{
+      block: RetainedTranscriptBlock
+      lines: string[]
+    }> = []
     let remaining = budget
     for (
       let index = this.orderedBlocks.length - 1;
       index >= 0 && remaining > 0;
       index -= 1
     ) {
-      const blockLines = this.orderedBlocks[index]!.render(contentWidth)
+      const component = this.orderedBlocks[index]!
+      const blockLines = component.render(contentWidth)
       if (blockLines.length === 0) continue
       const gap = sections.length > 0 ? 1 : 0
       const available = Math.max(0, remaining - gap)
       if (available === 0) break
       if (blockLines.length > available) {
-        sections.unshift(blockLines.slice(-available))
+        sections.unshift({
+          block: component,
+          lines: blockLines.slice(-available),
+        })
         remaining = 0
         break
       }
-      sections.unshift(blockLines)
+      sections.unshift({ block: component, lines: blockLines })
       remaining -= blockLines.length + gap
     }
 
     const lines: string[] = []
+    this.blockHitLines = new Map()
+    let line = 0
     for (const section of sections) {
-      this.appendBlock(lines, section, gutter)
+      line = this.appendBlock(lines, section.lines, gutter, line)
+      this.recordHitLines(section.block, section.lines, line)
     }
     return lines
   }
@@ -666,12 +689,38 @@ export class RetainedTranscript implements Component {
     lines: string[],
     blockLines: readonly string[],
     gutter: string,
+    startLine: number,
+  ): number {
+    if (blockLines.length === 0) return startLine
+    let line = startLine
+    if (line > 0) {
+      lines.push(gutter)
+      line += 1
+    }
+    for (const blockLine of blockLines) {
+      lines.push(`${gutter}${blockLine}`)
+      line += 1
+    }
+    return line
+  }
+
+  private recordHitLines(
+    component: RetainedTranscriptBlock,
+    blockLines: readonly string[],
+    endLine: number,
   ): void {
     if (blockLines.length === 0) return
-    if (lines.length > 0) lines.push(gutter)
-    for (const line of blockLines) {
-      lines.push(`${gutter}${line}`)
-    }
+    const block = component.getBlock()
+    if (block.kind !== 'tool') return
+    const projection = projectCliToolDisplay(
+      block,
+      this.resolveToolDisplayState(block),
+    )
+    if (!projection.canOpenPager || !projection.overflow) return
+    this.blockHitLines.set(block.id, {
+      start: endLine - blockLines.length,
+      end: endLine,
+    })
   }
 
   private tailWindowLineBudget(): number {

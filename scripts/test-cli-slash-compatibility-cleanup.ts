@@ -165,6 +165,7 @@ function createController(spies: SurfaceSpies): CliTuiController {
       spies.compatibility.push(text)
     },
     async flush() {},
+    setToolPagerContext() {},
   }
   return controller as unknown as CliTuiController
 }

@@ -35,6 +35,7 @@ import {
   type CliTuiViewState,
   type CliToolDisplayMode,
   type RuntimePagerSuccess,
+  parseSgrMouseSequence,
 } from '../../../shared/src/index.ts'
 import type { AskUserQuestionOutcome } from '../../../tools/src/index.ts'
 import { runCleanupSteps } from '../cleanup.ts'
@@ -125,6 +126,7 @@ export type CliTuiController = {
   ): void
   getState(): CliTuiViewState
   toggleToolDisplayMode(): CliToolDisplayMode | undefined
+  setToolPagerContext(context?: { cwd: string; sessionId: string }): void
   runToolHistoryOverlay(options?: {
     signal?: AbortSignal
     cwd?: string
@@ -180,6 +182,18 @@ type RevisionWaiter = {
   timer: ReturnType<typeof setTimeout>
 }
 
+/**
+ * pi-tui 把 base 内容渲染到屏幕 [viewportTop, viewportTop + rows) 的窗口；
+ * `previousViewportTop` 是 doRender 后的私有字段。升级 pi-tui 时在
+ * piCompat 收口处检查该字段是否仍存在。
+ */
+function tuiViewportTop(tui: TUI): number {
+  const value = (
+    tui as unknown as { previousViewportTop?: number }
+  ).previousViewportTop
+  return Number.isFinite(value) && (value ?? 0) > 0 ? Math.floor(value!) : 0
+}
+
 class WelcomeComponent implements Component {
   private options: RetainedWelcomeOptions = {
     version: '0.0.1',
@@ -222,6 +236,11 @@ class RetainedRoot extends Container {
   private visible = true
   private revision = 0
   private renderedRevision = -1
+  private toolHitRegions: Array<{
+    blockId: string
+    startLine: number
+    endLine: number
+  }> = []
   private readonly waiters = new Set<RevisionWaiter>()
 
   constructor(
@@ -348,16 +367,32 @@ class RetainedRoot extends Container {
 
   override render(width: number): string[] {
     const lines: string[] = []
+    const toolHitRegions: Array<{
+      blockId: string
+      startLine: number
+      endLine: number
+    }> = []
     if (this.visible) {
+      let line = 0
       const append = (section: string[], gap: number): void => {
         if (!section.length) return
-        if (lines.length && gap > 0) {
+        if (line > 0 && gap > 0) {
           lines.push(...Array.from({ length: gap }, () => ''))
+          line += gap
         }
         lines.push(...section)
+        line += section.length
       }
       append(this.welcome.render(width), 0)
+      const transcriptStart = line
       append(this.transcript.render(width), 1)
+      for (const [blockId, range] of this.transcript.getBlockHitLines()) {
+        toolHitRegions.push({
+          blockId,
+          startLine: transcriptStart + range.start,
+          endLine: transcriptStart + range.end,
+        })
+      }
       append(this.compatibilityOutput.render(width), 1)
       append(this.activity.render(width), 1)
       append(this.composer.render(width), 1)
@@ -365,6 +400,7 @@ class RetainedRoot extends Container {
       append(this.commandSurface.render(width), 0)
       append(this.footer.render(width), 0)
     }
+    this.toolHitRegions = toolHitRegions
     this.renderedRevision = this.revision
     for (const waiter of [...this.waiters]) {
       if (this.renderedRevision < waiter.revision) continue
@@ -373,6 +409,16 @@ class RetainedRoot extends Container {
       waiter.resolve()
     }
     return lines
+  }
+
+  /** 布局行（0-based，相对 root 顶部）命中哪个可点击 tool block。 */
+  resolveToolHitAt(layoutLine: number): string | undefined {
+    for (const region of this.toolHitRegions) {
+      if (layoutLine >= region.startLine && layoutLine < region.endLine) {
+        return region.blockId
+      }
+    }
+    return undefined
   }
 
   private markDirty(): void {
@@ -443,6 +489,7 @@ export function createRetainedTuiController(options: {
     output: options.output,
     fallbackColumns: options.fallbackColumns,
     fallbackRows: options.fallbackRows,
+    env,
   })
   let state = createCliTuiViewState()
   let started = false
@@ -450,6 +497,7 @@ export function createRetainedTuiController(options: {
   let streamedAssistantText = false
   let turnActivityEnabled = true
   let runningInterruptHandler: (() => void) | undefined
+  let toolPagerContext: { cwd: string; sessionId: string } | undefined
   let root: RetainedRoot
   let tui: TUI
   let overlayHandle: OverlayHandle | undefined
@@ -546,6 +594,31 @@ export function createRetainedTuiController(options: {
   const modalOverlayView = new RetainedOverlayView(overlay, 'modal')
   embeddedPagerView = new RetainedOverlayView(overlay, 'embedded-pager')
   root.setEmbeddedPager(embeddedPagerView)
+  const removeMouseInputListener = tui.addInputListener((data) => {
+    const mouse = parseSgrMouseSequence(data)
+    if (!mouse) return
+    if (mouse.kind !== 'press') return { consume: true }
+    const presentation = overlay.getPresentation()
+    if (presentation === 'modal') return { consume: true }
+    const pagerKey = overlay.getActivePagerKey()
+    if (presentation === 'embedded-pager' && pagerKey === undefined) {
+      // runtime pager 占用 embedded 槽：不打断它，也不静默尝试失败
+      return { consume: true }
+    }
+    const layoutLine = mouse.y - 1 + tuiViewportTop(tui)
+    const blockId = root.resolveToolHitAt(layoutLine)
+    if (!blockId) return { consume: true }
+    if (pagerKey === `tool:${blockId}`) {
+      overlay.dismissActivePager()
+      requestRender()
+    } else {
+      if (pagerKey !== undefined) overlay.dismissActivePager()
+      void openToolPagerFor(blockId).catch(() => {
+        // 被其它 overlay 占用或 pager 已关闭：保持现状，键盘路径永远等价可用。
+      })
+    }
+    return { consume: true }
+  })
   const removeToolDisplayInputListener = tui.addInputListener((data) => {
     if (overlay.isActive() || parseKey(data) !== 'ctrl+o') return
     const mode = root.toggleToolDisplayMode()
@@ -567,6 +640,46 @@ export function createRetainedTuiController(options: {
     handler()
     return { consume: true }
   })
+
+  const openToolPagerFor = (
+    blockId: string,
+    toolOptions?: {
+      signal?: AbortSignal
+      cwd?: string
+      sessionId?: string
+    },
+  ): Promise<RuntimePagerSuccess> => {
+    const pager = root.getToolPagerContent(blockId)
+    if (!pager) {
+      return Promise.resolve({
+        ok: true,
+        reason: 'quit',
+        page: 0,
+        pageCount: 1,
+      })
+    }
+    const context = toolPagerContext
+    const cwd = toolOptions?.cwd ?? context?.cwd
+    const sessionId = toolOptions?.sessionId ?? context?.sessionId
+    return pager.fullResult && cwd && sessionId
+      ? overlay.runLazyTextPager({
+          key: pager.key,
+          title: pager.title,
+          fallbackContent: pager.content,
+          loadPage: createToolResultFilePagerSource({
+            cwd,
+            sessionId,
+            reference: pager.fullResult,
+          }).loadPage,
+          ...(toolOptions?.signal ? { signal: toolOptions.signal } : {}),
+        })
+      : overlay.runTextPager({
+          key: pager.key,
+          title: pager.title,
+          content: pager.content,
+          ...(toolOptions?.signal ? { signal: toolOptions.signal } : {}),
+        })
+  }
 
   const runToolHistoryOverlay = async (toolOptions?: {
     signal?: AbortSignal
@@ -596,29 +709,7 @@ export function createRetainedTuiController(options: {
       ...(toolOptions?.signal ? { signal: toolOptions.signal } : {}),
     })
     if (!picked.ok) return { ok: false, reason: 'cancel' }
-    const pager = root.getToolPagerContent(picked.id)
-    if (!pager) return { ok: false, reason: 'cancel' }
-    const result =
-      pager.fullResult && toolOptions?.cwd && toolOptions.sessionId
-        ? await overlay.runLazyTextPager({
-            key: pager.key,
-            title: pager.title,
-            fallbackContent: pager.content,
-            loadPage: createToolResultFilePagerSource({
-              cwd: toolOptions.cwd,
-              sessionId: toolOptions.sessionId,
-              reference: pager.fullResult,
-            }).loadPage,
-            ...(toolOptions.signal ? { signal: toolOptions.signal } : {}),
-          })
-        : await overlay.runTextPager({
-            key: pager.key,
-            title: pager.title,
-            content: pager.content,
-            ...(toolOptions?.signal
-              ? { signal: toolOptions.signal }
-              : {}),
-          })
+    const result = await openToolPagerFor(picked.id, toolOptions)
     return {
       ok: true,
       blockId: picked.id,
@@ -802,6 +893,9 @@ export function createRetainedTuiController(options: {
       if (mode) requestRender()
       return mode
     },
+    setToolPagerContext(context) {
+      toolPagerContext = context
+    },
     runToolHistoryOverlay(toolOptions) {
       if (stopped) return Promise.resolve({ ok: false, reason: 'cancel' })
       return runToolHistoryOverlay(toolOptions)
@@ -849,6 +943,7 @@ export function createRetainedTuiController(options: {
           runningInterruptHandler = undefined
         },
         () => removeRunningInterruptInputListener(),
+        () => removeMouseInputListener(),
         () => removeToolDisplayInputListener(),
         () => commandSurfaceEffect.dispose(),
         () => composer.cancelInput(),

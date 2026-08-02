@@ -435,6 +435,17 @@ export {
 // AR3E：secret 不越过进程/持久化边界
 export { redactSecretsDeep } from './secretBoundary.ts'
 export {
+  SGR_MOUSE_DISABLE,
+  SGR_MOUSE_ENABLE,
+  isSgrMouseSequence,
+  parseSgrMouseSequence,
+  type SgrMouseDragEvent,
+  type SgrMouseEvent,
+  type SgrMousePressEvent,
+  type SgrMouseReleaseEvent,
+  type SgrMouseWheelEvent,
+} from './tuiMouse.ts'
+export {
   TUI_THEME_IDS,
   TUI_THEME_LABELS,
   isTuiThemeId,
