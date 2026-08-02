@@ -148,6 +148,21 @@ async function main(): Promise<void> {
     )
 
     const eventsBefore = controller.getTerminalStats().inputEvents
+
+    // 查询窗口内的 DA2 响应碎片（慢链路跨 chunk 残余）不得泄漏进输入。
+    // 用真实分片形态：每片间隔 >10ms（StdinBuffer 会逐片 flush 为 CSI 前缀
+    // 残余并被吞掉；间隔 <10ms 会被拼成完整响应走拦截路径）。
+    input.send('\x1b[>7721')
+    await new Promise<void>((resolve) => setTimeout(resolve, 20))
+    input.send('\x1b[>')
+    await new Promise<void>((resolve) => setTimeout(resolve, 20))
+    await settle()
+    assert.equal(
+      controller.getTerminalStats().inputEvents,
+      eventsBefore,
+      'DA2 response fragments inside the query window are swallowed',
+    )
+
     input.send('\x1b[>7721;1;0c')
     await settle()
     const caps = controller.getTerminalCapabilities()
