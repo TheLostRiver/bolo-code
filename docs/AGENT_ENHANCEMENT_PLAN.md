@@ -14,8 +14,8 @@
 |------|------|------|------|------|
 | ROB-1 | 工具调用重复检测（stationarity guard） | 低 | core queryLoop + shared 纯契约 | ✅ 本轮 |
 | ROB-2 | 悬空 tool call 修复与结果去重 | 低 | session transcript/load | ✅ 本轮 |
-| CMP-1 | 压缩专用模型与墙钟预算 | 低 | compact 配置/执行器 | ▶ NEXT |
-| ROB-3 | 后台任务 manifest 与重启恢复提醒 | 低 | backgroundShell 持久化 + `/bg` | 📋 |
+| CMP-1 | 压缩专用模型与墙钟预算 | 低 | compact 配置/执行器 | ✅ 本轮 |
+| ROB-3 | 后台任务 manifest 与重启恢复提醒 | 低 | backgroundShell 持久化 + `/bg` | ▶ NEXT |
 | TERM-1 | 终端能力探测（品牌特化） | 低 | CLI adapter | 📋 |
 | TERM-2 | 输入 CSI 分片重组 | 低 | CLI adapter/StdinBuffer | 📋 |
 | HKP-1 | hooks 事件面扩展与 fail-open 结果 | 低 | hooks 包 | 📋 |
@@ -72,15 +72,25 @@ reasoning-forward）与完整 `npm test` 通过。
 JSON 快照恢复集成；typecheck、resume/migration/persist/rewrite/first-run 回归与
 完整 `npm test` 通过。
 
-## 3. CMP-1 · 压缩专用模型与墙钟预算 — 低成本
+## 3. CMP-1 · 压缩专用模型与墙钟预算 — 低成本 ✅ 本轮
 
 **目标**：压缩摘要允许配置独立模型（如更小/更便宜的模型），并给压缩生成过程
 （含 reasoning）设置墙钟硬预算，防止压缩本身 runaway 卡住会话。
 
-**设计**：compact 配置新增可选 `compactModel`；执行器按预算传递 timeout 语义；
-超预算 fail-closed 回退「不压缩 + 保留旧历史」并 warning（复用既有压缩回退路径）。
+**设计**（已落地）：
+- config 顶层新增 `compactModel`（压缩专用模型名）与 `compactTimeoutMs`（墙钟
+  预算毫秒），可被会话创建选项覆盖；`CreateSessionFromWorkspaceOptions` 透传。
+- `createCompactSummarizerFromProvider(provider, { model })`：有模型覆盖时走
+  `completeStream(req, { disableTools, model })`，无覆盖保持 `completeText`
+  优先原语义；provider 热切重建 summarizer 同样应用模型覆盖。
+- `runFullCompact` 新增 `summarizeTimeoutMs`：每次 summarizer 调用（含 PTL
+  重试）套 `Promise.race` 墙钟预算，超时按失败回退（messages 不变）且 reason
+  点名超时时长；缺省不设限，旧行为不变。
 
-**验收**：配置解析、预算生效、超时回退；旧配置兼容。
+**验收**：专项覆盖挂起 summarizer 超时回退、快速成功、无预算原行为、模型覆盖
+（completeStream 收到 model / completeText 不被调用 / 无覆盖走 completeText /
+无 completeText 无 model 键）与 config→session 装配；typecheck、compact/
+auto-compact/config/ptl 回归与完整 `npm test` 通过。
 
 ## 4. ROB-3 · 后台任务 manifest 与重启恢复提醒 — 低成本
 
