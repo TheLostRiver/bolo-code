@@ -20,6 +20,9 @@ contextBridge.exposeInMainWorld('bolo', {
   listSessions: () => ipcRenderer.invoke('bolo:listSessions'),
   /** OI-06E：选择并恢复盘上的会话 */
   selectSession: (request) => ipcRenderer.invoke('bolo:selectSession', request),
+  pickFiles: () => ipcRenderer.invoke('bolo:pickFiles'),
+  openPath: (targetPath) =>
+    ipcRenderer.invoke('bolo:openPath', { path: targetPath }),
   /** CX7：多 provider */
   listProviders: () => ipcRenderer.invoke('bolo:listProviders'),
   useProvider: (idOrPayload) =>

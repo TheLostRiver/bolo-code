@@ -11,174 +11,953 @@
   </head>
   <body>
     <!--
-      S1 骨架（方案 docs/DESKTOP_GUI_PLAN.md §S1）：
-      左 = 会话栏（窄、Codex 风条目）  中 = 消息流 + 底部 composer
-      右栏 Details 保持 hidden（id 兼容 app.js，后续切片再定去留）
-      注意：以下 id 为 app.js 契约，重写时必须保留（test-desktop-launch 检查 #log/#session-list）
+      UI 重构 v3（对标 Codex App 交互）：
+      侧栏 = 品牌 + 功能导航（新建任务/自动化/Skills/插件）+ 项目分组 + 用户区
+      中栏 = 顶栏（侧栏开关/会话标题/provider/runtime/操作）+ 消息流 + composer
+      右上 = 环境信息浮层（会话/用量/子智能体/活动）
+      契约：#log #session-list .session-item composer 四按钮 id、settings 全部 id
+      （test-desktop-launch / test-desktop-composer-controls / test-desktop-model-effort-settings）
     -->
     <div class="app">
       <aside class="sidebar" aria-label="Sessions">
         <div class="sidebar-head">
-          <span class="brand">BOLO</span>
-          <button
-            type="button"
-            id="btn-new-session"
-            class="ghost icon"
-            title="New session"
-            aria-label="New session"
-          >
-            +
+          <div class="brand">
+            <span class="brand-mark" aria-hidden="true">B</span>
+            <span class="brand-name">BOLO</span>
+          </div>
+        </div>
+
+        <nav class="side-nav" aria-label="Actions">
+          <button type="button" id="btn-new-session" class="nav-item">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+            </svg>
+            <span>新建任务</span>
+          </button>
+          <button type="button" id="nav-automation" class="nav-item">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 7v5l3 2" />
+            </svg>
+            <span>自动化</span>
+          </button>
+          <button type="button" id="nav-skills" class="nav-item">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"
+              />
+              <path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z" />
+            </svg>
+            <span>Skills</span>
+          </button>
+          <button type="button" id="nav-plugins" class="nav-item">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M14 7V5a2 2 0 0 0-4 0v2H7a2 2 0 0 0-2 2v3h2a2 2 0 1 1 0 4H5v3a2 2 0 0 0 2 2h3v-2a2 2 0 1 1 4 0v2h3a2 2 0 0 0 2-2v-3h-2a2 2 0 1 1 0-4h2V9a2 2 0 0 0-2-2z"
+              />
+            </svg>
+            <span>插件</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-group"><span>项目</span></div>
+        <ul id="session-list" class="session-list" aria-label="Session list"></ul>
+
+        <div class="sidebar-foot">
+          <button type="button" id="user-card" class="user-card" aria-haspopup="menu">
+            <span class="user-avatar" id="user-avatar">
+              <span id="user-avatar-letter">B</span>
+              <span class="user-dot" id="user-dot"></span>
+            </span>
+            <span class="user-name" id="user-name">Workspace</span>
+            <svg class="user-chevron" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m18 15-6-6-6 6" />
+            </svg>
           </button>
         </div>
-        <ul id="session-list" class="session-list" aria-label="Session list"></ul>
       </aside>
 
       <section class="center">
         <header class="top">
+          <div class="top-bar-left">
+            <button
+              type="button"
+              id="btn-sidebar"
+              class="icon-btn"
+              aria-label="Toggle sidebar"
+              title="侧栏 (Ctrl+B)"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="16" rx="2" />
+                <path d="M9 4v16" />
+              </svg>
+            </button>
+            <div class="top-left">
+              <h1 id="session-title" class="session-title-main">Session</h1>
+              <div id="status" class="status">loading…</div>
+            </div>
+          </div>
           <div class="top-actions">
-            <label class="provider-pick" title="Active provider">
-              <select id="hdr-provider" aria-label="Provider"></select>
-            </label>
-            <button type="button" id="btn-theme" class="ghost" aria-label="Toggle theme">
-              Theme
+            <div
+              class="custom-select provider-pick"
+              data-select-id="hdr-provider"
+              data-direction="down"
+              data-align="end"
+              data-menu-width="300"
+            >
+              <select
+                id="hdr-provider"
+                class="native-select-sync"
+                aria-label="Provider"
+                tabindex="-1"
+              ></select>
+              <button
+                type="button"
+                class="select-trigger provider-trigger"
+                aria-haspopup="listbox"
+                aria-expanded="false"
+                aria-label="选择 Provider"
+              >
+                <span class="select-trigger-label">Provider</span>
+              </button>
+            </div>
+            <div id="runtime-status" class="status runtime-status" aria-live="polite">
+              Runtime connecting…
+            </div>
+            <span class="top-divider" aria-hidden="true"></span>
+            <button
+              type="button"
+              id="btn-theme"
+              class="icon-btn"
+              aria-label="Toggle theme"
+              title="Toggle theme"
+            >
+              <svg class="icon-sun" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="4" />
+                <path
+                  d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"
+                />
+              </svg>
+              <svg class="icon-moon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+              </svg>
             </button>
             <button
               type="button"
               id="btn-panel"
-              class="ghost"
+              class="icon-btn"
               aria-expanded="false"
               aria-controls="side-panel"
+              aria-label="Toggle details panel"
+              title="环境信息"
             >
-              Details
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="16" rx="2" />
+                <path d="M15 4v16" />
+              </svg>
             </button>
-            <button type="button" id="btn-settings" class="ghost">Settings</button>
-          </div>
-          <div class="status-stack">
-            <div id="runtime-status" class="status runtime-status" aria-live="polite">
-              Runtime connecting…
-            </div>
-            <div id="status" class="status">loading…</div>
+            <button
+              type="button"
+              id="btn-settings"
+              class="icon-btn"
+              aria-label="Settings"
+              title="Settings (Ctrl+,)"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="3" />
+                <path
+                  d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+                />
+              </svg>
+            </button>
           </div>
         </header>
 
-        <main id="log" class="log" aria-live="polite" aria-label="Conversation"></main>
-
-        <div id="perm" class="perm inline" hidden>
-          <div class="perm-card">
-            <pre id="perm-text"></pre>
-            <div class="perm-actions">
-              <button type="button" id="perm-allow">Allow</button>
-              <button type="button" id="perm-always">Always</button>
-              <button type="button" id="perm-deny">Deny</button>
+        <div id="view-chat" class="view-chat">
+          <section id="empty-workspace" class="empty-workspace" aria-label="开始任务">
+            <div class="empty-workspace-mark" aria-hidden="true">
+              <span>B</span>
+              <i></i>
             </div>
-          </div>
-        </div>
-
-        <div id="ask" class="perm inline" hidden>
-          <div class="perm-card">
-            <div id="ask-questions"></div>
-            <div class="perm-actions">
-              <button type="button" id="ask-cancel">Cancel</button>
-              <button type="button" id="ask-submit">Answer</button>
+            <div class="empty-workspace-copy">
+              <span class="empty-workspace-eyebrow">BOLO WORKSPACE</span>
+              <h2>开始一个新任务</h2>
+              <p>把目标交给 Agent，先从一个清晰的动作开始。</p>
             </div>
-          </div>
-        </div>
-
-        <footer class="input-bar">
-          <div class="composer-shell">
-            <textarea
-              id="prompt"
-              rows="1"
-              placeholder="Message or /help …"
-              autocomplete="off"
-              spellcheck="false"
-            ></textarea>
-            <div class="composer-toolbar">
-              <select id="composer-model" aria-label="Model" title="Model"></select>
-              <select id="composer-effort" aria-label="Effort" title="Reasoning effort"></select>
-              <span id="composer-usage" class="composer-usage" aria-live="polite"></span>
-            </div>
-            <div class="composer-actions" role="toolbar" aria-label="Message actions">
-              <button id="composer-send" type="button">Send</button>
-              <button id="composer-queue" type="button" class="ghost">Queue</button>
-              <button id="composer-steer" type="button" class="ghost">Steer</button>
-              <button id="composer-interrupt" type="button" class="ghost danger">
-                Interrupt
+            <div class="empty-workspace-actions" aria-label="任务示例">
+              <button type="button" class="empty-action" data-prompt="请先检查这个项目的结构，并告诉我从哪里开始。">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 5h16v14H4z" />
+                  <path d="M8 9h8M8 13h5" />
+                </svg>
+                <span>检查项目结构</span>
+              </button>
+              <button type="button" class="empty-action" data-prompt="请解释当前工作区里最重要的文件和它们之间的关系。">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 11v5M12 8h.01" />
+                </svg>
+                <span>解释关键文件</span>
+              </button>
+              <button type="button" class="empty-action" data-prompt="请根据当前项目状态规划下一步改动，并列出执行顺序。">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M5 5h14v14H5z" />
+                  <path d="M8 9h8M8 13h5M8 17h3" />
+                </svg>
+                <span>规划下一步</span>
               </button>
             </div>
+          </section>
+          <main id="log" class="log" aria-live="polite" aria-label="Conversation"></main>
+
+          <div id="perm" class="perm inline" hidden>
+            <div class="perm-card">
+              <pre id="perm-text"></pre>
+              <div class="perm-actions">
+                <button type="button" id="perm-allow">Allow</button>
+                <button type="button" id="perm-always">Always</button>
+                <button type="button" id="perm-deny">Deny</button>
+              </div>
+            </div>
           </div>
-        </footer>
+
+          <div id="ask" class="perm inline" hidden>
+            <div class="perm-card">
+              <div id="ask-questions"></div>
+              <div class="perm-actions">
+                <button type="button" id="ask-cancel" class="ghost">Cancel</button>
+                <button type="button" id="ask-submit">Answer</button>
+              </div>
+            </div>
+          </div>
+
+          <footer class="input-bar">
+            <div class="composer-shell">
+              <div
+                id="composer-attachments"
+                class="composer-attachments"
+                aria-label="Attached files"
+                hidden
+              ></div>
+              <textarea
+                id="prompt"
+                rows="1"
+                placeholder="随心输入，或 /help 查看命令…"
+                autocomplete="off"
+                spellcheck="false"
+              ></textarea>
+              <div class="composer-bar">
+                <button
+                  type="button"
+                  id="btn-attach"
+                  class="attach-btn"
+                  aria-haspopup="menu"
+                  aria-label="Add attachments and connectors"
+                  title="添加"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                </button>
+                <div
+                  class="custom-select mode-pick"
+                  data-select-id="composer-mode"
+                  data-direction="up"
+                  data-menu-width="330"
+                >
+                  <select
+                    id="composer-mode"
+                    class="native-select-sync"
+                    aria-label="Permission mode"
+                    tabindex="-1"
+                  >
+                    <option value="default">default</option>
+                    <option value="acceptEdits">acceptEdits</option>
+                    <option value="plan">plan</option>
+                    <option value="auto">auto</option>
+                    <option value="bypassPermissions">bypassPermissions</option>
+                  </select>
+                  <button
+                    type="button"
+                    class="select-trigger mode-trigger"
+                    aria-haspopup="listbox"
+                    aria-expanded="false"
+                    aria-label="选择权限模式"
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                    </svg>
+                    <span class="select-trigger-label">default</span>
+                  </button>
+                </div>
+                <span id="composer-usage" class="composer-usage" aria-live="polite"></span>
+                <span class="composer-spacer"></span>
+                <div
+                  class="custom-select composer-select model-select"
+                  data-select-id="composer-model"
+                  data-direction="up"
+                  data-menu-width="270"
+                >
+                  <select
+                    id="composer-model"
+                    class="native-select-sync"
+                    aria-label="Model"
+                    tabindex="-1"
+                  ></select>
+                  <button
+                    type="button"
+                    class="select-trigger composer-select-trigger"
+                    aria-haspopup="listbox"
+                    aria-expanded="false"
+                    aria-label="选择模型"
+                  >
+                    <span class="select-trigger-label">Model</span>
+                  </button>
+                </div>
+                <div
+                  class="custom-select composer-select effort-select"
+                  data-select-id="composer-effort"
+                  data-direction="up"
+                  data-menu-width="250"
+                >
+                  <select
+                    id="composer-effort"
+                    class="native-select-sync"
+                    aria-label="Effort"
+                    tabindex="-1"
+                  ></select>
+                  <button
+                    type="button"
+                    class="select-trigger composer-select-trigger"
+                    aria-haspopup="listbox"
+                    aria-expanded="false"
+                    aria-label="选择推理强度"
+                  >
+                    <span class="select-trigger-label">auto</span>
+                  </button>
+                </div>
+                <div class="composer-actions" role="toolbar" aria-label="Message actions">
+                  <button id="composer-queue" type="button" class="ghost" hidden>
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
+                    </svg>
+                    <span>Queue</span>
+                  </button>
+                  <button id="composer-steer" type="button" class="ghost" hidden>
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="m3 11 19-9-9 19-2-8-8-2z" />
+                    </svg>
+                    <span>Steer</span>
+                  </button>
+                  <button
+                    id="composer-interrupt"
+                    type="button"
+                    class="interrupt-btn"
+                    hidden
+                    title="Interrupt"
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <rect x="7" y="7" width="10" height="10" rx="2" />
+                    </svg>
+                  </button>
+                  <button
+                    id="composer-send"
+                    type="button"
+                    data-mode="submit"
+                    title="Send (Enter)"
+                  >
+                    <svg class="send-icon-arrow" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M12 19V5M5 12l7-7 7 7" />
+                    </svg>
+                    <svg class="send-icon-stop" viewBox="0 0 24 24" aria-hidden="true">
+                      <rect x="7" y="7" width="10" height="10" rx="2" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </footer>
+        </div>
+
+        <div id="view-capability" class="view-capability" hidden>
+          <div class="cap-body">
+            <div class="cap-icon" id="cap-icon"></div>
+            <h2 id="cap-title">—</h2>
+            <p id="cap-desc" class="cap-desc">—</p>
+            <div class="cap-path mono" id="cap-path">—</div>
+            <div class="cap-actions">
+              <button type="button" id="cap-open-settings" class="ghost">打开设置</button>
+              <button type="button" id="cap-back" class="ghost">返回会话</button>
+            </div>
+          </div>
+        </div>
       </section>
 
-      <aside id="side-panel" class="panel" hidden aria-label="Details">
+      <aside id="side-panel" class="panel" hidden aria-label="Current task board">
         <div class="panel-head">
-          <span>Details</span>
-          <button type="button" id="btn-panel-close" class="ghost icon" aria-label="Close">
-            ×
+          <span>任务板</span>
+          <button
+            type="button"
+            id="btn-panel-close"
+            class="icon-btn small"
+            aria-label="Close"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
           </button>
         </div>
-        <div id="panel-body" class="panel-body"></div>
+        <div id="panel-body" class="panel-body">
+          <section class="panel-section">
+            <h3>环境信息</h3>
+            <div class="board-row">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="4" y="3" width="16" height="18" rx="3" />
+                <path d="M9 9h6M12 6v6M8 16h8" />
+              </svg>
+              <span>状态</span><b id="panel-runtime">—</b>
+            </div>
+            <div class="board-row">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="3" y="5" width="18" height="13" rx="2" />
+                <path d="M8 21h8M12 18v3" />
+              </svg>
+              <span>本地</span><b id="panel-local">—</b>
+            </div>
+            <div class="board-row">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M6 3v12M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+                <path d="M18 9a9 9 0 0 1-9 9" />
+              </svg>
+              <span>会话</span><b id="panel-session">—</b>
+            </div>
+            <div class="board-row">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              </svg>
+              <span>权限</span><b id="panel-mode">—</b>
+            </div>
+          </section>
+          <section class="panel-section">
+            <h3>子智能体 <span id="panel-agents-count" class="panel-count"></span></h3>
+            <div id="panel-agents" class="panel-list"></div>
+          </section>
+          <section class="panel-section">
+            <h3>来源</h3>
+            <div id="panel-sources" class="panel-list board-sources"></div>
+          </section>
+        </div>
       </aside>
+    </div>
+
+    <div id="rename-dialog" class="perm" hidden>
+      <form id="rename-form" class="perm-card rename-card">
+        <div class="rename-head">
+          <h2 id="rename-title">重命名</h2>
+          <button
+            type="button"
+            id="rename-close"
+            class="icon-btn small"
+            aria-label="Close"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <label for="rename-input" id="rename-label">名称</label>
+        <input id="rename-input" type="text" autocomplete="off" spellcheck="false" />
+        <div class="rename-actions">
+          <button type="button" id="rename-cancel" class="ghost">取消</button>
+          <button type="submit" id="rename-save">保存</button>
+        </div>
+      </form>
     </div>
 
     <div id="settings" class="perm" hidden>
       <div class="perm-card settings-card">
-        <h3>Session settings</h3>
-        <label>Permission mode
-          <select id="set-mode">
-            <option value="default">default</option>
-            <option value="acceptEdits">acceptEdits</option>
-            <option value="plan">plan</option>
-            <option value="auto">auto</option>
-            <option value="bypassPermissions">bypassPermissions</option>
-          </select>
-        </label>
-        <label class="row">
-          <input type="checkbox" id="set-mock" /> Use mock provider
-        </label>
-        <label>Working directory (cwd)
-          <input type="text" id="set-cwd" spellcheck="false" />
-        </label>
+        <aside class="settings-sidebar">
+          <div class="settings-sidebar-head">
+            <div class="settings-brand">
+              <span class="settings-brand-mark">B</span>
+              <div>
+                <strong>设置</strong>
+                <span>BOLO DESKTOP</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              id="settings-close"
+              class="icon-btn small"
+              aria-label="关闭设置"
+              title="关闭"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <label class="settings-search">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="11" cy="11" r="6.5" />
+              <path d="m16 16 4 4" />
+            </svg>
+            <input id="settings-search" type="search" placeholder="搜索设置" autocomplete="off" />
+            <kbd>/</kbd>
+          </label>
+          <nav class="settings-nav" aria-label="Settings sections">
+          <div class="settings-nav-title">工作区</div>
+          <button type="button" class="settings-nav-item active" data-section="general">
+            常规
+          </button>
+          <button type="button" class="settings-nav-item" data-section="providers">
+            模型与 Provider
+          </button>
+          <button type="button" class="settings-nav-item" data-section="execution">
+            执行与权限
+          </button>
+          <button type="button" class="settings-nav-item" data-section="workspace">
+            工作区
+          </button>
+          <div class="settings-nav-title settings-nav-title-spaced">体验</div>
+          <button type="button" class="settings-nav-item" data-section="appearance">
+            外观
+          </button>
+          <button type="button" class="settings-nav-item" data-section="input">
+            输入与快捷键
+          </button>
+          <div class="settings-nav-title settings-nav-title-spaced">扩展</div>
+          <button type="button" class="settings-nav-item" data-section="tools">
+            工具与连接器
+          </button>
+          <button type="button" class="settings-nav-item" data-section="extensions">
+            Skills 与 Plugins
+          </button>
+          <div class="settings-nav-title settings-nav-title-spaced">系统</div>
+          <button type="button" class="settings-nav-item" data-section="privacy">
+            隐私与数据
+          </button>
+          <button type="button" class="settings-nav-item" data-section="about">关于</button>
+          <div class="settings-nav-foot">
+            <span class="settings-version">Bolo Code · v0.0.1</span>
+            <button type="button" id="set-cancel" class="ghost">取消</button>
+          </div>
+          </nav>
+        </aside>
 
-        <h3 class="sub">Providers (CX7)</h3>
-        <label>Active backend
-          <select id="set-provider"></select>
-        </label>
-        <label>Model
-          <input
-            type="text"
-            id="set-model"
-            list="set-model-suggestions"
-            autocomplete="off"
-            spellcheck="false"
-          />
-          <datalist id="set-model-suggestions"></datalist>
-        </label>
-        <p id="set-model-metadata" class="hint metadata-line" hidden></p>
-        <label>Effort
-          <select id="set-effort"></select>
-        </label>
-        <p id="set-effort-detail" class="hint effort-line"></p>
-        <label>Add preset
-          <select id="set-preset"></select>
-        </label>
-        <div class="perm-actions row-actions">
-          <button type="button" id="set-add-preset" class="ghost">Add preset</button>
-        </div>
-        <p class="hint">
-          Keys via env only (apiKeyEnv). Turn off mock to hit real APIs.
-          Same config as CLI <code>~/.bolo/config.json</code>.
-        </p>
+        <div class="settings-content">
+          <div id="settings-search-empty" class="settings-search-empty" hidden>
+            <div class="settings-search-empty-icon">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="11" cy="11" r="6.5" />
+                <path d="m16 16 4 4" />
+              </svg>
+            </div>
+            <h2>没有找到匹配设置</h2>
+            <p>尝试搜索模型、权限、快捷键或连接器。</p>
+          </div>
+          <section class="settings-section" data-section="general">
+            <div class="settings-section-intro">
+              <div class="settings-section-icon">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 3a2 2 0 0 1 2 2v1.2a6.8 6.8 0 0 1 1.7 1l1-.6a2 2 0 1 1 2 3.5l-1 .6c.1.6.2 1.2.2 1.8s-.1 1.2-.2 1.8l1 .6a2 2 0 1 1-2 3.5l-1-.6a6.8 6.8 0 0 1-1.7 1V19a2 2 0 1 1-4 0v-1.2a6.8 6.8 0 0 1-1.7-1l-1 .6a2 2 0 1 1-2-3.5l1-.6A7 7 0 0 1 6.1 11l-1-.6a2 2 0 1 1 2-3.5l1 .6a6.8 6.8 0 0 1 1.7-1V5a2 2 0 0 1 2-2Z" />
+                  <circle cx="12" cy="12" r="2.5" />
+                </svg>
+              </div>
+              <div>
+                <div class="settings-eyebrow">WORKSPACE CONFIGURATION</div>
+                <h2>常规</h2>
+                <p>控制 Agent 的默认工作方式、权限边界和运行环境。</p>
+              </div>
+            </div>
+            <div class="settings-overview-grid">
+              <div class="settings-stat">
+                <span>运行时</span>
+                <strong id="settings-runtime-value">ready</strong>
+                <small>当前桌面连接</small>
+              </div>
+              <div class="settings-stat">
+                <span>活动 Provider</span>
+                <strong id="settings-provider-value">—</strong>
+                <small>模型与请求来源</small>
+              </div>
+              <div class="settings-stat">
+                <span>工作区</span>
+                <strong id="settings-workspace-value">—</strong>
+                <small>当前会话目录</small>
+              </div>
+            </div>
+            <div class="settings-group">
+              <div class="settings-group-head">
+                <div>
+                  <h3>权限与安全</h3>
+                  <p>决定 Agent 在修改文件、运行命令前如何征求你的确认。</p>
+                </div>
+                <span class="settings-badge">实时生效</span>
+              </div>
+              <div class="settings-box">
+                <div class="setting-row">
+                  <div class="setting-text">
+                    <div class="setting-title">权限模式</div>
+                    <div class="setting-desc">
+                      控制工具调用的审批策略：default 逐项确认，plan 先规划，auto 自动放行
+                    </div>
+                  </div>
+                  <select id="set-mode">
+                    <option value="default">default</option>
+                    <option value="acceptEdits">acceptEdits</option>
+                    <option value="plan">plan</option>
+                    <option value="auto">auto</option>
+                    <option value="bypassPermissions">bypassPermissions</option>
+                  </select>
+                </div>
+                <div class="setting-row">
+                  <div class="setting-text">
+                    <div class="setting-title">使用 Mock Provider</div>
+                    <div class="setting-desc">
+                      不请求真实后端，由内置 mock 出数据；切换后会重建当前会话
+                    </div>
+                  </div>
+                  <input type="checkbox" id="set-mock" />
+                </div>
+              </div>
+            </div>
+            <div class="settings-group">
+              <div class="settings-group-head">
+                <div>
+                  <h3>运行方式</h3>
+                  <p>适合演示、调试或连接真实 Provider 的不同工作模式。</p>
+                </div>
+                <span class="settings-badge muted">基础</span>
+              </div>
+              <div class="settings-box">
+                <div class="setting-row setting-placeholder-row">
+                  <div class="setting-text">
+                    <div class="setting-title">自动恢复上次会话</div>
+                    <div class="setting-desc">启动时恢复最近打开的工作区与会话</div>
+                  </div>
+                  <span class="settings-placeholder">即将支持</span>
+                </div>
+              </div>
+            </div>
+          </section>
 
-        <p class="hint">Changing cwd or mock recreates the session.</p>
-        <p id="set-settings-error" class="settings-error" role="alert" hidden></p>
-        <div class="perm-actions">
-          <button type="button" id="set-cancel" class="ghost">Cancel</button>
-          <button type="button" id="set-save">Save</button>
+          <section class="settings-section" data-section="providers" hidden>
+            <div class="settings-section-intro">
+              <div class="settings-section-icon accent">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v11a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5z" />
+                  <path d="M8 9h8M8 13h5M8 17h3" />
+                </svg>
+              </div>
+              <div>
+                <div class="settings-eyebrow">MODELS & PROVIDERS</div>
+                <h2>模型与 Provider</h2>
+                <p>管理请求来源、模型、推理档位和可复用的 Provider 预设。</p>
+              </div>
+            </div>
+            <div class="settings-group">
+              <h3>后端</h3>
+              <div class="settings-box">
+                <div class="setting-row">
+                  <div class="setting-text">
+                    <div class="setting-title">活动后端</div>
+                    <div class="setting-desc">切换后立即生效，与 CLI 配置一致</div>
+                  </div>
+                  <select id="set-provider"></select>
+                </div>
+                <div class="setting-row">
+                  <div class="setting-text">
+                    <div class="setting-title">模型</div>
+                    <div class="setting-desc">可直接输入，或从建议列表选择</div>
+                  </div>
+                  <input
+                    type="text"
+                    id="set-model"
+                    list="set-model-suggestions"
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                  <datalist id="set-model-suggestions"></datalist>
+                </div>
+                <div class="setting-row">
+                  <div class="setting-text">
+                    <div class="setting-title">推理强度</div>
+                    <div class="setting-desc">可选档位取决于当前模型方言</div>
+                  </div>
+                  <select id="set-effort"></select>
+                </div>
+              </div>
+              <p id="set-model-metadata" class="hint metadata-line" hidden></p>
+              <p id="set-effort-detail" class="hint effort-line"></p>
+            </div>
+            <div class="settings-group">
+              <h3>预设</h3>
+              <div class="settings-box">
+                <div class="setting-row">
+                  <div class="setting-text">
+                    <div class="setting-title">添加预设</div>
+                    <div class="setting-desc">密钥仅通过环境变量配置 (apiKeyEnv)</div>
+                  </div>
+                  <select id="set-preset"></select>
+                </div>
+                <div class="setting-row compact">
+                  <div class="setting-text"></div>
+                  <button type="button" id="set-add-preset" class="ghost">Add preset</button>
+                </div>
+              </div>
+            </div>
+            <p class="hint">
+              关闭 mock 即请求真实 API。配置与 CLI 共用
+              <code>~/.bolo/config.json</code>。
+            </p>
+          </section>
+
+          <section class="settings-section" data-section="execution" hidden>
+            <div class="settings-section-intro">
+              <div class="settings-section-icon warning">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 3 20 7.5v5.2c0 4.1-2.7 7-8 8.3-5.3-1.3-8-4.2-8-8.3V7.5z" />
+                  <path d="M12 8v4M12 16h.01" />
+                </svg>
+              </div>
+              <div>
+                <div class="settings-eyebrow">AGENT BEHAVIOR</div>
+                <h2>执行与权限</h2>
+                <p>让每一次文件修改、命令执行和工具调用都保持可控。</p>
+              </div>
+            </div>
+            <div class="settings-group">
+              <div class="settings-group-head">
+                <div>
+                  <h3>审批策略</h3>
+                  <p>当前权限模式会同步到 Composer 和活动会话。</p>
+                </div>
+                <span class="settings-badge">已连接</span>
+              </div>
+              <div class="settings-box">
+                <div class="setting-row setting-placeholder-row">
+                  <div class="setting-text">
+                    <div class="setting-title">低风险操作自动批准</div>
+                    <div class="setting-desc">允许读取、搜索和只读诊断操作无需逐项确认</div>
+                  </div>
+                  <input class="settings-switch" type="checkbox" disabled />
+                </div>
+                <div class="setting-row setting-placeholder-row">
+                  <div class="setting-text">
+                    <div class="setting-title">命令执行沙箱</div>
+                    <div class="setting-desc">为终端工具配置网络、文件系统和进程隔离范围</div>
+                  </div>
+                  <span class="settings-placeholder">即将支持</span>
+                </div>
+                <div class="setting-row setting-placeholder-row">
+                  <div class="setting-text">
+                    <div class="setting-title">最大连续回合</div>
+                    <div class="setting-desc">防止 Agent 在无人值守时无限循环</div>
+                  </div>
+                  <span class="settings-placeholder">默认 · 即将支持</span>
+                </div>
+              </div>
+            </div>
+            <div class="settings-callout">
+              <span class="settings-callout-icon">!</span>
+              <div><strong>安全提示</strong><p>高风险操作仍会遵循权限模式，并在执行前显示完整预览。</p></div>
+            </div>
+          </section>
+
+          <section class="settings-section" data-section="workspace" hidden>
+            <div class="settings-section-intro">
+              <div class="settings-section-icon green">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h4l2 2h5A2.5 2.5 0 0 1 20 7.5v10a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5z" />
+                  <path d="M4 9h16" />
+                </svg>
+              </div>
+              <div>
+                <div class="settings-eyebrow">WORKSPACE</div>
+                <h2>工作区</h2>
+                <p>配置 Agent 默认打开的位置，以及项目相关的本地行为。</p>
+              </div>
+            </div>
+            <div class="settings-group">
+              <div class="settings-group-head"><div><h3>当前工作区</h3><p>修改后会重建当前会话并刷新项目列表。</p></div></div>
+              <div class="settings-box">
+                <div class="setting-row">
+                  <div class="setting-text">
+                    <div class="setting-title">工作目录 (cwd)</div>
+                    <div class="setting-desc">智能体读写文件、运行命令时使用的根目录</div>
+                  </div>
+                  <input type="text" id="set-cwd" spellcheck="false" />
+                </div>
+                <div class="setting-row setting-placeholder-row">
+                  <div class="setting-text"><div class="setting-title">默认文件打开方式</div><div class="setting-desc">选择文件和文件夹的默认打开应用</div></div>
+                  <span class="settings-placeholder">系统默认 · 即将支持</span>
+                </div>
+                <div class="setting-row setting-placeholder-row">
+                  <div class="setting-text"><div class="setting-title">会话存储</div><div class="setting-desc">保留本地会话记录，不上传到第三方服务</div></div>
+                  <span class="settings-value">本地</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="settings-section" data-section="appearance" hidden>
+            <div class="settings-section-intro">
+              <div class="settings-section-icon violet">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="12" cy="12" r="4" />
+                  <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+                </svg>
+              </div>
+              <div>
+                <div class="settings-eyebrow">INTERFACE</div>
+                <h2>外观</h2>
+                <p>让工作台更贴合你的显示器、主题和工作节奏。</p>
+              </div>
+            </div>
+            <div class="settings-group">
+              <div class="settings-group-head"><div><h3>界面主题</h3><p>主题会即时应用并保存在本地。</p></div></div>
+              <div class="settings-box">
+                <div class="setting-row">
+                  <div class="setting-text"><div class="setting-title">颜色主题</div><div class="setting-desc">在深色和浅色主题之间切换</div></div>
+                  <button type="button" id="settings-theme-toggle" class="settings-action settings-theme-toggle"><span id="settings-theme-value">深色</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg></button>
+                </div>
+                <div class="setting-row setting-placeholder-row">
+                  <div class="setting-text"><div class="setting-title">界面密度</div><div class="setting-desc">调整列表、消息和设置行的垂直间距</div></div>
+                  <span class="settings-placeholder">舒适 · 即将支持</span>
+                </div>
+                <div class="setting-row setting-placeholder-row">
+                  <div class="setting-text"><div class="setting-title">侧栏记忆</div><div class="setting-desc">记住侧栏展开状态和最近使用的导航页</div></div>
+                  <input class="settings-switch" type="checkbox" disabled />
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="settings-section" data-section="input" hidden>
+            <div class="settings-section-intro">
+              <div class="settings-section-icon blue">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 5h16v11H4z" /><path d="M8 20h8M12 16v4M7 9h.01M11 9h6M7 12h4" />
+                </svg>
+              </div>
+              <div><div class="settings-eyebrow">COMPOSER</div><h2>输入与快捷键</h2><p>管理消息发送、命令提示和键盘操作习惯。</p></div>
+            </div>
+            <div class="settings-group">
+              <div class="settings-group-head"><div><h3>输入行为</h3><p>这些选项会影响 Composer 的交互方式。</p></div></div>
+              <div class="settings-box">
+                <div class="setting-row setting-placeholder-row"><div class="setting-text"><div class="setting-title">Enter 键行为</div><div class="setting-desc">选择 Enter 发送消息，或换行后使用快捷键发送</div></div><span class="settings-placeholder">发送 · 即将支持</span></div>
+                <div class="setting-row setting-placeholder-row"><div class="setting-text"><div class="setting-title">命令与路径建议</div><div class="setting-desc">输入 /、@ 或文件路径时显示智能补全</div></div><input class="settings-switch" type="checkbox" disabled /></div>
+                <div class="setting-row setting-placeholder-row"><div class="setting-text"><div class="setting-title">粘贴图片与文件</div><div class="setting-desc">从剪贴板粘贴时自动添加附件引用</div></div><span class="settings-placeholder">即将支持</span></div>
+              </div>
+            </div>
+            <div class="settings-group">
+              <div class="settings-group-head"><div><h3>快捷键</h3><p>当前快捷键保持固定，后续支持自定义。</p></div></div>
+              <div class="settings-box settings-shortcuts-preview"><div><kbd>Ctrl</kbd><span>+</span><kbd>L</kbd><span>聚焦输入框</span></div><div><kbd>Ctrl</kbd><span>+</span><kbd>B</kbd><span>显示 / 隐藏侧栏</span></div><div><kbd>Ctrl</kbd><span>+</span><kbd>,</kbd><span>打开设置</span></div></div>
+            </div>
+          </section>
+
+          <section class="settings-section" data-section="tools" hidden>
+            <div class="settings-section-intro"><div class="settings-section-icon orange"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.7 6.3 3-3a4.2 4.2 0 0 1 .6 5.4l-7.7 7.7-3-3 7.7-7.7a4.2 4.2 0 0 1 5.4.6" /><path d="m5 15-2 2 4 4 2-2M14 10l-4 4" /></svg></div><div><div class="settings-eyebrow">TOOLS & CONNECTORS</div><h2>工具与连接器</h2><p>为 Agent 提供浏览器、终端、MCP 和外部服务能力。</p></div></div>
+            <div class="settings-group"><div class="settings-group-head"><div><h3>工具访问</h3><p>细分每一类工具的可用范围和审批策略。</p></div><span class="settings-badge muted">规划中</span></div><div class="settings-box">
+              <div class="setting-row setting-placeholder-row"><div class="setting-text"><div class="setting-title">MCP 连接器</div><div class="setting-desc">管理数据库、文档和第三方服务连接</div></div><button type="button" class="settings-action" disabled>管理连接器</button></div>
+              <div class="setting-row setting-placeholder-row"><div class="setting-text"><div class="setting-title">浏览器工具</div><div class="setting-desc">允许 Agent 访问网页、截图和提取页面信息</div></div><span class="settings-placeholder">即将支持</span></div>
+              <div class="setting-row setting-placeholder-row"><div class="setting-text"><div class="setting-title">终端命令白名单</div><div class="setting-desc">只允许预先批准的命令在工作区中运行</div></div><span class="settings-placeholder">即将支持</span></div>
+            </div></div>
+          </section>
+
+          <section class="settings-section" data-section="extensions" hidden>
+            <div class="settings-section-intro"><div class="settings-section-icon pink"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 7V5a2 2 0 0 0-4 0v2H7a2 2 0 0 0-2 2v3h2a2 2 0 1 1 0 4H5v3a2 2 0 0 0 2 2h3v-2a2 2 0 1 1 4 0v2h3a2 2 0 0 0 2-2v-3h-2a2 2 0 1 1 0-4h2V9a2 2 0 0 0-2-2z" /></svg></div><div><div class="settings-eyebrow">EXTENSIONS</div><h2>Skills 与 Plugins</h2><p>扩展 Agent 的知识、工作流和工具生态。</p></div></div>
+            <div class="settings-group"><div class="settings-group-head"><div><h3>扩展目录</h3><p>安装、启用并管理本地 Skills 与 Plugins。</p></div><span class="settings-badge muted">规划中</span></div><div class="settings-box">
+              <div class="setting-row setting-placeholder-row"><div class="setting-text"><div class="setting-title">Skills</div><div class="setting-desc">可复用的领域知识、提示词和自动化流程</div></div><button type="button" class="settings-action" disabled>打开目录</button></div>
+              <div class="setting-row setting-placeholder-row"><div class="setting-text"><div class="setting-title">Plugins</div><div class="setting-desc">向桌面 Agent 注入新的连接器和界面能力</div></div><button type="button" class="settings-action" disabled>管理插件</button></div>
+              <div class="setting-row setting-placeholder-row"><div class="setting-text"><div class="setting-title">自动更新扩展</div><div class="setting-desc">定期检查本地扩展的可用更新</div></div><input class="settings-switch" type="checkbox" disabled /></div>
+            </div></div>
+          </section>
+
+          <section class="settings-section" data-section="privacy" hidden>
+            <div class="settings-section-intro"><div class="settings-section-icon gray"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" /><path d="M9 12h6M12 9v6" /></svg></div><div><div class="settings-eyebrow">LOCAL & PRIVACY</div><h2>隐私与数据</h2><p>了解数据存在哪里，以及哪些信息会离开你的设备。</p></div></div>
+            <div class="settings-group"><div class="settings-group-head"><div><h3>数据边界</h3><p>Bolo 默认只在本地保存会话和桌面配置。</p></div></div><div class="settings-box">
+              <div class="setting-row"><div class="setting-text"><div class="setting-title">会话记录</div><div class="setting-desc">消息、工具结果和任务状态保存在本地工作区</div></div><span class="settings-value settings-value-good">仅本地</span></div>
+              <div class="setting-row"><div class="setting-text"><div class="setting-title">遥测</div><div class="setting-desc">当前版本不收集产品使用遥测或行为分析</div></div><span class="settings-value settings-value-good">未启用</span></div>
+              <div class="setting-row setting-placeholder-row"><div class="setting-text"><div class="setting-title">日志保留周期</div><div class="setting-desc">控制本地运行日志和诊断信息的保留时间</div></div><span class="settings-placeholder">即将支持</span></div>
+            </div></div>
+            <div class="settings-callout neutral"><span class="settings-callout-icon">i</span><div><strong>透明说明</strong><p>Provider 是否记录请求、如何保留数据，取决于你选择的服务商及其隐私策略。</p></div></div>
+          </section>
+
+          <section class="settings-section" data-section="about" hidden>
+            <div class="settings-section-intro">
+              <div class="settings-section-icon gray"><span class="settings-about-mark">B</span></div>
+              <div><div class="settings-eyebrow">BOLO CODE</div><h2>关于</h2><p>跨平台、本地优先的 Agent 工作台。</p></div>
+            </div>
+            <div class="settings-group">
+              <h3>Bolo Code</h3>
+              <div class="settings-box">
+                <div class="setting-row">
+                  <div class="setting-text">
+                    <div class="setting-title">版本</div>
+                    <div class="setting-desc">跨平台 AI 编程智能体 · 无遥测 · 零运行时依赖</div>
+                  </div>
+                  <span class="setting-value mono">v0.0.1</span>
+                </div>
+                <div class="setting-row">
+                  <div class="setting-text">
+                    <div class="setting-title">配置目录</div>
+                    <div class="setting-desc">
+                      插件、skills、hooks 经配置目录管理：<code>~/.bolo/</code>（图形化管理后续版本提供）
+                    </div>
+                  </div>
+                  <span class="setting-value mono">~/.bolo</span>
+                </div>
+              </div>
+            </div>
+            <div class="settings-group">
+              <h3>快捷键</h3>
+              <div class="settings-box">
+                <div class="setting-row">
+                  <div class="setting-text">
+                    <div class="setting-title">聚焦输入框</div>
+                  </div>
+                  <span class="setting-value"><kbd>Ctrl</kbd>+<kbd>L</kbd></span>
+                </div>
+                <div class="setting-row">
+                  <div class="setting-text">
+                    <div class="setting-title">侧栏显示 / 隐藏</div>
+                  </div>
+                  <span class="setting-value"><kbd>Ctrl</kbd>+<kbd>B</kbd></span>
+                </div>
+                <div class="setting-row">
+                  <div class="setting-text">
+                    <div class="setting-title">设置</div>
+                  </div>
+                  <span class="setting-value"><kbd>Ctrl</kbd>+<kbd>,</kbd></span>
+                </div>
+                <div class="setting-row">
+                  <div class="setting-text">
+                    <div class="setting-title">发送 / 换行</div>
+                  </div>
+                  <span class="setting-value"><kbd>Enter</kbd> / <kbd>Shift</kbd>+<kbd>Enter</kbd></span>
+                </div>
+                <div class="setting-row">
+                  <div class="setting-text">
+                    <div class="setting-title">关闭弹层</div>
+                  </div>
+                  <span class="setting-value"><kbd>Esc</kbd></span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <p id="set-settings-error" class="settings-error" role="alert" hidden></p>
+          <div class="settings-foot">
+            <button type="button" id="set-save">保存</button>
+          </div>
         </div>
       </div>
     </div>
 
+    <script src="./gsap.min.js"></script>
     <script type="module" src="./app.js"></script>
   </body>
 </html>

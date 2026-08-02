@@ -3,11 +3,19 @@
  * 产品逻辑在 packages/*；本文件只做 IPC 编排。无遥测。
  */
 
-import { app, BrowserWindow, ipcMain } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  shell,
+  type OpenDialogOptions,
+} from 'electron'
 import {
   createDesktopAskUserQuestion,
   type DesktopAskUserQuestionBridge,
 } from './askUserQuestionBridge.ts'
+import { stat } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -617,6 +625,38 @@ function registerIpc() {
   ipcMain.handle('bolo:getSettings', async () =>
     redactSecretsDeep({ ...desktopSettings }),
   )
+
+  ipcMain.handle('bolo:pickFiles', async (event) => {
+    const owner = BrowserWindow.fromWebContents(event.sender)
+    const options: OpenDialogOptions = {
+      title: '添加文件引用',
+      defaultPath: desktopSettings.cwd,
+      properties: ['openFile', 'multiSelections'],
+    }
+    const result = owner
+      ? await dialog.showOpenDialog(owner, options)
+      : await dialog.showOpenDialog(options)
+    if (result.canceled) return { ok: false, cancelled: true, paths: [] }
+    return { ok: true, paths: result.filePaths }
+  })
+
+  ipcMain.handle('bolo:openPath', async (_event, payload) => {
+    const target = payload?.path
+    if (typeof target !== 'string' || !target.trim()) {
+      return { ok: false, error: 'missing path' }
+    }
+    const resolved = path.resolve(target)
+    try {
+      const info = await stat(resolved)
+      if (!info.isDirectory()) {
+        return { ok: false, error: 'path is not a directory' }
+      }
+    } catch {
+      return { ok: false, error: 'path does not exist' }
+    }
+    const error = await shell.openPath(resolved)
+    return error ? { ok: false, error } : { ok: true, path: resolved }
+  })
 
   ipcMain.handle('bolo:setSettings', async (_evt, patch) => {
     if (!patch || typeof patch !== 'object') {
