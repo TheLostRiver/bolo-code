@@ -173,6 +173,8 @@ export type CliTuiController = {
   getRenderEpoch(): number
   waitForRender(afterEpoch: number, timeoutMs?: number): Promise<void>
   getTerminalStats(): BoloTerminalStats
+  /** TERM-1：终端能力探测结果（DA2/env/保守默认） */
+  getTerminalCapabilities(): import('../../../shared/src/index.ts').TerminalCapabilities
 }
 
 type RevisionWaiter = {
@@ -1056,6 +1058,9 @@ export function createRetainedTuiController(options: {
     },
     getTerminalStats() {
       return adapter.getStats()
+    },
+    getTerminalCapabilities() {
+      return adapter.getTerminalCapabilities()
     },
   }
 

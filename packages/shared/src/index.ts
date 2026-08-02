@@ -470,6 +470,17 @@ export {
 } from './toolRepetition.ts'
 export { repairToolMessagePairs } from './messageRepair.ts'
 export {
+  DA2_QUERY,
+  createDefaultTerminalCapabilities,
+  familyFromEnv,
+  familyFromVendorId,
+  isDa2Response,
+  parseDa2Response,
+  resolveTerminalCapabilities,
+  type TerminalCapabilities,
+  type TerminalFamily,
+} from './terminalProbe.ts'
+export {
   TUI_THEME_IDS,
   TUI_THEME_LABELS,
   isTuiThemeId,

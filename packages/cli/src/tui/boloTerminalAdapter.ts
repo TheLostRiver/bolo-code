@@ -3,6 +3,12 @@ import { runCleanupSteps } from '../cleanup.ts'
 import {
   SGR_MOUSE_DISABLE,
   SGR_MOUSE_ENABLE,
+  DA2_QUERY,
+  createDefaultTerminalCapabilities,
+  isDa2Response,
+  parseDa2Response,
+  resolveTerminalCapabilities,
+  type TerminalCapabilities,
 } from '../../../shared/src/index.ts'
 
 export type BoloTerminalInput = {
@@ -41,6 +47,8 @@ export type BoloTerminalAdapter = Terminal & {
   setInputEnabled(active: boolean): void
   isInputEnabled(): boolean
   waitForRender(afterEpoch: number, timeoutMs?: number): Promise<void>
+  /** TERM-1：终端能力探测结果（DA2 响应优先，env 回退，超时保守默认） */
+  getTerminalCapabilities(): TerminalCapabilities
 }
 
 type RenderWaiter = {
@@ -84,6 +92,10 @@ export function createBoloTerminalAdapter(options: {
   let inputWasRaw = false
   let mouseReportingEnabled = false
   let renderEpoch = 0
+  // TERM-1：探测结果与超时兜底 timer
+  let terminalCapabilities: TerminalCapabilities =
+    createDefaultTerminalCapabilities()
+  let da2Timer: ReturnType<typeof setTimeout> | undefined
   const waiters = new Set<RenderWaiter>()
   const stats: BoloTerminalStats = {
     writes: 0,
@@ -132,6 +144,12 @@ export function createBoloTerminalAdapter(options: {
       () => {
         if (input && dataHandler) input.removeListener('data', dataHandler)
       },
+      () => {
+        if (da2Timer) {
+          clearTimeout(da2Timer)
+          da2Timer = undefined
+        }
+      },
       () => buffer?.destroy(),
       () => emitRetained(BRACKETED_PASTE_DISABLE),
       () => {
@@ -168,6 +186,18 @@ export function createBoloTerminalAdapter(options: {
     const buffer = new StdinBuffer()
     buffer.on('data', (data) => {
       if (!inputActive || !inputHandler) return
+      // TERM-1：DA2 响应在 adapter 层拦截，不进输入处理
+      if (isDa2Response(data)) {
+        terminalCapabilities = resolveTerminalCapabilities(
+          parseDa2Response(data),
+          options.env ?? {},
+        )
+        if (da2Timer) {
+          clearTimeout(da2Timer)
+          da2Timer = undefined
+        }
+        return
+      }
       stats.inputEvents += 1
       inputHandler(data)
     })
@@ -195,6 +225,19 @@ export function createBoloTerminalAdapter(options: {
       if (options.env?.TERM !== 'dumb') {
         mouseReportingEnabled = true
         emitRetained(SGR_MOUSE_ENABLE)
+      }
+      // TERM-1：非阻塞 DA2 查询；dumb/能力不足不发查询，走保守默认。
+      // 超时后 env 回退，迟到响应仍会被拦截更新
+      if (options.env?.TERM !== 'dumb') {
+        terminalCapabilities = resolveTerminalCapabilities(
+          undefined,
+          options.env ?? {},
+        )
+        emitRetained(DA2_QUERY)
+        da2Timer = setTimeout(() => {
+          da2Timer = undefined
+          // 超时：保持 env 推断（不覆盖迟到响应——响应到达时会更新）
+        }, 300)
       }
       input.resume()
     } catch (error) {
@@ -317,6 +360,9 @@ export function createBoloTerminalAdapter(options: {
     },
     isInputEnabled() {
       return inputActive
+    },
+    getTerminalCapabilities() {
+      return { ...terminalCapabilities }
     },
     waitForRender(afterEpoch, timeoutMs = 1_000) {
       if (renderEpoch > afterEpoch) return Promise.resolve()
