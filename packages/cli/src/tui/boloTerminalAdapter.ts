@@ -4,6 +4,8 @@ import {
   SGR_MOUSE_DISABLE,
   SGR_MOUSE_ENABLE,
   DA2_QUERY,
+  CsiReassembler,
+  DEFAULT_CSI_REASSEMBLY_TIMEOUT_MS,
   createDefaultTerminalCapabilities,
   isDa2Response,
   parseDa2Response,
@@ -86,6 +88,8 @@ export function createBoloTerminalAdapter(options: {
   let inputHandler: ((data: string) => void) | undefined
   let inputDataHandler: ((data: string | Buffer) => void) | undefined
   let inputBuffer: StdinBuffer | undefined
+  let csiReassembler: CsiReassembler | undefined
+  let csiFlushTimer: ReturnType<typeof setTimeout> | undefined
   let started = false
   let inputRequested = false
   let inputActive = false
@@ -150,6 +154,15 @@ export function createBoloTerminalAdapter(options: {
           da2Timer = undefined
         }
       },
+      () => {
+        if (csiFlushTimer) {
+          clearTimeout(csiFlushTimer)
+          csiFlushTimer = undefined
+        }
+      },
+      () => {
+        csiReassembler?.reset()
+      },
       () => buffer?.destroy(),
       () => emitRetained(BRACKETED_PASTE_DISABLE),
       () => {
@@ -184,7 +197,17 @@ export function createBoloTerminalAdapter(options: {
     }
 
     const buffer = new StdinBuffer()
-    buffer.on('data', (data) => {
+    // TERM-2：CSI 分片重组（慢链路跨 chunk 残余拼完整；超时 fail-closed 丢弃）
+    const reassembler = new CsiReassembler()
+    csiReassembler = reassembler
+    const armCsiFlush = () => {
+      if (csiFlushTimer) clearTimeout(csiFlushTimer)
+      csiFlushTimer = setTimeout(() => {
+        csiFlushTimer = undefined
+        reassembler.tick()
+      }, DEFAULT_CSI_REASSEMBLY_TIMEOUT_MS + 5)
+    }
+    const forwardData = (data: string) => {
       if (!inputActive || !inputHandler) return
       // TERM-1：DA2 响应在 adapter 层拦截，不进输入处理
       if (isDa2Response(data)) {
@@ -198,13 +221,14 @@ export function createBoloTerminalAdapter(options: {
         }
         return
       }
-      // 查询窗口内：DA2 响应碎片（慢链路跨 chunk 残余，如 `\x1b[>7721`）
-      // 直接吞掉，不泄漏进输入处理；窗口关闭后不再吞（迟到完整响应仍由
-      // 上面拦截更新）。`\x1b[>` 是 DA2 查询专用前缀，无合法用户输入与之
-      // 冲突（鼠标/键盘 CSI 均不以 `\x1b[>` 开头），故精确匹配安全。
-      if (da2Timer && data.startsWith('\x1b[>')) return
       stats.inputEvents += 1
       inputHandler(data)
+    }
+    buffer.on('data', (data) => {
+      if (!inputActive || !inputHandler) return
+      const sequences = reassembler.push(data)
+      if (reassembler.hasPending()) armCsiFlush()
+      for (const sequence of sequences) forwardData(sequence)
     })
     buffer.on('paste', (data) => {
       if (!inputActive || !inputHandler) return
@@ -256,6 +280,15 @@ export function createBoloTerminalAdapter(options: {
               clearTimeout(da2Timer)
               da2Timer = undefined
             }
+          },
+          () => {
+            if (csiFlushTimer) {
+              clearTimeout(csiFlushTimer)
+              csiFlushTimer = undefined
+            }
+          },
+          () => {
+            reassembler.reset()
           },
           () => {
             if (listenerAttached) input.removeListener('data', dataHandler)

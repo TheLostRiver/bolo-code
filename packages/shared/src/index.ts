@@ -481,6 +481,16 @@ export {
   type TerminalFamily,
 } from './terminalProbe.ts'
 export {
+  CsiReassembler,
+  CSI_REASSEMBLY_EXPIRED_SINK_MS,
+  DEFAULT_CSI_REASSEMBLY_TIMEOUT_MS,
+  MAX_CSI_REASSEMBLY_PENDING_CHARS,
+  isCompleteCsiSequence,
+  isCsiContinuation,
+  isCsiStart,
+  type CsiReassemblerOptions,
+} from './csiReassembly.ts'
+export {
   TUI_THEME_IDS,
   TUI_THEME_LABELS,
   isTuiThemeId,
