@@ -104,7 +104,10 @@ export class CsiReassembler {
     if (this.pending === undefined) {
       if (!isCsiStart(data)) return [data]
       if (isCompleteCsiSequence(data)) return [data]
-      if (data.length > MAX_CSI_REASSEMBLY_PENDING_CHARS) return []
+      if (data.length > MAX_CSI_REASSEMBLY_PENDING_CHARS) {
+        this.expiredUntil = now + CSI_REASSEMBLY_EXPIRED_SINK_MS
+        return []
+      }
       this.pending = data
       this.pendingDeadline = now + this.timeoutMs
       return []
@@ -117,6 +120,7 @@ export class CsiReassembler {
     const merged = this.pending + data
     if (merged.length > MAX_CSI_REASSEMBLY_PENDING_CHARS) {
       this.pending = undefined
+      this.expiredUntil = now + CSI_REASSEMBLY_EXPIRED_SINK_MS
       return []
     }
     if (isCompleteCsiSequence(merged)) {

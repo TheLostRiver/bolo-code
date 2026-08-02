@@ -176,14 +176,21 @@ async function main(): Promise<void> {
     assert.equal(r.hasPending(), false)
   }
   {
-    // pending 长度上限：超限 fail-closed 丢弃
+    // pending 长度上限：超限 fail-closed 丢弃，且进入续段吞并窗口
     const clock = controlledNow(1_000)
     const r = new CsiReassembler({ timeoutMs: 50, now: clock.now })
     assert.deepEqual(r.push('\x1b[1;' + '9'.repeat(400)), [])
     assert.equal(r.hasPending(), false, 'oversized fragment is dropped')
+    assert.deepEqual(
+      r.push(';336;0c'),
+      [],
+      'second-half fragment after an overflow drop is sunk',
+    )
+    clock.advance(60)
+    assert.deepEqual(r.push(';336;0c'), [';336;0c'], 'sink window expires')
   }
   {
-    // 超大 pending 拼接超限丢弃
+    // 拼接超限：同样进入续段吞并窗口
     const clock = controlledNow(1_000)
     const r = new CsiReassembler({ timeoutMs: 50, now: clock.now })
     assert.deepEqual(r.push('\x1b[1;'), [])
@@ -192,6 +199,11 @@ async function main(): Promise<void> {
       if (out.length > 0) break
     }
     assert.equal(r.hasPending(), false, 'merged pending over the cap is dropped')
+    assert.deepEqual(
+      r.push(';336;0c'),
+      [],
+      'second-half fragment after a merged overflow is sunk',
+    )
   }
   {
     // 新 CSI 开头打断 pending
