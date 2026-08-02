@@ -16,8 +16,8 @@
 | ROB-2 | 悬空 tool call 修复与结果去重 | 低 | session transcript/load | ✅ 本轮 |
 | CMP-1 | 压缩专用模型与墙钟预算 | 低 | compact 配置/执行器 | ✅ 本轮 |
 | ROB-3 | 后台任务 manifest 与重启恢复提醒 | 低 | backgroundShell 持久化 + `/bg` | ✅ 本轮 |
-| TERM-1 | 终端能力探测（品牌特化） | 低 | CLI adapter | ▶ NEXT |
-| TERM-2 | 输入 CSI 分片重组 | 低 | CLI adapter/StdinBuffer | 📋 |
+| TERM-1 | 终端能力探测（品牌特化） | 低 | CLI adapter | ✅ 本轮 |
+| TERM-2 | 输入 CSI 分片重组 | 低 | CLI adapter/StdinBuffer | ▶ NEXT |
 | HKP-1 | hooks 事件面扩展与 fail-open 结果 | 低 | hooks 包 | 📋 |
 | HKP-2 | 权限 auto 模式命令级安全分析 | 低–中 | permissions auto 分类器 | 📋 |
 | HKP-3 | plan 模式与权限系统正交化 | 低 | core 权限接线 | 📋 |
@@ -113,16 +113,25 @@ auto-compact/config/ptl 回归与完整 `npm test` 通过。
 拒绝、真实 spawn → 落盘 → resume 投影 → 清理全链路；typecheck、bash-
 background/runtime/stream-error 与 slash 回归及完整 `npm test` 通过。
 
-## 5. TERM-1 · 终端能力探测（品牌特化）— 低成本
+## 5. TERM-1 · 终端能力探测（品牌特化）— 低成本 ✅ 本轮
 
-**目标**：启动时探测终端身份与能力（XTVERSION/DA2/OSC11/图形协议/tmux 嵌套），
-按品牌特化行为（如 Windows Terminal 的滚轮/粘贴差异），为渲染与输入差异提供
-数据源。
+**目标**：启动时探测终端身份与能力（DA2 报告、tmux 嵌套、Windows 平台），按品牌
+特化行为提供数据源；能力不足时走保守默认，不阻塞启动。
 
-**设计**：CLI adapter 增加能力探测模块（非阻塞、超时兜底）；探测结果缓存在
-controller 供渲染层查询；dumb/未知终端走保守默认。
+**设计**（已落地）：
+- shared `terminalProbe.ts` 纯契约：`parseDa2Response` / `isDa2Response`、
+  厂商→品牌映射（Windows Terminal 7721 / xterm 1 / iTerm2 0 / kitty 61 等）、
+  env 推断（WT_SESSION / TERM_PROGRAM / TERM / TMUX）、`resolveTerminalCapabilities`
+  优先级 da2 > env > 保守默认，含 `insideTmux` / `isWindows` / `source`。
+- adapter：raw input 获取时非阻塞发送 `CSI > c` 查询（`TERM=dumb` 不发）；
+  响应在 StdinBuffer data 回调里**拦截**（不泄漏进输入处理），到达即更新缓存；
+  300ms 超时后保持 env 推断（迟到响应仍会被拦截更新）；release/stop 清理 timer。
+- controller 透出 `getTerminalCapabilities()`。
 
-**验收**：探测解析、超时回退、能力门控生效；既有 TUI 门禁不回归。
+**验收**：专项覆盖 DA2 解析/畸形拒绝、厂商映射、env 推断、解析优先级、查询发送/
+响应拦截不泄漏/普通按键不受影响/超时 env 回退/dumb 不发查询；typecheck、TUI
+retained/cleanup/ownership/mouse 回归与完整 `npm test` 通过。后续消费方（TERM-3
+滚轮特化、粘贴差异）以本数据源为准。
 
 ## 6. TERM-2 · 输入 CSI 分片重组 — 低成本
 
