@@ -17,8 +17,8 @@
 | CMP-1 | 压缩专用模型与墙钟预算 | 低 | compact 配置/执行器 | ✅ 本轮 |
 | ROB-3 | 后台任务 manifest 与重启恢复提醒 | 低 | backgroundShell 持久化 + `/bg` | ✅ 本轮 |
 | TERM-1 | 终端能力探测（品牌特化） | 低 | CLI adapter | ✅ 本轮 |
-| TERM-2 | 输入 CSI 分片重组 | 低 | CLI adapter/StdinBuffer | ▶ NEXT |
-| HKP-1 | hooks 事件面扩展与 fail-open 结果 | 低 | hooks 包 | 📋 |
+| TERM-2 | 输入 CSI 分片重组 | 低 | CLI adapter/StdinBuffer | ✅ 本轮 |
+| HKP-1 | hooks 事件面扩展与 fail-open 结果 | 低 | hooks 包 | ▶ NEXT |
 | HKP-2 | 权限 auto 模式命令级安全分析 | 低–中 | permissions auto 分类器 | 📋 |
 | HKP-3 | plan 模式与权限系统正交化 | 低 | core 权限接线 | 📋 |
 | REN-1 | markdown render-fidelity 自检 | 低 | markdown 渲染层 | 📋 |
@@ -133,15 +133,26 @@ background/runtime/stream-error 与 slash 回归及完整 `npm test` 通过。
 retained/cleanup/ownership/mouse 回归与完整 `npm test` 通过。后续消费方（TERM-3
 滚轮特化、粘贴差异）以本数据源为准。
 
-## 6. TERM-2 · 输入 CSI 分片重组 — 低成本
+## 6. TERM-2 · 输入 CSI 分片重组 — 低成本 ✅ 本轮
 
-**目标**：输入流中跨 chunk 拆分的 CSI 报告（如焦点/鼠标报告）重组后再分发，
-防止被当成普通按键序列。
+**目标**：输入流中跨 chunk 拆分的 CSI 报告（如鼠标/焦点/终端响应）重组后再分发，
+防止被当成普通按键序列；未知不完整序列 fail-closed 丢弃。
 
-**设计**：在 stdin 缓冲层补齐 CSI 组装（与 bracketed paste/SGR mouse 同一路径），
-未知序列 fail-closed 丢弃不进入输入框。
+**设计**（已落地）：
+- shared `csiReassembly.ts` 纯逻辑：`isCompleteCsiSequence`（CSI 以 0x40-0x7e
+  终结，SGR mouse 特例）、`isCsiContinuation`（参数/中间字节/终结符续段，
+  非 ASCII 与控制字符不算）、`CsiReassembler` 状态机（pending 缓冲/拼接/
+  新 `\x1b` 或非续段打断/超时 tick 丢弃/reset），无 timer 纯逻辑可单测。
+- adapter：data 回调前接入重组器；拼完整的序列走既有拦截/转发；pending 时
+  设 55ms flush timer 触发 tick；release/stop/acquire-catch 清理。
+  取代 TERM-1 的 DA2 窗口吞（更通用：DA2 碎片同样被缓冲丢弃）。
+- 误拼窗口说明：终结符字节（0x40-0x7e）是合法续段（分片响应可能单独切出
+  终结符），重组优先；用户首字符被误拼仅限 pending 未超时的 50ms 窗口。
 
-**验收**：分片注入场景断言重组正确；键盘/粘贴/鼠标回归。
+**验收**：专项覆盖完整性/续段/重组/超时丢弃/新序列打断/控制字符打断/reset，
+adapter 集成（分片鼠标重组为单事件、未知序列超时丢弃、之后输入恢复）；
+TERM-1/mouse/TUI 回归与完整 `npm test` 通过。TERM-1 的尾段泄漏限制由本轨
+收口（`;1;0c` 现作为续段拼回 pending）。
 
 ## 7. HKP-1 · hooks 事件面扩展与 fail-open 结果 — 低成本
 
