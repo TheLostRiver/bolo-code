@@ -247,6 +247,12 @@ export function createBoloTerminalAdapter(options: {
       try {
         runCleanupSteps([
           () => {
+            if (da2Timer) {
+              clearTimeout(da2Timer)
+              da2Timer = undefined
+            }
+          },
+          () => {
             if (listenerAttached) input.removeListener('data', dataHandler)
           },
           () => buffer.destroy(),

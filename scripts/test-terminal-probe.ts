@@ -91,6 +91,14 @@ async function main(): Promise<void> {
   )
   assert.equal(da2.family, 'windows-terminal')
   assert.equal(da2.source, 'da2')
+  // iTerm2 的 DA2 是 `>0;95;0c`（vendorId=0 合法）：解析 → 识别全链路
+  const iterm2Da2 = resolveTerminalCapabilities(
+    parseDa2Response('\x1b[>0;95;0c'),
+    { TERM_PROGRAM: 'WezTerm' },
+  )
+  assert.equal(iterm2Da2.family, 'iterm2')
+  assert.equal(iterm2Da2.source, 'da2')
+  assert.equal(iterm2Da2.vendorId, 0)
   const env = resolveTerminalCapabilities(undefined, { TERM_PROGRAM: 'WezTerm' })
   assert.equal(env.family, 'wezterm')
   assert.equal(env.source, 'env')
@@ -189,8 +197,54 @@ async function main(): Promise<void> {
     const caps = controller.getTerminalCapabilities()
     assert.equal(caps.family, 'xterm')
     assert.equal(caps.source, 'env')
+
+    // 迟到响应仍会被拦截并更新缓存（超时窗口已过）
+    input.send('\x1b[>7721;1;0c')
+    await settle()
+    const late = controller.getTerminalCapabilities()
+    assert.equal(late.family, 'windows-terminal')
+    assert.equal(late.source, 'da2')
     await controller.stop()
     await pending
+  }
+
+  // ---- adapter: timer lifecycle across release / re-acquire ----
+  {
+    const input = new RawInputHarness()
+    const output = new ResizableOutput(80, 24)
+    const writes: string[] = []
+    const controller = createRetainedTuiController({
+      writeOut: (text) => writes.push(text),
+      writeErr: (text) => writes.push(text),
+      input,
+      output,
+      env: { NO_COLOR: '1', TERM_PROGRAM: 'WezTerm' },
+    })
+    await controller.start()
+    controller.setWelcomeVisible(false)
+    await controller.flush()
+    const first = controller.readInput()
+    await settle()
+    input.send('\x1b[>1;2;0c')
+    await settle()
+    assert.equal(controller.getTerminalCapabilities().family, 'xterm')
+    // 提交输入 → releaseInput（清理 DA2 timer）；再获取 → 新查询重新发出
+    input.send('x')
+    input.send('\r')
+    await first
+    const second = controller.readInput()
+    await settle()
+    input.send('\x1b[>7721;1;0c')
+    await settle()
+    assert.equal(
+      controller.getTerminalCapabilities().family,
+      'windows-terminal',
+      're-acquired input still answers the DA2 query',
+    )
+    input.send('y')
+    input.send('\r')
+    await second
+    await controller.stop()
   }
 
   // ---- adapter: dumb terminal sends no query ----

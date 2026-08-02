@@ -69,7 +69,8 @@ export function parseDa2Response(data: string): {
   const vendorId = Number(match[1])
   const versionId = match[2] !== undefined ? Number(match[2]) : undefined
   return {
-    ...(Number.isFinite(vendorId) && vendorId > 0 ? { vendorId } : {}),
+    // vendorId=0 合法（iTerm2 的 DA2 是 `>0;95;0c`）；Infinity/NaN 丢弃
+    ...(Number.isFinite(vendorId) ? { vendorId } : {}),
     ...(versionId !== undefined && Number.isFinite(versionId)
       ? { versionId }
       : {}),
@@ -120,6 +121,8 @@ export function familyFromVendorId(vendorId: number): TerminalFamily | undefined
 
 /**
  * 环境推断品牌族（查询缺失/超时回退）。
+ * 注意：tmux/kitty（TERM=screen 系列、xterm-kitty）不能从 TERM 可靠区分——
+ * 包裹终端与真身共用同一 TERM 名，宁缺勿错，交给 DA2 响应识别。
  */
 export function familyFromEnv(env: NodeJS.ProcessEnv): TerminalFamily | undefined {
   const program = (env.TERM_PROGRAM ?? '').trim().toLowerCase()
