@@ -944,6 +944,7 @@ export class RetainedOverlayHost implements Component, Focusable {
     const steps = Math.max(0, Math.min(3, Math.abs(pending)))
     const dir = pending > 0 ? 1 : -1
     this.pendingWheelScroll -= dir * steps
+    if (this.pendingWheelScroll === 0) this.pendingWheelStart = 0 // 下次 loading 重新计时
     this.lazyScrollQueue(active, steps, dir)
     this.options.requestRender()
   }
