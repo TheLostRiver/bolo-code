@@ -338,6 +338,9 @@ export class RetainedOverlayHost implements Component, Focusable {
   private active: OverlaySession | undefined
   private handle: OverlayHandle | undefined
   private nextCatalogGeneration = 1
+  /** TERM-3：lazy pager 未消费的滚轮量（加载中到达的帧不丢弃） */
+  private pendingWheelScroll = 0
+  private pendingWheelTimer: ReturnType<typeof setTimeout> | undefined
 
   constructor(
     private readonly options: {
@@ -870,49 +873,103 @@ export class RetainedOverlayHost implements Component, Focusable {
     } else if (this.active?.mode === 'pager') {
       this.finishPager('interrupt')
     }
+    // TERM-3：清理 pending 滚轮轮询（pager 已关闭）
+    this.clearPendingWheel()
+  }
+
+  /** TERM-3：清理 lazy 滚轮 pending（timer + 计数） */
+  private clearPendingWheel(): void {
+    if (this.pendingWheelTimer !== undefined) {
+      clearTimeout(this.pendingWheelTimer)
+      this.pendingWheelTimer = undefined
+    }
+    this.pendingWheelScroll = 0
   }
 
   /**
    * TERM-3：滚轮规范化滚动（正数向下、负数向上；只滚动不退出 pager）。
    * 每单位 = 1 页步；单帧增量 clamp 到 3 页（高速风暴帧不会一次跳到底）。
-   * lazy pager 逐页串行（每步等前一页加载完成）；键盘 quit 语义不触发。
+   * lazy pager：pending 累积 + 串行消费（加载中到达的帧不丢弃）。
+   * 键盘 quit 语义不触发。
    */
   scrollPager(lines: number): void {
     const active = this.active
     if (!active || active.mode !== 'pager') return
-    const steps = Math.max(0, Math.min(3, Math.abs(lines)))
-    const dir = lines > 0 ? 1 : -1
     if (active.source.kind === 'lazy-text') {
-      if (active.lazyPhase !== 'ready') return
-      this.lazyScrollQueue(active, steps, dir)
-      this.options.requestRender()
+      this.pendingWheelScroll += lines
+      this.drainWheelScroll()
       return
     }
+    const steps = Math.max(0, Math.min(3, Math.abs(lines)))
+    const dir = lines > 0 ? 1 : -1
     for (let i = 0; i < steps; i += 1) {
       if (!this.stepPagerPage(active, dir)) break
     }
     this.options.requestRender()
   }
 
-  /** lazy pager 串行翻页：每步等前一页加载完成（lazyPhase/page 轮询） */
+  /** lazy pager 滚轮消费：ready 时串行翻步，loading 时轮询等待（有界） */
+  private drainWheelScroll(): void {
+    const active = this.active
+    if (!active || active.mode !== 'pager') return
+    if (active.source.kind !== 'lazy-text') {
+      this.pendingWheelScroll = 0
+      return
+    }
+    if (this.pendingWheelScroll === 0) return
+    if (active.lazyPhase !== 'ready') {
+      if (this.pendingWheelTimer === undefined) {
+        const startedAt = Date.now()
+        this.pendingWheelTimer = setTimeout(() => {
+          this.pendingWheelTimer = undefined
+          if (Date.now() - startedAt < 5_000) this.drainWheelScroll()
+          else this.pendingWheelScroll = 0 // 有界：超时丢弃
+        }, 10)
+      }
+      return
+    }
+    const pending = this.pendingWheelScroll
+    const steps = Math.max(0, Math.min(3, Math.abs(pending)))
+    const dir = pending > 0 ? 1 : -1
+    this.pendingWheelScroll -= dir * steps
+    this.lazyScrollQueue(active, steps, dir)
+    this.options.requestRender()
+  }
+
+  /** lazy pager 串行翻页：每步等前一页加载完成；队列清空后消费新 pending */
   private lazyScrollQueue(
     session: OverlaySession & { mode: 'pager' },
     remaining: number,
     dir: 1 | -1,
   ): void {
-    if (remaining <= 0 || session.lazyPhase !== 'ready') return
+    if (remaining <= 0) {
+      this.drainWheelScroll()
+      return
+    }
+    if (session.lazyPhase !== 'ready') return
     const nextPage =
       dir < 0
         ? Math.max(0, session.page - 1)
         : session.lazyHasNext
           ? session.page + 1
           : session.page
-    if (nextPage === session.page) return
+    if (nextPage === session.page) {
+      this.drainWheelScroll()
+      return
+    }
     this.loadLazyPagerPage(session, nextPage, this.options.getColumns())
+    const startedAt = Date.now()
     const check = (): void => {
       if (this.active !== session) return
       if (session.lazyPhase === 'ready' && session.page === nextPage) {
         this.lazyScrollQueue(session, remaining - 1, dir)
+      } else if (session.lazyPhase === 'loading' && Date.now() - startedAt < 5_000) {
+        // 仍在加载：继续轮询（有界），慢加载不丢步
+        setTimeout(check, 10)
+      } else {
+        // error/超时：丢弃剩余步，消费新 pending
+        this.pendingWheelScroll = 0
+        this.drainWheelScroll()
       }
     }
     setTimeout(check, 10)
