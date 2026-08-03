@@ -281,6 +281,48 @@ function fingerprint(messages: readonly ChatMessage[]): string {
     'late older result rejected by at compare',
   )
   session.precompact = undefined
+
+  // stale 防护：压缩开始后（invalidBefore）→ 压缩前启动的预热结果拒绝落槽
+  let release3: (() => void) | undefined
+  const gate3 = new Promise<void>((r) => {
+    release3 = r
+  })
+  startPrecompactWarmup({
+    messages: () => session.messages,
+    summarize: async () => {
+      await gate3
+      return { text: 'stale result' }
+    },
+    contextWindowTokens: WINDOW,
+    current: () => session.precompact,
+    commit: (s) => {
+      if (s.at < (session.precompactInvalidBefore ?? 0)) return
+      if (!session.precompact || session.precompact.at < s.at) {
+        session.precompact = s
+      }
+    },
+    markInFlight: () => {
+      if (session.precompactInFlight) return false
+      session.precompactInFlight = true
+      return true
+    },
+    clearInFlight: () => {
+      session.precompactInFlight = false
+    },
+    summarizeTimeoutMs: 1_000,
+  })
+  await new Promise((r) => setTimeout(r, 30))
+  // 模拟压缩开始：清状态 + 记录 invalidBefore
+  session.precompact = undefined
+  session.precompactInvalidBefore = Date.now()
+  release3!()
+  await new Promise((r) => setTimeout(r, 150))
+  assert.equal(
+    session.precompact,
+    undefined,
+    'stale warmup result rejected after compact',
+  )
+  session.precompactInvalidBefore = undefined
 }
 
 // --- 4. 预热失败静默 ---

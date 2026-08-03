@@ -1063,6 +1063,8 @@ export type BoloSession = {
   precompact?: PrecompactState
   /** CMP-2：预热任务进行中标志（in-flight 去重） */
   precompactInFlight?: boolean
+  /** CMP-2：压缩开始时间戳——早于此启动的预热结果一律拒绝（stale commit 防护） */
+  precompactInvalidBefore?: number
   /** CMP-2：预热开关（默认 true；false 关闭） */
   precompactEnabled?: boolean
   skills: LoadedSkill[]
@@ -3110,6 +3112,13 @@ function maybeStartPrecompactWarmup(session: BoloSession): void {
     contextWindowTokens: session.resolvedModel.contextWindowTokens,
     current: () => session.precompact,
     commit: (state) => {
+      // stale 防护：压缩后（precompactInvalidBefore 之后）启动的预热才可提交；
+      // 压缩前启动的旧任务结果即使落在空槽也拒绝（指纹回退兜底是浪费）
+      if (
+        state.at < (session.precompactInvalidBefore ?? 0)
+      ) {
+        return
+      }
       // at 比较：晚到的旧结果（at 更小）不覆盖新状态/新预热；
       // 压缩清空后新预热已占位 → 本结果（旧 at）被拒
       if (!session.precompact || session.precompact.at < state.at) {
@@ -3124,7 +3133,7 @@ function maybeStartPrecompactWarmup(session: BoloSession): void {
     clearInFlight: () => {
       session.precompactInFlight = false
     },
-    summarizeTimeoutMs: session.compactTimeoutMs,
+    summarizeTimeoutMs: session.compactTimeoutMs ?? 30_000,
   })
 }
 
@@ -3175,9 +3184,11 @@ export async function compactSession(
     return { ok: false, reason: pre.blockReason || 'PreCompact blocked' }
   }
 
-  // CMP-2：压缩开始即取消预热（fire-and-forget 结果晚到时被 commit 引用检查丢弃）
+  // CMP-2：压缩开始即取消预热（fire-and-forget 结果晚到时被 commit 引用检查丢弃）；
+  // stale 防护：记录压缩开始时间，早于此启动的预热结果一律拒绝
   const precompact = session.precompact
   session.precompact = undefined
+  session.precompactInvalidBefore = Date.now()
   const compactMessages = buildPrecompactMessages(session.messages, precompact)
   const outcome = await runFullCompact({
     messages: compactMessages ?? session.messages,
