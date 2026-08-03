@@ -86,6 +86,31 @@ async function main() {
   })
   assert((await fs.stat(savedPath)).isFile(), 'session file written')
 
+  // HKP-3：plan 正交开关——摘要 mode 行显示 plan
+  {
+    const planSession = await createSession({
+      cwd,
+      sessionId: 'sess_cli_resume_plan',
+      systemPrompt: false,
+      permissionMode: 'acceptEdits',
+      planMode: true,
+      model: 'mock-cli',
+    })
+    const planSummary = {
+      id: planSession.id,
+      cwd: planSession.cwd,
+      path: savedPath,
+      messageCount: 0,
+      permissionMode: planSession.permissionMode,
+      planMode: planSession.planMode === true,
+    }
+    const formatted = formatSessionSummary(planSummary)
+    assert(
+      formatted.includes('mode:    plan'),
+      `plan summary shows plan mode: ${formatted}`,
+    )
+  }
+
   const out: string[] = []
   const err: string[] = []
   const resumed = await resumeFromIdOrPath({
