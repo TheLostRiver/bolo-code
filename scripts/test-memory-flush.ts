@@ -290,15 +290,22 @@ else process.env.BOLO_DISABLE_MEMORY = prevDisableEnv
 
 // --- 10. flush 超时：挂起 summarizer fail-open（锚点不更新）---
 {
-  const hung = await flushMemoryFromRecentMessages({
-    messages: mkMessages(),
-    summarize: () => new Promise(() => {}), // 永不 resolve
-    alreadyFlushedHash: 'f42',
-    timeoutMs: 50,
-    env: process.env,
-  })
-  assert(hung.appendedLine === undefined, 'timeout: no line')
-  assert(hung.newHash === 'f42', 'timeout: anchor unchanged')
+  const prevDisable10 = process.env.BOLO_DISABLE_MEMORY
+  delete process.env.BOLO_DISABLE_MEMORY
+  try {
+    const hung = await flushMemoryFromRecentMessages({
+      messages: mkMessages(),
+      summarize: () => new Promise(() => {}), // 永不 resolve
+      alreadyFlushedHash: 'f42',
+      timeoutMs: 50,
+      env: process.env,
+    })
+    assert(hung.appendedLine === undefined, 'timeout: no line')
+    assert(hung.newHash === 'f42', 'timeout: anchor unchanged')
+  } finally {
+    if (prevDisable10 === undefined) delete process.env.BOLO_DISABLE_MEMORY
+    else process.env.BOLO_DISABLE_MEMORY = prevDisable10
+  }
 }
 
 await fs.rm(tmp, { recursive: true, force: true })
