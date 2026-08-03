@@ -118,7 +118,8 @@ export function tokenizeShellCommand(
         // 单引号内反斜杠是字面量
         current += ch
       } else if (quote === '"' && (ch === '$' || ch === '\u0060')) {
-        // 双引号内的命令替换（$(...)/`...`）仍会被 shell 执行——fail-closed
+        // 双引号内未转义的 $（变量/命令替换）与反引号仍会被 shell 执行或
+        // 展开——词法级无法静态验证，fail-closed
         return undefined
       } else {
         current += ch

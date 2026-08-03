@@ -191,7 +191,7 @@ typecheck、hooks-htrack/ptl/subagent/cli-events 回归与完整 `npm test` 通�
   目标（rm -rf /、dd of=/dev/*、mkfs）；
   ask：npx/bunx（可执行任意包）与未覆盖命令；
   allow：包管理器（npm/pnpm/yarn/bun/cargo/pip/pip3/uv/go/gradle/mvn/composer）
-  惰性子命令（install/uninstall/update/upgrade/list/search/info/view/outdated/
+  白名单子命令（install/uninstall/update/upgrade/list/search/info/view/outdated/
   why/tree/audit/help/version 等；run/build/test/add/get/mod/init/create 等
   执行脚本/下载代码的一律询问）。
   威胁模型：install/update/upgrade 会执行生命周期脚本（postinstall/setup.py/
