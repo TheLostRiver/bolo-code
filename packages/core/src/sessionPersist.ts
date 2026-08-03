@@ -90,6 +90,8 @@ export type PersistableSession = {
   permissionMode: PermissionMode
   /** HKP-3：plan 正交开关（可选；缺省关闭） */
   planMode?: boolean
+  /** MEM-1：上次成功 flush 的消息块指纹（可选；resume 后防重复 flush） */
+  memoryFlushedHash?: string
   messages: ChatMessage[]
   systemPromptSections: string[]
   model?: string
@@ -153,6 +155,8 @@ export type SessionSnapshot = {
   permissionMode: PermissionMode
   /** HKP-3：plan 正交开关（可选；缺省关闭） */
   planMode?: boolean
+  /** MEM-1：上次成功 flush 的消息块指纹（可选；resume 后防重复 flush） */
+  memoryFlushedHash?: string
   messages: ChatMessage[]
   /**
    * system 段快照。resume 时默认优先按 cwd/mode 重建；
@@ -569,6 +573,8 @@ export function toSnapshot(
     permissionMode: session.permissionMode,
     // HKP-3：plan 正交开关持久化（缺省不写，旧快照兼容为关闭）
     ...(session.planMode === true ? { planMode: true } : {}),
+    // MEM-1：flush 锚点持久化（resume 后防重复 flush）
+    ...(session.memoryFlushedHash ? { memoryFlushedHash: session.memoryFlushedHash } : {}),
     messages: session.messages.map(cloneMessage),
     systemPromptSections: [...session.systemPromptSections],
     model: resolvedModel?.model ?? session.model,
@@ -709,6 +715,10 @@ export function parseSessionSnapshot(raw: unknown): SessionSnapshot {
     phase: typeof o.phase === 'string' ? (o.phase as SessionPhase) : undefined,
     // HKP-3：plan 正交开关随快照解析（旧快照缺省为关闭）
     ...(o.planMode === true ? { planMode: true } : {}),
+    // MEM-1：flush 锚点随快照解析（旧快照缺省为空）
+    ...(typeof o.memoryFlushedHash === 'string' && o.memoryFlushedHash
+      ? { memoryFlushedHash: o.memoryFlushedHash }
+      : {}),
     ...(permissionRules ? { permissionRules } : {}),
     ...(effortLevel ? { effortLevel } : {}),
     ...(resolvedModel?.providerId
@@ -1585,6 +1595,11 @@ export function applySnapshotToSession(
   session.permissionMode = snapshot.permissionMode
   // HKP-3：plan 正交开关随快照恢复（旧快照缺省为关闭）
   session.planMode = snapshot.planMode === true
+  // MEM-1：flush 锚点随快照恢复（resume 后防重复 flush）
+  session.memoryFlushedHash =
+    typeof snapshot.memoryFlushedHash === 'string'
+      ? snapshot.memoryFlushedHash
+      : undefined
   const restoreModelRuntime = options?.restoreModelRuntime !== false
   session.autoCompactEnabled = snapshot.autoCompactEnabled
   if (restoreModelRuntime) {

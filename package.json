@@ -101,8 +101,6 @@
     "test:csi-reassembly": "tsx scripts/test-csi-reassembly.ts",
     "test:hooks-events": "tsx scripts/test-hooks-events.ts",
     "test:command-safety": "tsx scripts/test-command-safety.ts",
-    "test:memory-flush": "tsx scripts/test-memory-flush.ts",
-    "test:memory": "tsx scripts/test-memory.ts",
     "test:plan-orthogonal": "tsx scripts/test-plan-orthogonal.ts",
     "test:markdown-fidelity": "tsx scripts/test-markdown-fidelity.ts",
     "test:config-parse-warning": "tsx scripts/test-config-parse-warning.ts",

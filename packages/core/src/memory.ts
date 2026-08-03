@@ -749,8 +749,10 @@ export async function appendMemoryDailyLog(
  *   用会话的 CompactSummarizer 总结成一行追加到 daily log。
  * - `alreadyFlushedHash` 为上次成功 flush 的消息块指纹（会话内锚点）；
  *   指纹相同（消息没实质新增）则跳过，避免连续 compact 重复总结同一批消息。
- * - 纯 fail-open：summarize 或写盘失败都不抛错（不拖垮 compact）；
- *   失败时不更新锚点，下次 compact 重试。
+ * - 纯 fail-open：summarize（含超时，默认 10s）或写盘失败都不抛错
+ *   （不拖垮 compact）；失败/超时不更新锚点，下次 compact 重试。
+ *   空总结视为成功（无内容可记，锚点照常推进）。
+ * - 尊重 `BOLO_DISABLE_MEMORY` 熔断：禁用时不读不写。
  */
 export async function flushMemoryFromRecentMessages(opts: {
   messages: readonly ChatMessage[]
@@ -760,9 +762,13 @@ export async function flushMemoryFromRecentMessages(opts: {
   }) => Promise<{ text: string }>
   alreadyFlushedHash?: string
   count?: number
+  timeoutMs?: number
   userBoloDir?: string
   env?: NodeJS.ProcessEnv
 }): Promise<{ appendedLine?: string; newHash: string }> {
+  if (isMemoryDisabled(opts.env)) {
+    return { newHash: opts.alreadyFlushedHash ?? '' }
+  }
   const count = opts.count ?? 15
   const recent = opts.messages
     .filter((m) => m.role === 'user' || m.role === 'assistant')
@@ -775,11 +781,15 @@ export async function flushMemoryFromRecentMessages(opts: {
     return { newHash: hash }
   }
   try {
-    const summary = await opts.summarize({
-      messages: recent,
-      compactPrompt:
-        'Summarize in one line what was done and any key findings, for a cross-session memory daily log. No preamble.',
-    })
+    // 超时保护：挂起的 provider-backed summarizer 不拖垮 compactSession
+    const summary = await withTimeout(
+      opts.summarize({
+        messages: recent,
+        compactPrompt:
+          'Summarize in one line what was done and any key findings, for a cross-session memory daily log. No preamble.',
+      }),
+      opts.timeoutMs ?? 10_000,
+    )
     const text = summary.text.trim()
     if (!text) return { newHash: hash }
     await appendMemoryDailyLog(text, {
@@ -788,8 +798,22 @@ export async function flushMemoryFromRecentMessages(opts: {
     })
     return { appendedLine: text, newHash: hash }
   } catch {
-    // fail-open：总结/写盘失败不阻断压缩；锚点不更新，下次重试
+    // fail-open：总结超时/失败/写盘失败不阻断压缩；锚点不更新，下次重试
     return { newHash: opts.alreadyFlushedHash ?? '' }
+  }
+}
+
+async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      p,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`memory flush timed out after ${ms}ms`)), ms)
+      }),
+    ])
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
   }
 }
 

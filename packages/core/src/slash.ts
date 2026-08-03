@@ -3806,6 +3806,9 @@ async function cmdMemory(
       }
     }
     // MEM-1：手动写入（用户显式记忆）；与压缩前 flush 共用 daily log
+    if (isMemoryDisabled()) {
+      return { ok: false, message: 'memory disabled (BOLO_DISABLE_MEMORY)' }
+    }
     const file = await appendMemoryDailyLog(line)
     return {
       ok: true,
@@ -3815,7 +3818,7 @@ async function cmdMemory(
   if (sub && sub !== 'status' && sub !== 'show') {
     return {
       ok: false,
-      message: 'Usage: /memory [path|status|topics]',
+      message: 'Usage: /memory [path|status|topics|remember <line>]',
     }
   }
 

@@ -933,7 +933,7 @@ export type CreateSessionOptions = {
   compactTimeoutMs?: number
   /** HKP-3：初始 plan 正交开关（默认 false；/plan 激活） */
   planMode?: boolean
-  /** MEM-1：首轮 memory 相关性检索查询；缺省取首条 user 消息 */
+  /** MEM-1：首轮 memory 相关性检索查询（显式传入；缺省无相关性检索） */
   memoryRelevanceQuery?: string
   /** 模型名（写入环境段；可从 workspace 传入） */
   model?: string

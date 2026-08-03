@@ -19,6 +19,8 @@ import {
   flushMemoryFromRecentMessages,
   getSystemPrompt,
   getMemoryDailyLogPath,
+  saveSession,
+  loadSessionPair,
 } from '../packages/core/src/index.ts'
 import type { ChatMessage } from '../packages/shared/src/index.ts'
 import type { LlmProvider } from '../packages/providers/src/index.ts'
@@ -215,6 +217,89 @@ if (prevMemDirEnv === undefined) delete process.env.BOLO_MEMORY_DIR
 else process.env.BOLO_MEMORY_DIR = prevMemDirEnv
 if (prevDisableEnv === undefined) delete process.env.BOLO_DISABLE_MEMORY
 else process.env.BOLO_DISABLE_MEMORY = prevDisableEnv
+
+// --- 8. flush 锚点持久化：save/load roundtrip ---
+{
+  const session = await createSession({
+    cwd: tmp,
+    provider: {
+      id: 'mock',
+      async *completeStream() {
+        yield { type: 'text_delta', text: 'ok' }
+        yield { type: 'done' }
+      },
+    },
+    systemPrompt: false,
+  })
+  session.memoryFlushedHash = 'f12345'
+  const sessionsDir = path.join(tmp, 'sess')
+  await fs.mkdir(sessionsDir, { recursive: true })
+  await saveSession(session, {
+    sessionsDir,
+    scope: 'project',
+    writeJsonSnapshot: true,
+  })
+  const { snapshot } = await loadSessionPair(
+    path.join(sessionsDir, `${session.id}.json`),
+  )
+  assert(
+    snapshot.memoryFlushedHash === 'f12345',
+    'persist: hash roundtrips through snapshot',
+  )
+}
+
+// --- 9. BOLO_DISABLE_MEMORY 熔断：flush 与 remember 都不写 ---
+{
+  const logPath = getMemoryDailyLogPath()
+  await fs.rm(logPath, { force: true })
+  const prevDisable = process.env.BOLO_DISABLE_MEMORY
+  process.env.BOLO_DISABLE_MEMORY = '1'
+  try {
+    const out = await flushMemoryFromRecentMessages({
+      messages: mkMessages(),
+      summarize,
+      env: process.env,
+    })
+    assert(out.appendedLine === undefined, 'disabled: no flush line')
+    assert(
+      !(await fs.stat(logPath).catch(() => null)),
+      'disabled: daily log not created',
+    )
+    const session = await createSession({
+      cwd: tmp,
+      provider: {
+        id: 'mock',
+        async *completeStream() {
+          yield { type: 'text_delta', text: 'ok' }
+          yield { type: 'done' }
+        },
+      },
+      systemPrompt: false,
+    })
+    const res = await dispatchSlashCommand(session, 'memory', 'remember xyz')
+    assert(res.ok === false, 'disabled: remember rejected')
+    assert(
+      !(await fs.stat(logPath).catch(() => null)),
+      'disabled: remember does not create daily log',
+    )
+  } finally {
+    if (prevDisable === undefined) delete process.env.BOLO_DISABLE_MEMORY
+    else process.env.BOLO_DISABLE_MEMORY = prevDisable
+  }
+}
+
+// --- 10. flush 超时：挂起 summarizer fail-open（锚点不更新）---
+{
+  const hung = await flushMemoryFromRecentMessages({
+    messages: mkMessages(),
+    summarize: () => new Promise(() => {}), // 永不 resolve
+    alreadyFlushedHash: 'f42',
+    timeoutMs: 50,
+    env: process.env,
+  })
+  assert(hung.appendedLine === undefined, 'timeout: no line')
+  assert(hung.newHash === 'f42', 'timeout: anchor unchanged')
+}
 
 await fs.rm(tmp, { recursive: true, force: true })
 console.log('PASS: MEM-1 memory flush + remember + relevance wiring')
