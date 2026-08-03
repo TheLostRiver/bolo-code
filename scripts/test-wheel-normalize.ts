@@ -11,8 +11,6 @@
  */
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
-import { promises as fs } from 'node:fs'
-import os from 'node:os'
 import {
   createWheelNormalizer,
   wheelBandMultiplier,
@@ -258,25 +256,27 @@ const boundedPresentation: ToolPresentation = {
     'clicking the summary opens the pager (page 1)',
   )
 
-  // 密集 wheel down × 6（同帧 → 高速带 3× → 封顶 6 事件 × 3 = 18 格）
+  // 密集 wheel down × 6（同帧 → 高速带 3× → 封顶 6 事件 × 3 = 18 格，
+  // 但页级消费 clamp 3 页——不会一次跳到底）
   for (let i = 0; i < 6; i += 1) {
     fixture.input.send(`\x1b[<65;20;${readRow}M`)
   }
-  await settle(fixture)
-  const page1Gone = !screen(fixture).includes('preview line 0')
+  await waitForScreen(fixture, (t) => !t.includes('preview line 0'))
+  const afterDown = screen(fixture)
   assert(
-    page1Gone || screen(fixture).includes('preview line 1'),
+    !afterDown.includes('preview line 0'),
     'wheel down paged past the first page',
+  )
+  assert(
+    !afterDown.includes('preview line 90'),
+    'storm frame clamped: did not jump to the last page (120-line file)',
   )
 
   // wheel up 翻回
   for (let i = 0; i < 6; i += 1) {
     fixture.input.send(`\x1b[<64;20;${readRow}M`)
   }
-  await settle(fixture)
-  if (page1Gone) {
-    await waitForScreen(fixture, (t) => t.includes('preview line 0'))
-  }
+  await waitForScreen(fixture, (t) => t.includes('preview line 0'))
 
   // wheel 在无 pager 时不泄漏为按键输入（关闭 pager 后再滚）
   fixture.input.send(`\x1b[<0;20;${readRow}M`)
@@ -292,5 +292,4 @@ const boundedPresentation: ToolPresentation = {
   fixture.controller.stop()
 }
 
-await fs.rm(os.tmpdir(), { recursive: false, force: false }).catch(() => {})
 console.log('PASS: TERM-3 wheel normalization + pager integration')

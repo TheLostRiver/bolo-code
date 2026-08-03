@@ -874,12 +874,14 @@ export class RetainedOverlayHost implements Component, Focusable {
 
   /**
    * TERM-3：滚轮规范化滚动（正数向下、负数向上；只滚动不退出 pager）。
+   * 每单位 = 1 页步；单帧增量 clamp 到 3 页（高速风暴帧不会一次跳到底——
+   * normalizer 的加速度倍率面向行级滚动，页级消费封顶）。
    * 键盘路径（翻到边界再按 next 会 quit）与滚轮语义分开——滚轮停在边界。
    */
   scrollPager(lines: number): void {
     const active = this.active
     if (!active || active.mode !== 'pager') return
-    const steps = Math.max(0, Math.min(24, Math.abs(lines)))
+    const steps = Math.max(0, Math.min(3, Math.abs(lines)))
     const dir = lines > 0 ? 1 : -1
     for (let i = 0; i < steps; i += 1) {
       if (!this.stepPagerPage(active, dir)) break
