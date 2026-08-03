@@ -99,7 +99,11 @@ const topic = (
 // --- 4. description 缺失降权 ---
 {
   const withDesc = topic('guide_setup.md', { description: 'bun setup guide' })
-  const noDesc = topic('quick_setup.md', { description: null })
+  // 旧 mtime（2 个半衰期）让衰减后分数触底 → 真实触发地板
+  const noDesc = topic('quick_setup.md', {
+    description: null,
+    mtimeMs: NOW - 2 * MEMORY_HALF_LIFE_DAYS * DAY,
+  })
   const rel = selectRelevantMemoryTopics('bun setup', [noDesc, withDesc], {
     now: NOW,
   })

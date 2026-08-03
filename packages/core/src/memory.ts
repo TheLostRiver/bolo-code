@@ -424,7 +424,8 @@ export function selectRelevantMemoryTopics(
 ): RelevantMemoryTopic[] {
   const limit = opts?.limit ?? MAX_RELEVANT_MEMORY_TOPICS
   const now = opts?.now ?? Date.now()
-  const tokens = tokenizeMemoryQuery(query)
+  // query 侧与 hay 侧同样归一（下划线按空格拆开），保持对称匹配
+  const tokens = tokenizeMemoryQuery(query.replace(/_/g, ' '))
   if (!tokens.length || !topics.length) return []
 
   const scored: RelevantMemoryTopic[] = []
@@ -440,7 +441,7 @@ export function selectRelevantMemoryTopics(
         ].join(' '),
       ),
     )
-    // 文件名整段也作为可匹配串（下划线拆开已在 tokenize）
+    // 文件名整段也作为可匹配串（下划线已在上方显式拆为空格）
     let score = 0
     for (const tok of tokens) {
       if (hayTokens.has(tok)) {
