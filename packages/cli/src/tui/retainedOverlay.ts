@@ -919,7 +919,7 @@ export class RetainedOverlayHost implements Component, Focusable {
       return
     }
     if (active.source.kind !== 'lazy-text') {
-      this.pendingWheelScroll = 0
+      this.clearPendingWheel()
       return
     }
     if (this.pendingWheelScroll === 0) return
@@ -980,8 +980,8 @@ export class RetainedOverlayHost implements Component, Focusable {
         // 仍在加载：继续轮询（有界），慢加载不丢步
         setTimeout(check, 10)
       } else {
-        // error/超时：丢弃剩余步，消费新 pending
-        this.pendingWheelScroll = 0
+        // error/超时：丢弃剩余步（清 timer+计数+计时），消费新 pending
+        this.clearPendingWheel()
         this.drainWheelScroll()
       }
     }
