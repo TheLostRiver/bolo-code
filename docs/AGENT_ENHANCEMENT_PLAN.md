@@ -331,14 +331,28 @@ autocompact-system-tokens 回归及完整 `npm test` 通过。
 相似内容去重保留高分者；test-memory（存量相关性断言）与 system-prompt
 回归兼容；完整 `npm test` 通过。
 
-## 14. TERM-3 · 滚轮滚动规范化 — 低–中成本（依赖 OUT-4 鼠标）
+## 14. TERM-3 · 滚轮滚动规范化 — 低–中成本（依赖 OUT-4 鼠标）✅ 本轮
 
 **目标**：鼠标滚轮事件规范化：wheel/trackpad 启发式、分数累积、16ms cadence、
 加速度分带，避免逐格滚动抖动与事件风暴。
 
-**设计**：在 OUT-4 的 SGR mouse 解析后加滚轮累积器（纯函数）；pager 翻页消费。
+**设计**（已落地）：
+- shared `wheelNormalizer.ts` 纯状态机：SGR 1006 每序列仅 1 格——规范化为
+  **增量滚动行数**；16ms cadence 帧合并（同帧密集事件合并为一帧量，
+  抑制 trackpad 事件风暴）+ 加速度分带（帧内 1-2 事件 1×、3-4 事件 2×、
+  5+ 事件 3×，快速滚动自然加速）+ 帧事件上限（`WHEEL_MAX_EVENTS_PER_FRAME=6`
+  单帧封顶）+ 方向变化开新帧（反向滚动立即生效不丢首格）。
+- 接入：retainedTui 鼠标监听 wheel 分支 → normalizer → `overlay.scrollPager`
+  （正数向下/负数向上；滚轮停在边界不触发键盘的 quit 语义）；无 active
+  pager 时 wheel 被消费不泄漏为输入。
+- 每次 push 返回**增量**（消费者累加即得帧量）；时间戳可注入（测试用）。
 
-**验收**：模拟滚轮序列断言翻页节奏与去抖；真人手感仍属 OI-H3。
+**验收**（全部通过）：专项覆盖逐格滚动（间隔 > 帧窗口每事件 1 格）、
+16ms 帧合并与分带增量（4 事件帧 = 8 格）、高速带封顶（6 事件 × 3× =
+18 格）、方向反转开新帧、flush 后新帧；TUI 集成（真实 headless TUI）：
+点击打开 pager → 密集 wheel down 翻页 → wheel up 翻回 → 关闭后 wheel
+不泄漏不重开；OUT-4 鼠标回归兼容；完整 `npm test` 通过。真人手感仍属
+OI-H3（参数可调）。
 
 ## 15. CBG-1 · 符号索引懒启动 + 门控 — 低–中成本
 
