@@ -354,17 +354,34 @@ autocompact-system-tokens 回归及完整 `npm test` 通过。
 不泄漏不重开；OUT-4 鼠标回归兼容；完整 `npm test` 通过。真人手感仍属
 OI-H3（参数可调）。
 
-## 15. CBG-1 · 符号索引懒启动 + 门控 — 低–中成本
+## 15. CBG-1 · 符号索引懒启动 + 门控 — 低–中成本 ✅ 本轮
 
 **目标**：仓库符号索引（定义/引用）按需懒构建，仅 git 仓库 + 显式请求时激活；
 缓存放用户目录不污染项目；查询版本戳驱动自动重建。最简版先交付 `/symbol` 命令
-（读现有索引或走 LSP/grep 兜底）。
+（纯正则扫描，不依赖 LSP/ripgrep——零运行时依赖）。
 
-**设计**：新 index 模块（worker 队列 + 事件合并 + 锁文件防并发重建）；
-四道门控（git 仓库/开关/显式请求/能力）；缓存目录 `~/.bolo/indexes/`。
+**设计**（已落地）：
+- `packages/core/src/symbolIndex.ts`：懒构建符号索引——源文件扩展名白名单
+  （ts/js/rs/go/py/java/cs/cpp/kt/swift 等）+ 目录黑名单（node_modules/
+  .git/dist/build/target 等）+ 行级定义正则（多语言：export function/
+  class/interface/type/const、pub fn/struct/enum、func、def/class、Java/C#
+  class 等）→ `{ name, kind, file, line }` 符号表。
+- **四道门控**：git 仓库（.git 目录/文件检测）、`BOLO_DISABLE_SYMBOLS` 开关、
+  显式请求（仅 `/symbol` 触发——懒启动）、能力（本地文件可读）。
+- **缓存**：`~/.bolo/indexes/<repoKey>.json`（BOLO_CONFIG_DIR 可重定向）；
+  版本戳 = HEAD commit（12 位）+ 最新源文件 mtime——源文件变化自动重建。
+- **并发锁**：`<cache>.lock`（内容 = 写锁时刻时间戳）；新鲜锁拒绝并发构建
+  （查询返回「构建中」提示）、陈旧锁（>30s）强制清理。
+- `/symbol <query>` slash 命令：名称包含匹配（大小写不敏感），输出
+  `file:line kind name` 列表；不注入模型上下文（命令专用）。
 
-**验收**：懒启动、门控、重建、并发锁、兜底路径；不注入模型上下文（编辑器/命令
-专用）。
+**验收**（全部通过）：专项覆盖懒启动（无调用不建缓存）、门控（开关/git
+检测）、多语言定义提取（ts/rs/go/py 全量）、缓存命中与版本戳重建（源文件
+修改 → 重建）、并发锁（新鲜拒绝/陈旧清理）、`/symbol` 命令（命中/无匹配/
+非 git/开关关闭）；slash 相关回归兼容；完整 `npm test` 通过。
+
+**边界**：引用索引（refs）与 LSP 能力为后续项（当前为定义索引 + 名称匹配）；
+超 1MB 文件与 5000 文件上限跳过（有界扫描）。
 
 ## 16. CMP-3 · 压缩 Segments 可检索模式 — 中成本
 
