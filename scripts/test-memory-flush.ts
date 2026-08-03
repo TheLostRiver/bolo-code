@@ -21,6 +21,7 @@ import {
   getMemoryDailyLogPath,
   saveSession,
   loadSessionPair,
+  scanMemoryTopics,
 } from '../packages/core/src/index.ts'
 import type { ChatMessage } from '../packages/shared/src/index.ts'
 import type { LlmProvider } from '../packages/providers/src/index.ts'
@@ -306,6 +307,42 @@ else process.env.BOLO_DISABLE_MEMORY = prevDisableEnv
     if (prevDisable10 === undefined) delete process.env.BOLO_DISABLE_MEMORY
     else process.env.BOLO_DISABLE_MEMORY = prevDisable10
   }
+}
+
+// --- 11. security 修复：daily/ 不进相关性注入 + day 参数校验 ---
+{
+  // daily/ 下文件不被 scanMemoryTopics 当作 topic
+  const scanDir = path.join(tmp, 'scanroot')
+  await fs.mkdir(path.join(scanDir, 'daily'), { recursive: true })
+  await fs.writeFile(
+    path.join(scanDir, 'daily', '2026-08-03.md'),
+    '---\ndescription: machine log line\ntitle: Daily\n---\n\nrandom model output\n',
+    'utf8',
+  )
+  await fs.writeFile(
+    path.join(scanDir, 'handwritten.md'),
+    '---\ndescription: user authored\ntitle: Hand\n---\n\nreal preference\n',
+    'utf8',
+  )
+  const topics = await scanMemoryTopics(scanDir, { scope: 'user' })
+  assert(
+    !topics.some((t) => t.filename.includes('daily')),
+    'scan: daily/ excluded from topics',
+  )
+  assert(
+    topics.some((t) => t.filename.includes('handwritten')),
+    'scan: handwritten topic still found',
+  )
+  // day 参数只接受 ISO 日期
+  let threw = false
+  try {
+    getMemoryDailyLogPath({ day: '../../evil' })
+  } catch {
+    threw = true
+  }
+  assert(threw, 'daily: non-ISO day rejected')
+  const okDay = getMemoryDailyLogPath({ day: '2026-01-02' })
+  assert(okDay.includes('2026-01-02.md'), 'daily: ISO day accepted')
 }
 
 await fs.rm(tmp, { recursive: true, force: true })

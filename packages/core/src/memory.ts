@@ -310,6 +310,9 @@ export async function scanMemoryTopics(
       if (out.length >= maxFiles) break
       const abs = path.join(dir, ent.name)
       if (ent.isDirectory()) {
+        // daily/ 是机器写入的流水（MEM-1 flush/remember），不进相关性注入——
+        // 模型输出/随手记属于低置信记录，不应与手写 topic 同权进入 system prompt
+        if (ent.name === 'daily') continue
         await walk(abs)
         continue
       }
@@ -724,6 +727,10 @@ export function getMemoryDailyLogPath(opts?: {
 }): string {
   const dir = getMemoryDir(opts)
   const day = opts?.day ?? new Date().toISOString().slice(0, 10)
+  // 防御：day 只接受 ISO 日期形态（所有调用点都用默认；非法值拒绝而非拼接路径）
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(day)) {
+    throw new Error(`invalid memory daily day: ${day}`)
+  }
   return path.join(dir, 'daily', `${day}.md`)
 }
 
