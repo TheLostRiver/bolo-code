@@ -21,8 +21,8 @@
 | HKP-1 | hooks 事件面扩展与 fail-open 结果 | 低 | hooks 包 | ✅ 本轮 |
 | HKP-2 | 权限 auto 模式命令级安全分析 | 低–中 | permissions auto 分类器 | ✅ 本轮 |
 | HKP-3 | plan 模式与权限系统正交化 | 低 | core 权限接线 | ✅ 本轮 |
-| REN-1 | markdown render-fidelity 自检 | 低 | markdown 渲染层 | ▶ NEXT |
-| MEM-1 | 跨会话记忆 MVP（Markdown 双层 + FTS 检索 + 压缩前 flush + 首轮注入） | 低–中 | 新 memory 模块 + core 注入 | 📋 |
+| REN-1 | markdown render-fidelity 自检 | 低 | markdown 渲染层 | ✅ 本轮 |
+| MEM-1 | 跨会话记忆 MVP（Markdown 双层 + FTS 检索 + 压缩前 flush + 首轮注入） | 低–中 | 新 memory 模块 + core 注入 | ▶ NEXT |
 | CMP-2 | 两遍预压缩（prefire pass1） | 中 | compact 执行器 | 📋 |
 | MEM-2 | 记忆检索质量链（时间衰减/源权重/脚手架过滤） | 低 | memory 检索（MEM-1 之后） | 📋 |
 | TERM-3 | 滚轮滚动规范化（分数累积 + cadence） | 低–中 | CLI 鼠标（OUT-4 之后） | 📋 |
@@ -229,15 +229,25 @@ plan 开关：plan 时 Write deny、Read allow；plan 关时 bypass allow、defa
 ExitPlanMode 正交路径恢复原模式、/plan 语义、status line；exit-plan-mode 与
 slash 回归更新；typecheck 与完整 `npm test` 通过。
 
-## 10. REN-1 · markdown render-fidelity 自检 — 低成本
+## 10. REN-1 · markdown render-fidelity 自检 — 低成本 ✅ 本轮
 
-**目标**：渲染层检测「意图做了结构（列表/表格/代码块）但实际没渲染出来」的
-fidelity 失败，作为模型反馈信号（warning 注入或 /context 展示），不静默吞掉。
+**目标**：渲染层检测「意图做了结构（表格/列表/代码块）但实际没渲染出来」的
+fidelity 失败，作为 warning 信号（不静默吞掉）。
 
-**设计**：markdown 渲染器输出结构化结构清单（检测到的块类型），与源文本意图
-对比；不一致时产生 warning 事件。纯函数可单测。
+**设计**（已落地）：
+- shared `markdownFidelity.ts` 纯契约：`detectMarkdownIntent`（表格=表头+`|---`
+  分隔行、列表=行首 `- ` `* ` `+ ` `\d+. `、代码块=成对围栏）、
+  `detectMarkdownRenderedStructures`（盒线边框/回退原始语法、列表符号、围栏）、
+  `checkMarkdownFidelity`（仅意图 >0 且产物完全缺失才报；回退渲染不算失败；
+  正常零误报）。
+- retainedTranscript：markdown 块（user/assistant/reasoning）渲染后按 source
+  缓存做检测（width 变化不重检——表格窄宽度回退仍保留原始语法）；
+  RetainedRoot 汇总。
+- controller flush：新问题以 warning 事件上报（blockId:kind 去重），CLI 展示。
 
-**验收**：表格/列表/代码块各失败模式检测；正常渲染零误报。
+**验收**：专项覆盖意图/产物/表格列表代码块丢失检测/回退不算失败/零误报，
+集成（正常渲染零 warning）；transcript/retained/folding 回归与完整 `npm test`
+通过。
 
 ## 11. MEM-1 · 跨会话记忆 MVP — 低–中成本（收益最高）
 
