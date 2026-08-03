@@ -33,6 +33,9 @@ export type SessionEndReason =
 export type CompactTrigger = 'manual' | 'auto'
 export type PermissionDecision = 'allow' | 'deny' | 'ask'
 
+/** HKP-1：per-hook 结构化执行状态（与 blocked 正交） */
+export type HookRunStatus = 'ok' | 'failed' | 'timeout' | 'aborted'
+
 export type HookCommand = {
   type: 'command'
   command: string

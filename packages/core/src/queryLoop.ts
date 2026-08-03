@@ -78,7 +78,7 @@ export type QueryLoopEvent =
   | { type: 'reasoning'; text: string }
   /** provider 的显式思考分段结束边界。 */
   | { type: 'reasoning_end' }
-  | { type: 'hook'; event: string; exitCode: number; blocked?: boolean; status?: string }
+  | { type: 'hook'; event: string; exitCode: number; blocked?: boolean; status?: import('../../shared/src/index.ts').HookRunStatus }
   | { type: 'error'; message: string }
   /**
    * 非致命诊断：本轮继续，但有些东西值得说。

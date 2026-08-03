@@ -75,7 +75,7 @@ export type ToolUseBlock = {
 }
 
 export type ToolExecutionEvent =
-  | { type: 'hook'; event: string; exitCode: number; blocked?: boolean; status?: string }
+  | { type: 'hook'; event: string; exitCode: number; blocked?: boolean; status?: import('../../shared/src/index.ts').HookRunStatus }
   | {
       type: 'permission_request'
       id: string
@@ -393,7 +393,9 @@ function endResult(
   },
 ): RunToolUseResult {
   if (flags.denied) {
-    // HKP-1：PermissionDenied 纯观察 hook（fire-and-forget，不阻塞拒绝路径）
+    // HKP-1：PermissionDenied 纯观察 hook（fire-and-forget，不阻塞拒绝路径）。
+    // 时序契约：hook 事件在 runHooks 完成（最长 timeout 秒）后异步 emit，
+    // 可能晚于后续工具事件；观察性语义下不保证事件间顺序。
     const deniedInput = {
       hook_event_name: 'PermissionDenied' as const,
       session_id: ctx.sessionId,
@@ -1206,6 +1208,12 @@ export async function runToolUse(
 
   // HKP-1：工具执行失败时额外触发 PostToolUseFailure（观察 + exit 2 反馈）
   if (result.isError) {
+    // 载荷有界：error 只带截断摘要（完整输出可能 MB 级，且已按
+    // maxToolResultChars 截断进 tool_result）；tool_response 保留原始引用。
+    const failureError =
+      result.output.length > 2_000
+        ? `${result.output.slice(0, 1_999)}…`
+        : result.output
     const failure = await runHooks(
       'PostToolUseFailure',
       {
@@ -1217,7 +1225,7 @@ export async function runToolUse(
         tool_input: toolInput,
         tool_use_id: toolUseId,
         tool_response: result,
-        error: result.output,
+        error: failureError,
       },
       ctx.hooks,
       { signal: ctx.signal },

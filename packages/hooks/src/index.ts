@@ -8,11 +8,10 @@ import {
   HOOK_EVENTS_WITHOUT_MATCHER,
   type AnyHookInput,
   type HookEvent,
+  type HookRunStatus,
   type HooksConfig,
   type PermissionDecision,
 } from '../../shared/src/index.ts'
-
-export type HookRunStatus = 'ok' | 'failed' | 'timeout' | 'aborted'
 
 export type HookRunResult = {
   event: HookEvent
@@ -491,4 +490,7 @@ export async function runHooks(
   }
 }
 
-export { HOOK_EVENTS_WITHOUT_MATCHER }
+export {
+  HOOK_EVENTS_WITHOUT_MATCHER,
+  type HookRunStatus,
+} from '../../shared/src/index.ts'
