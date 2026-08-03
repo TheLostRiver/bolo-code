@@ -2666,6 +2666,8 @@ export async function resumeSession(
     cwd,
     sessionId: snapshot.id,
     permissionMode: snapshot.permissionMode,
+    // HKP-3：plan 正交开关随快照恢复（旧快照缺省为关闭）
+    ...(snapshot.planMode === true ? { planMode: true } : {}),
     model: opts.create?.model ?? snapshot.model,
     autoCompactEnabled:
       opts.create?.autoCompactEnabled ?? snapshot.autoCompactEnabled,

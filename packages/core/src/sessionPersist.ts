@@ -88,6 +88,8 @@ export type PersistableSession = {
   id: string
   cwd: string
   permissionMode: PermissionMode
+  /** HKP-3：plan 正交开关（可选；缺省关闭） */
+  planMode?: boolean
   messages: ChatMessage[]
   systemPromptSections: string[]
   model?: string
@@ -149,6 +151,8 @@ export type SessionSnapshot = {
   id: string
   cwd: string
   permissionMode: PermissionMode
+  /** HKP-3：plan 正交开关（可选；缺省关闭） */
+  planMode?: boolean
   messages: ChatMessage[]
   /**
    * system 段快照。resume 时默认优先按 cwd/mode 重建；
@@ -563,6 +567,8 @@ export function toSnapshot(
     id: session.id,
     cwd: session.cwd,
     permissionMode: session.permissionMode,
+    // HKP-3：plan 正交开关持久化（缺省不写，旧快照兼容为关闭）
+    ...(session.planMode === true ? { planMode: true } : {}),
     messages: session.messages.map(cloneMessage),
     systemPromptSections: [...session.systemPromptSections],
     model: resolvedModel?.model ?? session.model,

@@ -3543,6 +3543,10 @@ async function cmdPermissions(
     raw as PermissionMode,
   )
   let extra = ''
+  if (raw === 'plan') {
+    // HKP-3：plan 是正交开关——激活规划态，权限模式保持原值
+    extra = ' — plan mode activated (read-only; permission mode unchanged)'
+  }
   if (raw === 'auto') {
     const st = (session as { autoModeState?: { lastReason?: string } })
       .autoModeState

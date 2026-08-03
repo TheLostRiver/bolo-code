@@ -535,6 +535,7 @@ export async function queryLoop(params: QueryLoopParams): Promise<Terminal> {
           cwd: params.cwd,
           hooks: params.hooks,
           permissionMode: params.permissionMode,
+          planMode: params.planMode === true,
           askPermission: params.askPermission,
           permissionRules: params.permissionRules,
           classifyPermission: params.classifyPermission,

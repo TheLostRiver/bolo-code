@@ -195,6 +195,59 @@ async function main(): Promise<void> {
     assert.equal(session.permissionMode, 'default', 'mode switch applies')
   }
 
+  // ---- queryLoop 级接线：bypassPermissions + plan → Write 仍被拒绝 ----
+  {
+    const messages: import('../packages/shared/src/index.ts').ChatMessage[] = [
+      { role: 'user', content: 'run plan' },
+    ]
+    let round = 0
+    const callModel: import('../packages/core/src/index.ts').CallModelFn =
+      async function* () {
+        round += 1
+        if (round > 1) {
+          yield { type: 'text_delta', text: 'done' }
+          yield { type: 'done' }
+          return
+        }
+        yield {
+          type: 'tool_call',
+          id: 'c1',
+          name: 'Write',
+          arguments: JSON.stringify({ path: 'x' }),
+        }
+        yield { type: 'done' }
+      }
+    const terminal = await (
+      await import('../packages/core/src/index.ts')
+    ).queryLoop({
+      sessionId: 'hkp3-loop',
+      cwd: root,
+      hooks: {},
+      messages,
+      deps: {
+        callModel,
+        prepareMessages: async ({ messages: m }) => ({ messages: m }),
+        uuid: () => 'hkp3-loop',
+      },
+      permissionMode: 'bypassPermissions',
+      planMode: true,
+      askPermission: async () => 'allow',
+      maxTurns: 5,
+      maxPtlRetries: 0,
+      tools: [writeTool()],
+    })
+    assert.equal(terminal.reason, 'completed')
+    const writeResult = messages.find(
+      (m) => m.role === 'tool' && typeof m.content === 'string',
+    )
+    assert(
+      writeResult &&
+        typeof writeResult.content === 'string' &&
+        writeResult.content.includes('permission denied'),
+      `plan + bypassPermissions still denies Write through the real wiring: ${writeResult?.content}`,
+    )
+  }
+
   await fs.rm(root, { recursive: true, force: true })
   console.log('PASS: HKP-3 plan mode orthogonal to permissions')
 }

@@ -26,6 +26,8 @@ export type RunToolsParams = {
   cwd: string
   hooks: HooksConfig
   permissionMode: import('../../permissions/src/index.ts').PermissionMode
+  /** HKP-3：plan 正交开关（透传到 gate 合成） */
+  planMode?: boolean
   askPermission: AskPermissionFn
   permissionRules?: import('../../permissions/src/index.ts').SessionPermissionRules
   classifyPermission?: import('../../permissions/src/index.ts').AutoClassifyFn
@@ -117,6 +119,7 @@ export async function runTools(params: RunToolsParams): Promise<RunToolsResult> 
     cwd: params.cwd,
     hooks: params.hooks,
     permissionMode: params.permissionMode,
+    planMode: params.planMode === true,
     askPermission: params.askPermission,
     permissionRules: params.permissionRules,
     classifyPermission: params.classifyPermission,
