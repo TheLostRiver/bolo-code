@@ -194,6 +194,10 @@ typecheck、hooks-htrack/ptl/subagent/cli-events 回归与完整 `npm test` 通�
   惰性子命令（install/uninstall/update/upgrade/list/search/info/view/outdated/
   why/tree/audit/help/version 等；run/build/test/add/get/mod/init/create 等
   执行脚本/下载代码的一律询问）。
+  威胁模型：install/update/upgrade 会执行生命周期脚本（postinstall/setup.py/
+  远程构建）——这是**有意保留**的供应链信任（与分类器允许同类工具同级），
+  边界以「是否包管理核心操作」为准。双引号内命令替换（$()/反引号）与引号外
+  元字符/换行一样 fail-closed（ask）。
 - toolExecution：auto 分支先于分类器做确定性判定——deny 直接拒绝（不调分类器、
   不执行）、allow 直接放行（跳过分类器，且**受 toolRequestedAsk 保护**：工具
   checkPermissions 显式 ask 时不被命令级 allow 覆盖）、ask 走原分类器/UI 路径；

@@ -20,8 +20,13 @@ export type BashCommandSafetyResult = {
   reason: string
 }
 
-/** 包管理器白名单：仅惰性子命令可自动放行（run/build/test 等会执行项目
- * 脚本或下载代码，与 npx 同类不可静态验证，一律询问；缺省也走询问） */
+/** 包管理器白名单：仅惰性子命令可自动放行。
+ * 威胁模型：install/update/upgrade 会执行生命周期脚本（npm postinstall、
+ * pip setup.py、go/cargo install 远程构建、mvn/gradle 构建生命周期）——
+ * 这是**有意保留**的供应链信任（与分类器允许同类工具同级），与拒绝
+ * run/build/add/get 的边界以「是否包管理核心操作」为准；文档同步见
+ * AGENT_ENHANCEMENT_PLAN §HKP-2。其余子命令（search/list/info 等）为惰性
+ * 只读操作。缺省（无子命令）也走询问。 */
 const PACKAGE_MANAGER_ALLOW_SUBCOMMANDS = new Set([
   'install',
   'i',
@@ -112,6 +117,9 @@ export function tokenizeShellCommand(
       } else if (ch === '\\' && quote === "'") {
         // 单引号内反斜杠是字面量
         current += ch
+      } else if (quote === '"' && (ch === '$' || ch === '\u0060')) {
+        // 双引号内的命令替换（$(...)/`...`）仍会被 shell 执行——fail-closed
+        return undefined
       } else {
         current += ch
       }
