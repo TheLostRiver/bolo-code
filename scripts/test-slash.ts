@@ -411,9 +411,14 @@ async function main() {
     'thinking validation',
   )
 
-  // /plan
+  // /plan（HKP-3：正交开关——权限模式保持，仅激活规划态）
   const plan = await dispatchSlashCommand(session, 'plan', '')
-  assert(plan.ok && session.permissionMode === 'plan', 'plan mode')
+  assert(
+    plan.ok &&
+      session.planMode === true &&
+      session.permissionMode === 'default',
+    'plan mode activates orthogonally (permission mode untouched)',
+  )
 
   // /permissions
   const perm = await dispatchSlashCommand(session, 'permissions', 'default')
@@ -563,7 +568,8 @@ async function main() {
 
   // ── T3 status line ──
   const status = formatSessionStatusLine({
-    permissionMode: 'plan',
+    permissionMode: 'default',
+    planMode: true,
     model: 'm1',
     effortLevel: 'high',
     messages: [{}, {}, {}],

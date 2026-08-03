@@ -150,6 +150,8 @@ export type QueryLoopParams = {
   systemPromptSections?: readonly string[]
   deps: QueryDeps
   permissionMode: PermissionMode
+  /** HKP-3：plan 正交开关（透传到工具执行的 gate 合成） */
+  planMode?: boolean
   askPermission: AskPermissionFn
   /** 会话 Always-allow；透传 runTools */
   permissionRules?: SessionPermissionRules

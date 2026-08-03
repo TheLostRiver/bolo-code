@@ -19,12 +19,18 @@ export const EXIT_PLAN_MODE_TOOL_NAME = 'ExitPlanMode'
 /** 退出 plan 模式后落到的模式：仍然逐个审批 */
 export const PLAN_MODE_EXIT_TARGET = 'default'
 
-/** core 挂在 ctx.extras.planModeStore 上的会话权限模式引用 */
+/** core 挂在 ctx.extras.planModeStore 上的会话权限模式引用（HKP-3 正交化） */
 export type PlanModeStoreRef = {
+  /** 当前权限模式（plan 激活时保持原值，不覆盖） */
   permissionMode: string
+  /** HKP-3：plan 正交开关（true = 规划态，任何权限模式下都强制只读） */
+  planMode: boolean
   /** 模式变更后回调（供 core 发事件 / 落盘） */
   onExit?: (next: string) => void | Promise<void>
 }
+
+/** 旧路径（permissionMode==='plan'）退出后落到的模式 */
+export const PLAN_MODE_LEGACY_EXIT_TARGET = 'default'
 
 export function createExitPlanModeTool(): BoloTool {
   return buildTool({
@@ -70,7 +76,9 @@ export function createExitPlanModeTool(): BoloTool {
         }
       }
 
-      if (store.permissionMode !== 'plan') {
+      // HKP-3：plan 激活 = 正交开关（planMode）或旧路径（permissionMode==='plan'）
+      const legacyPath = store.permissionMode === 'plan'
+      if (store.planMode !== true && !legacyPath) {
         return {
           ok: false,
           isError: true,
@@ -79,10 +87,17 @@ export function createExitPlanModeTool(): BoloTool {
         }
       }
 
-      store.permissionMode = PLAN_MODE_EXIT_TARGET
+      // 退出：关掉正交开关；旧路径才改写 permissionMode（plan → default）
+      if (store.planMode === true) {
+        store.planMode = false
+      }
+      const exitTarget = legacyPath ? PLAN_MODE_LEGACY_EXIT_TARGET : undefined
+      if (legacyPath) {
+        store.permissionMode = PLAN_MODE_LEGACY_EXIT_TARGET
+      }
       if (store.onExit) {
         try {
-          await store.onExit(PLAN_MODE_EXIT_TARGET)
+          await store.onExit(exitTarget ?? store.permissionMode)
         } catch {
           /* 通知失败不改变工具语义 */
         }
@@ -91,8 +106,9 @@ export function createExitPlanModeTool(): BoloTool {
       return {
         ok: true,
         output: [
-          `Plan approved. Left plan mode; permission mode is now "${PLAN_MODE_EXIT_TARGET}".`,
-          'Edits and commands are no longer blocked outright, but each still goes through the normal approval gate.',
+          legacyPath
+            ? `Plan approved. Left plan mode; permission mode is now "${PLAN_MODE_LEGACY_EXIT_TARGET}".`
+            : `Plan approved. Left plan mode; permission mode "${store.permissionMode}" is unchanged (edits and commands still go through its normal approval gate).`,
           'Proceed with the plan you just described.',
         ].join('\n'),
       }

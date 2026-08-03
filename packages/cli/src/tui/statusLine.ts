@@ -12,6 +12,8 @@ import {
 
 export type StatusLineSession = {
   permissionMode?: string
+  /** HKP-3：plan 正交开关（激活时状态显示 plan） */
+  planMode?: boolean
   model?: string
   effortLevel?: string
   messages: { length: number }
@@ -41,7 +43,8 @@ export function formatSessionStatusLine(
   session: StatusLineSession,
   opts?: StatusLineOptions,
 ): string {
-  const mode = session.permissionMode ?? 'default'
+  // HKP-3：plan 是正交开关——激活时状态显示 plan，尽管 permissionMode 保持原值
+  const mode = session.planMode === true ? 'plan' : (session.permissionMode ?? 'default')
   const model = session.model?.trim() || '(unset)'
   const effort = session.effortLevel?.trim() || 'auto'
   const n = session.messages.length

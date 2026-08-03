@@ -928,6 +928,8 @@ export type CreateSessionOptions = {
    * 超预算时压缩失败回退（保留旧历史）并 warning。
    */
   compactTimeoutMs?: number
+  /** HKP-3：初始 plan 正交开关（默认 false；/plan 激活） */
+  planMode?: boolean
   /** 模型名（写入环境段；可从 workspace 传入） */
   model?: string
   /**
@@ -994,6 +996,8 @@ export type BoloSession = {
    * submitPrompt path-scope 刷新 rules 时透传。
    */
   systemPromptUserConfigDir?: string
+  /** HKP-3：plan 正交开关（true = 规划态，任何权限模式下强制只读） */
+  planMode?: boolean
   /** 是否在 submitPrompt 时按 activePaths 重装 path-scoped rules。
    * 默认 true；createSession(systemPrompt:false) 或显式 loadRules:false 时为 false。
    */
@@ -1423,6 +1427,9 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
       opts.maxPtlRetries === undefined
         ? 3
         : Math.max(0, opts.maxPtlRetries),
+    ...(opts.planMode !== undefined
+      ? { planMode: opts.planMode === true }
+      : {}),
     ...(opts.compactModel !== undefined
       ? { compactModel: opts.compactModel }
       : {}),
@@ -2449,6 +2456,7 @@ async function runOwnedPrompt(
       systemPromptSections: session.systemPromptSections,
       deps: session.deps,
       permissionMode: session.permissionMode,
+      planMode: session.planMode === true,
       askPermission: session.askPermission,
       permissionRules: session.permissionRules,
       classifyPermission: session.classifyPermission,
@@ -2472,7 +2480,7 @@ async function runOwnedPrompt(
       backgroundStore: session.backgroundAgents,
       todoStore: getSessionTodoStore(session),
       backgroundShellStore: session.backgroundShells,
-      // AR-T3a：ExitPlanMode 经用户批准后就地切换会话权限模式。
+      // AR-T3a + HKP-3：plan 正交开关 + ExitPlanMode 就地切换。
       // 用 live getter/setter 直写 session，与 todoStore 同一手法。
       planModeStore: {
         get permissionMode(): string {
@@ -2480,6 +2488,12 @@ async function runOwnedPrompt(
         },
         set permissionMode(next: string) {
           session.permissionMode = next as typeof session.permissionMode
+        },
+        get planMode(): boolean {
+          return session.planMode === true
+        },
+        set planMode(next: boolean) {
+          session.planMode = next
         },
       },
       // AR-T3+：AskUserQuestion 的提问句柄。CLI / Desktop 各注入自己的实现；
@@ -3276,7 +3290,14 @@ export {
  */
 export function setPermissionMode(session: BoloSession, mode: PermissionMode) {
   const prev = session.permissionMode
-  session.permissionMode = mode
+  // HKP-3：plan 是正交开关——切换到 'plan' 只激活规划态，不覆盖原模式；
+  // 从其它模式切换时同步关闭规划态
+  if (mode === 'plan') {
+    session.planMode = true
+  } else {
+    session.planMode = false
+    session.permissionMode = mode
+  }
   if (mode === 'auto' && prev !== 'auto') {
     const removed = stripDangerousAllowsForAuto(session.permissionRules)
     if (!session.autoModeState) {

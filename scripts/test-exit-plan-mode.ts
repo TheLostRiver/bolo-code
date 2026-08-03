@@ -70,9 +70,9 @@ async function main() {
     'leaving plan mode must never bypass user approval',
   )
 
-  // ── 4) 批准 → 退出到 default（逐个审批），不是 acceptEdits / bypass ──
+  // ── 4) 批准 → 退出（旧路径 plan→default；正交路径恢复原模式）──
   {
-    const store: PlanModeStoreRef = { permissionMode: 'plan' }
+    const store: PlanModeStoreRef = { permissionMode: 'plan', planMode: false }
     const tool = createExitPlanModeTool()
     const r = await tool.call(
       { plan: '1. read config\n2. patch the parser\n3. run tests' },
@@ -81,7 +81,7 @@ async function main() {
     assert(r.ok === true, `approved exit succeeds: ${r.output}`)
     assert(
       store.permissionMode === 'default',
-      `exits to default, got ${store.permissionMode}`,
+      `legacy plan mode exits to default, got ${store.permissionMode}`,
     )
     assert(
       store.permissionMode !== 'acceptEdits' &&
@@ -94,9 +94,29 @@ async function main() {
     )
   }
 
+  // ── 4b) HKP-3 正交路径：bypassPermissions + planMode=true → 批准后
+  //      恢复原模式（不再被降级到 default）──
+  {
+    const store: PlanModeStoreRef = {
+      permissionMode: 'bypassPermissions',
+      planMode: true,
+    }
+    const tool = createExitPlanModeTool()
+    const r = await tool.call(
+      { plan: '1. read config\n2. patch the parser' },
+      { cwd: process.cwd(), extras: { planModeStore: store } },
+    )
+    assert(r.ok === true, `orthogonal exit succeeds: ${r.output}`)
+    assert(store.planMode === false, 'plan switch is cleared')
+    assert(
+      store.permissionMode === 'bypassPermissions',
+      `orthogonal exit restores the original mode, got ${store.permissionMode}`,
+    )
+  }
+
   // ── 5) 空计划要拒绝：出口不是「随便调一下就出去」 ──
   {
-    const store: PlanModeStoreRef = { permissionMode: 'plan' }
+    const store: PlanModeStoreRef = { permissionMode: 'plan', planMode: false }
     const tool = createExitPlanModeTool()
     const r = await tool.call(
       { plan: '   ' },
@@ -108,7 +128,7 @@ async function main() {
 
   // ── 6) 不在 plan 模式时调用是无意义的，要明说 ──
   {
-    const store: PlanModeStoreRef = { permissionMode: 'default' }
+    const store: PlanModeStoreRef = { permissionMode: 'default', planMode: false }
     const tool = createExitPlanModeTool()
     const r = await tool.call(
       { plan: 'do the thing' },

@@ -171,6 +171,8 @@ export type RunToolUseContext = {
   cwd: string
   hooks: HooksConfig
   permissionMode: PermissionMode
+  /** HKP-3：plan 正交开关（true = 规划态，gate 合成 'plan' 强制只读） */
+  planMode?: boolean
   askPermission: AskPermissionFn
   /** 会话 Always-allow；ask 选 a 时就地写入 */
   permissionRules?: SessionPermissionRules
@@ -224,6 +226,8 @@ export type RunToolUseContext = {
    */
   sessionRef?: {
     permissionMode: PermissionMode
+    /** HKP-3：plan 正交开关（ExitPlanMode 经 sessionRef 读） */
+    planMode?: boolean
     autoModeState?: AutoModeState
     fileDiffLog?: import('./fileDiffLog.ts').FileChangeRecord[]
     /** 当前用户 turn 序号；submitPrompt 递增 */
@@ -583,8 +587,9 @@ export async function runToolUse(
   }
 
   // --- 全局 PermissionGate + tool.checkPermissions ---
+  // HKP-3：plan 正交开关合成 gate 模式——规划态任何权限模式下都强制只读
   const gate = decidePermission({
-    mode: ctx.permissionMode,
+    mode: ctx.planMode === true ? 'plan' : ctx.permissionMode,
     toolName: name,
     toolInput,
     cwd: ctx.cwd,

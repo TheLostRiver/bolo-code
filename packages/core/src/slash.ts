@@ -145,6 +145,8 @@ export type SlashSession = {
   /** 是否把 reasoning_content 写入 assistant history */
   persistReasoning?: boolean
   compactSummarizer?: CompactSummarizer
+  /** HKP-3：plan 正交开关（/plan 激活，ExitPlanMode 关闭） */
+  planMode?: boolean
   /** ROB-3：后台 shell store（/bg 展示；Bash run_in_background 写入） */
   backgroundShells?: import('../../shared/src/index.ts').BackgroundShellStore
   /** 会话 skill 全文表；供 /skills 与 /<skill-id> 回落 */
@@ -3496,8 +3498,9 @@ Usage: /websearch [on|off|auto]`,
 }
 
 function cmdPlan(session: SlashSession, _args: string): SlashDispatchResult {
-  session.permissionMode = 'plan'
-  return { ok: true, message: 'permissionMode set to plan' }
+  // HKP-3：plan 正交开关——保持原权限模式，仅激活规划态（只读强制）
+  session.planMode = true
+  return { ok: true, message: 'plan mode activated (read-only; permission mode unchanged)' }
 }
 
 async function cmdPermissions(
