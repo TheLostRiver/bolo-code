@@ -407,10 +407,12 @@ function environmentSection(env: SystemPromptEnv): string {
       lines.push(
         `- Plan mode is ACTIVE: read-only investigation/planning only; ` +
           `write/exec tools are blocked until the user approves leaving plan mode ` +
-          `(call ExitPlanMode with your plan to ask).`,
+          `(call ExitPlanMode with your plan to ask). Permission mode stays ` +
+          `"${env.permissionMode}" but is overridden while plan is active.`,
       )
+    } else {
+      lines.push(`- ${permissionModeBehaviorLine(env.permissionMode)}`)
     }
-    lines.push(`- ${permissionModeBehaviorLine(env.permissionMode)}`)
   }
   if (env.model) {
     lines.push(`- Model: ${env.model}`)

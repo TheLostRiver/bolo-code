@@ -53,6 +53,8 @@ export type ApplyTuiInputKeyResult = {
 
 export type TuiInputStatus = {
   permissionMode?: string
+  /** HKP-3：plan 正交开关（chip 显示 plan） */
+  planMode?: boolean
   providerId?: string
   providerKind?: string
   model?: string
@@ -694,7 +696,10 @@ function renderStatusFooter(options: {
 }): string {
   const { status, width, colors } = options
   if (!status) return ''
-  const mode = sanitizeTuiStatusText(status.permissionMode) || 'default'
+  const mode =
+    status.planMode === true
+      ? 'plan'
+      : sanitizeTuiStatusText(status.permissionMode) || 'default'
   const provider =
     sanitizeTuiStatusText(status.providerId) ||
     sanitizeTuiStatusText(status.providerKind)
@@ -1047,8 +1052,11 @@ function renderPaletteFooter(options: {
       actionSegment(' exit'),
     ]
   }
-  // 右侧胶囊：permissionMode · usage（对齐原型 mode-chip）
-  const modeText = sanitizeTuiStatusText(status?.permissionMode) || 'default'
+  // 右侧胶囊：permissionMode · usage（对齐原型 mode-chip；plan 激活显示 plan）
+  const modeText =
+    status?.planMode === true
+      ? 'plan'
+      : sanitizeTuiStatusText(status?.permissionMode) || 'default'
   const usage = status?.usage
   const chipText = usage
     ? `${modeText} · ↓${formatTuiTokenCount(

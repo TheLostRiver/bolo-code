@@ -167,6 +167,7 @@ export async function runNewSessionCli(
         plain: opts.plainBanner,
         session: {
           permissionMode: session.permissionMode,
+          planMode: session.planMode === true,
           model: session.model,
           effortLevel: session.effortLevel,
           messages: session.messages,
@@ -194,6 +195,7 @@ export async function runNewSessionCli(
         plain: opts.plainBanner,
         session: {
           permissionMode: session.permissionMode,
+          planMode: session.planMode === true,
           model: session.model,
           effortLevel: session.effortLevel,
           messages: session.messages,

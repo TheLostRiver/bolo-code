@@ -123,6 +123,8 @@ export type SessionSummary = {
   path: string
   messageCount: number
   permissionMode: string
+  /** HKP-3：plan 正交开关（摘要展示） */
+  planMode?: boolean
   model?: string
   lastMessage?: { role: string; preview: string }
 }
@@ -154,6 +156,7 @@ export function buildSessionSummary(
     path: filePath,
     messageCount: session.messages.length,
     permissionMode: session.permissionMode,
+    planMode: session.planMode === true,
     model: session.model,
     lastMessage: last
       ? { role: last.role, preview: previewText(last.content || '(empty)') }
@@ -468,6 +471,7 @@ export function configureSessionComposer(
     slashCandidates: getCliSlashCommandCandidates(session),
     status: {
       permissionMode: session.permissionMode,
+      planMode: session.planMode === true,
       providerId: session.providerId,
       providerKind: session.provider?.id,
       model: session.model,
