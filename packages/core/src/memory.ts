@@ -433,9 +433,11 @@ export function selectRelevantMemoryTopics(
     if (t.hasBody === false) continue
     const hayTokens = new Set(
       tokenizeMemoryQuery(
-        [t.filename.replace(/\.md$/i, ''), t.title ?? '', t.description ?? ''].join(
-          ' ',
-        ),
+        [
+          t.filename.replace(/\.md$/i, '').replace(/_/g, ' '),
+          t.title ?? '',
+          t.description ?? '',
+        ].join(' '),
       ),
     )
     // 文件名整段也作为可匹配串（下划线拆开已在 tokenize）

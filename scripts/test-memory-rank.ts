@@ -98,15 +98,17 @@ const topic = (
 
 // --- 4. description 缺失降权 ---
 {
-  const withDesc = topic('a_setup.md', { description: 'bun setup guide' })
-  const noDesc = topic('b_setup.md', { description: null })
+  const withDesc = topic('guide_setup.md', { description: 'bun setup guide' })
+  const noDesc = topic('quick_setup.md', { description: null })
   const rel = selectRelevantMemoryTopics('bun setup', [noDesc, withDesc], {
     now: NOW,
   })
-  const a = rel.find((r) => r.filename === 'a_setup.md')!
-  const b = rel.find((r) => r.filename === 'b_setup.md')
+  const a = rel.find((r) => r.filename === 'guide_setup.md')!
+  const b = rel.find((r) => r.filename === 'quick_setup.md')
   assert(a, 'with-desc topic selected')
-  assert(a.score > (b?.score ?? 0), 'missing description penalized')
+  assert(b, 'missing-description topic still retained (floor)')
+  assert(b.score >= 0.5, `missing-description floored at 0.5 (got ${b.score})`)
+  assert(a.score > b.score, 'missing description penalized')
 }
 
 // --- 5. 多样性重排：相似标题只保留最高分者 ---
