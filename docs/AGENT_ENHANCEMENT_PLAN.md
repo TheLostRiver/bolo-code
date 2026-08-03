@@ -19,8 +19,8 @@
 | TERM-1 | 终端能力探测（品牌特化） | 低 | CLI adapter | ✅ 本轮 |
 | TERM-2 | 输入 CSI 分片重组 | 低 | CLI adapter/StdinBuffer | ✅ 本轮 |
 | HKP-1 | hooks 事件面扩展与 fail-open 结果 | 低 | hooks 包 | ✅ 本轮 |
-| HKP-2 | 权限 auto 模式命令级安全分析 | 低–中 | permissions auto 分类器 | ▶ NEXT |
-| HKP-3 | plan 模式与权限系统正交化 | 低 | core 权限接线 | 📋 |
+| HKP-2 | 权限 auto 模式命令级安全分析 | 低–中 | permissions auto 分类器 | ✅ 本轮 |
+| HKP-3 | plan 模式与权限系统正交化 | 低 | core 权限接线 | ▶ NEXT |
 | REN-1 | markdown render-fidelity 自检 | 低 | markdown 渲染层 | 📋 |
 | MEM-1 | 跨会话记忆 MVP（Markdown 双层 + FTS 检索 + 压缩前 flush + 首轮注入） | 低–中 | 新 memory 模块 + core 注入 | 📋 |
 | CMP-2 | 两遍预压缩（prefire pass1） | 中 | compact 执行器 | 📋 |
@@ -177,16 +177,28 @@ hookDiag/exit-2 反馈路径）。
 timeout/预 abort 不执行）、deny 触发写标记、失败触发写标记、exit 2 反馈；
 typecheck、hooks-htrack/ptl/subagent/cli-events 回归与完整 `npm test` 通过。
 
-## 8. HKP-2 · 权限 auto 模式命令级安全分析 — 低–中成本
+## 8. HKP-2 · 权限 auto 模式命令级安全分析 — 低–中成本 ✅ 本轮
 
-**目标**：auto 模式的 Bash 审批做命令级安全分析：sudo 永不自批、`rg --pre` /
-`env` / `cp` 等危险形态不批、包管理器（npm/pip/cargo 等）仅白名单子命令自动
-放行，其余走询问。
+**目标**：auto 模式的 Bash 审批做命令级安全分析：提权/危险形态永不自批、
+包管理器白名单子命令自动放行、其余走询问。
 
-**设计**：permissions auto 分类器增加命令解析层（词法级，不做语义理解）；
-fail-closed：无法解析的命令不自动放行。参考成熟 agent 的 allowlist 粒度。
+**设计**（已落地）：
+- shared `commandSafety.ts` 纯契约：`tokenizeShellCommand`（词法级，单/双引号与
+  转义，未闭合 fail-closed）+ `classifyBashCommandSafety`——
+  deny：提权命令头（sudo/su/doas/pkexec/runuser）、管道到 shell
+  （| sh/bash/zsh/fish/dash/powershell/pwsh）、rg/grep `--pre`、破坏性目标
+  （rm -rf /、dd of=/dev/*、mkfs）；
+  ask：npx/bunx（可执行任意包，无法静态确认）与未覆盖命令；
+  allow：包管理器（npm/pnpm/yarn/bun/cargo/pip/pip3/uv/go/gradle/mvn/composer）
+  白名单子命令（install/add/run/build/test/mod/get 等）。
+- toolExecution：auto 分支先于分类器做确定性判定——deny 直接拒绝（不调分类器、
+  不执行）、allow 直接放行（跳过分类器）、ask 走原分类器/UI 路径；audit
+  stage=command-safety、permission_decision 事件完整。
 
-**验收**：危险命令拒绝、白名单放行、未知命令询问；既有权限门禁回归。
+**验收**：专项覆盖 tokenizer（引号/转义/未闭合）、危险拒绝（13 例含 reason）、
+白名单放行（10 例）、任意执行器与未覆盖命令询问、fail-closed、auto 接线
+（classifier spy 断言 deny/allow 均不调分类器）；permissions/auto-permissions/
+permission-panel/exit-plan-mode 回归与完整 `npm test` 通过。
 
 ## 9. HKP-3 · plan 模式与权限系统正交化 — 低成本
 
