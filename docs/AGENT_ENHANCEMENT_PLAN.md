@@ -280,15 +280,34 @@ remember`（含无参拒绝）、relevanceQuery 透传（有/无查询对比）�
 **边界（后续项）**：FTS 索引（现为词频相关性，MEM-2 质量链）、外部编辑 watcher
 标脏（新会话生效，当前会话沿用首轮注入）、resume 会话沿用快照记忆段不重检索。
 
-## 12. CMP-2 · 两遍预压缩（prefire pass1）— 中成本
+## 12. CMP-2 · 两遍预压缩（prefire pass1）— 中成本 ✅ 本轮
 
 **目标**：接近压缩阈值时后台先总结历史前缀（pass1 预热），真正压缩时只做增量
 第二遍，缩短压缩停顿。
 
-**设计**：compact 执行器增加预压缩状态机：阈值 80% 触发 pass1（低优先级、可取消），
-到阈值时若有 pass1 结果直接做第二遍合并；并发安全（压缩期间新消息不丢）。
+**设计**（已落地）：
+- `packages/core/src/precompact.ts` 预热状态机：
+  - 触发区间 = `[autoThreshold - 8_000, autoThreshold)`（auto 阈值本身 ≈
+    effectiveWindow - 13_000 buffer，约 75% 窗口；预热取阈值前 8k token
+    窄带，不与 auto compact 抢触发）。
+  - pass1 用与真正压缩**相同**的 split/keep（`resolveCompactKeepOpts` 从
+    runFullCompact 抽出共用）总结历史前缀；结果落 `session.precompact`
+    （count + 前缀指纹 + summaryText）。
+  - fire-and-forget（不阻塞主线程）；压缩开始时清空状态，晚到结果经
+    commit 引用检查丢弃；压缩时用「前 N 条指纹」验证预热仍覆盖旧前缀，
+    不匹配回退全量（功能正确，仅预热失效）；预热失败静默，下次再触发。
+- 压缩合并：预热有效 → `buildPrecompactMessages` 产出
+  `[合成 summary user 消息] + 新增消息` 短链喂 runFullCompact——
+  summarizer 只吃新增（合成消息命中 isCompactSummaryMessage → 自动注入
+  COMPACT_MERGE_PRIOR_SUMMARY_HINT 合并提示）。
+- 触发点：`tryMidTurnCompact` 未达标分支（每轮查询循环检查）；
+  `session.precompactEnabled === false` 可关。
 
-**验收**：预压缩命中/未命中/取消/并发各场景；完整门禁。
+**验收**（全部通过）：专项覆盖阈值带、预热启动/跳过、commit 引用检查
+（晚到结果不覆盖新状态）、buildPrecompactMessages 命中/未命中/前缀篡改、
+compactSession 集成（预热后压缩 summarizer 只吃新增 ≤15 条 vs 全量 96）、
+预热失败静默、开关关闭；compact/auto-compact/write-failure/usage-anchor/
+autocompact-system-tokens 回归及完整 `npm test` 通过。
 
 ## 13. MEM-2 · 记忆检索质量链 — 低成本（依赖 MEM-1）
 
