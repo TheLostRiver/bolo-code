@@ -150,13 +150,34 @@ const topic = (
       '# Plain\n\njust body text, no frontmatter\n',
       'utf8',
     )
+    await fs.writeFile(path.join(dir, 'blank.md'), '   \n\n  \n', 'utf8')
     const topics = await scanMemoryTopics(dir, { scope: 'user' })
     const empty = topics.find((t) => t.filename === 'empty.md')
     const filled = topics.find((t) => t.filename === 'filled.md')
     const nofront = topics.find((t) => t.filename === 'nofront.md')
+    const blank = topics.find((t) => t.filename === 'blank.md')
     assert(empty && empty.hasBody === false, 'empty frontmatter-only → hasBody false')
     assert(filled && filled.hasBody !== false, 'filled → hasBody true')
     assert(nofront && nofront.hasBody !== false, 'no frontmatter → treated as body')
+    assert(
+      blank && blank.hasBody === false,
+      'whitespace-only no-frontmatter → hasBody false',
+    )
+    // 正文在 40 行/8KB 窗口之后也不误判为空（全文判定）
+    await fs.writeFile(
+      path.join(dir, 'longhead.md'),
+      '---\ndescription: bun setup\ntitle: Long\n---\n' +
+        Array.from({ length: 60 }, (_, i) => `line ${i}`).join('\n') +
+        '\n\nreal body content here\n',
+      'utf8',
+    )
+    const longhead = (await scanMemoryTopics(dir, { scope: 'user' })).find(
+      (t) => t.filename === 'longhead.md',
+    )
+    assert(
+      longhead && longhead.hasBody !== false,
+      'body beyond head window still detected (full-file read)',
+    )
     const rel = selectRelevantMemoryTopics('bun setup', topics, { now: NOW })
     assert(
       !rel.some((r) => r.filename === 'empty.md'),

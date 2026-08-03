@@ -322,21 +322,20 @@ export async function scanMemoryTopics(
       if (!ent.name.toLowerCase().endsWith('.md')) continue
       if (ent.name === MEMORY_ENTRYPOINT_NAME) continue
       let st: import('node:fs').Stats
-      let head: string
+      let raw: string
       try {
         st = await fs.stat(abs)
-        const fh = await fs.open(abs, 'r')
-        try {
-          const buf = Buffer.alloc(8_192)
-          const { bytesRead } = await fh.read(buf, 0, buf.length, 0)
-          head = buf.slice(0, bytesRead).toString('utf8')
-        } finally {
-          await fh.close()
-        }
+        // MEM-2 review：读全文判定 hasBody——head 窗口（8KB/40 行）会把
+        // 正文在窗口后的真实 topic 误判为空；topic 文件通常很小（正文预算
+        // MAX_SINGLE_TOPIC_BODY_CHARS），全文读取成本可控
+        raw = await fs.readFile(abs, 'utf8')
       } catch {
         continue
       }
-      const headLines = head.split(/\r?\n/).slice(0, MEMORY_TOPIC_HEADER_LINES).join('\n')
+      const headLines = raw
+        .split(/\r?\n/)
+        .slice(0, MEMORY_TOPIC_HEADER_LINES)
+        .join('\n')
       const { description, title } = parseMemoryTopicFrontmatter(headLines)
       let derivedTitle = title
       if (!derivedTitle) {
@@ -352,7 +351,7 @@ export async function scanMemoryTopics(
         title: derivedTitle,
         scope,
         // MEM-2：frontmatter 后无正文的 topic 视为空/脚手架（select 阶段过滤）
-        hasBody: frontmatterHasBody(headLines),
+        hasBody: frontmatterHasBody(raw),
       })
     }
   }
@@ -362,10 +361,13 @@ export async function scanMemoryTopics(
   return out.slice(0, maxFiles)
 }
 
-/** MEM-2：frontmatter（--- ... ---）之后是否有非空正文；无 frontmatter 视为有 */
-function frontmatterHasBody(headLines: string): boolean {
-  const lines = headLines.split(/\r?\n/)
-  if (lines[0]?.trim() !== '---') return true
+/** MEM-2：frontmatter（--- ... ---）之后是否有非空正文；无 frontmatter 时全文空白判定 */
+function frontmatterHasBody(raw: string): boolean {
+  const lines = raw.split(/\r?\n/)
+  if (lines[0]?.trim() !== '---') {
+    // 无 frontmatter：全文空白（0 字节/纯空白脚手架）→ false
+    return lines.some((l) => l.trim() !== '')
+  }
   let i = 1
   while (i < lines.length && lines[i]?.trim() !== '---') i += 1
   if (i >= lines.length) return true // frontmatter 未闭合 → 保守视为有正文
@@ -452,8 +454,8 @@ export function selectRelevantMemoryTopics(
         const ageDays = Math.max(0, (now - (t.mtimeMs ?? now)) / 86_400_000)
         score = score * Math.pow(0.5, ageDays / MEMORY_HALF_LIFE_DAYS)
       }
-      // description 缺失降权（脚手架感内容降排）
-      if (!t.description?.trim()) score -= 2
+      // description 缺失降权（降排不丢弃：地板 0.5 保证入池）
+      if (!t.description?.trim()) score = Math.max(0.5, score - 2)
       if (score > 0) scored.push({ ...t, score })
     }
   }
