@@ -1061,6 +1061,8 @@ export type BoloSession = {
   memoryFlushedHash?: string
   /** CMP-2：pass1 预热状态（80% 阈值后台总结；压缩时增量合并） */
   precompact?: PrecompactState
+  /** CMP-2：预热任务进行中标志（in-flight 去重） */
+  precompactInFlight?: boolean
   /** CMP-2：预热开关（默认 true；false 关闭） */
   precompactEnabled?: boolean
   skills: LoadedSkill[]
@@ -3108,8 +3110,19 @@ function maybeStartPrecompactWarmup(session: BoloSession): void {
     contextWindowTokens: session.resolvedModel.contextWindowTokens,
     current: () => session.precompact,
     commit: (state) => {
-      // 压缩开始已清空 / 新预热已占位 → 丢弃本结果
-      if (!session.precompact) session.precompact = state
+      // at 比较：晚到的旧结果（at 更小）不覆盖新状态/新预热；
+      // 压缩清空后新预热已占位 → 本结果（旧 at）被拒
+      if (!session.precompact || session.precompact.at < state.at) {
+        session.precompact = state
+      }
+    },
+    markInFlight: () => {
+      if (session.precompactInFlight) return false
+      session.precompactInFlight = true
+      return true
+    },
+    clearInFlight: () => {
+      session.precompactInFlight = false
     },
     summarizeTimeoutMs: session.compactTimeoutMs,
   })

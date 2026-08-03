@@ -139,11 +139,20 @@ function fingerprint(messages: readonly ChatMessage[]): string {
     commit: (s) => {
       session.precompact = s
     },
+    markInFlight: () => {
+      if (session.precompactInFlight) return false
+      session.precompactInFlight = true
+      return true
+    },
+    clearInFlight: () => {
+      session.precompactInFlight = false
+    },
     summarizeTimeoutMs: 1_000,
   })
   await new Promise((r) => setTimeout(r, 100))
   assert.equal(session.precompact, undefined, 'below threshold: no warmup')
   assert.equal(calls.length, 0, 'below threshold: summarizer untouched')
+  assert.equal(session.precompactInFlight, false, 'below threshold: no in-flight left')
 
   // 达预热带 → 预热启动并落位
   session.messages.push(...Array.from({ length: 62 }, (_, i) => bigMessage(`w${i}`)))
@@ -155,48 +164,109 @@ function fingerprint(messages: readonly ChatMessage[]): string {
     commit: (s) => {
       session.precompact = s
     },
+    markInFlight: () => {
+      if (session.precompactInFlight) return false
+      session.precompactInFlight = true
+      return true
+    },
+    clearInFlight: () => {
+      session.precompactInFlight = false
+    },
     summarizeTimeoutMs: 1_000,
   })
   await waitFor(() => session.precompact !== undefined, 3_000)
   const pc = session.precompact!
   assert.equal(pc.summaryText, 'warm 1', 'warmup summary text')
   assert.equal(pc.count, 88 - 1, 'warmup count excludes keep tail')
+  assert.equal(session.precompactInFlight, false, 'completed: in-flight cleared')
   assert(
     calls.every((c) => c.includes(warmupPromptMarker)),
     'warmup used precompact prompt',
   )
 
-  // 进行中 → 不再启动（current 已有）
-  const callsBefore = calls.length
+  // 进行中（in-flight）→ 不再启动（markInFlight 抢占拒绝）
+  session.precompact = undefined
+  let slowCalls = 0
+  let release: (() => void) | undefined
+  const gate = new Promise<void>((r) => {
+    release = r
+  })
   startPrecompactWarmup({
     messages: () => session.messages,
-    summarize: session.compactSummarizer!,
+    summarize: async () => {
+      slowCalls += 1
+      await gate
+      return { text: 'slow warm' }
+    },
     contextWindowTokens: WINDOW,
     current: () => session.precompact,
     commit: (s) => {
       session.precompact = s
     },
+    markInFlight: () => {
+      if (session.precompactInFlight) return false
+      session.precompactInFlight = true
+      return true
+    },
+    clearInFlight: () => {
+      session.precompactInFlight = false
+    },
   })
-  await new Promise((r) => setTimeout(r, 100))
-  assert.equal(calls.length, callsBefore, 'in-flight: no duplicate warmup')
-
-  // commit 引用检查：压缩已清空 → 晚到结果丢弃
-  session.precompact = undefined
-  let committed = 0
+  await new Promise((r) => setTimeout(r, 30))
+  assert.equal(slowCalls, 1, 'first warmup started')
   startPrecompactWarmup({
     messages: () => session.messages,
-    summarize: session.compactSummarizer!,
+    summarize: async () => {
+      slowCalls += 1
+      return { text: 'dup' }
+    },
     contextWindowTokens: WINDOW,
     current: () => session.precompact,
-    commit: () => {
-      committed += 1
-      // 模拟压缩已清空（会话内新状态占位）
-      session.precompact = { at: 999, count: 0, headFingerprint: 'x', summaryText: 'newer' }
+    commit: (s) => {
+      session.precompact = s
+    },
+    markInFlight: () => {
+      if (session.precompactInFlight) return false
+      session.precompactInFlight = true
+      return true
+    },
+    clearInFlight: () => {
+      session.precompactInFlight = false
+    },
+  })
+  await new Promise((r) => setTimeout(r, 30))
+  assert.equal(slowCalls, 1, 'in-flight dedup: no second warmup')
+  release!()
+  await waitFor(() => session.precompact !== undefined, 3_000)
+  assert.equal(session.precompact!.summaryText, 'slow warm', 'first warmup wins')
+
+  // commit at 比较：会话已有更新的状态 → 晚到旧结果不覆盖
+  session.precompact = undefined
+  const newerAt = Date.now() + 100_000
+  session.precompact = { at: newerAt, count: 0, headFingerprint: 'x', summaryText: 'newer' }
+  startPrecompactWarmup({
+    messages: () => session.messages,
+    summarize: async () => ({ text: 'old result' }),
+    contextWindowTokens: WINDOW,
+    current: () => session.precompact,
+    commit: (s) => {
+      if (!session.precompact || session.precompact.at < s.at) {
+        session.precompact = s
+      }
+    },
+    markInFlight: () => {
+      if (session.precompactInFlight) return false
+      session.precompactInFlight = true
+      return true
+    },
+    clearInFlight: () => {
+      session.precompactInFlight = false
     },
     summarizeTimeoutMs: 1_000,
   })
-  await waitFor(() => committed >= 1, 3_000)
-  assert.equal(session.precompact!.at, 999, 'late result did not overwrite newer state')
+  await new Promise((r) => setTimeout(r, 150))
+  assert.equal(session.precompact!.at, newerAt, 'late older result rejected by at compare')
+  session.precompact = undefined
 }
 
 // --- 4. 预热失败静默 ---
@@ -219,10 +289,19 @@ function fingerprint(messages: readonly ChatMessage[]): string {
     commit: (s) => {
       session.precompact = s
     },
+    markInFlight: () => {
+      if (session.precompactInFlight) return false
+      session.precompactInFlight = true
+      return true
+    },
+    clearInFlight: () => {
+      session.precompactInFlight = false
+    },
     summarizeTimeoutMs: 500,
   })
   await new Promise((r) => setTimeout(r, 300))
   assert.equal(session.precompact, undefined, 'failure: no warmup state')
+  assert.equal(session.precompactInFlight, false, 'failure: in-flight cleared')
 }
 
 // --- 5. compactSession 集成：预热后压缩只吃新增（增量第二遍）---

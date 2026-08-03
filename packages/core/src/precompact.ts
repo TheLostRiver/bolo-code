@@ -44,10 +44,14 @@ export type PrecompactWarmupOptions = {
   messages: () => readonly ChatMessage[]
   summarize: CompactSummarizer
   contextWindowTokens: number
-  /** 是否已有进行中的预热/有效预热 */
+  /** 是否已有有效预热（已落位状态） */
   current: () => PrecompactState | undefined
-  /** 提交结果：仅当会话仍无预热状态时写入（引用检查防覆盖） */
+  /** 提交结果：调用方做 at 比较（旧结果不覆盖新状态） */
   commit: (state: PrecompactState) => void
+  /** 抢占进行中标记：返回 true 表示本任务获得运行权（否则已有任务在跑） */
+  markInFlight: () => boolean
+  /** 释放进行中标记（任务结束/失败/超时） */
+  clearInFlight: () => void
   summarizeTimeoutMs?: number
 }
 
@@ -62,12 +66,19 @@ export function shouldPrecompact(
   return estimate >= threshold - PRECOMPACT_AHEAD_TOKENS && estimate < threshold
 }
 
-/** 启动 pass1 预热（fire-and-forget；已有进行中则跳过） */
+/** 启动 pass1 预热（fire-and-forget；已有进行中或有效预热则跳过） */
 export function startPrecompactWarmup(opts: PrecompactWarmupOptions): void {
   if (opts.current()) return
+  if (!opts.markInFlight()) return // 已有进行中任务（in-flight 去重）
   const messages = opts.messages()
-  if (messages.length === 0) return
-  if (!shouldPrecompact(messages, opts.contextWindowTokens)) return
+  if (messages.length === 0) {
+    opts.clearInFlight()
+    return
+  }
+  if (!shouldPrecompact(messages, opts.contextWindowTokens)) {
+    opts.clearInFlight()
+    return
+  }
 
   // 与真正压缩相同的 split（resolveCompactKeepOpts 共用保证一致性）
   const keepOpts = resolveCompactKeepOpts({
@@ -98,10 +109,12 @@ export function startPrecompactWarmup(opts: PrecompactWarmupOptions): void {
           : await call
       const text = out.text?.trim() ?? ''
       if (!text) return
-      // commit 由调用方做引用检查：压缩已清空/新预热已占位 → 丢弃本结果
+      // commit 由调用方做 at 比较：晚到的旧结果不覆盖新状态/新预热
       opts.commit({ at, count, headFingerprint, summaryText: text })
     } catch {
-      /* 预热失败静默丢弃，下次 ≥80% 再触发 */
+      /* 预热失败静默丢弃，下次进入区间再触发 */
+    } finally {
+      opts.clearInFlight()
     }
   })()
 }
