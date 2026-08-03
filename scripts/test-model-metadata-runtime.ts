@@ -296,7 +296,10 @@ async function main(): Promise<void> {
           loadInstructions: false,
           loadRules: false,
         },
-        compactSummarizer: async () => ({ text: 'compact fixture' }),
+        compactSummarizer: async ({ compactPrompt }) => {
+          if (compactPrompt.includes('memory daily log')) return { text: '' }
+          return { text: 'compact fixture' }
+        },
         microcompact: false,
         snip: false,
       })

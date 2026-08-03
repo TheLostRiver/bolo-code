@@ -3765,6 +3765,7 @@ async function cmdMemory(
     getProjectMemoryDir,
     getProjectMemoryEntrypoint,
     scanMemoryTopics,
+    appendMemoryDailyLog,
   } = await import('./memory.ts')
 
   const sub = args.trim().toLowerCase()
@@ -3793,6 +3794,22 @@ async function cmdMemory(
         `project dir: ${projectDir}`,
         formatMemoryTopicsList(topics),
       ].join('\n'),
+    }
+  }
+  const head = sub.split(/\s+/)[0] ?? ''
+  if (head === 'remember') {
+    const line = args.trim().replace(/^remember(?=\s|$)/i, '').trim()
+    if (!line) {
+      return {
+        ok: false,
+        message: 'Usage: /memory remember <line>  (append one line to user daily log)',
+      }
+    }
+    // MEM-1：手动写入（用户显式记忆）；与压缩前 flush 共用 daily log
+    const file = await appendMemoryDailyLog(line)
+    return {
+      ok: true,
+      message: `memory: appended to ${file}`,
     }
   }
   if (sub && sub !== 'status' && sub !== 'show') {

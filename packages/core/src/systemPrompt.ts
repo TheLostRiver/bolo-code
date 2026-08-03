@@ -224,6 +224,8 @@ export type GetSystemPromptOptions = SystemPromptEnv & {
   loadMemory?: boolean
   /** 已格式化的 memory 段；优先于自动加载 */
   memorySection?: string
+  /** MEM-1：首轮 memory 相关性检索查询（通常会话首条 user 消息） */
+  memoryRelevanceQuery?: string
 }
 
 /**
@@ -529,6 +531,8 @@ export async function getVolatileSections(
         // Startup is discovery-only for project state. Memory directories are
         // materialized by explicit memory writes, not while assembling prompt.
         ensureDir: false,
+        // MEM-1：首轮注入时按会话首条 user 消息检索相关 topic top-N
+        relevanceQuery: opts.memoryRelevanceQuery,
       }))
     if (mem?.trim()) sections.push(mem.trim())
   }

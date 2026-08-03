@@ -165,6 +165,10 @@ async function main() {
     contextWindowTokens: 8_000,
     provider: textOnlyProvider(),
     compactSummarizer: async ({ compactPrompt }) => {
+      // MEM-1：压缩前 flush 用不同 prompt 复用同一 summarizer——按 prompt 区分
+      if (compactPrompt.includes('memory daily log')) {
+        return { text: '' } // MEM-1 flush 分支：空文本不落盘，避免污染真实 daily log
+      }
       summarizeCalls += 1
       assert(compactPrompt.includes('TEXT ONLY'), 'compact prompt no-tools')
       return {
@@ -222,9 +226,12 @@ async function main() {
     systemPrompt: false,
     autoCompactEnabled: false,
     provider: textOnlyProvider(),
-    compactSummarizer: async () => ({
-      text: `<summary>manual ok</summary>`,
-    }),
+    compactSummarizer: async ({ compactPrompt }) => {
+      if (compactPrompt.includes('memory daily log')) return { text: '' }
+      return {
+        text: `<summary>manual ok</summary>`,
+      }
+    },
   })
   sessManual.messages.push({ role: 'user', content: 'a' })
   sessManual.messages.push({ role: 'assistant', content: 'b' })
@@ -245,9 +252,12 @@ async function main() {
     systemPrompt: false,
     autoSave: { sessionsDir, scope: 'project' },
     provider: textOnlyProvider(),
-    compactSummarizer: async () => ({
-      text: `<summary>\n1. Primary Request and Intent:\n   Boundary test.\n</summary>`,
-    }),
+    compactSummarizer: async ({ compactPrompt }) => {
+      if (compactPrompt.includes('memory daily log')) return { text: '' }
+      return {
+        text: `<summary>\n1. Primary Request and Intent:\n   Boundary test.\n</summary>`,
+      }
+    },
   })
   sessDisk.messages.push({ role: 'user', content: 'hello boundary' })
   sessDisk.messages.push({ role: 'assistant', content: 'ack boundary' })
@@ -286,9 +296,12 @@ async function main() {
     systemPrompt: false,
     autoCompactEnabled: false,
     provider: textOnlyProvider(),
-    compactSummarizer: async () => ({
-      text: `<summary>\n1. Primary Request and Intent:\n   Keep system.\n</summary>`,
-    }),
+    compactSummarizer: async ({ compactPrompt }) => {
+      if (compactPrompt.includes('memory daily log')) return { text: '' }
+      return {
+        text: `<summary>\n1. Primary Request and Intent:\n   Keep system.\n</summary>`,
+      }
+    },
   })
   sessSys.systemPromptSections = [
     '# Stable prefix\nDO NOT TOUCH',
@@ -390,7 +403,10 @@ async function main() {
     // 不传 autoCompactEnabled → 默认 true
     contextWindowTokens: 8_000,
     provider: textOnlyProvider(),
-    compactSummarizer: async () => {
+    compactSummarizer: async ({ compactPrompt }) => {
+      if (compactPrompt.includes('memory daily log')) {
+        return { text: '' } // MEM-1 flush 分支不计入 compact 调用计数
+      }
       defSum += 1
       return {
         text: `<summary>\n1. Primary Request and Intent:\n   Default path.\n</summary>`,

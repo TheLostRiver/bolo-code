@@ -57,6 +57,10 @@ async function main() {
     hookInstructions: 'from-precompact-hook',
     keepRecentMessageCount: 1,
     summarize: async ({ compactPrompt }) => {
+      // MEM-1：压缩前 flush 用不同 prompt 复用同一 summarizer——按 prompt 区分
+      if (compactPrompt.includes('memory daily log')) {
+        return { text: '' } // MEM-1 flush 分支：空文本不落盘，避免污染真实 daily log
+      }
       assert(compactPrompt.includes('from-user'), 'user instructions in prompt')
       assert(compactPrompt.includes('from-precompact-hook'), 'hook instructions in prompt')
       assert(compactPrompt.includes('TEXT ONLY'), 'no-tools preamble')

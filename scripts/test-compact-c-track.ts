@@ -189,9 +189,12 @@ async function main() {
     autoCompactEnabled: true,
     contextWindowTokens: 8_000,
     hooks: {},
-    compactSummarizer: async () => ({
-      text: `<summary>\n1. Primary Request and Intent:\n   mid-turn test\n8. Current Work:\n   C3\n</summary>`,
-    }),
+    compactSummarizer: async ({ compactPrompt }) => {
+      if (compactPrompt.includes('memory daily log')) return { text: '' }
+      return {
+        text: `<summary>\n1. Primary Request and Intent:\n   mid-turn test\n8. Current Work:\n   C3\n</summary>`,
+      }
+    },
     onEvent: () => {},
   })
   sess.messages.push(...fat)
@@ -226,9 +229,12 @@ async function main() {
     autoCompactEnabled: true,
     contextWindowTokens: 200_000,
     hooks: {},
-    compactSummarizer: async () => ({
-      text: `<summary>\n1. Primary Request and Intent:\n   no\n8. Current Work:\n   x\n</summary>`,
-    }),
+    compactSummarizer: async ({ compactPrompt }) => {
+      if (compactPrompt.includes('memory daily log')) return { text: '' }
+      return {
+        text: `<summary>\n1. Primary Request and Intent:\n   no\n8. Current Work:\n   x\n</summary>`,
+      }
+    },
     onEvent: () => {},
   })
   sess2.messages.push({ role: 'user', content: 'tiny' })

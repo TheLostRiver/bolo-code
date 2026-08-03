@@ -425,6 +425,7 @@ export {
   isMemoryDisabled,
   getMemoryDailyLogPath,
   appendMemoryDailyLog,
+  flushMemoryFromRecentMessages,
   getTeamMemoryDir,
   ensureTeamMemoryDir,
   MEMORY_ENTRYPOINT_NAME,
@@ -434,6 +435,8 @@ export {
   MAX_RELEVANT_MEMORY_TOPICS,
   MAX_RELEVANT_MEMORY_BODY_CHARS,
 } from './memory.ts'
+
+import { flushMemoryFromRecentMessages } from './memory.ts'
 export type {
   SystemPromptPartition,
   GetSystemPromptOptions,
@@ -930,6 +933,8 @@ export type CreateSessionOptions = {
   compactTimeoutMs?: number
   /** HKP-3：初始 plan 正交开关（默认 false；/plan 激活） */
   planMode?: boolean
+  /** MEM-1：首轮 memory 相关性检索查询；缺省取首条 user 消息 */
+  memoryRelevanceQuery?: string
   /** 模型名（写入环境段；可从 workspace 传入） */
   model?: string
   /**
@@ -1037,6 +1042,10 @@ export type BoloSession = {
   /** tool_result 字符预算（C6） */
   maxToolResultChars: number
   compactSummarizer?: CompactSummarizer
+  /** MEM-1：压缩前 flush 最近消息总结到 user memory daily log（默认 true） */
+  flushMemoryOnCompact?: boolean
+  /** MEM-1：上次成功 flush 的消息块指纹（会话内去重锚点） */
+  memoryFlushedHash?: string
   skills: LoadedSkill[]
   model?: string
   /**
@@ -1354,6 +1363,7 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
       date: extra.date,
       platform: extra.platform,
       shellHint: extra.shellHint,
+      memoryRelevanceQuery: opts.memoryRelevanceQuery,
     })
   }
 
@@ -3172,6 +3182,27 @@ export async function compactSession(
     emit(session, { type: 'error', message: reason })
     setPhase(session, 'ready')
     return { ok: false, reason }
+  }
+
+  // MEM-1：压缩前 flush 最近消息总结到 user memory daily log（fail-open）。
+  // 用压缩前的 snapshot 总结——压缩后这些消息已被摘要替换，正文不再可得。
+  if (session.flushMemoryOnCompact !== false) {
+    try {
+      const flushed = await flushMemoryFromRecentMessages({
+        messages: snapshot,
+        summarize: session.compactSummarizer,
+        alreadyFlushedHash: session.memoryFlushedHash,
+      })
+      session.memoryFlushedHash = flushed.newHash
+      if (flushed.appendedLine) {
+        emit(session, {
+          type: 'warning',
+          message: 'memory: flushed compact summary to daily log',
+        })
+      }
+    } catch {
+      /* 记忆 flush 失败不拖垮 compact */
+    }
   }
 
   // full compact 只改对话 messages；systemPromptSections 稳定前缀不动

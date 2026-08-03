@@ -59,7 +59,10 @@ async function makeSession(sessionsDir: string, id: string, cwd: string) {
     systemPrompt: false,
     autoSave: { sessionsDir, scope: 'project' },
     provider: textOnlyProvider(),
-    compactSummarizer: async () => SUMMARY,
+    compactSummarizer: async ({ compactPrompt }) => {
+      if (compactPrompt.includes('memory daily log')) return { text: '' }
+      return SUMMARY
+    },
   })
   for (let i = 0; i < 6; i++) {
     s.messages.push({ role: 'user', content: `question ${i}` })

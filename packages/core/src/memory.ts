@@ -12,6 +12,7 @@ import {
   getBoloHomeDir,
   getProjectBoloDir,
 } from '../../config/src/paths.ts'
+import type { ChatMessage } from '../../shared/src/index.ts'
 
 export const MEMORY_DIR_NAME = 'memory'
 export const MEMORY_ENTRYPOINT_NAME = 'MEMORY.md'
@@ -739,6 +740,69 @@ export async function appendMemoryDailyLog(
   const stamp = new Date().toISOString()
   await fs.appendFile(file, `- ${stamp} ${line.trim()}\n`, 'utf8')
   return file
+}
+
+/**
+ * MEM-1：压缩前 flush 最近消息总结到 user memory daily log。
+ *
+ * - 取 `messages`（压缩前的最近快照）末尾 N 条非 system/reasoning 消息，
+ *   用会话的 CompactSummarizer 总结成一行追加到 daily log。
+ * - `alreadyFlushedHash` 为上次成功 flush 的消息块指纹（会话内锚点）；
+ *   指纹相同（消息没实质新增）则跳过，避免连续 compact 重复总结同一批消息。
+ * - 纯 fail-open：summarize 或写盘失败都不抛错（不拖垮 compact）；
+ *   失败时不更新锚点，下次 compact 重试。
+ */
+export async function flushMemoryFromRecentMessages(opts: {
+  messages: readonly ChatMessage[]
+  summarize: (req: {
+    messages: ChatMessage[]
+    compactPrompt: string
+  }) => Promise<{ text: string }>
+  alreadyFlushedHash?: string
+  count?: number
+  userBoloDir?: string
+  env?: NodeJS.ProcessEnv
+}): Promise<{ appendedLine?: string; newHash: string }> {
+  const count = opts.count ?? 15
+  const recent = opts.messages
+    .filter((m) => m.role === 'user' || m.role === 'assistant')
+    .slice(-count)
+  if (recent.length === 0) {
+    return { newHash: opts.alreadyFlushedHash ?? '' }
+  }
+  const hash = fingerprintMessages(recent)
+  if (hash === opts.alreadyFlushedHash) {
+    return { newHash: hash }
+  }
+  try {
+    const summary = await opts.summarize({
+      messages: recent,
+      compactPrompt:
+        'Summarize in one line what was done and any key findings, for a cross-session memory daily log. No preamble.',
+    })
+    const text = summary.text.trim()
+    if (!text) return { newHash: hash }
+    await appendMemoryDailyLog(text, {
+      userBoloDir: opts.userBoloDir,
+      env: opts.env,
+    })
+    return { appendedLine: text, newHash: hash }
+  } catch {
+    // fail-open：总结/写盘失败不阻断压缩；锚点不更新，下次重试
+    return { newHash: opts.alreadyFlushedHash ?? '' }
+  }
+}
+
+/** 消息块指纹（非密码学；仅去重用途） */
+function fingerprintMessages(messages: readonly ChatMessage[]): string {
+  let h = 0
+  for (const m of messages) {
+    const s = `${m.role}\u0000${m.content}`
+    for (let i = 0; i < s.length; i += 1) {
+      h = (h * 31 + s.charCodeAt(i)) | 0
+    }
+  }
+  return `f${h >>> 0}`
 }
 
 export function getTeamMemoryDir(opts?: {

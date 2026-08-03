@@ -39,9 +39,12 @@ async function main() {
     autoCompactEnabled: true,
     contextWindowTokens: 128_000,
     provider: textOnlyProvider(),
-    compactSummarizer: async () => ({
-      text: `<summary>\n1. Primary Request and Intent:\n   Slash compact test.\n8. Current Work:\n   verifying compact slash.\n</summary>`,
-    }),
+    compactSummarizer: async ({ compactPrompt }) => {
+      if (compactPrompt.includes('memory daily log')) return { text: '' }
+      return {
+        text: `<summary>\n1. Primary Request and Intent:\n   Slash compact test.\n8. Current Work:\n   verifying compact slash.\n</summary>`,
+      }
+    },
   })
   session.systemPromptSections = ['# Stable\nkeep me']
   session.messages.push({ role: 'user', content: 'hello context' })
