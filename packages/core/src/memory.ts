@@ -15,6 +15,8 @@ import {
 import type { ChatMessage } from '../../shared/src/index.ts'
 
 export const MEMORY_DIR_NAME = 'memory'
+/** MEM-2 security：topic 头窗口读取上限（有界读，防大文件每轮全量 slurp） */
+export const MEMORY_TOPIC_READ_WINDOW_BYTES = 64 * 1024
 export const MEMORY_ENTRYPOINT_NAME = 'MEMORY.md'
 
 /** 对照 HC MAX_ENTRYPOINT_LINES */
@@ -322,17 +324,23 @@ export async function scanMemoryTopics(
       if (!ent.name.toLowerCase().endsWith('.md')) continue
       if (ent.name === MEMORY_ENTRYPOINT_NAME) continue
       let st: import('node:fs').Stats
-      let raw: string
+      let head: string
       try {
         st = await fs.stat(abs)
-        // MEM-2 review：读全文判定 hasBody——head 窗口（8KB/40 行）会把
-        // 正文在窗口后的真实 topic 误判为空；topic 文件通常很小（正文预算
-        // MAX_SINGLE_TOPIC_BODY_CHARS），全文读取成本可控
-        raw = await fs.readFile(abs, 'utf8')
+        // MEM-2 security：有界窗口读（64KB）——hasBody 用「窗口内正文 ||
+        // 文件比窗口大」（窗口外必有内容），既精确又避免每轮无界读取大文件
+        const fh = await fs.open(abs, 'r')
+        try {
+          const buf = Buffer.alloc(MEMORY_TOPIC_READ_WINDOW_BYTES)
+          const { bytesRead } = await fh.read(buf, 0, buf.length, 0)
+          head = buf.slice(0, bytesRead).toString('utf8')
+        } finally {
+          await fh.close()
+        }
       } catch {
         continue
       }
-      const headLines = raw
+      const headLines = head
         .split(/\r?\n/)
         .slice(0, MEMORY_TOPIC_HEADER_LINES)
         .join('\n')
@@ -350,8 +358,9 @@ export async function scanMemoryTopics(
         description,
         title: derivedTitle,
         scope,
-        // MEM-2：frontmatter 后无正文的 topic 视为空/脚手架（select 阶段过滤）
-        hasBody: frontmatterHasBody(raw),
+        // MEM-2：frontmatter 后无正文的 topic 视为空/脚手架（select 阶段过滤）；
+        // 文件比窗口大 → 窗口外必有正文（有界读 + size 判定保持精确）
+        hasBody: frontmatterHasBody(head) || st.size > head.length,
       })
     }
   }

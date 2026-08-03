@@ -157,19 +157,7 @@ const topic = (
       'utf8',
     )
     await fs.writeFile(path.join(dir, 'blank.md'), '   \n\n  \n', 'utf8')
-    const topics = await scanMemoryTopics(dir, { scope: 'user' })
-    const empty = topics.find((t) => t.filename === 'empty.md')
-    const filled = topics.find((t) => t.filename === 'filled.md')
-    const nofront = topics.find((t) => t.filename === 'nofront.md')
-    const blank = topics.find((t) => t.filename === 'blank.md')
-    assert(empty && empty.hasBody === false, 'empty frontmatter-only → hasBody false')
-    assert(filled && filled.hasBody !== false, 'filled → hasBody true')
-    assert(nofront && nofront.hasBody !== false, 'no frontmatter → treated as body')
-    assert(
-      blank && blank.hasBody === false,
-      'whitespace-only no-frontmatter → hasBody false',
-    )
-    // 正文在 40 行/8KB 窗口之后也不误判为空（全文判定）
+    // 正文在 40 行/8KB 窗口之后也不误判为空（窗口 + size 判定）
     await fs.writeFile(
       path.join(dir, 'longhead.md'),
       '---\ndescription: bun setup\ntitle: Long\n---\n' +
@@ -177,12 +165,33 @@ const topic = (
         '\n\nreal body content here\n',
       'utf8',
     )
-    const longhead = (await scanMemoryTopics(dir, { scope: 'user' })).find(
-      (t) => t.filename === 'longhead.md',
+    // 超大文件（超过 64KB 窗口）：窗口内 frontmatter 后无正文，但 size 判定有正文
+    await fs.writeFile(
+      path.join(dir, 'huge.md'),
+      '---\ndescription: bun setup\ntitle: Huge\n---\n' + 'x'.repeat(70_000) + '\n',
+      'utf8',
+    )
+    const topics = await scanMemoryTopics(dir, { scope: 'user' })
+    const empty = topics.find((t) => t.filename === 'empty.md')
+    const filled = topics.find((t) => t.filename === 'filled.md')
+    const nofront = topics.find((t) => t.filename === 'nofront.md')
+    const blank = topics.find((t) => t.filename === 'blank.md')
+    const longhead = topics.find((t) => t.filename === 'longhead.md')
+    const huge = topics.find((t) => t.filename === 'huge.md')
+    assert(empty && empty.hasBody === false, 'empty frontmatter-only → hasBody false')
+    assert(filled && filled.hasBody !== false, 'filled → hasBody true')
+    assert(nofront && nofront.hasBody !== false, 'no frontmatter → treated as body')
+    assert(
+      blank && blank.hasBody === false,
+      'whitespace-only no-frontmatter → hasBody false',
     )
     assert(
       longhead && longhead.hasBody !== false,
-      'body beyond head window still detected (full-file read)',
+      'body beyond head window still detected (window + size)',
+    )
+    assert(
+      huge && huge.hasBody !== false,
+      'huge file beyond read window still detected as having body (size)',
     )
     const rel = selectRelevantMemoryTopics('bun setup', topics, { now: NOW })
     assert(
