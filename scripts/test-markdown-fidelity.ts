@@ -50,12 +50,14 @@ class ResizableOutput extends EventEmitter {
   }
 }
 
-async function settle(controller: {
-  flush(): Promise<void>
-}): Promise<void> {
+async function settle(
+  controller: { flush(): Promise<void> },
+  terminal: { flush(): Promise<void> },
+): Promise<void> {
   await new Promise<void>((resolve) => setImmediate(resolve))
   await new Promise<void>((resolve) => setImmediate(resolve))
   await controller.flush()
+  await terminal.flush()
 }
 
 async function main(): Promise<void> {
@@ -170,23 +172,34 @@ async function main(): Promise<void> {
       output,
       env: { NO_COLOR: '1' },
     })
-    // 覆写 printer.onEvent 捕获 fidelity warning（内部持有同一 printer 引用）
+    // 覆写 printer.onEvent 捕获 fidelity warning，并转发非 warning 事件
+    // （保证 markdown 内容真实进入 transcript 渲染）
+    const originalOnEvent = controller.printer.onEvent.bind(controller.printer)
     const printerSpy = controller.printer as unknown as {
-      onEvent: (event: { type: string; message?: string }) => void
+      onEvent: (event: {
+        type: string
+        message?: string
+        text?: string
+      }) => void
     }
     printerSpy.onEvent = (event) => {
       if (event.type === 'warning') warnings.push(event.message ?? '')
+      else originalOnEvent(event)
     }
     controller.setWelcomeVisible(false)
     await controller.start()
     await terminal.flush()
     controller.printer.beginTurn({ prompt: 'render markdown' })
     controller.printer.onEvent({
-      type: 'assistant',
+      type: 'text',
       text: `intro\n\n${TABLE_SOURCE}\n\n${LIST_SOURCE}\n\n${CODE_SOURCE}`,
     })
     controller.printer.endTurn({ terminalReason: 'completed' })
-    await settle(controller)
+    await settle(controller, terminal)
+    assert(
+      terminal.viewport().some((line) => line.text.includes('intro')),
+      'markdown content genuinely reached the transcript renderer',
+    )
     assert.equal(
       warnings.length,
       0,
@@ -220,22 +233,32 @@ async function main(): Promise<void> {
       output,
       env: { COLORTERM: 'truecolor' },
     })
+    const originalOnEvent = controller.printer.onEvent.bind(controller.printer)
     const printerSpy = controller.printer as unknown as {
-      onEvent: (event: { type: string; message?: string }) => void
+      onEvent: (event: {
+        type: string
+        message?: string
+        text?: string
+      }) => void
     }
     printerSpy.onEvent = (event) => {
       if (event.type === 'warning') warnings.push(event.message ?? '')
+      else originalOnEvent(event)
     }
     controller.setWelcomeVisible(false)
     await controller.start()
     await terminal.flush()
     controller.printer.beginTurn({ prompt: 'render markdown' })
     controller.printer.onEvent({
-      type: 'assistant',
+      type: 'text',
       text: `intro\n\n${TABLE_SOURCE}\n\n${LIST_SOURCE}\n\n${CODE_SOURCE}`,
     })
     controller.printer.endTurn({ terminalReason: 'completed' })
-    await settle(controller)
+    await settle(controller, terminal)
+    assert(
+      terminal.viewport().some((line) => line.text.includes('intro')),
+      'ANSI fixture also renders markdown for real',
+    )
     assert(
       rawWrites.join('').includes('\x1b['),
       'the ANSI-enabled fixture genuinely emits styled output',

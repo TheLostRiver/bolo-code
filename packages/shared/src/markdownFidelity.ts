@@ -37,6 +37,8 @@ function countTableIntents(source: string): number {
   for (let index = 0; index + 1 < lines.length; index += 1) {
     const header = lines[index]!
     const separator = lines[index + 1]!
+    // 超长行跳过正则（防多项式回溯）；真表格行不会超 4KB
+    if (header.length > 4_096 || separator.length > 4_096) continue
     if (
       TABLE_HEADER_RE.test(header) &&
       TABLE_SEPARATOR_RE.test(separator) &&
@@ -52,6 +54,7 @@ function countTableIntents(source: string): number {
 function countListIntents(source: string): number {
   let lists = 0
   for (const line of source.split('\n')) {
+    if (line.length > 4_096) continue
     if (UNORDERED_LIST_RE.test(line) || ORDERED_LIST_RE.test(line)) {
       lists += 1
     }
@@ -62,6 +65,7 @@ function countListIntents(source: string): number {
 function countCodeBlockIntents(source: string): number {
   let fences = 0
   for (const line of source.split('\n')) {
+    if (line.length > 4_096) continue
     if (FENCE_RE.test(line)) fences += 1
   }
   // 成对围栏才算一个代码块；奇数围栏按不完整处理（不算意图）
@@ -84,6 +88,7 @@ function countTableRendered(lines: readonly string[]): number {
   let regions = 0
   let inTable = false
   for (const line of lines) {
+    if (line.length > 4_096) continue
     const pipes = (line.match(/[│|]/gu) ?? []).length
     if (pipes >= 2 || boxCorner.test(line)) {
       if (!inTable) {
@@ -100,6 +105,7 @@ function countTableRendered(lines: readonly string[]): number {
 function countListRendered(lines: readonly string[]): number {
   let lists = 0
   for (const line of lines) {
+    if (line.length > 4_096) continue
     if (/^\s*[•\-*]\s+\S/u.test(line) || /^\s*\d+\.\s+\S/u.test(line)) {
       lists += 1
     }
@@ -110,6 +116,7 @@ function countListRendered(lines: readonly string[]): number {
 function countCodeBlockRendered(lines: readonly string[]): number {
   let regions = 0
   for (const line of lines) {
+    if (line.length > 4_096) continue
     if (FENCE_RE.test(line)) regions += 1
   }
   return Math.floor(regions / 2)
