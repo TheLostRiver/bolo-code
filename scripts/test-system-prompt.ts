@@ -175,6 +175,32 @@ async function main() {
     )
   }
 
+  // HKP-3：plan 激活时 Environment 标注只读约束，且不输出矛盾的行为行
+  {
+    const planSections = await getSystemPrompt({
+      cwd: tmp,
+      userConfigDir: userDir,
+      loadInstructions: false,
+      permissionMode: 'bypassPermissions',
+      planMode: true,
+      date: '2026-07-24',
+    })
+    const envBlock = planSections.find((s) => s.startsWith('# Environment'))
+    assert(envBlock, 'plan: has Environment section')
+    assert(
+      envBlock!.includes('Plan mode is ACTIVE'),
+      'plan: Environment announces the read-only plan mode',
+    )
+    assert(
+      envBlock!.includes('bypassPermissions'),
+      'plan: underlying permission mode is named',
+    )
+    assert(
+      !envBlock!.includes(permissionModeBehaviorLine('bypassPermissions')),
+      'plan: no contradictory auto-allow behavior line while plan is active',
+    )
+  }
+
   // 3) skill catalog 可选
   const fakeSkill: LoadedSkill = {
     meta: {

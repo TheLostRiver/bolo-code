@@ -170,7 +170,8 @@ export function formatSessionSummary(s: SessionSummary): string {
     `cwd:     ${s.cwd}`,
     `file:    ${s.path}`,
     `messages:${s.messageCount}`,
-    `mode:    ${s.permissionMode}`,
+    // HKP-3：plan 正交开关——摘要显示 plan（permissionMode 保持原值）
+    `mode:    ${s.planMode === true ? 'plan' : s.permissionMode}`,
   ]
   if (s.model) lines.push(`model:   ${s.model}`)
   if (s.lastMessage) {
