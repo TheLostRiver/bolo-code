@@ -599,6 +599,8 @@ export async function runToolUse(
   })
 
   let finalBehavior = gate.behavior
+  // HKP-2：工具显式 ask 降级时，命令级 allow 不得覆盖（工具要求不确定）
+  let toolRequestedAsk = false
 
   const toolPerm = await tool.checkPermissions(toolInput, {
     cwd: ctx.cwd,
@@ -611,6 +613,7 @@ export async function runToolUse(
     // 工具要求 ask 时不能比全局更松（会话 always-allow 仍可被工具硬 deny 挡住）
     if (!gate.reason.includes('always-allow')) {
       finalBehavior = 'ask'
+      toolRequestedAsk = true
     }
   }
 
@@ -711,7 +714,7 @@ export async function runToolUse(
             },
           )
         }
-        if (bashSafety?.verdict === 'allow') {
+        if (bashSafety?.verdict === 'allow' && !toolRequestedAsk) {
           emit(ctx, {
             type: 'permission_decision',
             mode: 'auto',

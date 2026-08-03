@@ -18,7 +18,8 @@ export type BashCommandSafetyResult = {
   reason: string
 }
 
-/** 包管理器白名单：可自动放行的安全子命令（缺省走询问） */
+/** 包管理器白名单：仅惰性子命令可自动放行（run/build/test 等会执行项目
+ * 脚本或下载代码，与 npx 同类不可静态验证，一律询问；缺省也走询问） */
 const PACKAGE_MANAGER_ALLOW_SUBCOMMANDS = new Set([
   'install',
   'i',
@@ -28,36 +29,21 @@ const PACKAGE_MANAGER_ALLOW_SUBCOMMANDS = new Set([
   'update',
   'upgrade',
   'up',
-  'run',
-  'build',
-  'test',
-  'lint',
-  'format',
-  'add',
   'list',
   'ls',
   'search',
   'info',
   'view',
-  'init',
-  'create',
-  'login',
-  'logout',
-  'publish',
-  'pack',
-  'version',
-  'help',
   'outdated',
   'why',
   'tree',
   'audit',
-  'mod',
-  'get',
-  'vet',
-  'fmt',
-  'work',
-  'generate',
-  'clean',
+  'help',
+  'version',
+  'login',
+  'logout',
+  'pack',
+  'publish',
 ])
 
 /** 命令名（含常见变体）→ 包管理器族 */
@@ -96,6 +82,14 @@ const DESTRUCTIVE_TARGET = [
   /^dd\s+.*\bof=\/dev\//u,
   /^mkfs\./u,
 ]
+
+/**
+ * 引号外的 shell 元字符（分隔/替换/重定向/通配等）。真实 shell 会执行
+ * `;`/`&&`/`||`/`$()`/反引号/heredoc 等，而词法级白名单无法静态验证
+ * 附加命令的安全性——遇到即 fail-closed（ask，不自动放行）。
+ * 引号内的元字符是字面量，不受影响。
+ */
+const SHELL_METACHARACTER = /[;|&<>$(\u0060)\[\]{}*?!~#\t]/u
 
 /**
  * 词法级命令拆分：处理单/双引号、反斜杠转义与空白。
@@ -138,6 +132,7 @@ export function tokenizeShellCommand(
       hasToken = true
       continue
     }
+    if (ch === '\n' || ch === '\r') return undefined
     if (/\s/u.test(ch)) {
       if (hasToken) {
         tokens.push(current)
@@ -146,23 +141,14 @@ export function tokenizeShellCommand(
       }
       continue
     }
+    // 引号外元字符：fail-closed（分隔符/替换/重定向/通配都不进入白名单判定）
+    if (SHELL_METACHARACTER.test(ch)) return undefined
     current += ch
     hasToken = true
   }
   if (quote !== undefined) return undefined
   if (hasToken) tokens.push(current)
   return tokens
-}
-
-function hasPipeToShell(tokens: readonly string[]): string | undefined {
-  for (let index = 0; index < tokens.length; index += 1) {
-    if (tokens[index] !== '|') continue
-    const next = tokens[index + 1]
-    if (next && ['sh', 'bash', 'zsh', 'fish', 'dash', 'powershell', 'pwsh'].includes(next)) {
-      return next
-    }
-  }
-  return undefined
 }
 
 function hasPreFlag(tokens: readonly string[]): string | undefined {
@@ -202,13 +188,8 @@ export function classifyBashCommandSafety(
       reason: `privilege escalation command "${head}" is never auto-approved`,
     }
   }
-  const pipeShell = hasPipeToShell(tokens)
-  if (pipeShell) {
-    return {
-      verdict: 'deny',
-      reason: `piping to shell (${pipeShell}) is never auto-approved`,
-    }
-  }
+  // 管道/分隔符等元字符已被 tokenizer fail-closed 拒绝（返回 ask），
+  // 这里只需检查命令头与白名单。
   const preFlag = hasPreFlag(tokens)
   if (preFlag) {
     return {
