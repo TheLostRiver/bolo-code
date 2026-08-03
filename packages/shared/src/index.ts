@@ -498,6 +498,12 @@ export {
 } from './toolRepetition.ts'
 export { repairToolMessagePairs } from './messageRepair.ts'
 export {
+  classifyBashCommandSafety,
+  tokenizeShellCommand,
+  type BashCommandSafetyResult,
+  type BashCommandSafetyVerdict,
+} from './commandSafety.ts'
+export {
   DA2_QUERY,
   createDefaultTerminalCapabilities,
   familyFromEnv,

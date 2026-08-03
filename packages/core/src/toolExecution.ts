@@ -29,6 +29,7 @@ import {
   toolOutputBudgetBytes,
 } from '../../compact/src/index.ts'
 import {
+  classifyBashCommandSafety,
   createToolPresentation,
   nowIso,
   type ChatMessage,
@@ -668,6 +669,65 @@ export async function runToolUse(
         }
       }
       if (!autoState?.circuitBroken || autoState.fallback !== 'ask') {
+        // HKP-2：Bash 命令级安全分析（先于分类器，确定性判定；
+        // 危险拒绝 / 包管理器白名单放行 / 其余交给分类器）
+        const bashSafety =
+          name === 'Bash' &&
+          typeof (toolInput as { command?: unknown } | null)?.command ===
+            'string'
+            ? classifyBashCommandSafety(
+                (toolInput as { command: string }).command,
+              )
+            : undefined
+        if (bashSafety?.verdict === 'deny') {
+          emit(ctx, {
+            type: 'permission_decision',
+            mode: 'auto',
+            behavior: 'deny',
+            reason: bashSafety.reason,
+          })
+          await auditAutoClassify(ctx, {
+            toolName: name,
+            toolUseId,
+            toolInput,
+            decision: 'deny',
+            reason: bashSafety.reason,
+            stage: 'command-safety',
+          })
+          return endResult(
+            ctx,
+            toolUseId,
+            name,
+            toolInput,
+            formatToolUseError(
+              `permission denied (auto command safety: ${bashSafety.reason})`,
+            ),
+            {
+              blocked: false,
+              denied: true,
+              ok: false,
+              isError: true,
+              concurrencySafe,
+            },
+          )
+        }
+        if (bashSafety?.verdict === 'allow') {
+          emit(ctx, {
+            type: 'permission_decision',
+            mode: 'auto',
+            behavior: 'allow',
+            reason: bashSafety.reason,
+          })
+          await auditAutoClassify(ctx, {
+            toolName: name,
+            toolUseId,
+            toolInput,
+            decision: 'allow',
+            reason: bashSafety.reason,
+            stage: 'command-safety',
+          })
+          finalBehavior = 'allow'
+        } else {
         const classify = ctx.classifyPermission
         if (!classify) {
           if (autoState) {
@@ -788,6 +848,7 @@ export async function runToolUse(
           )
         }
         finalBehavior = 'allow'
+        }
       }
     }
 
