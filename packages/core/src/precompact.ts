@@ -70,56 +70,61 @@ export function shouldPrecompact(
 export function startPrecompactWarmup(opts: PrecompactWarmupOptions): void {
   if (opts.current()) return
   if (!opts.markInFlight()) return // 已有进行中任务（in-flight 去重）
-  const messages = opts.messages()
-  if (messages.length === 0) {
-    opts.clearInFlight()
-    return
-  }
-  if (!shouldPrecompact(messages, opts.contextWindowTokens)) {
-    opts.clearInFlight()
-    return
-  }
-
-  // 与真正压缩相同的 split（resolveCompactKeepOpts 共用保证一致性）
-  const keepOpts = resolveCompactKeepOpts({
-    messages: [...messages],
-    keepMaxTokens: undefined,
-  })
-  const split = splitMessagesForCompactKeep([...messages], keepOpts)
-  if (split.toSummarize.length === 0) {
-    opts.clearInFlight() // 所有早退路径都必须释放抢占标记
-    return
-  }
-
-  const count = split.toSummarize.length
-  const headFingerprint = fingerprintMessages(split.toSummarize)
-  const at = Date.now()
-  const compactPrompt =
-    'Summarize the conversation prefix below for later incremental compaction. ' +
-    'Keep all key facts, decisions, files, and errors. Output a single summary block.'
-
-  // fire-and-forget：低优先级预热，不阻塞主线程
-  void (async () => {
-    try {
-      const call = opts.summarize({
-        messages: split.toSummarize,
-        compactPrompt,
-      })
-      const timeoutMs = opts.summarizeTimeoutMs
-      const out =
-        timeoutMs !== undefined && Number.isFinite(timeoutMs) && timeoutMs > 0
-          ? await withTimeout(call, timeoutMs)
-          : await call
-      const text = out.text?.trim() ?? ''
-      if (!text) return
-      // commit 由调用方做 at 比较：晚到的旧结果不覆盖新状态/新预热
-      opts.commit({ at, count, headFingerprint, summaryText: text })
-    } catch {
-      /* 预热失败静默丢弃，下次进入区间再触发 */
-    } finally {
+  try {
+    const messages = opts.messages()
+    if (messages.length === 0) {
       opts.clearInFlight()
+      return
     }
-  })()
+    if (!shouldPrecompact(messages, opts.contextWindowTokens)) {
+      opts.clearInFlight()
+      return
+    }
+
+    // 与真正压缩相同的 split（resolveCompactKeepOpts 共用保证一致性）
+    const keepOpts = resolveCompactKeepOpts({
+      messages: [...messages],
+      keepMaxTokens: undefined,
+    })
+    const split = splitMessagesForCompactKeep([...messages], keepOpts)
+    if (split.toSummarize.length === 0) {
+      opts.clearInFlight() // 所有早退路径都必须释放抢占标记
+      return
+    }
+
+    const count = split.toSummarize.length
+    const headFingerprint = fingerprintMessages(split.toSummarize)
+    const at = Date.now()
+    const compactPrompt =
+      'Summarize the conversation prefix below for later incremental compaction. ' +
+      'Keep all key facts, decisions, files, and errors. Output a single summary block.'
+
+    // fire-and-forget：低优先级预热，不阻塞主线程
+    void (async () => {
+      try {
+        const call = opts.summarize({
+          messages: split.toSummarize,
+          compactPrompt,
+        })
+        const timeoutMs = opts.summarizeTimeoutMs
+        const out =
+          timeoutMs !== undefined && Number.isFinite(timeoutMs) && timeoutMs > 0
+            ? await withTimeout(call, timeoutMs)
+            : await call
+        const text = out.text?.trim() ?? ''
+        if (!text) return
+        // commit 由调用方做 at 比较：晚到的旧结果不覆盖新状态/新预热
+        opts.commit({ at, count, headFingerprint, summaryText: text })
+      } catch {
+        /* 预热失败静默丢弃，下次进入区间再触发 */
+      } finally {
+        opts.clearInFlight()
+      }
+    })()
+  } catch {
+    // 同步段（split/估算）异常也须释放抢占标记，杜绝 in-flight 卡死
+    opts.clearInFlight()
+  }
 }
 
 /**
