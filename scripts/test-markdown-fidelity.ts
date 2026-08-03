@@ -90,6 +90,18 @@ async function main(): Promise<void> {
     1,
     'box-drawing borders count as rendered tables',
   )
+  // 超长行防护：>4KB 的近失配行快速通过（防多项式回溯）
+  const pathological = `| ${'a'.repeat(10_000)} |`
+  assert.equal(
+    detectMarkdownIntent(`${pathological}\n${'-'.repeat(10_000)}`).table,
+    0,
+    'over-4KB near-miss lines are skipped without regex backtracking',
+  )
+  assert.equal(
+    detectMarkdownRenderedStructures([pathological]).table,
+    0,
+    'over-4KB rendered lines are skipped too',
+  )
   assert.equal(
     detectMarkdownRenderedStructures(['| a | b |']).table,
     1,
@@ -172,8 +184,8 @@ async function main(): Promise<void> {
       output,
       env: { NO_COLOR: '1' },
     })
-    // 覆写 printer.onEvent 捕获 fidelity warning，并转发非 warning 事件
-    // （保证 markdown 内容真实进入 transcript 渲染）
+    // 覆写 printer.onEvent 捕获 fidelity warning，并转发其它事件
+    // （保证 markdown 内容真实进入 transcript 渲染；warning 断言见下）
     const originalOnEvent = controller.printer.onEvent.bind(controller.printer)
     const printerSpy = controller.printer as unknown as {
       onEvent: (event: {

@@ -98,6 +98,8 @@ function countTableRendered(lines: readonly string[]): number {
     } else if (inTable && line.trim() !== '') {
       inTable = false
     }
+    // 超长行（>4KB）跳过且不打断 inTable——渲染产物行经终端 wrap 恒短于
+    // 4KB，此处仅防御不可信输入；误判方向为漏报（保守）
   }
   return regions
 }
