@@ -11,13 +11,15 @@
  */
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
+import { promises as fs } from 'node:fs'
+import path from 'node:path'
 import {
   createWheelNormalizer,
   wheelBandMultiplier,
   WHEEL_CADENCE_MS,
   WHEEL_MAX_EVENTS_PER_FRAME,
-  type ToolPresentation,
 } from '../packages/shared/src/index.ts'
+import { writeToolResultFile } from '../packages/core/src/index.ts'
 import {
   createRetainedTuiController,
   type CliTuiController,
@@ -136,18 +138,6 @@ async function waitForScreen(
   }
 }
 
-const boundedPresentation: ToolPresentation = {
-  summary: 'Read · x.txt · 120 lines · truncated',
-  preview: Array.from({ length: 120 }, (_, i) => `preview line ${i}`).join('\n'),
-  previewMode: 'head',
-  originalChars: 30_000,
-  originalLines: 120,
-  retainedChars: 1_000,
-  retainedLines: 10,
-  truncated: true,
-  overflow: true,
-}
-
 // --- 1. 逐格滚动：间隔 > 帧窗口 → 每事件 1 格 ---
 {
   const n = createWheelNormalizer()
@@ -219,77 +209,119 @@ const boundedPresentation: ToolPresentation = {
   assert.equal(after.scrollLines, 1, 'post-flush: fresh frame 1 line')
 }
 
-// --- 6. TUI 集成：wheel → 规范化 → pager 翻页 ---
+// --- 6. TUI 集成：wheel → 规范化 → lazy pager 翻页（真实文件，17 页）---
 {
-  const fixture = await createFixture()
-  const { controller } = fixture
-  controller.printer.beginTurn({ prompt: 'open pager' })
-  controller.printer.onEvent({
-    type: 'tool_start',
-    id: 'read-1',
-    name: 'Read',
-    input: { path: 'x.txt' },
-  })
-  controller.printer.onEvent({
-    type: 'tool_end',
-    id: 'read-1',
-    name: 'Read',
-    output: 'provider bounded result',
-    ok: true,
-    presentation: boundedPresentation,
-  })
-  controller.printer.endTurn({ terminalReason: 'completed' })
-  await settle(fixture)
+  const root = path.resolve('.bolo-tmp', 'test-wheel-normalize')
+  const cwd = path.join(root, 'workspace')
+  await fs.rm(root, { recursive: true, force: true })
+  await fs.mkdir(cwd, { recursive: true })
+  const previousConfigDir = process.env.BOLO_CONFIG_DIR
+  process.env.BOLO_CONFIG_DIR = path.join(root, 'user')
+  try {
+    const spillText = Array.from(
+      { length: 300 },
+      (_, i) => `spill-line-${i}`,
+    ).join('\n')
+    const reference = await writeToolResultFile({
+      cwd,
+      sessionId: 'wheel-session',
+      toolUseId: 'read/large',
+      content: spillText,
+    })
+    assert(reference, 'spill reference is written')
 
-  const readRow = await waitForRow(fixture, '✓ Read')
-  // 获取输入所有权（与 OUT-4 相同：readInput 后点击才生效）
-  const pendingInput = controller.readInput()
-  void pendingInput
-  controller.flush()
-  await fixture.terminal.flush()
+    const fixture = await createFixture(76, 48)
+    const { controller } = fixture
+    try {
+      controller.setToolPagerContext({ cwd, sessionId: 'wheel-session' })
+      controller.printer.beginTurn({ prompt: 'open pager' })
+      controller.printer.onEvent({
+        type: 'tool_start',
+        id: 'read-1',
+        name: 'Read',
+        input: { path: 'x.txt' },
+      })
+      controller.printer.onEvent({
+        type: 'tool_end',
+        id: 'read-1',
+        name: 'Read',
+        output: 'provider bounded result',
+        ok: true,
+        presentation: {
+          summary: 'Read · x.txt · 300 lines · truncated',
+          preview: 'bounded preview of the spill',
+          previewMode: 'head',
+          originalChars: 30_000,
+          originalLines: 300,
+          retainedChars: 1_000,
+          retainedLines: 10,
+          truncated: true,
+          overflow: true,
+          fullResult: reference!,
+        },
+      })
+      controller.printer.endTurn({ terminalReason: 'completed' })
+      await settle(fixture)
 
-  // 打开 pager
-  fixture.input.send(`\x1b[<0;20;${readRow}M`)
-  await waitForScreen(fixture, (t) => t.includes('preview line 0'))
-  assert(
-    screen(fixture).includes('preview line 0'),
-    'clicking the summary opens the pager (page 1)',
-  )
+      const readRow = await waitForRow(fixture, '✓ Read')
+      // 获取输入所有权（与 OUT-4 相同：readInput 后点击才生效）
+      const pendingInput = controller.readInput()
+      void pendingInput
+      controller.flush()
+      await fixture.terminal.flush()
 
-  // 密集 wheel down × 6（同帧 → 高速带 3× → 封顶 6 事件 × 3 = 18 格，
-  // 但页级消费 clamp 3 页——不会一次跳到底）
-  for (let i = 0; i < 6; i += 1) {
-    fixture.input.send(`\x1b[<65;20;${readRow}M`)
+      // 打开 lazy pager
+      fixture.input.send(`\x1b[<0;20;${readRow}M`)
+      await waitForScreen(fixture, (t) => t.includes('spill-line-0'))
+      assert(
+        screen(fixture).includes('spill-line-0'),
+        'clicking the summary opens the file pager (page 1)',
+      )
+
+      // 密集 wheel down × 6（同步同一 tick → 单帧风暴 18 格 → 帧末 clamp 3 页）
+      for (let i = 0; i < 6; i += 1) {
+        fixture.input.send(`\x1b[<65;20;${readRow}M`)
+      }
+      // 直接等最终状态：风暴帧 clamp 3 页 → 页 4（行 54-71）
+      await waitForScreen(fixture, (t) => t.includes('spill-line-54'))
+      const afterDown = screen(fixture)
+      assert(
+        !afterDown.includes('spill-line-0'),
+        'wheel down paged past the first page',
+      )
+      assert(
+        !afterDown.includes('spill-line-288'),
+        'storm frame did not jump to the last page',
+      )
+
+      // wheel up 翻回
+      for (let i = 0; i < 6; i += 1) {
+        fixture.input.send(`\x1b[<64;20;${readRow}M`)
+      }
+      await waitForScreen(fixture, (t) => t.includes('spill-line-0'))
+
+      // wheel 在无 pager 时不泄漏为按键输入（关闭 pager 后再滚）
+      fixture.input.send(`\x1b[<0;20;${readRow}M`)
+      await waitForScreen(fixture, (t) => !t.includes('spill-line-0'))
+      for (let i = 0; i < 3; i += 1) {
+        fixture.input.send(`\x1b[<65;20;${readRow}M`)
+      }
+      await settle(fixture)
+      assert(
+        !screen(fixture).includes('spill-line-0'),
+        'pager closed by click; wheel does not reopen it',
+      )
+      controller.stop()
+    } finally {
+      if (previousConfigDir === undefined) delete process.env.BOLO_CONFIG_DIR
+      else process.env.BOLO_CONFIG_DIR = previousConfigDir
+      await fs.rm(root, { recursive: true, force: true }).catch(() => {})
+    }
+  } catch (err) {
+    if (previousConfigDir === undefined) delete process.env.BOLO_CONFIG_DIR
+    else process.env.BOLO_CONFIG_DIR = previousConfigDir
+    throw err
   }
-  await waitForScreen(fixture, (t) => !t.includes('preview line 0'))
-  const afterDown = screen(fixture)
-  assert(
-    !afterDown.includes('preview line 0'),
-    'wheel down paged past the first page',
-  )
-  assert(
-    !afterDown.includes('preview line 90'),
-    'storm frame clamped: did not jump to the last page (120-line file)',
-  )
-
-  // wheel up 翻回
-  for (let i = 0; i < 6; i += 1) {
-    fixture.input.send(`\x1b[<64;20;${readRow}M`)
-  }
-  await waitForScreen(fixture, (t) => t.includes('preview line 0'))
-
-  // wheel 在无 pager 时不泄漏为按键输入（关闭 pager 后再滚）
-  fixture.input.send(`\x1b[<0;20;${readRow}M`)
-  await waitForScreen(fixture, (t) => !t.includes('preview line 0'))
-  for (let i = 0; i < 3; i += 1) {
-    fixture.input.send(`\x1b[<65;20;${readRow}M`)
-  }
-  await settle(fixture)
-  assert(
-    !screen(fixture).includes('preview line 0'),
-    'pager closed by click; wheel does not reopen it',
-  )
-  fixture.controller.stop()
 }
 
 console.log('PASS: TERM-3 wheel normalization + pager integration')

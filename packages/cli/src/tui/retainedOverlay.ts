@@ -874,19 +874,48 @@ export class RetainedOverlayHost implements Component, Focusable {
 
   /**
    * TERM-3：滚轮规范化滚动（正数向下、负数向上；只滚动不退出 pager）。
-   * 每单位 = 1 页步；单帧增量 clamp 到 3 页（高速风暴帧不会一次跳到底——
-   * normalizer 的加速度倍率面向行级滚动，页级消费封顶）。
-   * 键盘路径（翻到边界再按 next 会 quit）与滚轮语义分开——滚轮停在边界。
+   * 每单位 = 1 页步；单帧增量 clamp 到 3 页（高速风暴帧不会一次跳到底）。
+   * lazy pager 逐页串行（每步等前一页加载完成）；键盘 quit 语义不触发。
    */
   scrollPager(lines: number): void {
     const active = this.active
     if (!active || active.mode !== 'pager') return
     const steps = Math.max(0, Math.min(3, Math.abs(lines)))
     const dir = lines > 0 ? 1 : -1
+    if (active.source.kind === 'lazy-text') {
+      if (active.lazyPhase !== 'ready') return
+      this.lazyScrollQueue(active, steps, dir)
+      this.options.requestRender()
+      return
+    }
     for (let i = 0; i < steps; i += 1) {
       if (!this.stepPagerPage(active, dir)) break
     }
     this.options.requestRender()
+  }
+
+  /** lazy pager 串行翻页：每步等前一页加载完成（lazyPhase/page 轮询） */
+  private lazyScrollQueue(
+    session: OverlaySession & { mode: 'pager' },
+    remaining: number,
+    dir: 1 | -1,
+  ): void {
+    if (remaining <= 0 || session.lazyPhase !== 'ready') return
+    const nextPage =
+      dir < 0
+        ? Math.max(0, session.page - 1)
+        : session.lazyHasNext
+          ? session.page + 1
+          : session.page
+    if (nextPage === session.page) return
+    this.loadLazyPagerPage(session, nextPage, this.options.getColumns())
+    const check = (): void => {
+      if (this.active !== session) return
+      if (session.lazyPhase === 'ready' && session.page === nextPage) {
+        this.lazyScrollQueue(session, remaining - 1, dir)
+      }
+    }
+    setTimeout(check, 10)
   }
 
   /** 单步翻页；返回是否实际移动（边界 false） */

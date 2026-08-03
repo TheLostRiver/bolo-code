@@ -37,6 +37,7 @@ import {
   type RuntimePagerSuccess,
   parseSgrMouseSequence,
   createWheelNormalizer,
+  WHEEL_CADENCE_MS,
 } from '../../../shared/src/index.ts'
 import type { AskUserQuestionOutcome } from '../../../tools/src/index.ts'
 import { runCleanupSteps } from '../cleanup.ts'
@@ -523,6 +524,43 @@ export function createRetainedTuiController(options: {
   let commandSurfaceEffect: CliCommandSurfaceEffect
   // TERM-3：滚轮规范化状态机（16ms 帧合并 + 加速度分带）
   const wheelNormalizer = createWheelNormalizer()
+  // TERM-3：帧缓冲——帧内增量累积，帧末一次性 clamp 3 页滚动
+  // （逐事件 clamp 会让 6 事件风暴仍达 13 页步跳底）
+  const wheelFrame = {
+    start: -Infinity,
+    dir: undefined as 'up' | 'down' | undefined,
+    lines: 0,
+    timer: undefined as ReturnType<typeof setTimeout> | undefined,
+  }
+  const flushWheelFrame = (): void => {
+    if (wheelFrame.lines > 0 && overlay.isActive()) {
+      const steps = Math.min(3, wheelFrame.lines)
+      overlay.scrollPager(
+        wheelFrame.dir === 'down' ? steps : -steps,
+      )
+    }
+    wheelFrame.lines = 0
+    wheelFrame.dir = undefined
+    if (wheelFrame.timer !== undefined) {
+      clearTimeout(wheelFrame.timer)
+      wheelFrame.timer = undefined
+    }
+  }
+  const feedWheel = (direction: 'up' | 'down'): void => {
+    const at = Date.now()
+    if (
+      at - wheelFrame.start > WHEEL_CADENCE_MS ||
+      (wheelFrame.dir !== undefined && wheelFrame.dir !== direction)
+    ) {
+      flushWheelFrame()
+      wheelFrame.start = at
+    }
+    wheelFrame.dir = direction
+    wheelFrame.lines += wheelNormalizer.push({ direction, at }).scrollLines
+    if (wheelFrame.timer === undefined) {
+      wheelFrame.timer = setTimeout(flushWheelFrame, WHEEL_CADENCE_MS + 1)
+    }
+  }
 
   const requestRender = (): void => {
     if (started && !stopped) tui.requestRender()
@@ -618,16 +656,8 @@ export function createRetainedTuiController(options: {
     const mouse = parseSgrMouseSequence(data)
     if (!mouse) return
     if (mouse.kind === 'wheel') {
-      // TERM-3：滚轮规范化（16ms 帧合并 + 加速度分带）→ 滚动 active pager
-      const norm = wheelNormalizer.push({
-        direction: mouse.direction,
-        at: Date.now(),
-      })
-      if (norm.scrollLines > 0 && overlay.isActive()) {
-        overlay.scrollPager(
-          mouse.direction === 'down' ? norm.scrollLines : -norm.scrollLines,
-        )
-      }
+      // TERM-3：滚轮规范化（16ms 帧合并 + 加速度分带）→ 帧末 clamp 滚动 pager
+      feedWheel(mouse.direction)
       return { consume: true }
     }
     if (mouse.kind !== 'press') return { consume: true }
@@ -993,6 +1023,7 @@ export function createRetainedTuiController(options: {
         },
         () => removeRunningInterruptInputListener(),
         () => removeMouseInputListener(),
+        () => flushWheelFrame(),
         () => removeToolDisplayInputListener(),
         () => commandSurfaceEffect.dispose(),
         () => composer.cancelInput(),
