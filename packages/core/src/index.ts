@@ -404,6 +404,14 @@ export {
   BOLO_MD_MAX_TOTAL_CHARS,
 } from './systemPrompt.ts'
 export {
+  buildPrecompactMessages,
+  startPrecompactWarmup,
+  shouldPrecompact,
+  PRECOMPACT_AHEAD_TOKENS,
+  type PrecompactState,
+} from './precompact.ts'
+
+export {
   getMemoryDir,
   getProjectMemoryDir,
   getMemoryEntrypoint,
@@ -437,6 +445,11 @@ export {
 } from './memory.ts'
 
 import { flushMemoryFromRecentMessages } from './memory.ts'
+import {
+  buildPrecompactMessages,
+  startPrecompactWarmup,
+  type PrecompactState,
+} from './precompact.ts'
 export type {
   SystemPromptPartition,
   GetSystemPromptOptions,
@@ -1046,6 +1059,10 @@ export type BoloSession = {
   flushMemoryOnCompact?: boolean
   /** MEM-1：上次成功 flush 的消息块指纹（会话内去重锚点） */
   memoryFlushedHash?: string
+  /** CMP-2：pass1 预热状态（80% 阈值后台总结；压缩时增量合并） */
+  precompact?: PrecompactState
+  /** CMP-2：预热开关（默认 true；false 关闭） */
+  precompactEnabled?: boolean
   skills: LoadedSkill[]
   model?: string
   /**
@@ -1506,6 +1523,8 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
         querySource: 'repl_main_thread',
       })
     ) {
+      // CMP-2：未达压缩阈值但 ≥80% 上下文 → 后台预热 pass1（fire-and-forget）
+      maybeStartPrecompactWarmup(session)
       return false
     }
     const r = await compactSession(session, { trigger: 'auto' })
@@ -3076,6 +3095,26 @@ export type CompactSessionOptions = {
 /**
  * Full compact — docs/COMPACTION.md；无 summarizer 则失败且不改 messages
  */
+/**
+ * CMP-2：pass1 预热（fire-and-forget）。开关 false 或已在进行中则跳过。
+ * 预热用与压缩相同的 split/keep，结果提交时做引用检查（压缩已清空则丢弃）。
+ */
+function maybeStartPrecompactWarmup(session: BoloSession): void {
+  if (session.precompactEnabled === false) return
+  if (!session.compactSummarizer) return
+  startPrecompactWarmup({
+    messages: () => session.messages,
+    summarize: session.compactSummarizer,
+    contextWindowTokens: session.resolvedModel.contextWindowTokens,
+    current: () => session.precompact,
+    commit: (state) => {
+      // 压缩开始已清空 / 新预热已占位 → 丢弃本结果
+      if (!session.precompact) session.precompact = state
+    },
+    summarizeTimeoutMs: session.compactTimeoutMs,
+  })
+}
+
 export async function compactSession(
   session: BoloSession,
   options: CompactSessionOptions | 'manual' | 'auto' = 'manual',
@@ -3123,8 +3162,12 @@ export async function compactSession(
     return { ok: false, reason: pre.blockReason || 'PreCompact blocked' }
   }
 
+  // CMP-2：压缩开始即取消预热（fire-and-forget 结果晚到时被 commit 引用检查丢弃）
+  const precompact = session.precompact
+  session.precompact = undefined
+  const compactMessages = buildPrecompactMessages(session.messages, precompact)
   const outcome = await runFullCompact({
-    messages: session.messages,
+    messages: compactMessages ?? session.messages,
     trigger,
     customInstructions: opts.customInstructions,
     maxPtlRetries: session.maxPtlRetries,

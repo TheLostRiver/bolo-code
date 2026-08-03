@@ -388,6 +388,34 @@ export function formatCompactSummary(raw: string): string {
 }
 
 /**
+ * CMP-2：解析 keep 配置（runFullCompact 与 precompact 预热共用，保证
+ * 预热 split 与真正压缩 split 一致——不一致会让预热结果失效回退全量）。
+ */
+export function resolveCompactKeepOpts(
+  input: Pick<
+    FullCompactInput,
+    'keepMaxTokens' | 'keepRecentUserTurns' | 'keepRecentMessageCount'
+  > & { messages: ChatMessage[] },
+): KeepTailOptions {
+  const keepOpts: KeepTailOptions = {
+    keepMaxTokens: input.keepMaxTokens,
+  }
+  if (input.keepRecentUserTurns != null) {
+    keepOpts.keepRecentUserTurns = input.keepRecentUserTurns
+  } else if (input.keepRecentMessageCount != null) {
+    keepOpts.keepRecentMessageCount = input.keepRecentMessageCount
+  } else {
+    // 默认：保留尾部轮次，但至少留 1 个 user turn 给摘要（短会话不 keep）
+    const groups = groupMessagesByUserTurn(input.messages)
+    keepOpts.keepRecentUserTurns =
+      groups.length > 1
+        ? Math.min(DEFAULT_KEEP_RECENT_USER_TURNS, groups.length - 1)
+        : 0
+  }
+  return keepOpts
+}
+
+/**
  * Full compact 用 prompt（语义对齐参考 BASE_COMPACT_PROMPT，自维护文案）
  * Summarizer 必须 no-tools。
  */
@@ -719,21 +747,7 @@ export async function runFullCompact(
       : Math.max(0, input.maxPtlRetries)
 
   // C1：先拆 keep，summarizer 只吃前缀（降成本；尾部 verbatim）
-  const keepOpts: KeepTailOptions = {
-    keepMaxTokens: input.keepMaxTokens,
-  }
-  if (input.keepRecentUserTurns != null) {
-    keepOpts.keepRecentUserTurns = input.keepRecentUserTurns
-  } else if (input.keepRecentMessageCount != null) {
-    keepOpts.keepRecentMessageCount = input.keepRecentMessageCount
-  } else {
-    // 默认：保留尾部轮次，但至少留 1 个 user turn 给摘要（短会话不 keep）
-    const groups = groupMessagesByUserTurn(input.messages)
-    keepOpts.keepRecentUserTurns =
-      groups.length > 1
-        ? Math.min(DEFAULT_KEEP_RECENT_USER_TURNS, groups.length - 1)
-        : 0
-  }
+  const keepOpts = resolveCompactKeepOpts(input)
   const split = splitMessagesForCompactKeep(input.messages, keepOpts)
   if (split.toSummarize.length === 0) {
     return {

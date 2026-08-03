@@ -1,0 +1,159 @@
+/**
+ * CMP-2 · 两遍预压缩（prefire pass1）
+ *
+ * 接近压缩阈值时后台先总结历史前缀（pass1 预热），真正压缩时若预热仍有效
+ * 只做增量第二遍（summarizer 只吃新增消息），显著缩短压缩停顿。
+ *
+ * 触发区间：`[autoThreshold - PRECOMPACT_AHEAD_TOKENS, autoThreshold)`——
+ * auto 阈值本身 ≈ effectiveWindow - buffer（128k 窗口时约 75%），预热取
+ * 阈值前 8k token 的窄带，避免与 auto compact 抢触发。
+ *
+ * 并发/取消语义：
+ * - 预热是 fire-and-forget 低优先级任务（不阻塞主线程）。
+ * - 压缩开始时 `session.precompact` 被清空；预热结果晚到时 commit 被拒
+ *   （引用检查），丢弃——不会覆盖压缩后的新状态。
+ * - 预热期间新消息到达：压缩时用「前 N 条指纹」验证预热仍覆盖旧前缀，
+ *   不匹配则回退全量压缩（功能正确，仅预热失效）。
+ * - 预热失败（summarize 抛错/超时）静默丢弃，下次进入区间再触发。
+ */
+import type { ChatMessage } from '../../shared/src/index.ts'
+import {
+  estimateTokens,
+  getAutoCompactThreshold,
+  getCompactUserSummaryMessage,
+  resolveCompactKeepOpts,
+  splitMessagesForCompactKeep,
+  type CompactSummarizer,
+} from '../../compact/src/index.ts'
+
+/** 预热提前量：auto 阈值前这个 token 量即启动 pass1 */
+export const PRECOMPACT_AHEAD_TOKENS = 8_000
+
+export type PrecompactState = {
+  /** 启动时间戳（诊断/去重用） */
+  at: number
+  /** 已总结的前缀消息条数 */
+  count: number
+  /** 前缀指纹（压缩时验证仍匹配，防新消息污染合并） */
+  headFingerprint: string
+  /** pass1 总结文本 */
+  summaryText: string
+}
+
+export type PrecompactWarmupOptions = {
+  messages: () => readonly ChatMessage[]
+  summarize: CompactSummarizer
+  contextWindowTokens: number
+  /** 是否已有进行中的预热/有效预热 */
+  current: () => PrecompactState | undefined
+  /** 提交结果：仅当会话仍无预热状态时写入（引用检查防覆盖） */
+  commit: (state: PrecompactState) => void
+  summarizeTimeoutMs?: number
+}
+
+/** 当前消息是否处于预热区间（auto 阈值前 PREHEAT 窄带内） */
+export function shouldPrecompact(
+  messages: readonly ChatMessage[],
+  contextWindowTokens: number,
+): boolean {
+  if (contextWindowTokens <= 0) return false
+  const threshold = getAutoCompactThreshold(contextWindowTokens)
+  const estimate = estimateTokens([...messages])
+  return estimate >= threshold - PRECOMPACT_AHEAD_TOKENS && estimate < threshold
+}
+
+/** 启动 pass1 预热（fire-and-forget；已有进行中则跳过） */
+export function startPrecompactWarmup(opts: PrecompactWarmupOptions): void {
+  if (opts.current()) return
+  const messages = opts.messages()
+  if (messages.length === 0) return
+  if (!shouldPrecompact(messages, opts.contextWindowTokens)) return
+
+  // 与真正压缩相同的 split（resolveCompactKeepOpts 共用保证一致性）
+  const keepOpts = resolveCompactKeepOpts({
+    messages: [...messages],
+    keepMaxTokens: undefined,
+  })
+  const split = splitMessagesForCompactKeep([...messages], keepOpts)
+  if (split.toSummarize.length === 0) return
+
+  const count = split.toSummarize.length
+  const headFingerprint = fingerprintMessages(split.toSummarize)
+  const at = Date.now()
+  const compactPrompt =
+    'Summarize the conversation prefix below for later incremental compaction. ' +
+    'Keep all key facts, decisions, files, and errors. Output a single summary block.'
+
+  // fire-and-forget：低优先级预热，不阻塞主线程
+  void (async () => {
+    try {
+      const call = opts.summarize({
+        messages: split.toSummarize,
+        compactPrompt,
+      })
+      const timeoutMs = opts.summarizeTimeoutMs
+      const out =
+        timeoutMs !== undefined && Number.isFinite(timeoutMs) && timeoutMs > 0
+          ? await withTimeout(call, timeoutMs)
+          : await call
+      const text = out.text?.trim() ?? ''
+      if (!text) return
+      // commit 由调用方做引用检查：压缩已清空/新预热已占位 → 丢弃本结果
+      opts.commit({ at, count, headFingerprint, summaryText: text })
+    } catch {
+      /* 预热失败静默丢弃，下次 ≥80% 再触发 */
+    }
+  })()
+}
+
+/**
+ * 压缩时合并预热结果：预热仍有效 → 返回「合成 summary 消息 + 新增消息」短链；
+ * 无效（无预热/指纹不匹配/前 N 条变了）→ undefined（回退全量）。
+ */
+export function buildPrecompactMessages(
+  messages: readonly ChatMessage[],
+  precompact: PrecompactState | undefined,
+): ChatMessage[] | undefined {
+  if (!precompact) return undefined
+  if (messages.length <= precompact.count) return undefined
+  const head = messages.slice(0, precompact.count)
+  if (fingerprintMessages(head) !== precompact.headFingerprint) return undefined
+  // 合成 summary user 消息（isCompactSummaryMessage 识别 → 压缩时自动注入
+  // COMPACT_MERGE_PRIOR_SUMMARY_HINT 合并提示），后接新增消息 + 尾部
+  return [
+    {
+      role: 'user' as const,
+      content: getCompactUserSummaryMessage(precompact.summaryText),
+    },
+    ...messages.slice(precompact.count),
+  ]
+}
+
+/** 消息块指纹（非密码学；预热前缀验证用） */
+function fingerprintMessages(messages: readonly ChatMessage[]): string {
+  let h = 0
+  for (const m of messages) {
+    const s = `${m.role}\u0000${m.content}`
+    for (let i = 0; i < s.length; i += 1) {
+      h = (h * 31 + s.charCodeAt(i)) | 0
+    }
+  }
+  return `f${h >>> 0}`
+}
+
+async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      p,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`precompact timed out after ${ms}ms`)),
+          ms,
+        )
+      }),
+    ])
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
+  }
+}
