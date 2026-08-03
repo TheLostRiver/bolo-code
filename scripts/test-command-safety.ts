@@ -189,6 +189,14 @@ async function main(): Promise<void> {
       `script-executing subcommands ask: ${command}`,
     )
   }
+  // 裸包管理器命令（无子命令）也走询问——会执行项目定义的构建/安装代码
+  for (const command of ['npm', 'yarn', 'bun', 'gradle', 'mvn']) {
+    assert.equal(
+      classifyBashCommandSafety(command).verdict,
+      'ask',
+      `bare package-manager invocation asks: ${command}`,
+    )
+  }
 
   // ---- shared: everything else asks ----
   for (const command of [

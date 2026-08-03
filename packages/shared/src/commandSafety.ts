@@ -216,10 +216,12 @@ export function classifyBashCommandSafety(
   const manager = PACKAGE_MANAGERS.get(head)
   if (manager) {
     const sub = tokens[1]?.toLowerCase()
-    if (sub === undefined || PACKAGE_MANAGER_ALLOW_SUBCOMMANDS.has(sub)) {
+    // 缺省（无子命令）走询问：裸 gradle/mvn/bun/yarn 会执行项目定义的
+    // 构建/安装代码，不自动放行
+    if (sub !== undefined && PACKAGE_MANAGER_ALLOW_SUBCOMMANDS.has(sub)) {
       return {
         verdict: 'allow',
-        reason: `${manager} ${sub ?? ''} is on the auto-approve allowlist`,
+        reason: `${manager} ${sub} is on the auto-approve allowlist`,
       }
     }
   }
