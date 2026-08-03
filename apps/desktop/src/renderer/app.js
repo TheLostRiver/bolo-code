@@ -106,6 +106,10 @@ function motionShow(target, options = {}) {
   return motionFrom(target, options)
 }
 
+/** 隐藏动画的安全兜底：rAF 在后台/无焦点窗口可能暂停，动画完成回调
+ * 永远不触发会卡住关闭（模态关不掉）。超时后强制完成隐藏。 */
+const HIDE_ANIMATION_FALLBACK_MS = 800
+
 function motionHide(target, { x = 0, y = -4, scale = 0.985, duration = 0.16, onComplete } = {}) {
   if (!target || target.hidden) {
     onComplete?.()
@@ -118,6 +122,17 @@ function motionHide(target, { x = 0, y = -4, scale = 0.985, duration = 0.16, onC
     return null
   }
   motion.killTweensOf(target)
+  let fallback
+  const settle = () => {
+    target.hidden = true
+    clearMotion(target)
+    onComplete?.()
+  }
+  const onDone = () => {
+    clearTimeout(fallback)
+    settle()
+  }
+  fallback = setTimeout(settle, HIDE_ANIMATION_FALLBACK_MS)
   return motion.to(target, {
     autoAlpha: 0,
     x,
@@ -126,11 +141,7 @@ function motionHide(target, { x = 0, y = -4, scale = 0.985, duration = 0.16, onC
     duration,
     ease: 'power1.in',
     overwrite: 'auto',
-    onComplete: () => {
-      target.hidden = true
-      clearMotion(target)
-      onComplete?.()
-    },
+    onComplete: onDone,
   })
 }
 
@@ -180,6 +191,12 @@ function hideModal(root, card = root?.querySelector('.perm-card'), onComplete) {
   const targets = [root, card].filter(Boolean)
   motion.killTweensOf(targets)
   const timeline = motion.timeline({ defaults: { overwrite: 'auto' } })
+  let fallback
+  const settle = () => {
+    root.hidden = true
+    targets.forEach(clearMotion)
+    onComplete?.()
+  }
   if (card) {
     timeline.to(card, {
       autoAlpha: 0,
@@ -196,13 +213,14 @@ function hideModal(root, card = root?.querySelector('.perm-card'), onComplete) {
       duration: 0.13,
       ease: 'power1.in',
       onComplete: () => {
-        root.hidden = true
-        targets.forEach(clearMotion)
-        onComplete?.()
+        clearTimeout(fallback)
+        settle()
       },
     },
     card ? '<0.02' : 0,
   )
+  // 安全兜底：rAF 暂停时强制完成隐藏（与 motionHide 一致）
+  fallback = setTimeout(settle, HIDE_ANIMATION_FALLBACK_MS)
   return timeline
 }
 
