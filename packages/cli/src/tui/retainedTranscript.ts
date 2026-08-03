@@ -28,6 +28,8 @@ import { stripTerminalAnsi } from './terminalText.ts'
 import { resolveTuiTheme } from './theme.ts'
 import {
   groupAdjacentReadTools,
+  checkMarkdownFidelity,
+  type MarkdownFidelityIssue,
 } from '../../../shared/src/index.ts'
 
 const RESET = '\x1b[0m'
@@ -229,6 +231,9 @@ class RetainedTranscriptBlock implements Component {
   private block: CliTuiBlock
   private content!: Component
   private markdown?: Markdown
+  private readonly markdownKinds = new Set(['user', 'assistant', 'reasoning'])
+  private fidelityIssues: MarkdownFidelityIssue[] = []
+  private fidelitySource = ''
   private auxiliaryText?: Text
 
   constructor(
@@ -286,7 +291,24 @@ class RetainedTranscriptBlock implements Component {
   }
 
   render(width: number): string[] {
-    const lines = this.content.render(Math.max(1, Math.floor(width)))
+    const safeWidth = Math.max(1, Math.floor(width))
+    const lines = this.content.render(safeWidth)
+    // REN-1：markdown 块渲染 fidelity 自检——源文本结构意图 vs 渲染产物
+    // 线索对比（完全丢失才报）；按 source 缓存，width 变化不重检
+    // （表格窄宽度回退仍保留原始语法，判定与 width 无关）
+    const markdownText = (this.block as { text?: string }).text ?? ''
+    if (this.markdown && markdownText && this.markdownKinds.has(this.block.kind)) {
+      if (this.fidelitySource !== markdownText) {
+        this.fidelityIssues = checkMarkdownFidelity(
+          markdownText,
+          this.markdown.render(safeWidth),
+        )
+        this.fidelitySource = markdownText
+      }
+    } else if (this.fidelitySource !== '') {
+      this.fidelityIssues = []
+      this.fidelitySource = ''
+    }
     if (this.block.kind !== 'tool') return lines
     const maxLines =
       this.block.status === 'running'
@@ -301,6 +323,11 @@ class RetainedTranscriptBlock implements Component {
 
   getBlock(): CliTuiBlock {
     return this.block
+  }
+
+  /** REN-1：本块最近一次渲染的 markdown fidelity 问题（源变化时重检） */
+  getFidelityIssues(): MarkdownFidelityIssue[] {
+    return this.fidelityIssues
   }
 
   private build(): void {
@@ -714,6 +741,16 @@ export class RetainedTranscript implements Component {
    */
   getBlockHitLines(): ReadonlyMap<string, { start: number; end: number }> {
     return this.blockHitLines
+  }
+
+  /** REN-1：全部块的 markdown fidelity 问题汇总（blockId → issues） */
+  getFidelityIssues(): ReadonlyMap<string, readonly MarkdownFidelityIssue[]> {
+    const result = new Map<string, readonly MarkdownFidelityIssue[]>()
+    for (const [id, component] of this.blockCache) {
+      const issues = component.getFidelityIssues()
+      if (issues.length > 0) result.set(id, issues)
+    }
+    return result
   }
 
   render(width: number): string[] {

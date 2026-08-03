@@ -310,6 +310,14 @@ class RetainedRoot extends Container {
     return this.transcript.getToolPagerContent(blockId)
   }
 
+  /** REN-1：markdown fidelity 问题汇总（controller 上报 warning） */
+  getFidelityIssues(): ReadonlyMap<
+    string,
+    readonly import('../../../shared/src/index.ts').MarkdownFidelityIssue[]
+  > {
+    return this.transcript.getFidelityIssues()
+  }
+
   setVisible(visible: boolean): void {
     if (this.visible === visible) return
     this.visible = visible
@@ -500,6 +508,8 @@ export function createRetainedTuiController(options: {
   let turnActivityEnabled = true
   let runningInterruptHandler: (() => void) | undefined
   let toolPagerContext: { cwd: string; sessionId: string } | undefined
+  // REN-1：已上报的 fidelity 问题（blockId:kind 去重）
+  const reportedFidelityIssues = new Set<string>()
   let root: RetainedRoot
   let tui: TUI
   let overlayHandle: OverlayHandle | undefined
@@ -822,6 +832,20 @@ export function createRetainedTuiController(options: {
     const revision = root.currentRevision()
     tui.requestRender()
     await root.waitForRevision(revision)
+    // REN-1：markdown fidelity 自检——新问题以 warning 事件上报（不静默吞掉）
+    for (const [blockId, issues] of root.getFidelityIssues()) {
+      for (const issue of issues) {
+        const key = `${blockId}:${issue.kind}`
+        if (reportedFidelityIssues.has(key)) continue
+        reportedFidelityIssues.add(key)
+        printer.onEvent({
+          type: 'warning',
+          message:
+            `markdown fidelity: block ${blockId} intended ${issue.intent} ` +
+            `${issue.kind}(s) but none rendered`,
+        })
+      }
+    }
   }
 
   const controller: CliTuiController = {

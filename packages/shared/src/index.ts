@@ -498,6 +498,14 @@ export {
 } from './toolRepetition.ts'
 export { repairToolMessagePairs } from './messageRepair.ts'
 export {
+  checkMarkdownFidelity,
+  detectMarkdownIntent,
+  detectMarkdownRenderedStructures,
+  type MarkdownFidelityIssue,
+  type MarkdownStructureCounts,
+  type MarkdownStructureKind,
+} from './markdownFidelity.ts'
+export {
   classifyBashCommandSafety,
   tokenizeShellCommand,
   type BashCommandSafetyResult,
