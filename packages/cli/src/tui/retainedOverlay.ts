@@ -341,6 +341,7 @@ export class RetainedOverlayHost implements Component, Focusable {
   /** TERM-3：lazy pager 未消费的滚轮量（加载中到达的帧不丢弃） */
   private pendingWheelScroll = 0
   private pendingWheelTimer: ReturnType<typeof setTimeout> | undefined
+  private pendingWheelStart = 0
 
   constructor(
     private readonly options: {
@@ -884,6 +885,7 @@ export class RetainedOverlayHost implements Component, Focusable {
       this.pendingWheelTimer = undefined
     }
     this.pendingWheelScroll = 0
+    this.pendingWheelStart = 0
   }
 
   /**
@@ -911,7 +913,11 @@ export class RetainedOverlayHost implements Component, Focusable {
   /** lazy pager 滚轮消费：ready 时串行翻步，loading 时轮询等待（有界） */
   private drainWheelScroll(): void {
     const active = this.active
-    if (!active || active.mode !== 'pager') return
+    if (!active || active.mode !== 'pager') {
+      // pager 已关闭：清除 pending（防陈旧滚轮意图泄漏进下一个 pager 会话）
+      this.clearPendingWheel()
+      return
+    }
     if (active.source.kind !== 'lazy-text') {
       this.pendingWheelScroll = 0
       return
@@ -919,11 +925,16 @@ export class RetainedOverlayHost implements Component, Focusable {
     if (this.pendingWheelScroll === 0) return
     if (active.lazyPhase !== 'ready') {
       if (this.pendingWheelTimer === undefined) {
-        const startedAt = Date.now()
+        // startedAt 只捕获一次（有界轮询：永不 settle 的 loadPage 不会 100Hz 永久轮询）
+        this.pendingWheelStart = Date.now()
         this.pendingWheelTimer = setTimeout(() => {
           this.pendingWheelTimer = undefined
-          if (Date.now() - startedAt < 5_000) this.drainWheelScroll()
-          else this.pendingWheelScroll = 0 // 有界：超时丢弃
+          if (Date.now() - this.pendingWheelStart < 5_000) {
+            this.drainWheelScroll()
+          } else {
+            this.pendingWheelScroll = 0 // 有界：超时丢弃
+            this.pendingWheelStart = 0
+          }
         }, 10)
       }
       return
@@ -1482,6 +1493,8 @@ export class RetainedOverlayHost implements Component, Focusable {
   ): void {
     const active = this.active
     if (!active || active.mode !== 'pager') return
+    // TERM-3：pager 关闭（含键盘 quit/ctrl-c）清理 pending 滚轮
+    this.clearPendingWheel()
     this.active = undefined
     this.close(active)
     active.resolve({
