@@ -188,6 +188,8 @@ export type SystemPromptEnv = {
   platform?: string
   shellHint?: string
   permissionMode?: PermissionMode | string
+  /** HKP-3：plan 正交开关（规划态只读，prompt 标注） */
+  planMode?: boolean
   model?: string
   /**
    * 可注入时钟（仅影响 Environment 的 Date 行，当未传 date 时）。
@@ -400,6 +402,14 @@ function environmentSection(env: SystemPromptEnv): string {
     `- Shell: ${shell}`,
   ]
   if (env.permissionMode) {
+    // HKP-3：plan 正交开关——规划态只读，权限模式保持原值但行为被覆盖
+    if (env.planMode === true) {
+      lines.push(
+        `- Plan mode is ACTIVE: read-only investigation/planning only; ` +
+          `write/exec tools are blocked until the user approves leaving plan mode ` +
+          `(call ExitPlanMode with your plan to ask).`,
+      )
+    }
     lines.push(`- ${permissionModeBehaviorLine(env.permissionMode)}`)
   }
   if (env.model) {

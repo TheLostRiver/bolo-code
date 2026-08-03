@@ -1335,6 +1335,8 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
     systemPromptSections = await assembleSessionSystemPrompt({
       cwd: opts.cwd,
       permissionMode,
+      // HKP-3：plan 正交开关注入 Environment（模型可见只读约束）
+      planMode: opts.planMode === true,
       model: opts.model ?? extra.model,
       skills: extra.skills ?? skills,
       skillCatalog: extra.skillCatalog,

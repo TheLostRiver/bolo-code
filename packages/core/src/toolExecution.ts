@@ -647,7 +647,9 @@ export async function runToolUse(
 
   if (finalBehavior === 'ask') {
     // ── auto 模式：分类器（对照 HC YOLO 挂接点）──
-    if (ctx.permissionMode === 'auto') {
+    // HKP-3：plan 激活时强制走用户审批——分类器零交互批准会静默破坏
+    // 「离开 plan 需用户批准」的边界，任何权限模式（含 auto）都不例外
+    if (ctx.permissionMode === 'auto' && ctx.planMode !== true) {
       const autoState = ctx.autoModeState
       if (autoState?.circuitBroken) {
         if (autoState.fallback === 'ask') {

@@ -248,6 +248,90 @@ async function main(): Promise<void> {
     )
   }
 
+  // ---- plan+auto：ExitPlanMode 强制走用户审批（分类器不可零交互批准）----
+  {
+    const store: PlanModeStoreRef = {
+      permissionMode: 'auto',
+      planMode: true,
+    }
+    let classifyCalls = 0
+    let askCalls = 0
+    const ctx = {
+      sessionId: 'hkp3',
+      cwd: root,
+      hooks: {},
+      permissionMode: 'auto' as const,
+      planMode: true,
+      askPermission: async () => {
+        askCalls += 1
+        return 'deny' as const
+      },
+      tools: [createExitPlanModeTool()],
+      classifyPermission: async () => {
+        classifyCalls += 1
+        return { decision: 'allow' as const, reason: 'spy' }
+      },
+      autoModeState: undefined,
+      planModeStore: store,
+    }
+    const result = await runToolUse(
+      {
+        id: 't-exit-auto',
+        name: 'ExitPlanMode',
+        input: { plan: '1. read\n2. patch' },
+      },
+      ctx,
+    )
+    assert.equal(
+      classifyCalls,
+      0,
+      'plan+auto never routes ExitPlanMode to the classifier',
+    )
+    assert.equal(
+      askCalls,
+      1,
+      'plan+auto forces the user approval path',
+    )
+    assert.equal(result.denied, true, 'user deny keeps plan mode active')
+    assert.equal(store.planMode, true, 'plan switch survives a deny')
+  }
+
+  // ---- snapshot roundtrip：planMode 随快照保存并恢复 ----
+  {
+    const snapDir = path.join(root, 'snap')
+    await fs.mkdir(snapDir, { recursive: true })
+    const session = await createSession({
+      cwd: root,
+      systemPrompt: false,
+      permissionMode: 'bypassPermissions',
+      planMode: true,
+      model: 'mock-model',
+    })
+    const { saveSession, resumeSession } = await import(
+      '../packages/core/src/index.ts'
+    )
+    const { path: snapPath } = await saveSession(session, {
+      sessionsDir: snapDir,
+      writeJsonSnapshot: true,
+    })
+    const resumed = await resumeSession({
+      idOrPath: snapPath,
+      cwd: root,
+      reassembleSystem: false,
+      systemPrompt: false,
+    })
+    assert.equal(
+      resumed.session.planMode,
+      true,
+      'plan mode survives save + resume',
+    )
+    assert.equal(
+      resumed.session.permissionMode,
+      'bypassPermissions',
+      'original mode restored alongside plan',
+    )
+  }
+
   await fs.rm(root, { recursive: true, force: true })
   console.log('PASS: HKP-3 plan mode orthogonal to permissions')
 }

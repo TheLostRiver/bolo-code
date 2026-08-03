@@ -707,6 +707,8 @@ export function parseSessionSnapshot(raw: unknown): SessionSnapshot {
     createdAt: typeof o.createdAt === 'string' ? o.createdAt : nowIso(),
     updatedAt: typeof o.updatedAt === 'string' ? o.updatedAt : nowIso(),
     phase: typeof o.phase === 'string' ? (o.phase as SessionPhase) : undefined,
+    // HKP-3：plan 正交开关随快照解析（旧快照缺省为关闭）
+    ...(o.planMode === true ? { planMode: true } : {}),
     ...(permissionRules ? { permissionRules } : {}),
     ...(effortLevel ? { effortLevel } : {}),
     ...(resolvedModel?.providerId
@@ -1581,6 +1583,8 @@ export function applySnapshotToSession(
     session.systemPromptSections = [...snapshot.systemPromptSections]
   }
   session.permissionMode = snapshot.permissionMode
+  // HKP-3：plan 正交开关随快照恢复（旧快照缺省为关闭）
+  session.planMode = snapshot.planMode === true
   const restoreModelRuntime = options?.restoreModelRuntime !== false
   session.autoCompactEnabled = snapshot.autoCompactEnabled
   if (restoreModelRuntime) {
