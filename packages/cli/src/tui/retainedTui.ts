@@ -841,8 +841,7 @@ export function createRetainedTuiController(options: {
     // 去重 key 含内容指纹：同一块内容变化后再次丢失会重新上报。
     for (const [blockId, issues] of root.getFidelityIssues()) {
       for (const issue of issues) {
-        const fingerprint = root
-          .getBlockSourceFingerprint(blockId)
+        const fingerprint = root.getBlockSourceFingerprint(blockId)
         const key = `${blockId}:${issue.kind}:${fingerprint}`
         if (reportedFidelityIssues.has(key)) continue
         reportedFidelityIssues.add(key)
