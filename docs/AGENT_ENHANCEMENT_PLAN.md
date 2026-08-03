@@ -20,8 +20,8 @@
 | TERM-2 | 输入 CSI 分片重组 | 低 | CLI adapter/StdinBuffer | ✅ 本轮 |
 | HKP-1 | hooks 事件面扩展与 fail-open 结果 | 低 | hooks 包 | ✅ 本轮 |
 | HKP-2 | 权限 auto 模式命令级安全分析 | 低–中 | permissions auto 分类器 | ✅ 本轮 |
-| HKP-3 | plan 模式与权限系统正交化 | 低 | core 权限接线 | ▶ NEXT |
-| REN-1 | markdown render-fidelity 自检 | 低 | markdown 渲染层 | 📋 |
+| HKP-3 | plan 模式与权限系统正交化 | 低 | core 权限接线 | ✅ 本轮 |
+| REN-1 | markdown render-fidelity 自检 | 低 | markdown 渲染层 | ▶ NEXT |
 | MEM-1 | 跨会话记忆 MVP（Markdown 双层 + FTS 检索 + 压缩前 flush + 首轮注入） | 低–中 | 新 memory 模块 + core 注入 | 📋 |
 | CMP-2 | 两遍预压缩（prefire pass1） | 中 | compact 执行器 | 📋 |
 | MEM-2 | 记忆检索质量链（时间衰减/源权重/脚手架过滤） | 低 | memory 检索（MEM-1 之后） | 📋 |
@@ -208,15 +208,26 @@ typecheck、hooks-htrack/ptl/subagent/cli-events 回归与完整 `npm test` 通�
 （classifier spy 断言 deny/allow 均不调分类器）；permissions/auto-permissions/
 permission-panel/exit-plan-mode 回归与完整 `npm test` 通过。
 
-## 9. HKP-3 · plan 模式与权限系统正交化 — 低成本
+## 9. HKP-3 · plan 模式与权限系统正交化 — 低成本 ✅ 本轮
 
-**目标**：plan 模式在任何权限模式下（含 bypassPermissions）都强制只读，
-ExitPlanMode 批准后才恢复；plan 状态独立于权限模式声明。
+**目标**：plan 模式在任何权限模式下（含 bypassPermissions）都强制只读，ExitPlanMode
+批准后才恢复；plan 状态独立于权限模式声明。
 
-**设计**：core 权限接线把 plan 作为正交开关，工具执行前检查「plan 且非只读 →
-拒绝（可走 ExitPlanMode）」；不改变现有 permissionMode 语义。
+**设计**（已落地）：
+- session 新增 `planMode` 正交开关：`/plan` 只置位开关（permissionMode 保持原值，
+  不再被覆盖）；`setPermissionMode` 切到其它模式时清开关。
+- toolExecution 的 gate 合成：`ctx.planMode ? 'plan' : ctx.permissionMode`——
+  规划态任何权限模式（含 bypassPermissions）下都走 plan 只读 gate（read allow、
+  ExitPlanMode ask、其余 deny）。
+- ExitPlanMode 升级：plan 激活判定 = planMode 开关或旧路径
+  （permissionMode==='plan' 兼容）；正交路径批准后**恢复原权限模式**（不再
+  降级到 default），旧路径仍落到 default。
+- status line：planMode 激活时显示 `mode=plan`。
 
-**验收**：各权限模式 × plan 组合矩阵；ExitPlanMode 恢复；既有 AR-T3a 回归。
+**验收**：专项覆盖组合矩阵（default/acceptEdits/bypassPermissions/auto ×
+plan 开关：plan 时 Write deny、Read allow；plan 关时 bypass allow、default ask）、
+ExitPlanMode 正交路径恢复原模式、/plan 语义、status line；exit-plan-mode 与
+slash 回归更新；typecheck 与完整 `npm test` 通过。
 
 ## 10. REN-1 · markdown render-fidelity 自检 — 低成本
 
