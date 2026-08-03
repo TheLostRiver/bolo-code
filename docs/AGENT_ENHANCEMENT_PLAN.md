@@ -249,21 +249,36 @@ fidelity 失败，作为 warning 信号（不静默吞掉）。
 集成（正常渲染零 warning）；transcript/retained/folding 回归与完整 `npm test`
 通过。
 
-## 11. MEM-1 · 跨会话记忆 MVP — 低–中成本（收益最高）
+## 11. MEM-1 · 跨会话记忆 MVP — 低–中成本（收益最高）✅ 本轮
 
 **目标**：本地跨会话记忆：项目级与用户级 Markdown 记忆文件（人可读可编辑）+
-全文检索索引（FTS，向量为可选增强）；会话内总结 flush（压缩前/定时/手动触发），
+全文检索索引（FTS，向量为可选增强）；会话内总结 flush（压缩前/手动触发），
 会话首轮自动检索 top-N 注入系统消息（注入过则跳过，保护 prompt cache）。
 
-**设计**：
-- 新 `packages/memory`（或 core 子模块）：`MEMORY.md` 双层布局、
-  Markdown 结构感知分块、FTS 索引（无外部服务）、检索排序（时间衰减/源权重）。
-- 与既有 compact 衔接：压缩前 flush 最近消息总结（复用已有 LLM 调用）。
-- 首轮注入：检索 top-N 拼 memory-context 块，一次性标志防重复注入。
-- 全部本地；索引失败降级为「直接读 MEMORY.md 全文注入」。
+**设计**（已落地；存量基础：core `memory.ts` 双层 MEMORY.md + topic 扫描 +
+确定性相关挑选 + system 段注入，本次补齐 MVP 缺口）：
+- **压缩前 flush**：`compactSession` 成功后总结压缩前最近消息（复用会话
+  CompactSummarizer）追加到 user memory daily log（`<memory>/daily/<date>.md`）；
+  会话内指纹锚点（`memoryFlushedHash`）去重——消息未实质新增则跳过；
+  纯 fail-open（总结/写盘失败不拖垮压缩，锚点不更新下次重试）；`/compact`、
+  auto compact、mid-turn 同路径。
+- **手动写入**：`/memory remember <line>` 追加一行到 user daily log。
+- **首轮相关性检索**：`createSession({ memoryRelevanceQuery })` →
+  `assembleSessionSystemPrompt` → `getSystemPrompt` 透传
+  `buildMemorySystemSection(relevanceQuery)`，首轮注入相关 topic top-N；
+  注入一次性由 systemPromptSections 创建时定稿保证（后续轮不重检索，
+  稳定前缀保护 prompt cache）。
+- **降级**：检索/扫描 fail-open（读盘失败回退 MEMORY.md 全文注入，存量行为）；
+  环境 `BOLO_DISABLE_MEMORY` 熔断保留。
 
-**验收**：写入/总结/检索/注入/降级/外部编辑同步（watcher 标脏）；resume 与
-子代理继承；跨会话可用性。
+**验收**（全部通过）：专项覆盖 flush 追加/指纹去重/失败 fail-open/过滤
+system-tool 消息/空消息、compactSession 接线（warning + 锚点）、`/memory
+remember`（含无参拒绝）、relevanceQuery 透传（有/无查询对比）；test-memory
+（存量）顺带注册进默认 `npm test`；typecheck、slash/system-prompt/compact
+回归及完整 `npm test` 通过。
+
+**边界（后续项）**：FTS 索引（现为词频相关性，MEM-2 质量链）、外部编辑 watcher
+标脏（新会话生效，当前会话沿用首轮注入）、resume 会话沿用快照记忆段不重检索。
 
 ## 12. CMP-2 · 两遍预压缩（prefire pass1）— 中成本
 
