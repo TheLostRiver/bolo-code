@@ -793,7 +793,7 @@ export type SessionEvent =
         unifiedPreview?: string
       }
     }
-  | { type: 'hook'; event: string; exitCode: number; blocked?: boolean }
+  | { type: 'hook'; event: string; exitCode: number; blocked?: boolean; status?: import('../../shared/src/index.ts').HookRunStatus }
   | { type: 'permission_decision'; mode: string; behavior: string; reason: string }
   | { type: 'error'; message: string }
   | { type: 'warning'; message: string }
