@@ -872,6 +872,46 @@ export class RetainedOverlayHost implements Component, Focusable {
     }
   }
 
+  /**
+   * TERM-3：滚轮规范化滚动（正数向下、负数向上；只滚动不退出 pager）。
+   * 键盘路径（翻到边界再按 next 会 quit）与滚轮语义分开——滚轮停在边界。
+   */
+  scrollPager(lines: number): void {
+    const active = this.active
+    if (!active || active.mode !== 'pager') return
+    const steps = Math.max(0, Math.min(24, Math.abs(lines)))
+    const dir = lines > 0 ? 1 : -1
+    for (let i = 0; i < steps; i += 1) {
+      if (!this.stepPagerPage(active, dir)) break
+    }
+    this.options.requestRender()
+  }
+
+  /** 单步翻页；返回是否实际移动（边界 false） */
+  private stepPagerPage(active: OverlaySession & { mode: 'pager' }, dir: 1 | -1): boolean {
+    if (active.source.kind === 'lazy-text') {
+      if (active.lazyPhase !== 'ready') return false
+      const nextPage =
+        dir < 0
+          ? Math.max(0, active.page - 1)
+          : active.lazyHasNext
+            ? active.page + 1
+            : active.page
+      if (nextPage !== active.page) {
+        this.loadLazyPagerPage(active, nextPage, this.options.getColumns())
+      }
+      return nextPage !== active.page
+    }
+    const pageCount = active.pageCount ?? 1
+    const nextPage =
+      dir < 0
+        ? Math.max(0, active.page - 1)
+        : Math.min(pageCount - 1, active.page + 1)
+    if (nextPage === active.page) return false
+    active.page = nextPage
+    return true
+  }
+
   handleInput(data: string): void {
     const active = this.active
     if (!active) return

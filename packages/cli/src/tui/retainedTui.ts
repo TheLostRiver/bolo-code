@@ -36,6 +36,7 @@ import {
   type CliToolDisplayMode,
   type RuntimePagerSuccess,
   parseSgrMouseSequence,
+  createWheelNormalizer,
 } from '../../../shared/src/index.ts'
 import type { AskUserQuestionOutcome } from '../../../tools/src/index.ts'
 import { runCleanupSteps } from '../cleanup.ts'
@@ -520,6 +521,8 @@ export function createRetainedTuiController(options: {
   let overlayHandle: OverlayHandle | undefined
   let embeddedPagerView: RetainedOverlayView
   let commandSurfaceEffect: CliCommandSurfaceEffect
+  // TERM-3：滚轮规范化状态机（16ms 帧合并 + 加速度分带）
+  const wheelNormalizer = createWheelNormalizer()
 
   const requestRender = (): void => {
     if (started && !stopped) tui.requestRender()
@@ -614,6 +617,19 @@ export function createRetainedTuiController(options: {
   const removeMouseInputListener = tui.addInputListener((data) => {
     const mouse = parseSgrMouseSequence(data)
     if (!mouse) return
+    if (mouse.kind === 'wheel') {
+      // TERM-3：滚轮规范化（16ms 帧合并 + 加速度分带）→ 滚动 active pager
+      const norm = wheelNormalizer.push({
+        direction: mouse.direction,
+        at: Date.now(),
+      })
+      if (norm.scrollLines > 0 && overlay.isActive()) {
+        overlay.scrollPager(
+          mouse.direction === 'down' ? norm.scrollLines : -norm.scrollLines,
+        )
+      }
+      return { consume: true }
+    }
     if (mouse.kind !== 'press') return { consume: true }
     const presentation = overlay.getPresentation()
     if (presentation === 'modal') return { consume: true }

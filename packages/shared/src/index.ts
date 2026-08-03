@@ -477,6 +477,16 @@ export {
   type SgrMouseWheelEvent,
 } from './tuiMouse.ts'
 export {
+  createWheelNormalizer,
+  wheelBandMultiplier,
+  WHEEL_CADENCE_MS,
+  WHEEL_MAX_EVENTS_PER_FRAME,
+  type WheelDirection,
+  type WheelNormalizeInput,
+  type WheelNormalizeResult,
+  type WheelNormalizer,
+} from './wheelNormalizer.ts'
+export {
   READ_ONLY_GROUP_MIN_MEMBERS,
   groupAdjacentReadTools,
   isAbsorbableThinkingBlock,
