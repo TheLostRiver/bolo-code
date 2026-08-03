@@ -3838,6 +3838,70 @@ async function cmdMemory(
   }
 }
 
+/** CBG-1：/symbol <query>——懒构建符号索引并查询（四道门控） */
+async function cmdSymbols(
+  session: SlashSession,
+  args: string,
+): Promise<SlashDispatchResult> {
+  const {
+    symbolsEnabled,
+    isGitRepository,
+    loadOrBuildSymbolIndex,
+    querySymbols,
+  } = await import('./symbolIndex.ts')
+
+  const query = args.trim()
+  if (!query) {
+    return {
+      ok: false,
+      message:
+        'Usage: /symbol <query>  (search repository symbol definitions; lazy index)',
+    }
+  }
+  if (!symbolsEnabled()) {
+    return { ok: false, message: 'symbols disabled (BOLO_DISABLE_SYMBOLS)' }
+  }
+  if (!(await isGitRepository(session.cwd))) {
+    return {
+      ok: false,
+      message: 'symbols require a git repository (no .git found in cwd)',
+    }
+  }
+  let index
+  try {
+    const loaded = await loadOrBuildSymbolIndex(session.cwd)
+    index = loaded.index
+  } catch (err) {
+    if (err instanceof Error && err.message === 'symbol index build in progress') {
+      return {
+        ok: false,
+        message: 'symbol index is being built by another request; retry shortly',
+      }
+    }
+    return {
+      ok: false,
+      message: `symbol index failed: ${err instanceof Error ? err.message : String(err)}`,
+    }
+  }
+  const hits = querySymbols(index, query)
+  if (!hits.length) {
+    return {
+      ok: true,
+      message: `No symbols matching "${query}" (indexed ${index.symbols.length} symbols).`,
+    }
+  }
+  const lines = hits.map(
+    (s) => `${s.file}:${s.line}  ${s.kind} ${s.name}`,
+  )
+  return {
+    ok: true,
+    message: [
+      `${hits.length} symbol(s) matching "${query}":`,
+      ...lines.map((l) => `  ${l}`),
+    ].join('\n'),
+  }
+}
+
 async function cmdRules(
   session: SlashSession,
   args: string,
@@ -4618,6 +4682,17 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     group: 'session',
     hidden: true,
     run: cmdCost,
+  },
+  {
+    name: 'symbol',
+    summary: 'Search repository symbol definitions (lazy index; git repos)',
+    usage: '<query>',
+    display: displayOnResult(
+      panelDisplay('slash:symbol', { overflow: 'pager' }),
+      'slash:symbol:error',
+    ),
+    group: 'session',
+    run: cmdSymbols,
   },
   {
     name: 'memory',
