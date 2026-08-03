@@ -206,9 +206,16 @@ async function main(): Promise<void> {
       scrollback: 400,
     })
     const warnings: string[] = []
+    const rawWrites: string[] = []
     const controller = createRetainedTuiController({
-      writeOut: (text) => terminal.write(text),
-      writeErr: (text) => terminal.write(text),
+      writeOut: (text) => {
+        rawWrites.push(text)
+        terminal.write(text)
+      },
+      writeErr: (text) => {
+        rawWrites.push(text)
+        terminal.write(text)
+      },
       input,
       output,
       env: { COLORTERM: 'truecolor' },
@@ -225,10 +232,14 @@ async function main(): Promise<void> {
     controller.printer.beginTurn({ prompt: 'render markdown' })
     controller.printer.onEvent({
       type: 'assistant',
-      text: `intro\n\n${LIST_SOURCE}\n\n${CODE_SOURCE}`,
+      text: `intro\n\n${TABLE_SOURCE}\n\n${LIST_SOURCE}\n\n${CODE_SOURCE}`,
     })
     controller.printer.endTurn({ terminalReason: 'completed' })
     await settle(controller)
+    assert(
+      rawWrites.join('').includes('\x1b['),
+      'the ANSI-enabled fixture genuinely emits styled output',
+    )
     assert.equal(
       warnings.length,
       0,
