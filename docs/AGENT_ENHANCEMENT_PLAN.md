@@ -18,8 +18,8 @@
 | ROB-3 | 后台任务 manifest 与重启恢复提醒 | 低 | backgroundShell 持久化 + `/bg` | ✅ 本轮 |
 | TERM-1 | 终端能力探测（品牌特化） | 低 | CLI adapter | ✅ 本轮 |
 | TERM-2 | 输入 CSI 分片重组 | 低 | CLI adapter/StdinBuffer | ✅ 本轮 |
-| HKP-1 | hooks 事件面扩展与 fail-open 结果 | 低 | hooks 包 | ▶ NEXT |
-| HKP-2 | 权限 auto 模式命令级安全分析 | 低–中 | permissions auto 分类器 | 📋 |
+| HKP-1 | hooks 事件面扩展与 fail-open 结果 | 低 | hooks 包 | ✅ 本轮 |
+| HKP-2 | 权限 auto 模式命令级安全分析 | 低–中 | permissions auto 分类器 | ▶ NEXT |
 | HKP-3 | plan 模式与权限系统正交化 | 低 | core 权限接线 | 📋 |
 | REN-1 | markdown render-fidelity 自检 | 低 | markdown 渲染层 | 📋 |
 | MEM-1 | 跨会话记忆 MVP（Markdown 双层 + FTS 检索 + 压缩前 flush + 首轮注入） | 低–中 | 新 memory 模块 + core 注入 | 📋 |
@@ -154,16 +154,28 @@ adapter 集成（分片鼠标重组为单事件、未知序列超时丢弃、之
 TERM-1/mouse/TUI 回归与完整 `npm test` 通过。TERM-1 的尾段泄漏限制由本轨
 收口（`;1;0c` 现作为续段拼回 pending）。
 
-## 7. HKP-1 · hooks 事件面扩展与 fail-open 结果 — 低成本
+## 7. HKP-1 · hooks 事件面扩展与 fail-open 结果 — 低成本 ✅ 本轮
 
-**目标**：hooks 事件面补齐 `user_prompt_submit` / `permission_denied` /
-`post_tool_use_failure`；hook 执行失败（超时/崩溃/输出非法）记录为结构化
-per-hook 结果供 UI 展示，不静默吞掉也不无谓阻断（fail-open，含威胁模型注释）。
+**目标**：hooks 事件面补齐 `PermissionDenied` / `PostToolUseFailure`（`UserPromptSubmit`
+已有，不重复）；hook 执行结果结构化（ok/failed/timeout/aborted）供展示与诊断，
+失败不静默吞掉也不无谓阻断（fail-open）。
 
-**设计**：事件宏表增加三事件；执行器返回 per-hook 结果（ok/failed/timeout）；
-`permission_denied` 纯观察不参与决策。
+**设计**（已落地）：
+- shared：`HOOK_EVENTS` 加 `PermissionDenied`（纯观察，含 reason）与
+  `PostToolUseFailure`（含 error/tool_response，exit 2 反馈给模型）；两者按
+  tool_name 匹配（不进 WITHOUT_MATCHER）。
+- hooks：`HookRunResult.status` 派生字段（aborted > timeout > exit 0 ok >
+  failed；与 blocked 正交）；PostToolUseFailure exit 2 并入 continuation。
+- core：权限拒绝（deny 各路径）经 `endResult` 统一 fire-and-forget
+  `PermissionDenied`（不阻塞拒绝路径，hook 自身失败被吞且仅此）；工具执行
+  失败（isError）时在 PostToolUse 之后 await `PostToolUseFailure`（同 emit/
+hookDiag/exit-2 反馈路径）。
+- 威胁模型：PermissionDenied 是纯观察事件，hook 输出不参与任何决策；
+  fire-and-forget 意味着进程退出可能截断该观察（fail-open 语义内）。
 
-**验收**：三事件触发与载荷、失败结果结构化、既有 H0–H5 回归。
+**验收**：专项覆盖事件注册、tool_name 匹配、status 四态派生（ok/failed/
+timeout/预 abort 不执行）、deny 触发写标记、失败触发写标记、exit 2 反馈；
+typecheck、hooks-htrack/ptl/subagent/cli-events 回归与完整 `npm test` 通过。
 
 ## 8. HKP-2 · 权限 auto 模式命令级安全分析 — 低–中成本
 

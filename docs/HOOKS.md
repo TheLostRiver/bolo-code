@@ -6,12 +6,14 @@
 > **水位与阶段：** 见 [ROADMAP.md §7 Hooks 轨](./ROADMAP.md)（H0–H5）。  
 > **最低完备集 = 11 事件**（原 10 + **SessionEnd 必做**，对齐 Codex `HOOK_EVENT_NAMES`）。
 
-## 1. 最低 11 个事件
+## 1. 最低 13 个事件
 
 | Event | Matcher 字段 | Matcher 取值 / 说明 |
 |-------|--------------|---------------------|
 | **PermissionRequest** | `tool_name` | 含 Bash、`apply_patch*`、MCP tool 名等 |
+| **PermissionDenied**（HKP-1） | `tool_name` | 权限被拒时纯观察事件，不参与决策；载荷含 `reason` |
 | **PostToolUse** | `tool_name` | 见 Tool coverage |
+| **PostToolUseFailure**（HKP-1） | `tool_name` | 工具执行失败（isError/抛错）时触发；exit 2 反馈给模型，载荷含 `error` |
 | **PostCompact** | `trigger` | `manual` \| `auto` |
 | **PreCompact** | `trigger` | `manual` \| `auto` |
 | **PreToolUse** | `tool_name` | 见 Tool coverage |
