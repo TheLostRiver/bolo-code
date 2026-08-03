@@ -297,6 +297,18 @@ async function makeRepo(name: string): Promise<string> {
   const v = await computeSymbolVersion(repo)
   assert(v.startsWith('badref'), `malicious ref rejected (got ${v.slice(0, 20)})`)
   assert(!v.includes('topsecret'), 'secret content not leaked into version')
+  // 绕过尝试：`refs/heads/../../secret.txt`（正则通过但 `..` 段拒绝）
+  await fs.writeFile(
+    path.join(repo, '.git', 'HEAD'),
+    'ref: refs/heads/../../secret.txt\n',
+    'utf8',
+  )
+  const bypass = await computeSymbolVersion(repo)
+  assert(
+    bypass.startsWith('badref'),
+    `ref with .. segments rejected (got ${bypass.slice(0, 20)})`,
+  )
+  assert(!bypass.includes('topsecret'), 'bypass attempt does not leak secret')
   // 正常 ref 仍工作
   await fs.writeFile(
     path.join(repo, '.git', 'HEAD'),

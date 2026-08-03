@@ -131,9 +131,13 @@ export async function computeSymbolVersion(cwd: string): Promise<string> {
     const headRaw = await fs.readFile(path.join(cwd, '.git', 'HEAD'), 'utf8')
     const ref = headRaw.trim().match(/^ref:\s+(.+)$/)?.[1]
     if (ref) {
-      // 安全：ref 只接受 `refs/...` 白名单形态（恶意 repo 的 `ref: ../../x`
-      // 会让 readFile 越出 .git 读任意文件——拒绝并回退 mtime-only 版本）
-      if (!/^refs\/[A-Za-z0-9._/-]+$/.test(ref)) {
+      // 安全：ref 只接受 `refs/...` 白名单形态且不含 `..` 段（恶意 repo 的
+      // `ref: ../../x` 或 `refs/heads/../../x` 会让 readFile 越出 .git 读任意
+      // 文件——拒绝并回退 mtime-only 版本）
+      if (
+        !/^refs\/[A-Za-z0-9._/-]+$/.test(ref) ||
+        ref.split('/').includes('..')
+      ) {
         commit = 'badref'
       } else {
         commit = (
