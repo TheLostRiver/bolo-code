@@ -234,6 +234,7 @@ class RetainedTranscriptBlock implements Component {
   private readonly markdownKinds = new Set(['user', 'assistant', 'reasoning'])
   private fidelityIssues: MarkdownFidelityIssue[] = []
   private fidelitySource = ''
+  private lastRenderedWidth?: number
   private auxiliaryText?: Text
 
   constructor(
@@ -292,23 +293,8 @@ class RetainedTranscriptBlock implements Component {
 
   render(width: number): string[] {
     const safeWidth = Math.max(1, Math.floor(width))
+    this.lastRenderedWidth = safeWidth
     const lines = this.content.render(safeWidth)
-    // REN-1：markdown 块渲染 fidelity 自检——源文本结构意图 vs 渲染产物
-    // 线索对比（完全丢失才报）；按 source 缓存，width 变化不重检
-    // （表格窄宽度回退仍保留原始语法，判定与 width 无关）
-    const markdownText = (this.block as { text?: string }).text ?? ''
-    if (this.markdown && markdownText && this.markdownKinds.has(this.block.kind)) {
-      if (this.fidelitySource !== markdownText) {
-        this.fidelityIssues = checkMarkdownFidelity(
-          markdownText,
-          this.markdown.render(safeWidth),
-        )
-        this.fidelitySource = markdownText
-      }
-    } else if (this.fidelitySource !== '') {
-      this.fidelityIssues = []
-      this.fidelitySource = ''
-    }
     if (this.block.kind !== 'tool') return lines
     const maxLines =
       this.block.status === 'running'
@@ -325,9 +311,43 @@ class RetainedTranscriptBlock implements Component {
     return this.block
   }
 
+  /** REN-1：本块 markdown 源的稳定指纹（去重 key 用） */
+  getSourceFingerprint(): string {
+    const text = (this.block as { text?: string }).text ?? ''
+    let hash = 5381
+    for (let index = 0; index < text.length; index += 1) {
+      hash = ((hash << 5) + hash + text.charCodeAt(index)) | 0
+    }
+    return (hash >>> 0).toString(36)
+  }
+
   /** REN-1：本块最近一次渲染的 markdown fidelity 问题（源变化时重检） */
   getFidelityIssues(): MarkdownFidelityIssue[] {
     return this.fidelityIssues
+  }
+
+  /**
+   * REN-1：渲染后按需检查 markdown fidelity（flush 时调用，不在流式渲染
+   * 路径上；按 source 缓存，同一源只检一次；width 变化不重检——表格窄
+   * 宽度回退仍保留原始语法，判定与 width 无关）。
+   */
+  checkFidelity(): void {
+    const markdownText = (this.block as { text?: string }).text ?? ''
+    if (this.markdown && markdownText && this.markdownKinds.has(this.block.kind)) {
+      if (this.fidelitySource !== markdownText) {
+        const width = this.lastRenderedWidth ?? 80
+        this.fidelityIssues = checkMarkdownFidelity(
+          markdownText,
+          this.markdown.render(Math.max(1, Math.floor(width))),
+        )
+        this.fidelitySource = markdownText
+      }
+      return
+    }
+    if (this.fidelitySource !== '') {
+      this.fidelityIssues = []
+      this.fidelitySource = ''
+    }
   }
 
   private build(): void {
@@ -743,10 +763,16 @@ export class RetainedTranscript implements Component {
     return this.blockHitLines
   }
 
-  /** REN-1：全部块的 markdown fidelity 问题汇总（blockId → issues） */
+  /** REN-1：块 markdown 源指纹（warning 去重 key） */
+  getBlockSourceFingerprint(blockId: string): string {
+    return this.blockCache.get(blockId)?.getSourceFingerprint() ?? ''
+  }
+
+  /** REN-1：全部块的 markdown fidelity 问题汇总（flush 时先按需检查） */
   getFidelityIssues(): ReadonlyMap<string, readonly MarkdownFidelityIssue[]> {
     const result = new Map<string, readonly MarkdownFidelityIssue[]>()
     for (const [id, component] of this.blockCache) {
+      component.checkFidelity()
       const issues = component.getFidelityIssues()
       if (issues.length > 0) result.set(id, issues)
     }

@@ -318,6 +318,11 @@ class RetainedRoot extends Container {
     return this.transcript.getFidelityIssues()
   }
 
+  /** REN-1：块 markdown 源指纹（warning 去重 key） */
+  getBlockSourceFingerprint(blockId: string): string {
+    return this.transcript.getBlockSourceFingerprint(blockId)
+  }
+
   setVisible(visible: boolean): void {
     if (this.visible === visible) return
     this.visible = visible
@@ -832,10 +837,13 @@ export function createRetainedTuiController(options: {
     const revision = root.currentRevision()
     tui.requestRender()
     await root.waitForRevision(revision)
-    // REN-1：markdown fidelity 自检——新问题以 warning 事件上报（不静默吞掉）
+    // REN-1：markdown fidelity 自检——新问题以 warning 事件上报（不静默吞掉）。
+    // 去重 key 含内容指纹：同一块内容变化后再次丢失会重新上报。
     for (const [blockId, issues] of root.getFidelityIssues()) {
       for (const issue of issues) {
-        const key = `${blockId}:${issue.kind}`
+        const fingerprint = root
+          .getBlockSourceFingerprint(blockId)
+        const key = `${blockId}:${issue.kind}:${fingerprint}`
         if (reportedFidelityIssues.has(key)) continue
         reportedFidelityIssues.add(key)
         printer.onEvent({

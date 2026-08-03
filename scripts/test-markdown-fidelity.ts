@@ -94,6 +94,16 @@ async function main(): Promise<void> {
     'fallback raw syntax counts as rendered tables',
   )
   assert.equal(
+    detectMarkdownRenderedStructures(['│ quote prefix']).table,
+    0,
+    'a single blockquote prefix is not a rendered table',
+  )
+  assert.equal(
+    detectMarkdownRenderedStructures(['─'.repeat(20)]).table,
+    0,
+    'an HR rule is not a rendered table',
+  )
+  assert.equal(
     detectMarkdownRenderedStructures(['• one', '2. two']).list,
     2,
     'bullet and ordered markers count as rendered lists',

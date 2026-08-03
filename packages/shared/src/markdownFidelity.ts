@@ -78,12 +78,14 @@ export function detectMarkdownIntent(source: string): MarkdownStructureCounts {
 }
 
 function countTableRendered(lines: readonly string[]): number {
-  // 表格边框（│/─/┌┐└┘ 等盒线字符）或回退原始语法的 `|`
-  const tableLine = /[│─┌┐└┘├┤]|\|/u
+  // 表格线索：≥2 个垂直框线（│/|）或角/交叉框线（┌┐└┘├┤）。
+  // 收紧匹配避免 box 边框、blockquote 前缀（单 │）与 HR（─）误当表格。
+  const boxCorner = /[┌┐└┘├┤]/u
   let regions = 0
   let inTable = false
   for (const line of lines) {
-    if (tableLine.test(line)) {
+    const pipes = (line.match(/[│|]/gu) ?? []).length
+    if (pipes >= 2 || boxCorner.test(line)) {
       if (!inTable) {
         regions += 1
         inTable = true
