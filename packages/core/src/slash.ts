@@ -3554,7 +3554,11 @@ async function cmdPermissions(
     extra +=
       ' — classifier will approve/deny non-allowlisted tools; expect extra model cost; failures deny.'
   }
-  return { ok: true, message: `permissionMode set to ${raw}${extra}` }
+  const prefix =
+    raw === 'plan'
+      ? 'plan mode activated'
+      : `permissionMode set to ${raw}`
+  return { ok: true, message: `${prefix}${extra}` }
 }
 
 function ensurePermissionRules(session: SlashSession): SessionPermissionRules {
