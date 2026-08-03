@@ -109,14 +109,8 @@ function countListRendered(lines: readonly string[]): number {
 
 function countCodeBlockRendered(lines: readonly string[]): number {
   let regions = 0
-  let inCode = false
   for (const line of lines) {
-    if (FENCE_RE.test(line)) {
-      regions += 1
-      inCode = !inCode
-    } else if (inCode && line.trim() === '') {
-      // 代码块内空行不断开（围栏闭合判定）
-    }
+    if (FENCE_RE.test(line)) regions += 1
   }
   return Math.floor(regions / 2)
 }

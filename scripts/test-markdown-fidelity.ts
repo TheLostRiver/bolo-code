@@ -196,6 +196,48 @@ async function main(): Promise<void> {
     terminal.dispose()
   }
 
+  // ---- integration: ANSI enabled (real terminal styles) still zero warnings ----
+  {
+    const input = new RawInputHarness()
+    const output = new ResizableOutput(90, 40)
+    const terminal = new HeadlessTerminalHarness({
+      columns: 90,
+      rows: 40,
+      scrollback: 400,
+    })
+    const warnings: string[] = []
+    const controller = createRetainedTuiController({
+      writeOut: (text) => terminal.write(text),
+      writeErr: (text) => terminal.write(text),
+      input,
+      output,
+      env: { COLORTERM: 'truecolor' },
+    })
+    const printerSpy = controller.printer as unknown as {
+      onEvent: (event: { type: string; message?: string }) => void
+    }
+    printerSpy.onEvent = (event) => {
+      if (event.type === 'warning') warnings.push(event.message ?? '')
+    }
+    controller.setWelcomeVisible(false)
+    await controller.start()
+    await terminal.flush()
+    controller.printer.beginTurn({ prompt: 'render markdown' })
+    controller.printer.onEvent({
+      type: 'assistant',
+      text: `intro\n\n${LIST_SOURCE}\n\n${CODE_SOURCE}`,
+    })
+    controller.printer.endTurn({ terminalReason: 'completed' })
+    await settle(controller)
+    assert.equal(
+      warnings.length,
+      0,
+      `ANSI-styled markdown still produces zero fidelity warnings (got ${warnings.join('; ')})`,
+    )
+    await controller.stop()
+    terminal.dispose()
+  }
+
   console.log('PASS: REN-1 markdown render-fidelity self-check')
 }
 

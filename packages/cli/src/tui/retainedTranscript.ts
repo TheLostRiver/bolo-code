@@ -336,10 +336,11 @@ class RetainedTranscriptBlock implements Component {
     if (this.markdown && markdownText && this.markdownKinds.has(this.block.kind)) {
       if (this.fidelitySource !== markdownText) {
         const width = this.lastRenderedWidth ?? 80
-        this.fidelityIssues = checkMarkdownFidelity(
-          markdownText,
-          this.markdown.render(Math.max(1, Math.floor(width))),
-        )
+        // ANSI 会破坏行首锚定检测（列表符号/代码围栏带颜色前缀）——先剥离
+        const rendered = this.markdown
+          .render(Math.max(1, Math.floor(width)))
+          .map((line) => stripTerminalAnsi(line))
+        this.fidelityIssues = checkMarkdownFidelity(markdownText, rendered)
         this.fidelitySource = markdownText
       }
       return
