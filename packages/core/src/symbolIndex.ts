@@ -131,9 +131,15 @@ export async function computeSymbolVersion(cwd: string): Promise<string> {
     const headRaw = await fs.readFile(path.join(cwd, '.git', 'HEAD'), 'utf8')
     const ref = headRaw.trim().match(/^ref:\s+(.+)$/)?.[1]
     if (ref) {
-      commit = (
-        await fs.readFile(path.join(cwd, '.git', ref), 'utf8')
-      ).trim()
+      // 安全：ref 只接受 `refs/...` 白名单形态（恶意 repo 的 `ref: ../../x`
+      // 会让 readFile 越出 .git 读任意文件——拒绝并回退 mtime-only 版本）
+      if (!/^refs\/[A-Za-z0-9._/-]+$/.test(ref)) {
+        commit = 'badref'
+      } else {
+        commit = (
+          await fs.readFile(path.join(cwd, '.git', ref), 'utf8')
+        ).trim()
+      }
     } else {
       commit = headRaw.trim()
     }
@@ -266,19 +272,31 @@ export async function loadOrBuildSymbolIndex(
     /* 无缓存/损坏 → 重建 */
   }
 
-  // 锁：独占创建（open 'wx'）——并发构建防重的真实排除语义；
-  // 已存在 → 读内容时间戳判陈旧（>LOCK_STALE_MS 清理后继续）。
-  try {
-    const fh = await fs.open(lock, 'wx')
-    await fh.writeFile(String(now()), 'utf8')
-    await fh.close()
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code
-    if (code === 'EEXIST') {
+  // 锁：独占创建（open 'wx'）——并发构建防重的真实排除语义。
+  // 锁内容 = `<ts>:<token>`（令牌归属：finally 只删自己的锁）。
+  // 已存在 → 读内容时间戳判陈旧（>LOCK_STALE_MS 清理后**重新获取**）。
+  const token = `${now()}:${Math.random().toString(36).slice(2, 10)}`
+  for (let attempt = 0; ; attempt += 1) {
+    if (attempt > 2) throw new Error('symbol index build in progress')
+    try {
+      const fh = await fs.open(lock, 'wx')
+      await fh.writeFile(token, 'utf8')
+      await fh.close()
+      break
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code
+      if (code !== 'EEXIST') {
+        if (code === 'ENOENT') {
+          // 目录刚建好前的竞态：重试
+          await fs.mkdir(path.dirname(cachePath), { recursive: true })
+          continue
+        }
+        throw err
+      }
       let stale = false
       try {
         const raw = await fs.readFile(lock, 'utf8')
-        const ts = Number(raw.trim())
+        const ts = Number(raw.trim().split(':')[0])
         stale = !Number.isFinite(ts) || now() - ts >= LOCK_STALE_MS
       } catch {
         stale = true
@@ -287,14 +305,10 @@ export async function loadOrBuildSymbolIndex(
         throw new Error('symbol index build in progress')
       }
       await fs.rm(lock, { force: true })
-    } else if (code !== 'ENOENT') {
-      throw err
+      // 清理后循环重新获取（不给并发者留空窗）
     }
-    /* ENOENT（目录刚建好前）→ 下一轮重试语义：重新走构建 */
   }
 
-  await fs.mkdir(path.dirname(cachePath), { recursive: true })
-  await fs.writeFile(lock, String(now()), 'utf8')
   try {
     const index = await buildSymbolIndex(cwd)
     await fs.mkdir(path.dirname(cachePath), { recursive: true })
@@ -303,7 +317,13 @@ export async function loadOrBuildSymbolIndex(
     await fs.rename(tmp, cachePath)
     return { index, rebuilt: true }
   } finally {
-    await fs.rm(lock, { force: true }).catch(() => {})
+    // 只删自己的锁（内容令牌匹配——防删掉并发者刚创建的新锁）
+    try {
+      const raw = await fs.readFile(lock, 'utf8')
+      if (raw.trim() === token) await fs.rm(lock, { force: true })
+    } catch {
+      /* 锁已被清理/不存在 */
+    }
   }
 }
 

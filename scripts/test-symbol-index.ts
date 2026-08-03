@@ -282,6 +282,31 @@ async function makeRepo(name: string): Promise<string> {
   assert(v1 !== v2, 'version changes when source mtime changes')
 }
 
+// --- 8. security：恶意 HEAD ref 不越出 .git 读文件 ---
+{
+  const repo = await makeRepo('evil')
+  await fs.writeFile(path.join(repo, 'a.ts'), 'export function evilFn() {}\n', 'utf8')
+  // 恶意 repo：ref 指向 .git 外（`ref: ../../secret`）
+  const secret = path.join(repo, 'secret.txt')
+  await fs.writeFile(secret, 'topsecret1234567890', 'utf8')
+  await fs.writeFile(
+    path.join(repo, '.git', 'HEAD'),
+    `ref: ../../secret.txt\n`,
+    'utf8',
+  )
+  const v = await computeSymbolVersion(repo)
+  assert(v.startsWith('badref'), `malicious ref rejected (got ${v.slice(0, 20)})`)
+  assert(!v.includes('topsecret'), 'secret content not leaked into version')
+  // 正常 ref 仍工作
+  await fs.writeFile(
+    path.join(repo, '.git', 'HEAD'),
+    'ref: refs/heads/main\n',
+    'utf8',
+  )
+  const ok = await computeSymbolVersion(repo)
+  assert(ok.startsWith('0123456789ab'), 'normal ref resolves commit')
+}
+
 if (prevConfigDir === undefined) delete process.env.BOLO_CONFIG_DIR
 else process.env.BOLO_CONFIG_DIR = prevConfigDir
 await fs.rm(tmp, { recursive: true, force: true })
