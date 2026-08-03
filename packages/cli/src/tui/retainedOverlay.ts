@@ -925,8 +925,9 @@ export class RetainedOverlayHost implements Component, Focusable {
     if (this.pendingWheelScroll === 0) return
     if (active.lazyPhase !== 'ready') {
       if (this.pendingWheelTimer === undefined) {
-        // startedAt 只捕获一次（有界轮询：永不 settle 的 loadPage 不会 100Hz 永久轮询）
-        this.pendingWheelStart = Date.now()
+        // startedAt 只在首次 arm 捕获（expiry 重置 0）——有界轮询：
+        // 永不 settle 的 loadPage 在 5s 后停止轮询并丢弃 pending
+        if (this.pendingWheelStart === 0) this.pendingWheelStart = Date.now()
         this.pendingWheelTimer = setTimeout(() => {
           this.pendingWheelTimer = undefined
           if (Date.now() - this.pendingWheelStart < 5_000) {
