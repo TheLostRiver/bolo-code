@@ -423,6 +423,8 @@ export {
   truncateMemoryEntrypoint,
   scanMemoryTopics,
   selectRelevantMemoryTopics,
+  MEMORY_HALF_LIFE_DAYS,
+  MEMORY_DIVERSITY_SIMILARITY,
   loadTopicBodies,
   tokenizeMemoryQuery,
   parseMemoryTopicFrontmatter,

@@ -56,6 +56,8 @@ export type MemoryTopicHeader = {
   description: string | null
   title: string | null
   scope: MemoryScope
+  /** MEM-2：frontmatter 后是否有正文（scan 近似判定；false = 空/脚手架） */
+  hasBody?: boolean
 }
 
 export type RelevantMemoryTopic = MemoryTopicHeader & {
@@ -349,6 +351,8 @@ export async function scanMemoryTopics(
         description,
         title: derivedTitle,
         scope,
+        // MEM-2：frontmatter 后无正文的 topic 视为空/脚手架（select 阶段过滤）
+        hasBody: frontmatterHasBody(headLines),
       })
     }
   }
@@ -356,6 +360,16 @@ export async function scanMemoryTopics(
   await walk(root)
   out.sort((a, b) => b.mtimeMs - a.mtimeMs)
   return out.slice(0, maxFiles)
+}
+
+/** MEM-2：frontmatter（--- ... ---）之后是否有非空正文；无 frontmatter 视为有 */
+function frontmatterHasBody(headLines: string): boolean {
+  const lines = headLines.split(/\r?\n/)
+  if (lines[0]?.trim() !== '---') return true
+  let i = 1
+  while (i < lines.length && lines[i]?.trim() !== '---') i += 1
+  if (i >= lines.length) return true // frontmatter 未闭合 → 保守视为有正文
+  return lines.slice(i + 1).some((l) => l.trim() !== '')
 }
 
 /** 分词：字母数字与 CJK 连续段；过滤极短英文停用噪声 */
@@ -391,21 +405,30 @@ export function tokenizeMemoryQuery(text: string): string[] {
   return [...new Set(parts.filter((p) => !stop.has(p) && p.length >= 2))]
 }
 
+/** MEM-2：user 层 topic 半衰期（天）——超期旧记忆权重减半 */
+export const MEMORY_HALF_LIFE_DAYS = 30
+/** MEM-2：多样性去重阈值（标题/文件名 token Jaccard 相似度） */
+export const MEMORY_DIVERSITY_SIMILARITY = 0.5
+
 /**
- * 确定性相关挑选：文件名/标题/描述与 query token 重叠计分。
- * 无 LLM、无遥测。匹配按 token 边界（避免 notes⊃not）。
+ * 确定性相关挑选（MEM-2 质量链）：文件名/标题/描述与 query token 重叠计分，
+ * 叠加 user 层时间衰减（半衰期）、空/脚手架过滤、description 缺失降权、
+ * 相似内容多样性重排。无 LLM、无遥测。匹配按 token 边界（避免 notes⊃not）。
  */
 export function selectRelevantMemoryTopics(
   query: string,
   topics: readonly MemoryTopicHeader[],
-  opts?: { limit?: number },
+  opts?: { limit?: number; now?: number },
 ): RelevantMemoryTopic[] {
   const limit = opts?.limit ?? MAX_RELEVANT_MEMORY_TOPICS
+  const now = opts?.now ?? Date.now()
   const tokens = tokenizeMemoryQuery(query)
   if (!tokens.length || !topics.length) return []
 
   const scored: RelevantMemoryTopic[] = []
   for (const t of topics) {
+    // 空/脚手架过滤：frontmatter 后无正文 → 不入选
+    if (t.hasBody === false) continue
     const hayTokens = new Set(
       tokenizeMemoryQuery(
         [t.filename.replace(/\.md$/i, ''), t.title ?? '', t.description ?? ''].join(
@@ -423,10 +446,40 @@ export function selectRelevantMemoryTopics(
       }
     }
     if (t.scope === 'project' && score > 0) score += 1
-    if (score > 0) scored.push({ ...t, score })
+    if (score > 0) {
+      // 时间衰减：user 层按半衰期衰减（30 天减半）；project 层免衰减
+      if (t.scope === 'user') {
+        const ageDays = Math.max(0, (now - (t.mtimeMs ?? now)) / 86_400_000)
+        score = score * Math.pow(0.5, ageDays / MEMORY_HALF_LIFE_DAYS)
+      }
+      // description 缺失降权（脚手架感内容降排）
+      if (!t.description?.trim()) score -= 2
+      if (score > 0) scored.push({ ...t, score })
+    }
   }
   scored.sort((a, b) => b.score - a.score || b.mtimeMs - a.mtimeMs)
-  return scored.slice(0, limit)
+
+  // 多样性重排：标题/文件名 token 相似的重复内容只保留最高分者
+  const picked: RelevantMemoryTopic[] = []
+  for (const t of scored) {
+    if (picked.some((p) => topicSimilarity(p, t) > MEMORY_DIVERSITY_SIMILARITY)) {
+      continue
+    }
+    picked.push(t)
+    if (picked.length >= limit) break
+  }
+  return picked
+}
+
+/** 标题/文件名 token Jaccard 相似度（多样性去重用；下划线/后缀归一） */
+function topicSimilarity(a: MemoryTopicHeader, b: MemoryTopicHeader): number {
+  const norm = (f: string) => f.replace(/\.md$/i, '').replace(/_/g, ' ')
+  const ta = new Set(tokenizeMemoryQuery(`${a.title ?? ''} ${norm(a.filename)}`))
+  const tb = new Set(tokenizeMemoryQuery(`${b.title ?? ''} ${norm(b.filename)}`))
+  if (!ta.size || !tb.size) return 0
+  let inter = 0
+  for (const tok of ta) if (tb.has(tok)) inter += 1
+  return inter / (ta.size + tb.size - inter)
 }
 
 export async function loadTopicBodies(
