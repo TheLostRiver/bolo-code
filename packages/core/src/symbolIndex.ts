@@ -83,21 +83,23 @@ export const LOCK_STALE_MS = 30_000
 
 /** 定义模式表：pattern + kind（行级匹配） */
 const DEFINITION_PATTERNS: Array<{ re: RegExp; kind: SymbolKind }> = [
-  // TypeScript / JavaScript
-  { re: /^\s*export\s+(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/, kind: 'function' },
-  { re: /^\s*(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/, kind: 'function' },
+  // C++ scoped enum 最前：`enum class Foo` 不被 Rust/Java 的 enum 分支误提取
+  { re: /^\s*(?:(?:public|private|protected|internal|static|final|abstract|sealed)\s+)*enum\s+class\s+([A-Za-z_][\w]*)/, kind: 'enum' },
+  // TypeScript / JavaScript（export default function/async function 也覆盖）
+  { re: /^\s*export\s+default\s+(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/, kind: 'function' },
+  { re: /^\s*(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/, kind: 'function' },
   { re: /^\s*export\s+(?:default\s+)?class\s+([A-Za-z_$][\w$]*)/, kind: 'class' },
   { re: /^\s*(?:export\s+)?class\s+([A-Za-z_$][\w$]*)/, kind: 'class' },
   { re: /^\s*(?:export\s+)?interface\s+([A-Za-z_$][\w$]*)/, kind: 'interface' },
   { re: /^\s*(?:export\s+)?type\s+([A-Za-z_$][\w$]*)\s*=/, kind: 'type' },
   { re: /^\s*export\s+(?:const|let|var)\s+([A-Za-z_$][\w$]*)/, kind: 'const' },
   { re: /^\s*const\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:function|\([^)]*\)\s*=>)/, kind: 'const' },
-  { re: /^\s*(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/, kind: 'function' },
-  // Rust
-  { re: /^\s*(?:pub(?:\([^)]*\))?\s+)?fn\s+([A-Za-z_][\w]*)/, kind: 'function' },
-  { re: /^\s*(?:pub\s+)?(?:struct|enum|trait)\s+([A-Za-z_][\w]*)/, kind: 'struct' },
-  // Go
+  // Rust（pub(...) 可见性 + async fn 也覆盖）
+  { re: /^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+([A-Za-z_][\w]*)/, kind: 'function' },
+  { re: /^\s*(?:pub(?:\([^)]*\))?\s+)?(?:struct|enum|trait)\s+([A-Za-z_][\w]*)/, kind: 'struct' },
+  // Go（导出函数 + type Foo struct/interface）
   { re: /^\s*func\s+(?:\([^)]*\)\s+)?([A-Z][\w]*)/, kind: 'function' },
+  { re: /^\s*type\s+([A-Z][\w]*)\s+(?:struct|interface)/, kind: 'type' },
   // Python
   { re: /^\s*(?:async\s+)?def\s+([A-Za-z_][\w]*)/, kind: 'def' },
   { re: /^\s*class\s+([A-Za-z_][\w]*)/, kind: 'class' },
@@ -264,21 +266,31 @@ export async function loadOrBuildSymbolIndex(
     /* 无缓存/损坏 → 重建 */
   }
 
-  // 锁：存在且未陈旧 → 另一构建进行中（本次查询跳过，避免并发重复构建）。
-  // 陈旧判据 = 锁内容时间戳（写锁时刻；崩溃遗留锁内容即崩溃时刻）。
+  // 锁：独占创建（open 'wx'）——并发构建防重的真实排除语义；
+  // 已存在 → 读内容时间戳判陈旧（>LOCK_STALE_MS 清理后继续）。
   try {
-    const raw = await fs.readFile(lock, 'utf8')
-    const ts = Number(raw.trim())
-    if (Number.isFinite(ts) && now() - ts < LOCK_STALE_MS) {
-      throw new Error('symbol index build in progress')
-    }
-    // 陈旧锁：清理后继续
-    await fs.rm(lock, { force: true })
+    const fh = await fs.open(lock, 'wx')
+    await fh.writeFile(String(now()), 'utf8')
+    await fh.close()
   } catch (err) {
-    if (err instanceof Error && err.message === 'symbol index build in progress') {
+    const code = (err as NodeJS.ErrnoException).code
+    if (code === 'EEXIST') {
+      let stale = false
+      try {
+        const raw = await fs.readFile(lock, 'utf8')
+        const ts = Number(raw.trim())
+        stale = !Number.isFinite(ts) || now() - ts >= LOCK_STALE_MS
+      } catch {
+        stale = true
+      }
+      if (!stale) {
+        throw new Error('symbol index build in progress')
+      }
+      await fs.rm(lock, { force: true })
+    } else if (code !== 'ENOENT') {
       throw err
     }
-    /* 锁不存在 → 正常构建 */
+    /* ENOENT（目录刚建好前）→ 下一轮重试语义：重新走构建 */
   }
 
   await fs.mkdir(path.dirname(cachePath), { recursive: true })

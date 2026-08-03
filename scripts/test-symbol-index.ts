@@ -104,6 +104,21 @@ async function makeRepo(name: string): Promise<string> {
     ['def py_fn():', '    pass', 'class PyClass:', '    pass'].join('\n'),
     'utf8',
   )
+  await fs.writeFile(
+    path.join(repo, 'cpp.cpp'),
+    ['enum class Color { Red };', 'enum Old { A };'].join('\n'),
+    'utf8',
+  )
+  await fs.writeFile(
+    path.join(repo, 'default.ts'),
+    ['export default function defaultFn() {}', 'export default async function asyncDefaultFn() {}'].join('\n'),
+    'utf8',
+  )
+  await fs.writeFile(
+    path.join(repo, 'types.go'),
+    ['type User struct { Name string }', 'type Reader interface { Read() }'].join('\n'),
+    'utf8',
+  )
   // 黑名单目录不扫描
   await fs.mkdir(path.join(repo, 'node_modules'), { recursive: true })
   await fs.writeFile(
@@ -127,9 +142,19 @@ async function makeRepo(name: string): Promise<string> {
     'Method',
     'py_fn',
     'PyClass',
+    'Color',
+    'Old',
+    'defaultFn',
+    'asyncDefaultFn',
+    'User',
+    'Reader',
   ]) {
     assert(names.includes(expected), `symbol extracted: ${expected}`)
   }
+  const color = index.symbols.find((s) => s.name === 'Color')!
+  assert.equal(color.kind, 'enum', 'scoped enum kind (not class)')
+  const user = index.symbols.find((s) => s.name === 'User')!
+  assert.equal(user.kind, 'type', 'go struct type kind')
   assert(!names.includes('skipped'), 'node_modules skipped')
   const tsFn = index.symbols.find((s) => s.name === 'tsFn')!
   assert.equal(tsFn.kind, 'function', 'ts fn kind')
