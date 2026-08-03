@@ -240,13 +240,18 @@ function fingerprint(messages: readonly ChatMessage[]): string {
   await waitFor(() => session.precompact !== undefined, 3_000)
   assert.equal(session.precompact!.summaryText, 'slow warm', 'first warmup wins')
 
-  // commit at 比较：会话已有更新的状态 → 晚到旧结果不覆盖
+  // commit at 比较：预热进行中种下更新的状态 → 晚到旧结果不覆盖
   session.precompact = undefined
-  const newerAt = Date.now() + 100_000
-  session.precompact = { at: newerAt, count: 0, headFingerprint: 'x', summaryText: 'newer' }
+  let release2: (() => void) | undefined
+  const gate2 = new Promise<void>((r) => {
+    release2 = r
+  })
   startPrecompactWarmup({
     messages: () => session.messages,
-    summarize: async () => ({ text: 'old result' }),
+    summarize: async () => {
+      await gate2
+      return { text: 'old result' }
+    },
     contextWindowTokens: WINDOW,
     current: () => session.precompact,
     commit: (s) => {
@@ -264,8 +269,17 @@ function fingerprint(messages: readonly ChatMessage[]): string {
     },
     summarizeTimeoutMs: 1_000,
   })
+  await new Promise((r) => setTimeout(r, 30))
+  // 预热仍在跑时种下更新状态（模拟压缩后新预热已占位）
+  const newerAt = Date.now() + 100_000
+  session.precompact = { at: newerAt, count: 0, headFingerprint: 'x', summaryText: 'newer' }
+  release2!()
   await new Promise((r) => setTimeout(r, 150))
-  assert.equal(session.precompact!.at, newerAt, 'late older result rejected by at compare')
+  assert.equal(
+    session.precompact!.at,
+    newerAt,
+    'late older result rejected by at compare',
+  )
   session.precompact = undefined
 }
 

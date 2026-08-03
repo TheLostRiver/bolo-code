@@ -86,7 +86,10 @@ export function startPrecompactWarmup(opts: PrecompactWarmupOptions): void {
     keepMaxTokens: undefined,
   })
   const split = splitMessagesForCompactKeep([...messages], keepOpts)
-  if (split.toSummarize.length === 0) return
+  if (split.toSummarize.length === 0) {
+    opts.clearInFlight() // 所有早退路径都必须释放抢占标记
+    return
+  }
 
   const count = split.toSummarize.length
   const headFingerprint = fingerprintMessages(split.toSummarize)
