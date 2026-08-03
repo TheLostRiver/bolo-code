@@ -342,6 +342,8 @@ export class RetainedOverlayHost implements Component, Focusable {
   private pendingWheelScroll = 0
   private pendingWheelTimer: ReturnType<typeof setTimeout> | undefined
   private pendingWheelStart = 0
+  /** TERM-3：lazyScrollQueue 消费链进行中（单链标志——防双链竞争） */
+  private wheelChainActive = false
 
   constructor(
     private readonly options: {
@@ -878,7 +880,7 @@ export class RetainedOverlayHost implements Component, Focusable {
     this.clearPendingWheel()
   }
 
-  /** TERM-3：清理 lazy 滚轮 pending（timer + 计数） */
+  /** TERM-3：清理 lazy 滚轮 pending（timer + 计数 + 链标志） */
   private clearPendingWheel(): void {
     if (this.pendingWheelTimer !== undefined) {
       clearTimeout(this.pendingWheelTimer)
@@ -886,6 +888,7 @@ export class RetainedOverlayHost implements Component, Focusable {
     }
     this.pendingWheelScroll = 0
     this.pendingWheelStart = 0
+    this.wheelChainActive = false
   }
 
   /**
@@ -943,8 +946,11 @@ export class RetainedOverlayHost implements Component, Focusable {
     const pending = this.pendingWheelScroll
     const steps = Math.max(0, Math.min(3, Math.abs(pending)))
     const dir = pending > 0 ? 1 : -1
+    // 单链：已有消费链进行中 → 只保留 pending（链完成回调会 drain 新 pending）
+    if (this.wheelChainActive) return
     this.pendingWheelScroll -= dir * steps
     if (this.pendingWheelScroll === 0) this.pendingWheelStart = 0 // 下次 loading 重新计时
+    this.wheelChainActive = true
     this.lazyScrollQueue(active, steps, dir)
     this.options.requestRender()
   }
@@ -956,6 +962,7 @@ export class RetainedOverlayHost implements Component, Focusable {
     dir: 1 | -1,
   ): void {
     if (remaining <= 0) {
+      this.wheelChainActive = false // 单链结束：消费新 pending
       this.drainWheelScroll()
       return
     }
@@ -967,6 +974,7 @@ export class RetainedOverlayHost implements Component, Focusable {
           ? session.page + 1
           : session.page
     if (nextPage === session.page) {
+      this.wheelChainActive = false // 边界：单链结束
       this.drainWheelScroll()
       return
     }
