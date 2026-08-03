@@ -8,8 +8,10 @@
  * 危险形态（保守白名单之外的明确拒绝）：
  * - 提权命令头：sudo / su / doas / pkexec / runuser
  * - rg/grep 的 --pre（执行任意命令的预处理）
- * - 管道到 shell：`| sh|bash|zsh|fish|dash|powershell|pwsh`（网络管道注入面）
  * - 破坏性目标：`rm -rf /`、`dd of=/dev/*`、`mkfs.*`
+ * 分隔符/替换/重定向/管道（`;`/`&&`/`||`/`|`/`$()`/反引号/换行等）由
+ * tokenizer 在引号外一律 fail-closed（ask，不自动放行）——词法级无法
+ * 静态验证链式附加命令的安全性。
  */
 export type BashCommandSafetyVerdict = 'allow' | 'deny' | 'ask'
 
@@ -40,10 +42,6 @@ const PACKAGE_MANAGER_ALLOW_SUBCOMMANDS = new Set([
   'audit',
   'help',
   'version',
-  'login',
-  'logout',
-  'pack',
-  'publish',
 ])
 
 /** 命令名（含常见变体）→ 包管理器族 */

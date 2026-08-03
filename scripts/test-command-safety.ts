@@ -291,6 +291,40 @@ async function main(): Promise<void> {
     assert.equal(result.denied, false, 'classifier allow executes')
   }
 
+  // tool-requested ask downgrade protects even allowlisted commands
+  {
+    classifyCalls = []
+    const calls: string[] = []
+    const result = await runToolUse(
+      { id: 't4', name: 'Bash', input: { command: 'npm install -D typescript' } },
+      {
+        sessionId: 's',
+        cwd: root,
+        hooks: {},
+        permissionMode: 'auto',
+        askPermission: async () => 'allow',
+        tools: [
+          {
+            ...makeBashTool(calls),
+            checkPermissions: async () => ({ behavior: 'ask' as const }),
+          },
+        ],
+        classifyPermission: classifySpy,
+        autoModeState: createAutoModeState('deny'),
+      },
+    )
+    assert.equal(
+      classifyCalls.length,
+      1,
+      'a tool-requested ask downgrade sends even allowlisted commands to the classifier',
+    )
+    assert.equal(
+      result.denied,
+      false,
+      'classifier allow still executes the downgraded command',
+    )
+  }
+
   await fs.rm(root, { recursive: true, force: true })
   console.log('PASS: HKP-2 auto command-level safety analysis')
 }

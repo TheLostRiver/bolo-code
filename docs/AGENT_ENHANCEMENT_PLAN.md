@@ -184,16 +184,20 @@ typecheck、hooks-htrack/ptl/subagent/cli-events 回归与完整 `npm test` 通�
 
 **设计**（已落地）：
 - shared `commandSafety.ts` 纯契约：`tokenizeShellCommand`（词法级，单/双引号与
-  转义，未闭合 fail-closed）+ `classifyBashCommandSafety`——
-  deny：提权命令头（sudo/su/doas/pkexec/runuser）、管道到 shell
-  （| sh/bash/zsh/fish/dash/powershell/pwsh）、rg/grep `--pre`、破坏性目标
-  （rm -rf /、dd of=/dev/*、mkfs）；
-  ask：npx/bunx（可执行任意包，无法静态确认）与未覆盖命令；
+  转义，未闭合 fail-closed；**引号外 shell 元字符——`;`/`&&`/`||`/`|`/`$()`/
+  反引号/换行/CRLF/重定向/通配——一律 fail-closed 为 ask**，词法级无法静态
+  验证链式附加命令）+ `classifyBashCommandSafety`——
+  deny：提权命令头（sudo/su/doas/pkexec/runuser）、rg/grep `--pre`、破坏性
+  目标（rm -rf /、dd of=/dev/*、mkfs）；
+  ask：npx/bunx（可执行任意包）与未覆盖命令；
   allow：包管理器（npm/pnpm/yarn/bun/cargo/pip/pip3/uv/go/gradle/mvn/composer）
-  白名单子命令（install/add/run/build/test/mod/get 等）。
+  惰性子命令（install/uninstall/update/upgrade/list/search/info/view/outdated/
+  why/tree/audit/help/version 等；run/build/test/add/get/mod/init/create 等
+  执行脚本/下载代码的一律询问）。
 - toolExecution：auto 分支先于分类器做确定性判定——deny 直接拒绝（不调分类器、
-  不执行）、allow 直接放行（跳过分类器）、ask 走原分类器/UI 路径；audit
-  stage=command-safety、permission_decision 事件完整。
+  不执行）、allow 直接放行（跳过分类器，且**受 toolRequestedAsk 保护**：工具
+  checkPermissions 显式 ask 时不被命令级 allow 覆盖）、ask 走原分类器/UI 路径；
+  audit stage=command-safety、permission_decision 事件完整。
 
 **验收**：专项覆盖 tokenizer（引号/转义/未闭合）、危险拒绝（13 例含 reason）、
 白名单放行（10 例）、任意执行器与未覆盖命令询问、fail-closed、auto 接线

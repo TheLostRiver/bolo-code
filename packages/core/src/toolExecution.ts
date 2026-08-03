@@ -609,11 +609,15 @@ export async function runToolUse(
   })
   if (toolPerm.behavior === 'deny') {
     finalBehavior = 'deny'
-  } else if (toolPerm.behavior === 'ask' && finalBehavior === 'allow') {
-    // 工具要求 ask 时不能比全局更松（会话 always-allow 仍可被工具硬 deny 挡住）
-    if (!gate.reason.includes('always-allow')) {
-      finalBehavior = 'ask'
-      toolRequestedAsk = true
+  } else if (toolPerm.behavior === 'ask') {
+    // HKP-2：工具显式 ask 时，命令级 allow 不得覆盖（工具要求不确定）。
+    // 无论 gate 是否已 ask（auto 模式 gate 常为 ask），都记录该信号。
+    toolRequestedAsk = true
+    if (finalBehavior === 'allow') {
+      // 工具要求 ask 时不能比全局更松（会话 always-allow 仍可被工具硬 deny 挡住）
+      if (!gate.reason.includes('always-allow')) {
+        finalBehavior = 'ask'
+      }
     }
   }
 
