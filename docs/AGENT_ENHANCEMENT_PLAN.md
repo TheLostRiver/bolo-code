@@ -309,14 +309,27 @@ compactSession 集成（预热后压缩 summarizer 只吃新增 ≤15 条 vs 全
 预热失败静默、开关关闭；compact/auto-compact/write-failure/usage-anchor/
 autocompact-system-tokens 回归及完整 `npm test` 通过。
 
-## 13. MEM-2 · 记忆检索质量链 — 低成本（依赖 MEM-1）
+## 13. MEM-2 · 记忆检索质量链 — 低成本（依赖 MEM-1）✅ 本轮
 
 **目标**：检索排序加入时间衰减（会话来源按半衰期衰减、项目/全局免衰减）、
 空/脚手架 chunk 过滤、源权重与访问频率 boost、多样性重排。
 
-**设计**：纯函数排序链（无外部依赖），阈值与权重可配置；MEM-1 的 FTS 结果接入。
+**设计**（已落地；全部纯函数、可配置常量、无外部依赖）：
+- **时间衰减**：user 层 topic 按半衰期衰减（`MEMORY_HALF_LIFE_DAYS = 30`，
+  每 30 天权重减半）；project 层免衰减（项目事实长期有效）。
+- **空/脚手架过滤**：`scanMemoryTopics` 记录 `hasBody`（frontmatter 后
+  无正文 → false；无 frontmatter 保守视为有正文），select 阶段过滤。
+- **description 缺失降权**：无 description 的 topic 扣 2 分（脚手架感降排）。
+- **多样性重排**：标题/文件名 token Jaccard 相似（`.md` 后缀与下划线归一）
+  超过 `MEMORY_DIVERSITY_SIMILARITY = 0.5` 的重复内容只保留最高分者。
+- **源权重**：既有 project +1 boost 保留（source 权重项）。
+- 访问频率 boost 无数据源（无访问计数），文档注明为后续项。
+- FTS 索引仍为 MEM-2 后置（现有词频相关性 + 质量链已可用）。
 
-**验收**：排序质量场景（新旧记忆、脚手架污染、重复内容）。
+**验收**（全部通过）：专项覆盖新旧记忆排序（半衰期减半验证）、project
+免衰减、空/脚手架过滤（含真实文件系统 scan 集成）、description 缺失降权、
+相似内容去重保留高分者；test-memory（存量相关性断言）与 system-prompt
+回归兼容；完整 `npm test` 通过。
 
 ## 14. TERM-3 · 滚轮滚动规范化 — 低–中成本（依赖 OUT-4 鼠标）
 
