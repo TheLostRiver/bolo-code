@@ -157,6 +157,12 @@ const topic = (
       'utf8',
     )
     await fs.writeFile(path.join(dir, 'blank.md'), '   \n\n  \n', 'utf8')
+    // CJK frontmatter-only：多字节内容不因字节/字符比较差异泄漏过脚手架过滤
+    await fs.writeFile(
+      path.join(dir, 'cjk_empty.md'),
+      '---\ndescription: 偏好记录\ntitle: 空\n---\n',
+      'utf8',
+    )
     // 正文在 40 行/8KB 窗口之后也不误判为空（窗口 + size 判定）
     await fs.writeFile(
       path.join(dir, 'longhead.md'),
@@ -176,6 +182,7 @@ const topic = (
     const filled = topics.find((t) => t.filename === 'filled.md')
     const nofront = topics.find((t) => t.filename === 'nofront.md')
     const blank = topics.find((t) => t.filename === 'blank.md')
+    const cjkEmpty = topics.find((t) => t.filename === 'cjk_empty.md')
     const longhead = topics.find((t) => t.filename === 'longhead.md')
     const huge = topics.find((t) => t.filename === 'huge.md')
     assert(empty && empty.hasBody === false, 'empty frontmatter-only → hasBody false')
@@ -184,6 +191,10 @@ const topic = (
     assert(
       blank && blank.hasBody === false,
       'whitespace-only no-frontmatter → hasBody false',
+    )
+    assert(
+      cjkEmpty && cjkEmpty.hasBody === false,
+      'CJK frontmatter-only → hasBody false (byte-level comparison)',
     )
     assert(
       longhead && longhead.hasBody !== false,

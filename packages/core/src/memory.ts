@@ -325,6 +325,7 @@ export async function scanMemoryTopics(
       if (ent.name === MEMORY_ENTRYPOINT_NAME) continue
       let st: import('node:fs').Stats
       let head: string
+      let hasMoreBeyondWindow = false
       try {
         st = await fs.stat(abs)
         // MEM-2 security：有界窗口读（64KB）——hasBody 用「窗口内正文 ||
@@ -334,6 +335,9 @@ export async function scanMemoryTopics(
           const buf = Buffer.alloc(MEMORY_TOPIC_READ_WINDOW_BYTES)
           const { bytesRead } = await fh.read(buf, 0, buf.length, 0)
           head = buf.slice(0, bytesRead).toString('utf8')
+          // 窗口外有内容的判定用**字节**比较（bytesRead vs st.size）：
+          // 字符数比较会被 CJK 多字节编码欺骗（UTF-16 字符数 < UTF-8 字节数）
+          hasMoreBeyondWindow = st.size > bytesRead
         } finally {
           await fh.close()
         }
@@ -359,8 +363,8 @@ export async function scanMemoryTopics(
         title: derivedTitle,
         scope,
         // MEM-2：frontmatter 后无正文的 topic 视为空/脚手架（select 阶段过滤）；
-        // 文件比窗口大 → 窗口外必有正文（有界读 + size 判定保持精确）
-        hasBody: frontmatterHasBody(head) || st.size > head.length,
+        // 窗口外有正文（字节级判定，CJK 安全）→ hasBody true
+        hasBody: frontmatterHasBody(head) || hasMoreBeyondWindow,
       })
     }
   }
