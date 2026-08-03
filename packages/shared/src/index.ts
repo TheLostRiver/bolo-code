@@ -1,8 +1,10 @@
 /** 共享契约 — 类型真源 */
 
 export const HOOK_EVENTS = [
+  'PermissionDenied',
   'PermissionRequest',
   'PostToolUse',
+  'PostToolUseFailure',
   'PostCompact',
   'PreCompact',
   'PreToolUse',
@@ -60,6 +62,27 @@ export type PermissionRequestInput = HookBaseInput & {
   tool_use_id: string
 }
 
+/** HKP-1：工具权限被拒绝时触发；纯观察，不参与决策。 */
+export type PermissionDeniedInput = HookBaseInput & {
+  hook_event_name: 'PermissionDenied'
+  tool_name: string
+  tool_input: unknown
+  tool_use_id: string
+  /** 拒绝原因（权限模式/规则/用户选择等） */
+  reason?: string
+}
+
+/** HKP-1：工具执行失败（isError/抛错）时触发；观察 + exit 2 反馈。 */
+export type PostToolUseFailureInput = HookBaseInput & {
+  hook_event_name: 'PostToolUseFailure'
+  tool_name: string
+  tool_input: unknown
+  tool_use_id: string
+  tool_response: unknown
+  /** 失败原因/错误消息 */
+  error: string
+}
+
 export type PreToolUseInput = HookBaseInput & {
   hook_event_name: 'PreToolUse'
   tool_name: string
@@ -114,8 +137,10 @@ export type SubagentLifecycleInput = HookBaseInput & {
 
 export type AnyHookInput =
   | PermissionRequestInput
+  | PermissionDeniedInput
   | PreToolUseInput
   | PostToolUseInput
+  | PostToolUseFailureInput
   | SessionStartInput
   | SessionEndInput
   | UserPromptSubmitInput

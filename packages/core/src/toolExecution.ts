@@ -75,7 +75,7 @@ export type ToolUseBlock = {
 }
 
 export type ToolExecutionEvent =
-  | { type: 'hook'; event: string; exitCode: number; blocked?: boolean }
+  | { type: 'hook'; event: string; exitCode: number; blocked?: boolean; status?: string }
   | {
       type: 'permission_request'
       id: string
@@ -382,6 +382,7 @@ function endResult(
   ctx: RunToolUseContext,
   toolUseId: string,
   name: string,
+  toolInput: unknown,
   content: string,
   flags: {
     blocked: boolean
@@ -391,6 +392,35 @@ function endResult(
     concurrencySafe?: boolean
   },
 ): RunToolUseResult {
+  if (flags.denied) {
+    // HKP-1：PermissionDenied 纯观察 hook（fire-and-forget，不阻塞拒绝路径）
+    const deniedInput = {
+      hook_event_name: 'PermissionDenied' as const,
+      session_id: ctx.sessionId,
+      cwd: ctx.cwd,
+      timestamp: nowIso(),
+      tool_name: name,
+      tool_input: toolInput,
+      tool_use_id: toolUseId,
+      ...(content.trim() ? { reason: content.trim() } : {}),
+    }
+    void runHooks('PermissionDenied', deniedInput, ctx.hooks, {
+      signal: ctx.signal,
+    })
+      .then((run) => {
+        for (const r of run.results) {
+          emit(ctx, {
+            type: 'hook',
+            event: 'PermissionDenied',
+            exitCode: r.exitCode,
+            status: r.status,
+          })
+        }
+      })
+      .catch(() => {
+        /* 纯观察：hook 自身失败不阻断拒绝路径 */
+      })
+  }
   const presentation = createToolPresentation({
     toolName: name,
     output: content,
@@ -429,7 +459,7 @@ export async function runToolUse(
   // --- Unknown tool（对照 HC）---
   if (!tool) {
     const content = formatToolUseError(`Error: No such tool available: ${name}`)
-    return endResult(ctx, toolUseId, name, content, {
+    return endResult(ctx, toolUseId, name, rawInput, content, {
       blocked: false,
       denied: false,
       ok: false,
@@ -441,7 +471,7 @@ export async function runToolUse(
   const parsed = validateAgainstJsonSchema(tool.inputJSONSchema, rawInput)
   if (!parsed.success) {
     const content = formatToolUseError(parsed.error)
-    return endResult(ctx, toolUseId, name, content, {
+    return endResult(ctx, toolUseId, name, rawInput, content, {
       blocked: false,
       denied: false,
       ok: false,
@@ -467,7 +497,7 @@ export async function runToolUse(
     })
     if (!v.ok) {
       const content = formatToolUseError(v.message)
-      return endResult(ctx, toolUseId, name, content, {
+      return endResult(ctx, toolUseId, name, toolInput, content, {
         blocked: false,
         denied: false,
         ok: false,
@@ -525,6 +555,7 @@ export async function runToolUse(
       ctx,
       toolUseId,
       name,
+      toolInput,
       formatToolUseError(`blocked by PreToolUse: ${pre.blockReason}`),
       {
         blocked: true,
@@ -585,6 +616,7 @@ export async function runToolUse(
       ctx,
       toolUseId,
       name,
+      toolInput,
       formatToolUseError(
         `permission denied (${toolPerm.reason ?? gate.reason})`,
       ),
@@ -619,6 +651,7 @@ export async function runToolUse(
             ctx,
             toolUseId,
             name,
+            toolInput,
             formatToolUseError(
               `permission denied (auto circuit open: ${autoState.lastReason ?? 'classifier unavailable'})`,
             ),
@@ -654,6 +687,7 @@ export async function runToolUse(
             ctx,
             toolUseId,
             name,
+            toolInput,
             formatToolUseError(
               'permission denied (auto: no classifier; fail-closed)',
             ),
@@ -707,6 +741,7 @@ export async function runToolUse(
             ctx,
             toolUseId,
             name,
+            toolInput,
             formatToolUseError(`permission denied (auto: ${result.reason})`),
             {
               blocked: false,
@@ -739,6 +774,7 @@ export async function runToolUse(
             ctx,
             toolUseId,
             name,
+            toolInput,
             formatToolUseError(`permission denied (auto: ${result.reason})`),
             {
               blocked: false,
@@ -837,6 +873,7 @@ export async function runToolUse(
         ctx,
         toolUseId,
         name,
+        toolInput,
         formatToolUseError('permission denied (user/hook)'),
         {
           blocked: false,
@@ -856,6 +893,7 @@ export async function runToolUse(
       ctx,
       toolUseId,
       name,
+      toolInput,
       formatToolUseError('Error: tool cancelled'),
       {
         blocked: false,
@@ -1164,6 +1202,57 @@ export async function runToolUse(
   const postFeedback = (post.continuationText || '').trim()
   if (postFeedback) {
     content = `${content}\n\n[PostToolUse hook]\n${postFeedback}`
+  }
+
+  // HKP-1：工具执行失败时额外触发 PostToolUseFailure（观察 + exit 2 反馈）
+  if (result.isError) {
+    const failure = await runHooks(
+      'PostToolUseFailure',
+      {
+        hook_event_name: 'PostToolUseFailure',
+        session_id: ctx.sessionId,
+        cwd: ctx.cwd,
+        timestamp: nowIso(),
+        tool_name: name,
+        tool_input: toolInput,
+        tool_use_id: toolUseId,
+        tool_response: result,
+        error: result.output,
+      },
+      ctx.hooks,
+      { signal: ctx.signal },
+    )
+    for (const r of failure.results) {
+      emit(ctx, {
+        type: 'hook',
+        event: 'PostToolUseFailure',
+        exitCode: r.exitCode,
+        status: r.status,
+      })
+    }
+    try {
+      const { appendHookDiag, diagEntriesFromHookRun } = await import(
+        './hookDiag.ts'
+      )
+      if (ctx.sessionRef) {
+        const entries = diagEntriesFromHookRun({
+          event: 'PostToolUseFailure',
+          results: failure.results,
+        })
+        for (const e of entries) {
+          ctx.sessionRef.hookDiagLog = appendHookDiag(
+            ctx.sessionRef.hookDiagLog,
+            e,
+          )
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    const failureFeedback = (failure.continuationText || '').trim()
+    if (failureFeedback) {
+      content = `${content}\n\n[PostToolUseFailure hook]\n${failureFeedback}`
+    }
   }
 
   return {

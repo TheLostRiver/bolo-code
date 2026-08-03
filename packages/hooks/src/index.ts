@@ -12,11 +12,15 @@ import {
   type PermissionDecision,
 } from '../../shared/src/index.ts'
 
+export type HookRunStatus = 'ok' | 'failed' | 'timeout' | 'aborted'
+
 export type HookRunResult = {
   event: HookEvent
   exitCode: number
   stdout: string
   stderr: string
+  /** HKP-1：结构化执行状态（ok/failed/timeout/aborted）；与 blocked 正交 */
+  status: HookRunStatus
   /** PreToolUse exit 2 等 */
   blocked: boolean
   permissionDecision?: PermissionDecision
@@ -97,7 +101,9 @@ function matchValueFor(event: HookEvent, input: AnyHookInput): string | undefine
   switch (event) {
     case 'PreToolUse':
     case 'PostToolUse':
+    case 'PostToolUseFailure':
     case 'PermissionRequest':
+    case 'PermissionDenied':
       return typeof rec.tool_name === 'string' ? rec.tool_name : undefined
     case 'SessionStart':
       return typeof rec.source === 'string' ? rec.source : undefined
@@ -379,6 +385,13 @@ export async function runHooks(
         exitCode,
         stdout,
         stderr,
+        status: hookAborted
+          ? 'aborted'
+          : timedOut
+            ? 'timeout'
+            : exitCode === 0
+              ? 'ok'
+              : 'failed',
         blocked: false,
         ...(timedOut ? { timedOut: true } : {}),
         ...(hookAborted ? { aborted: true } : {}),
@@ -412,11 +425,14 @@ export async function runHooks(
         blockReason = text
         continuationParts.push(text)
       }
-      // PostToolUse exit 2：立即给模型
-      if (event === 'PostToolUse' && exitCode === 2) {
+      // PostToolUse / PostToolUseFailure exit 2：立即给模型
+      if (
+        (event === 'PostToolUse' || event === 'PostToolUseFailure') &&
+        exitCode === 2
+      ) {
         const text =
           pickContinuationText(stderr, stdout) ||
-          'PostToolUse hook feedback'
+          `${event} hook feedback`
         continuationParts.push(text)
       }
       if (event === 'PermissionRequest' && exitCode === 0) {
