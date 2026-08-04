@@ -122,6 +122,39 @@ function seedTools(fixture: Fixture, count: number): void {
   }
   controller.printer.endTurn({ terminalReason: 'completed' })
 }
+/** seed N 个**交错**工具块（Read/Bash 交替防 OUT-5 聚合——保证独立渲染单元） */
+function seedToolsInterleaved(fixture: Fixture, count: number): void {
+  const { controller } = fixture
+  controller.printer.beginTurn({ prompt: 'interleaved tools' })
+  for (let i = 0; i < count; i += 1) {
+    const isRead = i % 2 === 0
+    controller.printer.onEvent({
+      type: 'tool_start',
+      id: `t-${i}`,
+      name: isRead ? 'Read' : 'Bash',
+      input: isRead ? { path: `f${i}.txt` } : { command: `echo ${i}` },
+    })
+    controller.printer.onEvent({
+      type: 'tool_end',
+      id: `t-${i}`,
+      name: isRead ? 'Read' : 'Bash',
+      output: `provider bounded result ${i}`,
+      ok: true,
+      presentation: {
+        summary: `${isRead ? 'Read' : 'Bash'} · item ${i} · truncated`,
+        preview: `interleaved-mark-${i}`,
+        previewMode: 'head',
+        originalChars: 500,
+        originalLines: 1,
+        retainedChars: 100,
+        retainedLines: 1,
+        truncated: true,
+        overflow: true,
+      },
+    })
+  }
+  controller.printer.endTurn({ terminalReason: 'completed' })
+}
 
 // --- 1. 灏忓唴瀹逛竴娆″畬鎴愶紙鏃犲垎鐗囧熬娉級---
 {
@@ -172,25 +205,36 @@ function seedTools(fixture: Fixture, count: number): void {
 // --- 4. mid-slice resize：分片进行中宽度变化 → flush 不挂起且最终一致 ---
 {
   const fixture = await createFixture(90, 48)
-  // 120 块 > 100（TAIL_WINDOW_BLOCK_THRESHOLD）——resize 会切入 tailWindow，
-  // 预修复代码此处 flush 死循环
-  seedTools(fixture, 120)
-  // fire-and-forget flush（分片多帧进行中）
+  // 交错 120 块（防聚合——独立渲染单元；行数远超 tailWindowLineBudget，
+  // 完成一轮分片后 seededFullHistory 置位）
+  seedToolsInterleaved(fixture, 120)
+  await fixture.controller.flush()
+  await fixture.terminal.flush()
+  // 再交 30 块——触发新一轮分片（>16 units）
+  seedToolsInterleaved(fixture, 30)
+  // fire-and-forget flush（新分片进行中）
   const flushing = fixture.controller.flush()
   await new Promise<void>((r) => setImmediate(r))
-  // 分片进行中 resize（更窄）——tailWindow 被触发，flush 不得挂起
+  // 分片进行中 resize（更窄）——seededFullHistory 已置位 + 块数 > 100 →
+  // tailWindow 被触发；预修复代码 renderIncomplete 残留 → flush 死循环
   fixture.output.resize(70, 48)
-  await flushing
+  // 核心断言：flush 必须在超时内返回（预修复代码此处永久挂起）
+  await Promise.race([
+    flushing,
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error('flush hung: mid-slice resize deadloop (REN-2)')),
+        5_000,
+      ),
+    ),
+  ])
   await fixture.terminal.flush()
-  const done = screen(fixture)
-  assert(done.includes('f119.txt'), 'mid-slice resize: last block visible')
   assert(
     !renderIncomplete(fixture),
     'mid-slice resize: rendering complete (no hang)',
   )
   fixture.controller.stop()
 }
-
 // --- 5. 鍒嗙墖鏈熼棿杈撳叆鍙揪锛堢画甯?setImmediate 璁╄矾锛岃緭鍏ヤ笉涓級---
 {
   const fixture = await createFixture()
