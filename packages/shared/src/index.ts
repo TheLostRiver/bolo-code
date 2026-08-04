@@ -477,6 +477,10 @@ export {
   type SgrMouseWheelEvent,
 } from './tuiMouse.ts'
 export {
+  createEventBus,
+  type EventBus,
+} from './eventBus.ts'
+export {
   createWheelNormalizer,
   wheelBandMultiplier,
   WHEEL_CADENCE_MS,
