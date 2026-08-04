@@ -26,8 +26,6 @@ export type RenderWorkerResult =
 
 /** 墙钟超时（毫秒）：worker 超时 kill，主进程降级 */
 export const RENDER_WORKER_TIMEOUT_MS = 2_000
-/** kill 后宽限（毫秒）：SIGTERM 未退再 SIGKILL */
-export const RENDER_WORKER_KILL_GRACE_MS = 500
 
 /** worker 进程主逻辑：读 stdin JSON → 渲染 → stdout JSON */
 export async function runRenderWorker(): Promise<void> {
@@ -96,17 +94,13 @@ export async function renderTextInWorker(
       if (settled) return
       settled = true
       clearTimeout(timer)
-      clearTimeout(killTimer)
+      // worker 是渲染进程（无清理状态）——超时直接 SIGKILL（不可捕获）
       child.kill('SIGKILL')
       resolve(result)
     }
     const timer = setTimeout(() => {
-      // 超时：kill（SIGTERM → SIGKILL 宽限）→ 降级
-      child.kill('SIGTERM')
-      killTimer = setTimeout(() => child.kill('SIGKILL'), RENDER_WORKER_KILL_GRACE_MS)
       finish({ ok: false, error: 'render worker timed out' })
     }, timeoutMs)
-    let killTimer: ReturnType<typeof setTimeout> | undefined
     child.stdout.on('data', (d) => {
       out += d
     })

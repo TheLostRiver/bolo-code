@@ -95,11 +95,16 @@ import { wrapTerminalText } from '../packages/cli/src/tui/terminalText.ts'
 
 // --- 5. worker 杈撳叆杩囧ぇ鎷掔粷锛坵orker 鍐呬繚鎶わ級---
 {
-  const result = await renderTextInWorker({
-    text: 'a'.repeat(2_500_000),
-    mode: 'terminal',
-    width: 10,
-  })
+  const result = await renderTextInWorker(
+    {
+      text: 'a'.repeat(2_500_000),
+      mode: 'terminal',
+      width: 10,
+    },
+    // 慢 CI 下 2.5MB 管道 + tsx 启动可能逼近默认 2s——放宽超时让「too large」
+    // 分支（worker 侧）而非「timed out」分支（父进程侧）先触发
+    { timeoutMs: 10_000 },
+  )
   assert(result.ok === false, 'oversized input rejected by worker')
   assert(
     result.ok === false && result.error.includes('too large'),
