@@ -152,6 +152,45 @@ function makeToast(
   assert(!lines[3]!.includes('\u001b[31m'), 'ANSI stripped in clipped row')
 }
 
+// --- 3c. 安全边界：bare ESC / C0 VT FF / \r / 行数上限 ---
+{
+  // bare ESC（ESC E 会加行、ESC c 会清屏）+ VT + FF + 行中 \r
+  const hostile =
+    'title\u001bE\u001bc\u000b\u000c\u001b' +
+    '\r' +
+    'hidden' +
+    '\rvisible-tail'
+  const lines = fmt({
+    panel: undefined,
+    toast: makeToast(hostile),
+    nextGeneration: 1,
+  })
+  for (const [i, line] of lines.entries()) {
+    assert(!line.includes('\u001b'), `line ${i}: no bare ESC survives`)
+    assert(!line.includes('\u000b') && !line.includes('\u000c'), 'no VT/FF')
+    assert(!line.includes('\r'), 'no carriage return survives')
+  }
+  assert(lines.length >= 1, 'hostile content still renders at least one row')
+  const joined = lines.join('\n')
+  assert(joined.includes('visible-tail'), 'mid-line \\r removed, tail visible')
+  assert(
+    joined.includes('hidden'),
+    '\\r stripped: no overwrite — both segments visible',
+  )
+
+  // 行数上限：30 行 → cap 到 rows*0.4（24 行视口 → 9 行）
+  const manyLines = Array.from({ length: 30 }, (_, i) => `line ${i}`).join(
+    '\n',
+  )
+  const capped = fmt({
+    panel: undefined,
+    toast: makeToast(manyLines),
+    nextGeneration: 1,
+  })
+  assert.equal(capped.length, 9, 'toast row count capped to 40% viewport')
+  assert(capped[0]!.includes('line 0'), 'first line kept')
+}
+
 // --- 4. 集成：多行 toast 在视口完整可见（布局不破坏） ---
 {
   const terminal = new HeadlessTerminalHarness({

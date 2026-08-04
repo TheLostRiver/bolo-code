@@ -150,14 +150,24 @@ export function formatCliCommandSurface(
 
   if (state.toast) {
     // 多行 toast：逐行拆渲染（行内含 \n 会破坏终端布局——渲染行数必须
-    // 与终端实际占行一致）；前缀只加首行
+    // 与终端实际占行一致）；前缀只加首行。
+    // 净化：bare ESC（stripTerminalAnsi 只清 CSI/OSC 完整序列——残余裸
+    // ESC 如 ESC E 会加行/清屏破坏行数不变式）与 C0 VT/FF（xterm 换行）
+    // 一并剥离；\r 消除（行中回车会覆盖行首）。
+    const sanitized = state.toast.content
+      .replace(/\x1b/g, '')
+      .replace(/[\u000b\u000c]/g, '')
+      .replace(/\r/g, '')
     const prefix = `${tonePrefix(state.toast.tone)} `
-    const body = state.toast.content.split('\n').map((l) => l.trimEnd())
-    const first = clipTerminalText(`${prefix}${body[0] ?? ''}`, frameWidth)
+    const body = sanitized.split('\n').map((l) => l.trimEnd())
+    // 行数上限（同 panel 的 bodyLimit——防止病理多行内容洪泛/挤走 footer）
+    const maxToastRows = Math.max(1, Math.floor(rows * 0.4))
+    const visible = body.slice(0, maxToastRows)
+    const first = clipTerminalText(`${prefix}${visible[0] ?? ''}`, frameWidth)
     lines.push(
       color ? `${toneColor(state.toast.tone)}${first}${reset}` : first,
     )
-    for (const rest of body.slice(1)) {
+    for (const rest of visible.slice(1)) {
       const clipped = clipTerminalText(rest, frameWidth)
       // 空行保留（渲染为空行）——行数与终端占行严格一致
       lines.push(
