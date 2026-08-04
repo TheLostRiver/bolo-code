@@ -169,21 +169,22 @@ function seedTools(fixture: Fixture, count: number): void {
   fixture.controller.stop()
 }
 
-// --- 4. resize 鍏ㄩ噺锛氬垎鐗囨湡闂村搴﹀彉鍖?鈫?鏈€缁堜竴鑷?---
+// --- 4. mid-slice resize：分片进行中宽度变化 → flush 不挂起且最终一致 ---
 {
   const fixture = await createFixture(90, 48)
-  seedTools(fixture, 30)
-  await fixture.controller.flush()
-  await fixture.terminal.flush()
-  // 瀹藉害鍙樺寲锛堟洿绐勶級鈫?杩涘害閲嶇疆鍏ㄩ噺閲嶆覆
+  seedTools(fixture, 40)
+  // fire-and-forget flush（分片多帧进行中）
+  const flushing = fixture.controller.flush()
+  await new Promise<void>((r) => setImmediate(r))
+  // 分片进行中 resize（更窄）——tailWindow 可能被触发，flush 不得挂起
   fixture.output.resize(70, 48)
-  await fixture.controller.flush()
+  await flushing
   await fixture.terminal.flush()
   const done = screen(fixture)
-  assert(done.includes('f29.txt'), 'resize: last block visible')
+  assert(done.includes('f39.txt'), 'mid-slice resize: last block visible')
   assert(
     !renderIncomplete(fixture),
-    'resize: rendering complete',
+    'mid-slice resize: rendering complete (no hang)',
   )
   fixture.controller.stop()
 }

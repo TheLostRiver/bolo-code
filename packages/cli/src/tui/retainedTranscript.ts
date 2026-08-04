@@ -575,7 +575,8 @@ export type RetainedToolPagerContent = {
 export class RetainedTranscript implements Component {
   private readonly styles: TranscriptStyles
   private readonly blockCache = new Map<string, RetainedTranscriptBlock>()
-  /** REN-2：渲染单元行缓存（分片续帧用；setState 重建后自动失效） */
+  /** REN-2：渲染单元行缓存（分片续帧用；setState 重建后自动失效）。
+   * 容量 O(活动分片内已处理单元数)——瞬态、完成时清空（仅分片期间驻留）。 */
   private unitCache = new Map<RenderUnit, string[]>()
   /** REN-2：渲染进度（已渲染 unit 数）；分片续帧起点 */
   private renderProgress = 0
@@ -852,7 +853,20 @@ export class RetainedTranscript implements Component {
           this.renderProgress = 0
           this.unitCache.clear()
         } else {
+          // REN-2 should-fix：缓存复用分支也记录 hit lines——完成帧的
+          // blockHitLines 必须覆盖全部块（否则 overflow 块的 pager 点击丢失）
           line = this.appendBlock(lines, cached, gutter, line)
+          if (unit.kind === 'block') {
+            this.recordHitLines(unit.component, cached, line)
+          } else {
+            const groupStart = line - cached.length
+            for (const hit of unit.group.getMemberHits()) {
+              this.blockHitLines.set(hit.blockId, {
+                start: groupStart + hit.start,
+                end: groupStart + hit.end,
+              })
+            }
+          }
           renderedUnits += 1
           continue
         }
@@ -896,6 +910,10 @@ export class RetainedTranscript implements Component {
     contentWidth: number,
     gutter: string,
   ): string[] {
+    // REN-2 blocking：尾窗口模式自身有行预算（有界）——分片标记必须重置，
+    // 否则分片中 resize 切到尾窗口后 renderIncomplete 残留 true →
+    // flush 续帧循环永不退出（死循环）
+    this.renderIncomplete = false
     const budget = this.tailWindowLineBudget()
     const sections: Array<{
       unit: RenderUnit

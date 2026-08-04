@@ -271,9 +271,14 @@ async function main(): Promise<void> {
     await fixture.controller.flush()
     await fixture.terminal.flush()
     // REN-2：burst 事件合并为一次 flush（epoch 不随事件数增长）；
-    // 大 transcript（数百块）分片渲染产生固定数量的续帧——上限内即合并成功
+    // 大 transcript 分片产生固定续帧数（块数/16 预算 + 合并帧 + margin）
+    const burstBlocks = state.turns.reduce(
+      (sum, turn) => sum + turn.blocks.length,
+      0,
+    )
+    const burstSliceFrames = 1 + Math.ceil(burstBlocks / 16) + 4
     assert(
-      fixture.controller.getRenderEpoch() - burstEpoch <= 40,
+      fixture.controller.getRenderEpoch() - burstEpoch <= burstSliceFrames,
       'stream/tool/search burst is coalesced into bounded retained frames',
     )
     const afterLiveTurn = fixture.terminal.snapshot()
