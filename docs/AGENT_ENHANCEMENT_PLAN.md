@@ -503,15 +503,34 @@ kill（假 sleep worker 300ms 超时 → 回收 + 降级消息）、worker 非�
 后续扩展）；消费方接入点=memory 外部编辑同步（MEM-1 边界「新会话生效」
 可由 watcher 标脏升级为会话内刷新——后续项）。
 
-## 20. WT-1 · worktree 快照/GC/池化 — 高成本
+## 20. WT-1 · worktree 快照/GC/池化 — 高成本 ✅ 本轮
 
-**目标**：会话/子代理 worktree 隔离增强：快照为 git ref（可整树回滚/重水合）、
-自动 GC 按年龄清理、预创建池；元数据库展示。
+**目标**：会话/子代理 worktree 隔离增强：快照 worktree 变更清单（git 状态），
+崩溃/中断后可恢复（HEAD 基线回滚）；自动 GC 按龄/数上限清理；崩溃残留检测。
 
-**设计**：worktree 模块扩展（复用现有 git worktree 能力）；GC 策略配置；
-快照 ref 命名与清理规则；失败保留现场。
+**设计**（已落地）：
+- `packages/core/src/worktreeSnapshot.ts`：
+  - **快照**：`git status --porcelain` 解析（tracked 修改/deleted + untracked，
+    rename 归并）→ `{ id, ts, changes }` 存 `~/.bolo/snapshots/<repoKey>/`；
+    **HEAD 为恢复基线**（快照不存内容——恢复时 `git show HEAD:path` 写回
+    tracked、删除 untracked——快照本身轻量）。
+  - **恢复**：`restoreWorktreeSnapshot`（tracked 回 HEAD + untracked 删除；
+    失败文件跳过返回失败清单，不中断其余；路径防逃逸校验）。
+  - **GC**：`gcSnapshots`（7 天 / 20 个上限，可注入 now 测试）。
+- `/worktree` 命令：`list` / `snapshot` / `restore [id]`（缺省最新）/ `gc`。
+- **崩溃残留检测**：createSession 时检查未恢复快照 → warning
+  （`/worktree list/restore` 指引，非阻断、失败静默）。
+- 全部本地 git 命令（execFile 无 shell）；非 git 仓库 → git 失败 → 命令报错。
 
-**验收**：快照/回滚/GC/池化/展示；既有 worktree-safety 回归。
+**验收**（全部通过）：专项覆盖 porcelain 解析（含 rename）、快照创建
+（modified+untracked 记录与落盘）、恢复（tracked 回 HEAD 内容 + untracked
+删除）、GC（maxCount/maxAge）、`/worktree` 命令全子命令、崩溃残留检测
+（createSession warning）；slash/session/durable 回归兼容；完整 `npm test`
+通过。
+
+**边界**：快照为变更清单（非 git ref/整树快照）——untracked 内容不复制
+（恢复删清单引用）；预创建池与元数据库展示为后续项；恢复统一按 HEAD
+写回（staged 变更不单独处理——porcelain 双列已解析暂存态）。
 
 ## 21. HKP-4 · 变更归因（agent vs 外部）— 高成本
 
