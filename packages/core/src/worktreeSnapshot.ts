@@ -78,7 +78,8 @@ export function snapshotsDir(cwd: string): string {
 }
 
 /** 解析 `git status --porcelain -z`（NUL 分隔记录；记录 = `XY<SP>path`；
- * rename 为两条记录（源 + 目标）——消费成对，目标映射为基线删除） */
+ * rename 为两条记录（`R  dest\0source\0`——目标在前）——消费成对，
+ * 记录 renamed{path:dest, from:source}） */
 export function parsePorcelainZ(output: string): WorktreeChange[] {
   const changes: WorktreeChange[] = []
   const records = output.split('\0').filter((r) => r.length > 0)

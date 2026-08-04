@@ -320,6 +320,8 @@ async function makeRepo(name: string): Promise<string> {
       await fs.stat(path.join(repo, 'old.txt')).catch(() => null),
       'rename source preserved (HEAD file untouched)',
     )
+    const oldContent = await fs.readFile(path.join(repo, 'old.txt'), 'utf8')
+    assert.equal(oldContent, 'rename me\n', 'rename source restored from HEAD')
     void prevHome
   } finally {
     await fs.rm(repo, { recursive: true, force: true }).catch(() => {})
