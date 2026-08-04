@@ -187,6 +187,11 @@ export async function restoreWorktreeSnapshot(
         await fs.mkdir(path.dirname(source), { recursive: true })
         await fs.writeFile(source, sourceContent)
         const dest = path.join(repoRoot, change.path)
+        // 防御：rename 目标解析到 repoRoot（`.`/空路径）——绝不递归删除仓库根
+        if (dest === repoRoot) {
+          failed.push(change.path)
+          continue
+        }
         await fs.rm(dest, { recursive: true, force: true })
       } else if (change.status === 'untracked') {
         const target = path.join(repoRoot, change.path)

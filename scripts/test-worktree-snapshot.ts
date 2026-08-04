@@ -312,6 +312,17 @@ async function makeRepo(name: string): Promise<string> {
       await fs.stat(path.join(repo, '.git')).catch(() => null),
       'repo root not deleted',
     )
+    // renamed 目标 `.` 同样拒绝（git show 先成功写源，rm 前拦截）
+    const renamedDot = await restoreWorktreeSnapshot(repo, {
+      id: 'evil4',
+      ts: 0,
+      changes: [{ path: '.', status: 'renamed', from: 'base.txt' }],
+    })
+    assert.deepEqual(renamedDot.failed, ['.'], 'repo-root renamed dest rejected')
+    assert(
+      await fs.stat(path.join(repo, '.git')).catch(() => null),
+      'repo root not deleted (renamed)',
+    )
     void prevHome
   } finally {
     await fs.rm(repo, { recursive: true, force: true }).catch(() => {})
