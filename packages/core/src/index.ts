@@ -4,6 +4,8 @@
  * 禁止：Electron / DOM / 遥测
  */
 
+import { promises as fs } from 'node:fs'
+import path from 'node:path'
 import {
   runFullCompact,
   isAutoCompactEnvDisabled,
@@ -260,7 +262,12 @@ export {
   AUTOCOMPACT_BUFFER_TOKENS,
   WARNING_BUFFER_TOKENS,
   DEFAULT_MAX_AUTOCOMPACT_FAILURES,
+  COMPACT_SUMMARY_MARKER,
 } from '../../compact/src/index.ts'
+
+// CMP-3：真 import（219 的 re-export 块不提供模块内名称）
+import { COMPACT_SUMMARY_MARKER } from '../../compact/src/index.ts'
+
 export {
   classifyError,
   isRetryableError,
@@ -1061,6 +1068,8 @@ export type BoloSession = {
   flushMemoryOnCompact?: boolean
   /** MEM-1：上次成功 flush 的消息块指纹（会话内去重锚点） */
   memoryFlushedHash?: string
+  /** CMP-3：segments 模式（默认关）——压缩前缀按 turn 段落盘 + 摘要指针 */
+  compactSegments?: boolean
   /** CMP-2：pass1 预热状态（80% 阈值后台总结；压缩时增量合并） */
   precompact?: PrecompactState
   /** CMP-2：预热任务进行中标志（in-flight 去重） */
@@ -3210,6 +3219,7 @@ export async function compactSession(
       ? { keepRecentMessageCount: opts.keepRecentMessageCount }
       : {}),
     suppressFollowUpQuestions: trigger === 'auto',
+    ...(session.compactSegments === true ? { segments: true } : {}),
   })
 
   if (!outcome.ok) {
@@ -3251,6 +3261,63 @@ export async function compactSession(
     emit(session, { type: 'error', message: reason })
     setPhase(session, 'ready')
     return { ok: false, reason }
+  }
+
+  // CMP-3：segments 模式——段文件落盘 + 摘要指针（fail-open，不回滚压缩）。
+  // 段文件 = 压缩前缀按 turn 原子块切分（摘要已提炼要点，段文件供 read_file/grep
+  // 检索细节）；索引文件与段文件同批写入。
+  if (
+    session.compactSegments === true &&
+    outcome.result.segments?.length
+  ) {
+    try {
+      const segMeta = getSessionPersistMeta(session)
+      if (!segMeta?.sessionsDir) {
+        emit(session, {
+          type: 'warning',
+          message: 'compact segments skipped: session has no sessionsDir',
+        })
+      } else {
+        const segmentsDir = path.join(
+          segMeta.sessionsDir,
+          session.id,
+          'segments',
+        )
+        await fs.mkdir(segmentsDir, { recursive: true })
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+        const segmentFile = `${stamp}.segments.md`
+        await fs.writeFile(
+          path.join(segmentsDir, segmentFile),
+          outcome.result.segments.join('\n\n---\n\n'),
+          'utf8',
+        )
+        await fs.appendFile(
+          path.join(segmentsDir, 'index.md'),
+          `- ${segmentFile} · ${outcome.result.segments.length} segments · summary ${outcome.result.summaryText.length} chars\n`,
+          'utf8',
+        )
+        // 摘要消息追加指针（同对象引用——session.messages 同步生效）
+        const summaryMsg = outcome.apiMessages.find(
+          (m) =>
+            m.role === 'user' &&
+            typeof m.content === 'string' &&
+            m.content.startsWith(COMPACT_SUMMARY_MARKER),
+        )
+        if (summaryMsg && typeof summaryMsg.content === 'string') {
+          summaryMsg.content +=
+            `\n\n[compact segments] 完整对话细节按段存储于 ${segmentsDir}/${segmentFile}` +
+            `（共 ${outcome.result.segments.length} 段）——需要具体细节时用 read_file 查看该文件，` +
+            `或用 grep 在该目录检索关键词。`
+        }
+      }
+    } catch (err) {
+      emit(session, {
+        type: 'warning',
+        message: `compact segments write failed (summary kept): ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      })
+    }
   }
 
   // MEM-1：压缩前 flush 最近消息总结到 user memory daily log（fail-open）。

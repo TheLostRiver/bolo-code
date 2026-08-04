@@ -33,6 +33,8 @@ export type CompactionResult = {
   preCompactTokenCount: number
   postCompactTokenCount: number
   trigger: CompactTrigger
+  /** CMP-3：segments 模式的段文本（每段 = turn 原子块；缺省 undefined） */
+  segments?: string[]
 }
 
 /**
@@ -537,6 +539,45 @@ export function groupMessagesByUserTurn(
   return groups
 }
 
+/** CMP-3：单段消息条数上限（超出按 turn 边界截断新开段） */
+export const SEGMENT_MAX_MESSAGES = 25
+
+/**
+ * CMP-3：把压缩前缀按 turn 原子块切分并文本化（每段 = 若干完整 turn；
+ * 段内消息数 ≤ SEGMENT_MAX_MESSAGES，超出在 turn 边界截断新开段）。
+ * 输出为可直接落盘的 markdown 段文本（`**user**` / `**assistant**` /
+ * `**tool**` 标注 + 内容）。
+ */
+export function splitMessagesIntoSegments(
+  messages: ChatMessage[],
+  opts?: { maxMessagesPerSegment?: number },
+): string[] {
+  const maxPer = opts?.maxMessagesPerSegment ?? SEGMENT_MAX_MESSAGES
+  const turns = groupMessagesByUserTurn(messages)
+  const segments: string[] = []
+  let current: ChatMessage[] = []
+  for (const turn of turns) {
+    if (current.length > 0 && current.length + turn.length > maxPer) {
+      segments.push(renderSegment(current))
+      current = []
+    }
+    current.push(...turn)
+  }
+  if (current.length > 0) segments.push(renderSegment(current))
+  return segments
+}
+
+function renderSegment(messages: ChatMessage[]): string {
+  return messages
+    .map((m) => {
+      const role = m.role === 'assistant' ? 'assistant' : m.role
+      const content =
+        m.role === 'tool' && m.name ? `(${m.name}) ${m.content}` : m.content
+      return `**${role}**: ${content}`
+    })
+    .join('\n')
+}
+
 /**
  * 切点落在 tool 上时左移，避免 tool_result 与 tool_use 分家
  *（对照 HC adjustIndexToPreserveAPIInvariants 缩小版）。
@@ -686,6 +727,12 @@ export type FullCompactInput = {
    * 不改调用方 messages。
    */
   summarizeTimeoutMs?: number
+  /**
+   * CMP-3：segments 模式（默认关）。true 时对 toSummarize 前缀按 turn 原子块
+   * 切分并文本化，随结果返回 `segments`（落盘与指针由调用方处理）；
+   * 摘要生成不变。缺省 false = 零行为变化。
+   */
+  segments?: boolean
 }
 
 /**
@@ -858,6 +905,10 @@ export async function runFullCompact(
     preCompactTokenCount,
     postCompactTokenCount,
     trigger: input.trigger,
+    // CMP-3：segments 模式——对 toSummarize 前缀按 turn 原子块切分文本化
+    ...(input.segments === true
+      ? { segments: splitMessagesIntoSegments(split.toSummarize) }
+      : {}),
   }
 
   return {
