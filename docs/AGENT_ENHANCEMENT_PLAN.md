@@ -442,15 +442,39 @@ burst 合并断言适配为「有界渲染帧」：burst 不随事件数增长�
 单元数预算可测且可注入；真人手感与超大（数千块）transcript 的帧数上限
 属 OI-H3（参数可调）。
 
-## 18. REN-3 · 子进程隔离渲染不可信内容 — 中成本
+## 18. REN-3 · 子进程隔离渲染不可信内容 — 中成本 ✅ 本轮
 
 **目标**：渲染模型输出的不可信内容（如图表 DSL）时，用独立子进程 + 墙钟超时
 隔离崩溃，主进程不因渲染 panic 退出。
 
-**设计**：渲染 worker 子命令（self re-exec）+ 超时 kill + 结果回传；
-失败时显示明确降级提示。
+**设计**（已落地）：
+- `packages/cli/src/renderWorker.ts`：
+  - **worker 主逻辑**（`runRenderWorker`）：stdin 单行 JSON 请求
+    `{text, mode: terminal|markdown, width}` → 渲染（wrapTerminalText）→
+    stdout 单行 JSON `{ok, lines}` / `{ok:false, error}`；输入 2MB 上限
+    （防恶意超大输入拖垮 worker）；渲染 try/catch（渲染器异常 → ok:false
+    不崩 worker）。
+  - **主进程调用方**（`renderTextInWorker`）：spawn worker → 墙钟超时
+    （2s 默认）→ SIGTERM + 宽限 500ms 后 SIGKILL → 降级（ok:false +
+    timed out/exited 信息）；EPIPE/EOF 无害化；失败/超时主进程不崩。
+  - **轻量独立入口**（`renderWorkerCli.ts`——不加载 main.ts 全树，
+    dev 下 tsx 冷启动 ~200ms）；main.ts 加 `render-worker` 子命令分支
+    （dist 单文件同样可执行）。
+- **隔离语义**：worker 崩溃/挂起/渲染异常均不影响主进程（进程级隔离）；
+  成功路径渲染结果与主进程 wrapTerminalText 一致（测试断言）。
+- **接入**：基础设施先行——`renderTextInWorker` 公开 API + 显式调用点
+  （大/高风险内容渲染由未来 DSL 渲染器接入）；当前渲染（纯字符串）仍
+  主进程（零回归），worker 作为防御性隔离层。
 
-**验收**：恶意/损坏输入不崩主进程；超时回收；成功路径零回归。
+**验收**（全部通过）：专项覆盖正常渲染（与主进程 wrapTerminalText 逐行
+一致）、恶意输入（50KB 长文本/ANSI 转义/控制序列不崩且内容保留）、超时
+kill（假 sleep worker 300ms 超时 → 回收 + 降级消息）、worker 非零退出
+（→ 降级 + 退出码说明）、输入过大拒绝（2.5MB → too large）；CLI 回归
+兼容；完整 `npm test` 通过（含 dist build——render-worker 分支进单文件）。
+
+**边界**：markdown 模式当前为纯文本降级（与主进程简易 markdown 等价）；
+未来原生 DSL 渲染器（图表等）接入 worker 协议即可复用隔离；子进程成本
+（~200ms dev / 快 dist）仅显式调用时产生（高频路径不 worker 化）。
 
 ## 19. EVT-1 · 文件事件总线分层 — 中成本
 
