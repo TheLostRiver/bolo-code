@@ -142,12 +142,16 @@ function mk(
   )
 
   // 开启：段文件 + index + 指针
+  const onWarnings: string[] = []
   const onSession = await createSession({
     cwd: tmp,
     systemPrompt: false,
     provider,
     compactSummarizer: summarize,
     autoSave: { sessionsDir, scope: 'project' },
+    onEvent: (e) => {
+      if (e.type === 'warning') onWarnings.push(e.message)
+    },
   })
   onSession.compactSegments = true
   onSession.messages.push(
@@ -156,6 +160,9 @@ function mk(
   )
   const on = await compactSession(onSession, 'manual')
   assert(on.ok === true, 'compact ok (segments on)')
+  if (onWarnings.length) {
+    console.log('DIAG onWarnings:', onWarnings.join(' | '))
+  }
   const onSegmentsDir = path.join(sessionsDir, onSession.id, 'segments')
   const files = await fs.readdir(onSegmentsDir)
   const segmentFile = files.find((f) => f.endsWith('.segments.md'))
@@ -170,6 +177,18 @@ function mk(
   const pointer = JSON.stringify(onSession.messages)
   assert(pointer.includes('[compact segments]'), 'pointer appended to summary')
   assert(pointer.includes(segmentFile!), 'pointer names the segment file')
+
+  // 指针持久化：transcript（jsonl）也含指针——resume 后不丢链接
+  const transcriptPath = path.join(sessionsDir, `${onSession.id}.jsonl`)
+  const transcript = await fs.readFile(transcriptPath, 'utf8')
+  assert(
+    transcript.includes('[compact segments]'),
+    'transcript persists the segments pointer',
+  )
+  assert(
+    transcript.includes(segmentFile!),
+    'transcript names the segment file',
+  )
 
   // 检索链路：段文件可被 read_file 读取（模拟模型检索）
   const reread = await fs.readFile(path.join(onSegmentsDir, segmentFile!), 'utf8')

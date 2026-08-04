@@ -570,10 +570,11 @@ export function splitMessagesIntoSegments(
 function renderSegment(messages: ChatMessage[]): string {
   return messages
     .map((m) => {
-      const role = m.role === 'assistant' ? 'assistant' : m.role
       const content =
-        m.role === 'tool' && m.name ? `(${m.name}) ${m.content}` : m.content
-      return `**${role}**: ${content}`
+        m.role === 'tool' && m.name
+          ? `(${m.name}) ${String(m.content)}`
+          : String(m.content)
+      return `**${m.role}**: ${content}`
     })
     .join('\n')
 }
