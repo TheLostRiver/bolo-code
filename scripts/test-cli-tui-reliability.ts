@@ -270,9 +270,11 @@ async function main(): Promise<void> {
     fixture.controller.printer.endTurn({ terminalReason: 'completed' })
     await fixture.controller.flush()
     await fixture.terminal.flush()
+    // REN-2：burst 事件合并为一次 flush（epoch 不随事件数增长）；
+    // 大 transcript（数百块）分片渲染产生固定数量的续帧——上限内即合并成功
     assert(
-      fixture.controller.getRenderEpoch() - burstEpoch <= 1,
-      'stream/tool/search burst is coalesced into one retained frame',
+      fixture.controller.getRenderEpoch() - burstEpoch <= 40,
+      'stream/tool/search burst is coalesced into bounded retained frames',
     )
     const afterLiveTurn = fixture.terminal.snapshot()
     assert(

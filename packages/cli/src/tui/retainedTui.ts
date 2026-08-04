@@ -247,6 +247,11 @@ class RetainedRoot extends Container {
   }> = []
   private readonly waiters = new Set<RevisionWaiter>()
 
+  /** REN-2：transcript 分片渲染是否未完成（转发） */
+  isRenderIncomplete(): boolean {
+    return this.transcript.isRenderIncomplete()
+  }
+
   constructor(
     env: NodeJS.ProcessEnv,
     composer: RetainedComposer,
@@ -883,6 +888,14 @@ export function createRetainedTuiController(options: {
     const revision = root.currentRevision()
     tui.requestRender()
     await root.waitForRevision(revision)
+    // REN-2：分片续帧——每帧 setImmediate 让路（输入事件优先）后继续渲染，
+    // 直到完成（flush 语义保持：返回 = 渲染完整）
+    while (root.isRenderIncomplete() && !stopped) {
+      await new Promise<void>((resolve) => setImmediate(resolve))
+      const next = root.currentRevision()
+      tui.requestRender()
+      await root.waitForRevision(next)
+    }
     // REN-1：markdown fidelity 自检——新问题以 warning 事件上报（不静默吞掉）。
     // 去重 key 含内容指纹：同一块内容变化后再次丢失会重新上报。
     for (const [blockId, issues] of root.getFidelityIssues()) {

@@ -575,6 +575,14 @@ export type RetainedToolPagerContent = {
 export class RetainedTranscript implements Component {
   private readonly styles: TranscriptStyles
   private readonly blockCache = new Map<string, RetainedTranscriptBlock>()
+  /** REN-2：渲染单元行缓存（分片续帧用；setState 重建后自动失效） */
+  private unitCache = new Map<RenderUnit, string[]>()
+  /** REN-2：渲染进度（已渲染 unit 数）；分片续帧起点 */
+  private renderProgress = 0
+  /** REN-2：本帧渲染未完成（超出块预算）——controller 应安排下帧续渲 */
+  private renderIncomplete = false
+  /** REN-2：每帧渲染单元预算（默认 16；undefined = 不分片） */
+  private renderBlockBudget: number | undefined = 16
   private readonly toolDisplayStates =
     new Map<string, RetainedToolDisplayEntry>()
   private renderUnits: RenderUnit[] = []
@@ -780,6 +788,14 @@ export class RetainedTranscript implements Component {
     return result
   }
 
+  /**
+   * REN-2：本帧渲染是否未完成（超块预算截断）——controller 据此安排
+   * 下帧续渲。尾窗口模式恒 false（其自身有行预算）。
+   */
+  isRenderIncomplete(): boolean {
+    return this.renderIncomplete
+  }
+
   render(width: number): string[] {
     const normalizedWidth = Number.isFinite(width)
       ? Math.max(1, Math.floor(width))
@@ -787,6 +803,11 @@ export class RetainedTranscript implements Component {
     const widthChanged =
       this.lastRenderedWidth !== undefined &&
       this.lastRenderedWidth !== normalizedWidth
+    if (widthChanged) {
+      // REN-2：宽度变化 → 行缓存失效 + 分片进度重置（全量重渲）
+      this.unitCache.clear()
+      this.renderProgress = 0
+    }
     if (
       widthChanged &&
       this.seededFullHistory &&
@@ -812,26 +833,61 @@ export class RetainedTranscript implements Component {
     return lines
   }
 
-  private renderAllBlocks(contentWidth: number, gutter: string): string[] {
+  private renderAllBlocks(
+    contentWidth: number,
+    gutter: string,
+  ): string[] {
     const lines: string[] = []
     this.blockHitLines = new Map()
     let line = 0
+    let renderedUnits = 0
+    this.renderIncomplete = false
+    const budget = this.renderBlockBudget ?? Infinity
     for (const unit of this.renderUnits) {
+      // 进度内（已渲染）的 unit：复用缓存行；缓存失效（内容变化/宽变化）
+      // → 重置进度从头渲染
+      if (renderedUnits < this.renderProgress) {
+        const cached = this.unitCache.get(unit)
+        if (cached === undefined) {
+          this.renderProgress = 0
+          this.unitCache.clear()
+        } else {
+          line = this.appendBlock(lines, cached, gutter, line)
+          renderedUnits += 1
+          continue
+        }
+      }
+      // 新 unit：帧预算检查——超出 → 截断 + 尾注，下帧续渲
+      if (renderedUnits - this.renderProgress >= budget) {
+        this.renderIncomplete = true
+        lines.push(gutter, `${gutter}… rendering…`)
+        break
+      }
+      let unitLines: string[]
       if (unit.kind === 'block') {
-        const blockLines = unit.component.render(contentWidth)
-        line = this.appendBlock(lines, blockLines, gutter, line)
-        this.recordHitLines(unit.component, blockLines, line)
-        continue
+        unitLines = unit.component.render(contentWidth)
+        line = this.appendBlock(lines, unitLines, gutter, line)
+        this.recordHitLines(unit.component, unitLines, line)
+      } else {
+        unitLines = unit.group.render(contentWidth)
+        line = this.appendBlock(lines, unitLines, gutter, line)
+        const groupStart = line - unitLines.length
+        for (const hit of unit.group.getMemberHits()) {
+          this.blockHitLines.set(hit.blockId, {
+            start: groupStart + hit.start,
+            end: groupStart + hit.end,
+          })
+        }
       }
-      const groupLines = unit.group.render(contentWidth)
-      line = this.appendBlock(lines, groupLines, gutter, line)
-      const groupStart = line - groupLines.length
-      for (const hit of unit.group.getMemberHits()) {
-        this.blockHitLines.set(hit.blockId, {
-          start: groupStart + hit.start,
-          end: groupStart + hit.end,
-        })
-      }
+      this.unitCache.set(unit, unitLines)
+      renderedUnits += 1
+    }
+    if (this.renderIncomplete) {
+      this.renderProgress = renderedUnits
+    } else {
+      // 完成：进度归零 + 清缓存（缓存只服务分片续帧）
+      this.renderProgress = 0
+      this.unitCache.clear()
     }
     return lines
   }
