@@ -137,6 +137,21 @@ function makeToast(
   }
 }
 
+// --- 3b. 边界：空行保留 + 超长行截断 + ANSI 剥离 ---
+{
+  const lines = fmt({
+    panel: undefined,
+    toast: makeToast('title\n\n' + 'x'.repeat(200) + '\n\u001b[31mred\u001b[0m'),
+    nextGeneration: 1,
+  })
+  assert.equal(lines.length, 4, 'blank row preserved (row count matches)')
+  assert(lines[1] === '', 'blank middle row renders as empty row')
+  assert(!lines[2]!.includes('\n'), 'long row clipped, no embedded newline')
+  assert(lines[2]!.length <= 80, 'long row clipped to frame width')
+  assert(lines[2]!.endsWith('…'), 'clip marker present')
+  assert(!lines[3]!.includes('\u001b[31m'), 'ANSI stripped in clipped row')
+}
+
 // --- 4. 集成：多行 toast 在视口完整可见（布局不破坏） ---
 {
   const terminal = new HeadlessTerminalHarness({
@@ -177,7 +192,7 @@ function makeToast(
     viewport.some((l) => l.includes('Enter send')),
     'footer still visible after toast',
   )
-  controller.stop()
+  await controller.stop()
 }
 
 console.log('PASS: URF-1 command surface multi-line toast + panel frame')

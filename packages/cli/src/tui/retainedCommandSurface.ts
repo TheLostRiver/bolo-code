@@ -159,7 +159,7 @@ export function formatCliCommandSurface(
     )
     for (const rest of body.slice(1)) {
       const clipped = clipTerminalText(rest, frameWidth)
-      if (!clipped) continue
+      // 空行保留（渲染为空行）——行数与终端占行严格一致
       lines.push(
         color
           ? `${toneColor(state.toast.tone)}${clipped}${reset}`
