@@ -14,7 +14,9 @@ import { getBoloHomeDir } from '../../config/src/paths.ts'
 
 export type WorktreeChange = {
   path: string
-  status: 'modified' | 'deleted' | 'untracked'
+  status: 'modified' | 'deleted' | 'untracked' | 'renamed'
+  /** rename 的源路径（恢复时从 HEAD 写回源 + 删目标） */
+  from?: string
 }
 
 export type WorktreeSnapshot = {
@@ -75,44 +77,28 @@ export function snapshotsDir(cwd: string): string {
   return path.join(getBoloHomeDir(), 'snapshots', repoKey(cwd))
 }
 
-/** 解析 `git status --porcelain -z`（NUL 分隔记录；记录 = `XY<SP>path`） */
+/** 解析 `git status --porcelain -z`（NUL 分隔记录；记录 = `XY<SP>path`；
+ * rename 为两条记录（源 + 目标）——消费成对，目标映射为基线删除） */
 export function parsePorcelainZ(output: string): WorktreeChange[] {
   const changes: WorktreeChange[] = []
-  for (const rec of output.split('\0').filter(Boolean)) {
+  const records = output.split('\0').filter((r) => r.length > 0)
+  for (let i = 0; i < records.length; i += 1) {
+    const rec = records[i]!
     const status = rec.slice(0, 2)
     const p = rec.slice(3)
+    if (status[0] === 'R' || status[1] === 'R') {
+      // rename：第一条记录 path 即目标（`R  dest\0source\0`）——记录为
+      // renamed（含源路径）；恢复 = HEAD 写回源 + 删目标
+      const from = records[i + 1] ?? p
+      changes.push({ path: p, status: 'renamed', from })
+      i += 1
+      continue
+    }
     if (status === '??') {
       // untracked 目录带尾斜杠（`?? build/`）——归一化去尾斜杠
       changes.push({ path: p.replace(/\/+$/, ''), status: 'untracked' })
-    } else if (status[0] === 'A' || status[1] === 'A' || status[0] === 'R' || status[1] === 'R') {
-      // staged-add / rename：目标不在 HEAD——恢复时删除（基线无该文件）
-      changes.push({ path: p, status: 'untracked' })
-    } else if (status.includes('D')) {
-      changes.push({ path: p, status: 'deleted' })
-    } else {
-      changes.push({ path: p, status: 'modified' })
-    }
-  }
-  return changes
-}
-
-/** 旧版解析（无 -z 时用；保留兼容）——含 rename 归并 */
-export function parsePorcelain(output: string): WorktreeChange[] {
-  const changes: WorktreeChange[] = []
-  for (const raw of output.split('\n')) {
-    if (!raw.trim()) continue
-    const status = raw.slice(0, 2)
-    let p = raw.slice(3)
-    const rename = p.lastIndexOf(' -> ')
-    if (rename >= 0) p = p.slice(rename + 4)
-    if (p.startsWith('"') && p.endsWith('"')) {
-      try {
-        p = JSON.parse(p) as string
-      } catch {
-        /* 保持原样 */
-      }
-    }
-    if (status === '??') {
+    } else if (status[0] === 'A' || status[1] === 'A') {
+      // staged-add：目标不在 HEAD——恢复时删除（基线无该文件）
       changes.push({ path: p, status: 'untracked' })
     } else if (status.includes('D')) {
       changes.push({ path: p, status: 'deleted' })
@@ -187,7 +173,18 @@ export async function restoreWorktreeSnapshot(
         failed.push(change.path)
         continue
       }
-      if (change.status === 'untracked') {
+      if (change.status === 'renamed') {
+        // rename：HEAD 写回源（git mv 后源在工作树已消失）+ 删目标
+        const sourceContent = await runGitBuffer(
+          cwd,
+          ['show', `HEAD:${change.from ?? change.path}`],
+        )
+        const source = path.join(repoRoot, change.from ?? change.path)
+        await fs.mkdir(path.dirname(source), { recursive: true })
+        await fs.writeFile(source, sourceContent)
+        const dest = path.join(repoRoot, change.path)
+        await fs.rm(dest, { recursive: true, force: true })
+      } else if (change.status === 'untracked') {
         const target = path.join(repoRoot, change.path)
         await fs.rm(target, { recursive: true, force: true })
       } else {

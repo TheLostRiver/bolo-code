@@ -2,7 +2,7 @@
  * WT-1 · worktree 快照/GC/池化
  *
  * 覆盖：
- * - parsePorcelain 解析（modified/deleted/untracked）
+ * - parsePorcelainZ 解析（modified/deleted/untracked/rename 成对）
  * - 快照创建（tracked 修改 + untracked 记录 + 落盘）
  * - 恢复（tracked 回 HEAD 内容 + untracked 删除）
  * - GC（maxCount/maxAge 清理）
@@ -15,7 +15,7 @@ import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import {
-  parsePorcelain,
+  parsePorcelainZ,
   createWorktreeSnapshot,
   listSnapshots,
   restoreWorktreeSnapshot,
@@ -47,25 +47,28 @@ async function makeRepo(name: string): Promise<string> {
   return repo
 }
 
-// --- 1. parsePorcelain ---
+// --- 1. parsePorcelainZ ---
 {
-  const out = [
-    ' M src/a.ts',
-    'D  src/b.ts',
-    '?? untracked.txt',
-    'R  old.txt -> new.txt',
-  ].join('\n')
-  const changes = parsePorcelain(out)
-  assert.equal(changes.length, 4, 'four changes parsed')
+  const out =
+    ' M src/a.ts\u0000' + 'D  src/b.ts\u0000' + '?? untracked.txt\u0000'
+  const changes = parsePorcelainZ(out)
+  assert.equal(changes.length, 3, 'three changes parsed')
   assert.deepEqual(
     changes.map((c) => `${c.status}:${c.path}`),
     [
       'modified:src/a.ts',
       'deleted:src/b.ts',
       'untracked:untracked.txt',
-      'modified:new.txt',
     ],
     'status/path parsed',
+  )
+  // rename：两条 NUL 记录（`R  dest\0source\0`——目标在前）——记录为
+  // renamed（含源）；恢复 = HEAD 写回源 + 删目标
+  const renamed = parsePorcelainZ('R  new.txt\u0000old.txt\u0000')
+  assert.deepEqual(
+    renamed.map((c) => `${c.status}:${c.path}<-${c.from ?? ''}`),
+    ['renamed:new.txt<-old.txt'],
+    'rename recorded with source path',
   )
 }
 
@@ -284,6 +287,38 @@ async function makeRepo(name: string): Promise<string> {
     assert(
       !(await fs.stat(path.join(os.tmpdir(), 'outside.txt')).catch(() => null)),
       'no file written outside repo',
+    )
+    void prevHome
+  } finally {
+    await fs.rm(repo, { recursive: true, force: true }).catch(() => {})
+  }
+}
+
+// --- 8b. rename（git mv）：目标映射为基线删除，恢复不误删源 ---
+{
+  const repo = await makeRepo('rename')
+  const prevHome = process.env.BOLO_CONFIG_DIR
+  process.env.BOLO_CONFIG_DIR = path.join(os.tmpdir(), `bolo-wt-home-${Date.now()}`)
+  try {
+    await fs.writeFile(path.join(repo, 'old.txt'), 'rename me\n', 'utf8')
+    await runGit(repo, ['add', 'old.txt'])
+    await runGit(repo, ['commit', '-m', 'old'])
+    await runGit(repo, ['mv', 'old.txt', 'new.txt'])
+    const snap = await createWorktreeSnapshot(repo)
+    assert.deepEqual(
+      snap.changes.map((c) => `${c.status}:${c.path}`),
+      ['renamed:new.txt'],
+      'rename dest recorded (source in from field)',
+    )
+    const { failed } = await restoreWorktreeSnapshot(repo, snap)
+    assert.equal(failed.length, 0, 'rename restore ok')
+    assert(
+      !(await fs.stat(path.join(repo, 'new.txt')).catch(() => null)),
+      'rename dest removed on restore',
+    )
+    assert(
+      await fs.stat(path.join(repo, 'old.txt')).catch(() => null),
+      'rename source preserved (HEAD file untouched)',
     )
     void prevHome
   } finally {

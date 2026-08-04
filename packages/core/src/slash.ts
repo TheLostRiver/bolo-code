@@ -3944,12 +3944,15 @@ async function cmdWorktree(
       // 全量恢复成功 → 删除快照（避免后续会话反复提示未恢复残留）
       if (failed.length === 0) {
         const { snapshotsDir } = await import('./worktreeSnapshot.ts')
-        await import('node:fs').then(async (fsm) => {
+        try {
+          const fsm = await import('node:fs')
           await fsm.promises.rm(
             path.join(snapshotsDir(session.cwd), `${target.id}.json`),
             { force: true },
           )
-        })
+        } catch {
+          /* 删快照失败不影响恢复结果（残留仅多提示一次） */
+        }
       }
       return {
         ok: failed.length === 0,
