@@ -175,12 +175,15 @@ export async function restoreWorktreeSnapshot(
         continue
       }
       if (change.status === 'renamed') {
-        // rename：HEAD 写回源（git mv 后源在工作树已消失）+ 删目标
-        const sourceContent = await runGitBuffer(
-          cwd,
-          ['show', `HEAD:${change.from ?? change.path}`],
-        )
-        const source = path.join(repoRoot, change.from ?? change.path)
+        // rename：HEAD 写回源（git mv 后源在工作树已消失）+ 删目标；
+        // from（源路径）同样须通过逃逸守卫
+        const from = change.from ?? change.path
+        if (!isInside(from)) {
+          failed.push(change.path)
+          continue
+        }
+        const sourceContent = await runGitBuffer(cwd, ['show', `HEAD:${from}`])
+        const source = path.join(repoRoot, from)
         await fs.mkdir(path.dirname(source), { recursive: true })
         await fs.writeFile(source, sourceContent)
         const dest = path.join(repoRoot, change.path)

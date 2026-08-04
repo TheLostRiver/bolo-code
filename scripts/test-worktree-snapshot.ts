@@ -272,7 +272,7 @@ async function makeRepo(name: string): Promise<string> {
   }
 }
 
-// --- 9. 遍历守卫：恶意快照路径拒绝 ---
+// --- 9. 遍历守卫：恶意快照路径拒绝（modified + renamed from）---
 {
   const repo = await makeRepo('guard')
   const prevHome = process.env.BOLO_CONFIG_DIR
@@ -287,6 +287,19 @@ async function makeRepo(name: string): Promise<string> {
     assert(
       !(await fs.stat(path.join(os.tmpdir(), 'outside.txt')).catch(() => null)),
       'no file written outside repo',
+    )
+    // renamed 的 from（源路径）同样拒绝
+    const renamed = await restoreWorktreeSnapshot(repo, {
+      id: 'evil2',
+      ts: 0,
+      changes: [
+        { path: 'dest.txt', status: 'renamed', from: '../outside-src.txt' },
+      ],
+    })
+    assert.deepEqual(renamed.failed, ['dest.txt'], 'renamed from rejected')
+    assert(
+      !(await fs.stat(path.join(os.tmpdir(), 'outside-src.txt')).catch(() => null)),
+      'no renamed source written outside repo',
     )
     void prevHome
   } finally {
