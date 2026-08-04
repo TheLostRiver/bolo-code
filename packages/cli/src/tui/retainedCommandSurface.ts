@@ -162,7 +162,8 @@ export function formatCliCommandSurface(
       .replace(/\r/g, '')
     const prefix = `${tonePrefix(state.toast.tone)} `
     const body = sanitized.split('\n').map((l) => l.trimEnd())
-    // 行数上限（同 panel 的 bodyLimit——防止病理多行内容洪泛/挤走 footer）
+    // 行数上限（受界于 40% 视口——panel 为 min(10, 40%)−2；toast 略宽但
+    // 有界——防止病理多行内容洪泛/挤走 footer）
     const maxToastRows = Math.max(1, Math.floor(rows * 0.4))
     const visible = body.slice(0, maxToastRows)
     const first = clipTerminalText(`${prefix}${visible[0] ?? ''}`, frameWidth)
