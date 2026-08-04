@@ -154,9 +154,9 @@ function makeToast(
 
 // --- 3c. 安全边界：bare ESC / C0 VT FF / \r / 行数上限 ---
 {
-  // bare ESC（ESC E 会加行、ESC c 会清屏）+ VT + FF + 行中 \r
+  // bare ESC（ESC E 会加行、ESC c 会清屏）+ VT + FF + 行中 \r + C1 CSI
   const hostile =
-    'title\u001bE\u001bc\u000b\u000c\u001b' +
+    'title\u001bE\u001bc\u000b\u000c\u001b\u009b2J' +
     '\r' +
     'hidden' +
     '\rvisible-tail'
@@ -169,6 +169,7 @@ function makeToast(
     assert(!line.includes('\u001b'), `line ${i}: no bare ESC survives`)
     assert(!line.includes('\u000b') && !line.includes('\u000c'), 'no VT/FF')
     assert(!line.includes('\r'), 'no carriage return survives')
+    assert(!line.includes('\u009b'), `line ${i}: no C1 CSI survives`)
   }
   assert(lines.length >= 1, 'hostile content still renders at least one row')
   const joined = lines.join('\n')

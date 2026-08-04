@@ -152,11 +152,13 @@ export function formatCliCommandSurface(
     // 多行 toast：逐行拆渲染（行内含 \n 会破坏终端布局——渲染行数必须
     // 与终端实际占行一致）；前缀只加首行。
     // 净化：bare ESC（stripTerminalAnsi 只清 CSI/OSC 完整序列——残余裸
-    // ESC 如 ESC E 会加行/清屏破坏行数不变式）与 C0 VT/FF（xterm 换行）
-    // 一并剥离；\r 消除（行中回车会覆盖行首）。
+    // ESC 如 ESC E 会加行/清屏破坏行数不变式）、C0 VT/FF（xterm 换行）
+    // 与 C1 控制区（\u0080-\u009f——xterm 将 \u009b 当 CSI 前缀）一并剥离；
+    // \r 消除（行中回车会覆盖行首）。
     const sanitized = state.toast.content
       .replace(/\x1b/g, '')
       .replace(/[\u000b\u000c]/g, '')
+      .replace(/[\u0080-\u009f]/g, '')
       .replace(/\r/g, '')
     const prefix = `${tonePrefix(state.toast.tone)} `
     const body = sanitized.split('\n').map((l) => l.trimEnd())
