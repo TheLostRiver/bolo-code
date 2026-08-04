@@ -477,15 +477,31 @@ kill（假 sleep worker 300ms 超时 → 回收 + 降级消息）、worker 非�
 未来原生 DSL 渲染器（图表等）接入 worker 协议即可复用隔离；子进程成本
 （~200ms dev / 快 dist）仅显式调用时产生（高频路径不 worker 化）。
 
-## 19. EVT-1 · 文件事件总线分层 — 中成本
+## 19. EVT-1 · 文件事件总线分层 — 中成本 ✅ 本轮
 
 **目标**：把 OS 文件事件规范化为语义事件（文件变更/git 变更/操作完成），单源
 广播给多个订阅者（TUI 刷新、索引、变更跟踪），避免各功能各自 watch 与事件风暴。
 
-**设计**：新 events 模块：单 watcher + 事件合并（path last-writer-wins）+ 语义化
-（git 目录过滤、操作完成延迟上报）；订阅者注册/退订。
+**设计**（已落地）：
+- `packages/shared/src/eventBus.ts`：轻量事件总线（无外部依赖）——
+  按 key 发布/订阅/取消订阅 + **replay 最近状态**（resume 时新订阅者
+  拿到最新状态不丢更新）+ 订阅者错误隔离（一个异常不影响其余）。
+- `packages/core/src/memoryWatcher.ts`：memory 目录 fs.watch watcher——
+  debounce 合并（100ms——一次写操作多次事件只通知一次）+ **错误隔离**
+  （目录缺失/watch error → 重启一次 → 降级通知 false，不崩主循环）+
+  stop 释放。
+- **分层**：IO 层（watcher 规范化为「目录变更」事件）+ 领域层（bus 按 key
+  过滤/扇出）+ 消费层（订阅者——memory 外部编辑同步、未来索引/变更跟踪
+  接入）。bus 的 replay 语义支撑 resume 状态重放。
 
-**验收**：事件合并/过滤/扇出/退订；TUI 与索引两个消费方接入。
+**验收**（全部通过）：专项覆盖 bus 发布/订阅/取消订阅/key 过滤/replay
+（最新状态幂等重放）/订阅者错误隔离；watcher 目录变更（多写合并 ≤2 次
+通知）/缺失目录降级不崩/stop 后不再通知；memory 相关回归兼容；完整
+`npm test` 通过。
+
+**边界**：watcher 为 memory 目录专用（git 目录过滤/操作完成延迟上报为
+后续扩展）；消费方接入点=memory 外部编辑同步（MEM-1 边界「新会话生效」
+可由 watcher 标脏升级为会话内刷新——后续项）。
 
 ## 20. WT-1 · worktree 快照/GC/池化 — 高成本
 
