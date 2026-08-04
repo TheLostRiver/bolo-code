@@ -1629,6 +1629,24 @@ export async function createSession(opts: CreateSessionOptions): Promise<BoloSes
     })
   }
 
+  // WT-1：崩溃残留检测——存在未恢复的 worktree 快照时提示（非阻断）
+  {
+    const { listSnapshots } = await import('./worktreeSnapshot.ts')
+    try {
+      const snaps = await listSnapshots(session.cwd)
+      if (snaps.length > 0) {
+        emit(session, {
+          type: 'warning',
+          message:
+            `worktree: ${snaps.length} unrecovered snapshot(s) found — ` +
+            `/worktree list to inspect, /worktree restore to roll back`,
+        })
+      }
+    } catch {
+      /* 检测失败静默（非阻断） */
+    }
+  }
+
   setPhase(session, 'starting')
   const start = await runHooks(
     'SessionStart',

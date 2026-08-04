@@ -3902,6 +3902,88 @@ async function cmdSymbols(
   }
 }
 
+/** WT-1：/worktree——快照 worktree 变更清单，崩溃后恢复/清理 */
+async function cmdWorktree(
+  session: SlashSession,
+  args: string,
+): Promise<SlashDispatchResult> {
+  const {
+    createWorktreeSnapshot,
+    listSnapshots,
+    restoreWorktreeSnapshot,
+    gcSnapshots,
+  } = await import('./worktreeSnapshot.ts')
+  const sub = (args.trim().split(/\s+/)[0] ?? 'list').toLowerCase()
+  const rest = args.trim().replace(/^\S+\s*/, '')
+
+  try {
+    if (sub === 'snapshot') {
+      const snap = await createWorktreeSnapshot(session.cwd)
+      return {
+        ok: true,
+        message:
+          snap.changes.length === 0
+            ? `worktree clean; snapshot ${snap.id} (no changes)`
+            : `snapshot ${snap.id} · ${snap.changes.length} change(s):\n` +
+              snap.changes
+                .slice(0, 20)
+                .map((c) => `  ${c.status} ${c.path}`)
+                .join('\n'),
+      }
+    }
+    if (sub === 'restore') {
+      const snaps = await listSnapshots(session.cwd)
+      const target = snaps.find((s) => s.id === rest.trim()) ?? snaps[0]
+      if (!target) {
+        return { ok: false, message: 'no snapshots to restore' }
+      }
+      const { restored, failed } = await restoreWorktreeSnapshot(
+        session.cwd,
+        target,
+      )
+      return {
+        ok: failed.length === 0,
+        message:
+          `restored ${restored.length} file(s) from snapshot ${target.id}` +
+          (failed.length
+            ? `; failed: ${failed.slice(0, 10).join(', ')}`
+            : ''),
+      }
+    }
+    if (sub === 'gc') {
+      const removed = await gcSnapshots(session.cwd)
+      return { ok: true, message: `gc removed ${removed} snapshot(s)` }
+    }
+    // list（缺省）
+    const snaps = await listSnapshots(session.cwd)
+    if (!snaps.length) {
+      return {
+        ok: true,
+        message:
+          'No worktree snapshots. Usage: /worktree [list|snapshot|restore [id]|gc]',
+      }
+    }
+    return {
+      ok: true,
+      message:
+        `${snaps.length} snapshot(s):\n` +
+        snaps
+          .map(
+            (s) =>
+              `  ${s.id} · ${new Date(s.ts).toISOString()} · ${s.changes.length} change(s)`,
+          )
+          .join('\n'),
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      message: `worktree snapshot failed: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    }
+  }
+}
+
 async function cmdRules(
   session: SlashSession,
   args: string,
@@ -4682,6 +4764,17 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     group: 'session',
     hidden: true,
     run: cmdCost,
+  },
+  {
+    name: 'worktree',
+    summary: 'Snapshot/restore worktree changes (git; crash recovery)',
+    usage: '[list|snapshot|restore [id]|gc]',
+    display: displayOnResult(
+      panelDisplay('slash:worktree', { overflow: 'pager' }),
+      'slash:worktree:error',
+    ),
+    group: 'session',
+    run: cmdWorktree,
   },
   {
     name: 'symbol',
