@@ -74,9 +74,11 @@ function renderCompactPanel(
   if (!visible.length) visible.push('')
 
   return [
-    frameLine('╭', '╮', frameWidth, title),
+    // 面板用单线框（┌┐└┘）——与输入框（composer）的双线框（╭╮╰╯）区分，
+    // 避免 command surface 被误认为「第二个输入框」
+    frameLine('┌', '┐', frameWidth, title),
     ...visible.map((line) => panelBodyLine(line, frameWidth)),
-    frameLine('╰', '╯', frameWidth),
+    frameLine('└', '┘', frameWidth),
   ]
 }
 
@@ -147,16 +149,23 @@ export function formatCliCommandSurface(
   }
 
   if (state.toast) {
+    // 多行 toast：逐行拆渲染（行内含 \n 会破坏终端布局——渲染行数必须
+    // 与终端实际占行一致）；前缀只加首行
     const prefix = `${tonePrefix(state.toast.tone)} `
-    const plain = clipTerminalText(
-      `${prefix}${state.toast.content}`,
-      frameWidth,
-    )
+    const body = state.toast.content.split('\n').map((l) => l.trimEnd())
+    const first = clipTerminalText(`${prefix}${body[0] ?? ''}`, frameWidth)
     lines.push(
-      color
-        ? `${toneColor(state.toast.tone)}${plain}${reset}`
-        : plain,
+      color ? `${toneColor(state.toast.tone)}${first}${reset}` : first,
     )
+    for (const rest of body.slice(1)) {
+      const clipped = clipTerminalText(rest, frameWidth)
+      if (!clipped) continue
+      lines.push(
+        color
+          ? `${toneColor(state.toast.tone)}${clipped}${reset}`
+          : clipped,
+      )
+    }
   }
 
   return lines
