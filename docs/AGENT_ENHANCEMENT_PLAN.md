@@ -412,15 +412,35 @@ runFullCompact 开关（on → segments / off → undefined）、compactSession 
 **边界**：段文件为压缩前缀的文本转录（含工具输出原文——权限由会话
 transcript 同级保护）；LSP 检索与段级语义索引为后续项。
 
-## 17. REN-2 · checkpoint 流式渲染 — 中成本
+## 17. REN-2 · checkpoint 流式渲染 — 中成本 ✅ 本轮
 
-**目标**：长消息/长 transcript 渲染按帧预算（如 8ms）分时间片切片，不冻结事件
-循环；渲染期间新事件可继续入队。
+**目标**：长消息/长 transcript 渲染按帧预算分片，不冻结事件循环；渲染期间
+新事件可继续入队。
 
-**设计**：retained renderer 增加分片渲染调度（一次 render 只处理预算内的行，
-剩余排入下帧）；resize 时强制全量。
+**设计**（已落地）：
+- RetainedTranscript 分片渲染：`renderAllBlocks` 按**渲染单元预算**
+  （`renderBlockBudget=16`/帧）渲染新块并缓存行（`unitCache`）；超出预算
+  → 标记 `renderIncomplete` + 输出截断尾注（`… rendering…`）；进度
+  （`renderProgress`）记录已渲染单元数——续帧从进度继续，已渲染块复用
+  缓存行（每帧只重渲染预算内新块）。
+- **续帧驱动**：controller flush 内 `while (renderIncomplete)` 循环——
+  每帧 `setImmediate` 让路（输入事件优先处理）后继续渲染直到完成——
+  **flush 语义保持**（返回 = 渲染完整；调用方/测试不感知分片）。
+- **内容变化**：setState 重建 renderUnits（新引用）→ 缓存自动失效 → 进度
+  重置从头渲染；**宽度变化** → 缓存清空 + 进度重置（全量重渲，含 tailWindow
+  切换）。
+- 尾窗口模式（大 transcript 行预算）不受影响（其自身有界）。
 
-**验收**：超长内容渲染不阻塞输入；渲染完整性（最终帧一致）。
+**验收**（全部通过）：专项覆盖小内容一次完成（无尾注）、40 块分片 flush
+返回完整（最后块可见）、20 块最终一致（无尾注 + 全块可见）、resize 全量
+（宽度变化后最终一致）、输入可达（分片期间输入不丢）；TUI 回归兼容
+（retained/cleanup/transcript/mouse/folding/reliability——reliability 的
+burst 合并断言适配为「有界渲染帧」：burst 不随事件数增长，大 transcript
+分片产生固定续帧数）；完整 `npm test` 通过。
+
+**边界**：分片预算按单元数（16/帧）而非墙钟——纯字符串渲染成本稳定，
+单元数预算可测且可注入；真人手感与超大（数千块）transcript 的帧数上限
+属 OI-H3（参数可调）。
 
 ## 18. REN-3 · 子进程隔离渲染不可信内容 — 中成本
 
