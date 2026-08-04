@@ -383,16 +383,34 @@ OI-H3（参数可调）。
 **边界**：引用索引（refs）与 LSP 能力为后续项（当前为定义索引 + 名称匹配）；
 超 1MB 文件与 5000 文件上限跳过（有界扫描）。
 
-## 16. CMP-3 · 压缩 Segments 可检索模式 — 中成本
+## 16. CMP-3 · 压缩 Segments 可检索模式 — 中成本 ✅ 本轮
 
 **目标**：压缩产物可选「摘要 + 逐段 markdown 存储」：段文件落盘（有界大小），
 模型通过 read_file/grep 可检索细节，而非只依赖摘要。
 
-**设计**：compact 增加 `mode: summary | segments`（默认 summary 不变）；
-segments 段文件按原子块切分、索引文件与摘要同批写入；模型消息只加指针提示；
-证据门控：默认关闭，配置显式开启。
+**设计**（已落地）：
+- compact 包：`splitMessagesIntoSegments`（turn 原子块切分 + 文本化——
+  `**user**`/`**assistant**`/`**tool** (name)` 标注；段消息数 ≤
+  `SEGMENT_MAX_MESSAGES=25`，超限在 turn 边界切段，turn 原子性优先可略超）；
+  `runFullCompact` 选项 `segments?: boolean`——true 时 `CompactionResult.segments`
+  携带 toSummarize 前缀的段文本（摘要生成不变；缺省 false → undefined，
+  **默认模式零行为变化**）。
+- core：`session.compactSegments`（默认关）——compactSession 传 segments；
+  成功后段文件落盘 `<sessionsDir>/<sessionId>/segments/<ts>.segments.md`
+  （原子写）+ `index.md` 索引（段文件清单 + 摘要字符数）同批写入；
+  摘要消息追加 `[compact segments]` 指针（路径 + 段数 + read_file/grep 提示，
+  同对象引用同步进 session.messages）；fail-open（无 sessionsDir → warning
+  且摘要保持；写盘失败 → warning 不回滚压缩）。
+- **检索链路**：模型用既有 read_file/grep 检索段文件细节（零新代码）。
 
-**验收**：段存储/指针/检索链路；默认模式零行为变化。
+**验收**（全部通过）：专项覆盖段切分（合并/上限/turn 原子/空输入）、
+runFullCompact 开关（on → segments / off → undefined）、compactSession 集成
+（段文件 + index + 指针 + 可检索重读）、默认关闭无文件无指针、fail-open
+（无 sessionsDir warning 且摘要保持）；compact/auto-compact/write-failure
+回归兼容；完整 `npm test` 通过。
+
+**边界**：段文件为压缩前缀的文本转录（含工具输出原文——权限由会话
+transcript 同级保护）；LSP 检索与段级语义索引为后续项。
 
 ## 17. REN-2 · checkpoint 流式渲染 — 中成本
 
