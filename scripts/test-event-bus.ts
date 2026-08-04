@@ -69,24 +69,32 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
   bus.subscribe('x', (v) => got.push(v))
   bus.emit('x', 42)
   assert.deepEqual(got, [42], 'one subscriber error does not affect others')
+  // replay 同隔离语义
+  const replayed: number[] = []
+  const bus2 = createEventBus<'x', number>()
+  bus2.emit('x', 7)
+  bus2.replay((_key, v) => {
+    if (v === 7) throw new Error('replay boom')
+    replayed.push(v)
+  })
+  assert.deepEqual(replayed, [], 'replay error isolated (no throw)')
 }
 
-// --- 5. memoryWatcher：目录变更通知（debounce 合并）---
+// --- 5. memoryWatcher：目录变更通知（debounce 合并；首次 ack 不计变更）---
 {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'bolo-evt-'))
-  const seen: boolean[] = []
+  const changes: boolean[] = []
   const watcher = createMemoryWatcher(dir, { debounceMs: 30 })
   watcher.onChange((available) => {
-    seen.push(available)
+    changes.push(available)
   })
-  await wait(50) // 首次订阅通知（true）
+  await wait(60) // 首次订阅 ack（true）——不计为变更
+  changes.length = 0
   await fs.writeFile(path.join(dir, 'a.md'), 'x', 'utf8')
   await fs.writeFile(path.join(dir, 'b.md'), 'y', 'utf8')
   await wait(150)
-  assert(seen.includes(true), 'directory change notified')
-  // 多次写入合并为 ≤2 次通知（首次 + debounce 合并）
-  const changeNotices = seen.filter(Boolean).length
-  assert(changeNotices >= 1 && changeNotices <= 2, `debounced (got ${changeNotices})`)
+  // 两次写入 debounce 合并为一次变更通知
+  assert.deepEqual(changes, [true], 'directory change notified once (debounced)')
   watcher.stop()
   await fs.rm(dir, { recursive: true, force: true })
 }

@@ -53,7 +53,12 @@ export function createEventBus<
     },
     replay(fn) {
       for (const [key, value] of lastValues) {
-        fn(key, value)
+        // 与 emit 同语义：单键回调异常不影响其余键的重放
+        try {
+          fn(key, value)
+        } catch {
+          /* 订阅者错误隔离 */
+        }
       }
     },
     snapshot() {

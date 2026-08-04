@@ -57,6 +57,8 @@ export function createMemoryWatcher(
         scheduleNotify()
       })
       watcher.on('error', () => {
+        // stop/degrade 后的排队 error：直接忽略（不重启不泄漏）
+        if (stopped || degraded) return
         // watch error：尝试重启一次，失败则降级
         watcher?.close()
         watcher = undefined
@@ -65,6 +67,7 @@ export function createMemoryWatcher(
             scheduleNotify()
           })
           watcher.on('error', () => {
+            if (stopped || degraded) return
             degrade()
           })
         } catch {
@@ -79,6 +82,10 @@ export function createMemoryWatcher(
   const degrade = (): void => {
     if (degraded || stopped) return
     degraded = true
+    if (timer !== undefined) {
+      clearTimeout(timer)
+      timer = undefined
+    }
     watcher?.close()
     watcher = undefined
     notify(false)
