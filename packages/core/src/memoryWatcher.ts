@@ -54,6 +54,8 @@ export function createMemoryWatcher(
     if (stopped) return
     try {
       watcher = watch(dir, { persistent: false }, () => {
+        // stop/degrade 后的事件循环排队变更：直接忽略（不重启 timer）
+        if (stopped || degraded) return
         scheduleNotify()
       })
       watcher.on('error', () => {
@@ -64,6 +66,7 @@ export function createMemoryWatcher(
         watcher = undefined
         try {
           watcher = watch(dir, { persistent: false }, () => {
+            if (stopped || degraded) return
             scheduleNotify()
           })
           watcher.on('error', () => {
