@@ -219,15 +219,20 @@ function seedToolsInterleaved(fixture: Fixture, count: number): void {
   // tailWindow 被触发；预修复代码 renderIncomplete 残留 → flush 死循环
   fixture.output.resize(70, 48)
   // 核心断言：flush 必须在超时内返回（预修复代码此处永久挂起）
-  await Promise.race([
-    flushing,
-    new Promise<never>((_, reject) =>
-      setTimeout(
-        () => reject(new Error('flush hung: mid-slice resize deadloop (REN-2)')),
-        5_000,
-      ),
-    ),
-  ])
+  let hangTimer: ReturnType<typeof setTimeout> | undefined
+  try {
+    await Promise.race([
+      flushing,
+      new Promise<never>((_, reject) => {
+        hangTimer = setTimeout(
+          () => reject(new Error('flush hung: mid-slice resize deadloop (REN-2)')),
+          5_000,
+        )
+      }),
+    ])
+  } finally {
+    if (hangTimer !== undefined) clearTimeout(hangTimer)
+  }
   await fixture.terminal.flush()
   assert(
     !renderIncomplete(fixture),
