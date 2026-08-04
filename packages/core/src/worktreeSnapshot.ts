@@ -190,6 +190,11 @@ export async function restoreWorktreeSnapshot(
         await fs.rm(dest, { recursive: true, force: true })
       } else if (change.status === 'untracked') {
         const target = path.join(repoRoot, change.path)
+        // 防御：`.` / 空路径解析到 repoRoot 本身——绝不递归删除仓库根
+        if (target === repoRoot) {
+          failed.push(change.path)
+          continue
+        }
         await fs.rm(target, { recursive: true, force: true })
       } else {
         // 二进制安全：Buffer 直出直写（utf8 解码会损毁二进制 blob）

@@ -301,6 +301,17 @@ async function makeRepo(name: string): Promise<string> {
       !(await fs.stat(path.join(os.tmpdir(), 'outside-src.txt')).catch(() => null)),
       'no renamed source written outside repo',
     )
+    // untracked `.`（解析到 repoRoot）绝不递归删除仓库根
+    const dot = await restoreWorktreeSnapshot(repo, {
+      id: 'evil3',
+      ts: 0,
+      changes: [{ path: '.', status: 'untracked' }],
+    })
+    assert.deepEqual(dot.failed, ['.'], 'repo-root untracked delete rejected')
+    assert(
+      await fs.stat(path.join(repo, '.git')).catch(() => null),
+      'repo root not deleted',
+    )
     void prevHome
   } finally {
     await fs.rm(repo, { recursive: true, force: true }).catch(() => {})
