@@ -232,6 +232,8 @@ function assertSafeSessionId(id: string): void {
     throw new Error(`invalid session id characters: ${id}`)
   }
 }
+/** CMP-3/安全：导出供段写入等路径前校验（防 session.id 路径穿越） */
+export { assertSafeSessionId }
 
 /** 将 session id 规范为文件名（不含扩展名） */
 export function sessionFileName(sessionId: string): string {

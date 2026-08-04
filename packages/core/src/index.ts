@@ -611,6 +611,9 @@ export {
   type SessionPersistMeta,
 } from './sessionPersist.ts'
 
+// CMP-3/安全：真 import（573 的 re-export 块不提供模块内名称）
+import { assertSafeSessionId } from './sessionPersist.ts'
+
 export {
   requestSessionControl,
   cancelSessionControl,
@@ -3253,6 +3256,9 @@ export async function compactSession(
           message: 'compact segments skipped: session has no sessionsDir',
         })
       } else {
+        // 安全：session.id 可被 createSession({sessionId}) 传入任意字符串——
+        // 路径穿越校验（与其它持久化路径同规则）后才能拼进目录路径
+        assertSafeSessionId(session.id)
         const segmentsDir = path.join(
           segMeta.sessionsDir,
           session.id,
@@ -3280,8 +3286,9 @@ export async function compactSession(
             m.content.startsWith(COMPACT_SUMMARY_MARKER),
         )
         if (summaryMsg && typeof summaryMsg.content === 'string') {
+          // 指针路径用反引号包裹（防路径含空白/markdown 字符注入提示文本）
           summaryMsg.content +=
-            `\n\n[compact segments] 完整对话细节按段存储于 ${segmentsDir}/${segmentFile}` +
+            `\n\n[compact segments] 完整对话细节按段存储于 \`${segmentsDir}/${segmentFile}\`` +
             `（共 ${outcome.result.segments.length} 段）——需要具体细节时用 read_file 查看该文件，` +
             `或用 grep 在该目录检索关键词。`
         }
