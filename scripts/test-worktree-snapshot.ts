@@ -203,4 +203,92 @@ async function makeRepo(name: string): Promise<string> {
   }
 }
 
+// --- 7. blocking 修复：binary round-trip / 非 ASCII 路径 / untracked 目录 ---
+{
+  const repo = await makeRepo('blocking')
+  const prevHome = process.env.BOLO_CONFIG_DIR
+  process.env.BOLO_CONFIG_DIR = path.join(os.tmpdir(), `bolo-wt-home-${Date.now()}`)
+  try {
+    // binary 文件（含 \0 字节）
+    const binary = Buffer.from([0x00, 0x01, 0xfe, 0xff, 0x00, 0x42])
+    await fs.writeFile(path.join(repo, 'bin.dat'), binary)
+    await runGit(repo, ['add', 'bin.dat'])
+    await runGit(repo, ['commit', '-m', 'binary'])
+    await fs.writeFile(path.join(repo, 'bin.dat'), Buffer.from([0xff, 0x00]))
+    // 非 ASCII 路径
+    await fs.writeFile(path.join(repo, '中文.txt'), '中文字符内容\n', 'utf8')
+    // untracked 目录（非空）
+    await fs.mkdir(path.join(repo, 'build'), { recursive: true })
+    await fs.writeFile(path.join(repo, 'build', 'out.txt'), 'x', 'utf8')
+    const snap = await createWorktreeSnapshot(repo)
+    const paths = snap.changes.map((c) => c.path)
+    assert(paths.includes('中文.txt'), 'non-ASCII path recorded')
+    assert(paths.includes('build'), 'untracked dir recorded')
+    const { restored, failed } = await restoreWorktreeSnapshot(repo, snap)
+    assert.equal(failed.length, 0, `restore no failures (${failed.join(',')})`)
+    assert.equal(restored.length, 3, 'all three changes restored')
+    // binary round-trip：恢复后与 HEAD 版本逐字节一致
+    const after = await fs.readFile(path.join(repo, 'bin.dat'))
+    assert(after.equals(binary), 'binary file restored byte-exact')
+    assert(
+      !(await fs.stat(path.join(repo, '中文.txt')).catch(() => null)),
+      'non-ASCII untracked removed',
+    )
+    assert(
+      !(await fs.stat(path.join(repo, 'build')).catch(() => null)),
+      'untracked dir removed recursively',
+    )
+    void prevHome
+  } finally {
+    await fs.rm(repo, { recursive: true, force: true }).catch(() => {})
+  }
+}
+
+// --- 8. staged-add 恢复（目标不在 HEAD → 删除）---
+{
+  const repo = await makeRepo('staged')
+  const prevHome = process.env.BOLO_CONFIG_DIR
+  process.env.BOLO_CONFIG_DIR = path.join(os.tmpdir(), `bolo-wt-home-${Date.now()}`)
+  try {
+    await fs.writeFile(path.join(repo, 'new.txt'), 'staged content\n', 'utf8')
+    await runGit(repo, ['add', 'new.txt'])
+    const snap = await createWorktreeSnapshot(repo)
+    assert(
+      snap.changes.some((c) => c.path === 'new.txt' && c.status === 'untracked'),
+      'staged-add treated as untracked (baseline delete)',
+    )
+    const { failed } = await restoreWorktreeSnapshot(repo, snap)
+    assert.equal(failed.length, 0, 'staged restore ok')
+    assert(
+      !(await fs.stat(path.join(repo, 'new.txt')).catch(() => null)),
+      'staged-add file removed on restore',
+    )
+    void prevHome
+  } finally {
+    await fs.rm(repo, { recursive: true, force: true }).catch(() => {})
+  }
+}
+
+// --- 9. 遍历守卫：恶意快照路径拒绝 ---
+{
+  const repo = await makeRepo('guard')
+  const prevHome = process.env.BOLO_CONFIG_DIR
+  process.env.BOLO_CONFIG_DIR = path.join(os.tmpdir(), `bolo-wt-home-${Date.now()}`)
+  try {
+    const { failed } = await restoreWorktreeSnapshot(repo, {
+      id: 'evil',
+      ts: 0,
+      changes: [{ path: '../outside.txt', status: 'modified' }],
+    })
+    assert.deepEqual(failed, ['../outside.txt'], 'traversal path rejected')
+    assert(
+      !(await fs.stat(path.join(os.tmpdir(), 'outside.txt')).catch(() => null)),
+      'no file written outside repo',
+    )
+    void prevHome
+  } finally {
+    await fs.rm(repo, { recursive: true, force: true }).catch(() => {})
+  }
+}
+
 console.log('PASS: WT-1 worktree snapshot / restore / gc')

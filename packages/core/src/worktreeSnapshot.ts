@@ -44,6 +44,24 @@ function runGit(cwd: string, args: string[]): Promise<string> {
   })
 }
 
+/** git show（二进制安全：Buffer 直出） */
+function runGitBuffer(cwd: string, args: string[]): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      'git',
+      args,
+      { cwd, maxBuffer: 10 * 1024 * 1024, windowsHide: true, encoding: 'buffer' },
+      (err, stdout) => {
+        if (err) {
+          reject(new Error(`git ${args[0]} failed: ${String(err)}`))
+          return
+        }
+        resolve(stdout as Buffer)
+      },
+    )
+  })
+}
+
 function repoKey(cwd: string): string {
   let h = 0
   const s = path.resolve(cwd)
@@ -57,14 +75,35 @@ export function snapshotsDir(cwd: string): string {
   return path.join(getBoloHomeDir(), 'snapshots', repoKey(cwd))
 }
 
-/** 解析 `git status --porcelain`（第一列状态 + 第二列暂存，路径按 ` -> ` 分离） */
+/** 解析 `git status --porcelain -z`（NUL 分隔记录；记录 = `XY<SP>path`） */
+export function parsePorcelainZ(output: string): WorktreeChange[] {
+  const changes: WorktreeChange[] = []
+  for (const rec of output.split('\0').filter(Boolean)) {
+    const status = rec.slice(0, 2)
+    const p = rec.slice(3)
+    if (status === '??') {
+      // untracked 目录带尾斜杠（`?? build/`）——归一化去尾斜杠
+      changes.push({ path: p.replace(/\/+$/, ''), status: 'untracked' })
+    } else if (status[0] === 'A' || status[1] === 'A' || status[0] === 'R' || status[1] === 'R') {
+      // staged-add / rename：目标不在 HEAD——恢复时删除（基线无该文件）
+      changes.push({ path: p, status: 'untracked' })
+    } else if (status.includes('D')) {
+      changes.push({ path: p, status: 'deleted' })
+    } else {
+      changes.push({ path: p, status: 'modified' })
+    }
+  }
+  return changes
+}
+
+/** 旧版解析（无 -z 时用；保留兼容）——含 rename 归并 */
 export function parsePorcelain(output: string): WorktreeChange[] {
   const changes: WorktreeChange[] = []
   for (const raw of output.split('\n')) {
     if (!raw.trim()) continue
     const status = raw.slice(0, 2)
     let p = raw.slice(3)
-    const rename = p.indexOf(' -> ')
+    const rename = p.lastIndexOf(' -> ')
     if (rename >= 0) p = p.slice(rename + 4)
     if (p.startsWith('"') && p.endsWith('"')) {
       try {
@@ -86,19 +125,20 @@ export function parsePorcelain(output: string): WorktreeChange[] {
 
 /** 创建快照（记录当前 worktree 变更清单；HEAD 为恢复基线） */
 export async function createWorktreeSnapshot(cwd: string): Promise<WorktreeSnapshot> {
-  const raw = await runGit(cwd, ['status', '--porcelain'])
-  const changes = parsePorcelain(raw)
+  const raw = await runGit(cwd, ['status', '--porcelain', '-z'])
+  const changes = parsePorcelainZ(raw)
   const ts = Date.now()
+  const id = `${ts}-${Math.random().toString(36).slice(2, 6)}`
   const snapshot: WorktreeSnapshot = {
-    id: `${ts}`,
+    id,
     ts,
     changes,
   }
   const dir = snapshotsDir(cwd)
   await fs.mkdir(dir, { recursive: true })
-  const tmp = path.join(dir, `${ts}.tmp`)
+  const tmp = path.join(dir, `${id}.tmp`)
   await fs.writeFile(tmp, JSON.stringify(snapshot), 'utf8')
-  await fs.rename(tmp, path.join(dir, `${ts}.json`))
+  await fs.rename(tmp, path.join(dir, `${id}.json`))
   return snapshot
 }
 
@@ -126,8 +166,9 @@ export async function listSnapshots(cwd: string): Promise<WorktreeSnapshot[]> {
 }
 
 /**
- * 恢复快照：tracked 修改/deleted → `git show HEAD:path` 写回；untracked →
- * 删除。失败的文件跳过（返回失败清单，不中断其余）。
+ * 恢复快照：tracked 修改/deleted → `git show HEAD:path`（Buffer 二进制安全）
+ * 写回；untracked（含 staged-add/rename 目标）→ 递归删除。路径逃逸校验
+ * 两分支统一；守卫拒绝与失败记入 failed，不中断其余。
  */
 export async function restoreWorktreeSnapshot(
   cwd: string,
@@ -135,18 +176,26 @@ export async function restoreWorktreeSnapshot(
 ): Promise<{ restored: string[]; failed: string[] }> {
   const restored: string[] = []
   const failed: string[] = []
+  const repoRoot = path.resolve(cwd)
+  const isInside = (p: string): boolean => {
+    const target = path.resolve(repoRoot, p)
+    return target === repoRoot || target.startsWith(repoRoot + path.sep)
+  }
   for (const change of snapshot.changes) {
     try {
+      if (!isInside(change.path)) {
+        failed.push(change.path)
+        continue
+      }
       if (change.status === 'untracked') {
-        const target = path.resolve(cwd, change.path)
-        if (target.startsWith(path.resolve(cwd) + path.sep)) {
-          await fs.rm(target, { force: true })
-        }
+        const target = path.join(repoRoot, change.path)
+        await fs.rm(target, { recursive: true, force: true })
       } else {
-        const content = await runGit(cwd, ['show', `HEAD:${change.path}`])
-        const target = path.join(path.resolve(cwd), change.path)
+        // 二进制安全：Buffer 直出直写（utf8 解码会损毁二进制 blob）
+        const content = await runGitBuffer(cwd, ['show', `HEAD:${change.path}`])
+        const target = path.join(repoRoot, change.path)
         await fs.mkdir(path.dirname(target), { recursive: true })
-        await fs.writeFile(target, content, 'utf8')
+        await fs.writeFile(target, content)
       }
       restored.push(change.path)
     } catch {
