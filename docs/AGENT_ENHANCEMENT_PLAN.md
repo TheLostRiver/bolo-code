@@ -455,8 +455,9 @@ burst 合并断言适配为「有界渲染帧」：burst 不随事件数增长�
     （防恶意超大输入拖垮 worker）；渲染 try/catch（渲染器异常 → ok:false
     不崩 worker）。
   - **主进程调用方**（`renderTextInWorker`）：spawn worker → 墙钟超时
-    （2s 默认）→ SIGTERM + 宽限 500ms 后 SIGKILL → 降级（ok:false +
-    timed out/exited 信息）；EPIPE/EOF 无害化；失败/超时主进程不崩。
+    （2s 默认）→ 直接 SIGKILL（worker 为渲染进程无清理状态，不可捕获
+    立即回收）→ 降级（ok:false + timed out/exited 信息）；EPIPE/EOF
+    无害化；失败/超时主进程不崩。
   - **轻量独立入口**（`renderWorkerCli.ts`——不加载 main.ts 全树，
     dev 下 tsx 冷启动 ~200ms）；main.ts 加 `render-worker` 子命令分支
     （dist 单文件同样可执行）。
