@@ -68,6 +68,13 @@ async function main(): Promise<void> {
     return
   }
 
+  // REN-3：渲染 worker 子命令（self re-exec 隔离不可信内容渲染）。
+  if (argv[0] === 'render-worker') {
+    const { runRenderWorker } = await import('./renderWorker.ts')
+    await runRenderWorker()
+    return
+  }
+
   const wantsJson = argv.includes('--json')
   let args
   try {
