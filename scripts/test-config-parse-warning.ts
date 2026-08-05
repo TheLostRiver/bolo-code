@@ -118,6 +118,54 @@ async function main() {
     )
   }
 
+  // ── 5) apiKeyEnv 字段语义校验：sk- 值 / 非法环境变量名 → warning ──
+  {
+    const dir = path.join(root, 'layout-keyfields')
+    await fs.mkdir(dir, { recursive: true })
+    const configJson = path.join(dir, 'config.json')
+    await fs.writeFile(
+      configJson,
+      JSON.stringify({
+        version: 1,
+        providers: {
+          good: {
+            kind: 'openai-compatible',
+            baseUrl: 'https://x',
+            model: 'm',
+            apiKeyEnv: 'MY_API_KEY',
+          },
+          leaked: {
+            kind: 'openai-compatible',
+            baseUrl: 'https://x',
+            model: 'm',
+            apiKeyEnv: 'sk-abc123',
+          },
+          spaced: {
+            kind: 'openai-compatible',
+            baseUrl: 'https://x',
+            model: 'm',
+            apiKeyEnv: 'MY KEY',
+          },
+        },
+      }),
+      'utf8',
+    )
+    const r = await loadConfigJsonWithWarnings({ configJson } as never)
+    assert(r.warnings.length >= 2, 'sk- value and invalid name both warn')
+    assert(
+      r.warnings.some((w) => w.includes('leaked') && w.includes('apiKeyEnv')),
+      'sk- value warning names the provider',
+    )
+    assert(
+      r.warnings.some((w) => w.includes('spaced') && w.includes('not a valid')),
+      'invalid env name warning names the provider',
+    )
+    assert(
+      !r.warnings.some((w) => w.includes('good')),
+      'valid apiKeyEnv name produces no warning',
+    )
+  }
+
   await fs.rm(root, { recursive: true, force: true }).catch(() => {})
   console.log('PASS: config parse failures are reported')
 }

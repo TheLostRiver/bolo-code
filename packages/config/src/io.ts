@@ -151,6 +151,34 @@ export async function loadConfigJson(
  * 同 loadConfigJson，但把「文件在却读不了」变成可见 warning。
  * 坏配置不阻断启动——进不去 CLI 就更难修了——但必须说出来。
  */
+/**
+ * apiKeyEnv 语义 = 环境变量**名**（运行时 env(name) 读取）。
+ * 常见误用：把密钥本身（sk-...）填进 apiKeyEnv——运行时查不到该 env，
+ * 回落也失败 → provider 静默无 key。这里给出可诊断的 warning。
+ */
+export function validateProviderKeyFieldWarnings(
+  config: BoloConfigJson,
+): string[] {
+  const out: string[] = []
+  for (const [id, p] of Object.entries(config.providers ?? {})) {
+    const name = p.apiKeyEnv?.trim()
+    if (!name) continue
+    if (/^sk-/i.test(name)) {
+      out.push(
+        `provider "${id}": apiKeyEnv value looks like a key ("sk-…" prefix) — ` +
+          'apiKeyEnv must be an ENVIRONMENT VARIABLE NAME; ' +
+          'move the key into that env var or use "apiKey" instead',
+      )
+    } else if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+      out.push(
+        `provider "${id}": apiKeyEnv "${name}" is not a valid environment ` +
+          'variable name (letters/digits/underscore only)',
+      )
+    }
+  }
+  return out
+}
+
 export async function loadConfigJsonWithWarnings(
   layout: BoloLayoutPaths,
 ): Promise<{
@@ -171,7 +199,10 @@ export async function loadConfigJsonWithWarnings(
   }
   return {
     config: mergeConfigJson({ ...DEFAULT_CONFIG }, r.value),
-    warnings: validateBoloConfigModelMetadata(r.value, layout.configJson),
+    warnings: [
+      ...validateBoloConfigModelMetadata(r.value, layout.configJson),
+      ...validateProviderKeyFieldWarnings(r.value),
+    ],
     sourceConfig: r.value,
   }
 }

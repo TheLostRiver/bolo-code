@@ -88,6 +88,20 @@ async function main() {
   const selectionTarget = 'desktop_switch_target'
   try {
     await fs.mkdir(sessionsDir, { recursive: true })
+    // 显式 mock provider 配置：settings 应用 model 时 switchSessionModel
+    // 会用 config 的 default provider 重建——DEFAULT_CONFIG 的 provider
+    // 是 openai-compatible 且无 key → 重建报「API key unavailable」。
+    // 测试必须显式把 default provider 钉为 mock（隔离用户真实 config +
+    // 不依赖任何密钥）。
+    await fs.writeFile(
+      path.join(fixtureRoot, '.bolo', 'config.json'),
+      JSON.stringify({
+        version: 1,
+        defaultProvider: 'mock',
+        providers: { mock: { kind: 'mock', model: 'desktop-smoke-model' } },
+      }),
+      'utf8',
+    )
     for (const sessionId of [selectionTarget, 'desktop_switch_other']) {
       await ensureTranscriptFile(path.join(sessionsDir, `${sessionId}.jsonl`), {
         sessionId,
@@ -107,6 +121,10 @@ async function main() {
         BOLO_DESKTOP_CWD: fixtureRoot,
         // mock provider：启动检查不该依赖任何真实后端或密钥
         BOLO_DESKTOP_MOCK: '1',
+        // 隔离用户真实 config（~/.bolo/config.json）——冒烟测试不得受
+        // 本机 provider 配置干扰（曾因用户 config 修复后被真实
+        // providers/defaultProvider 干扰而失败）
+        BOLO_CONFIG_DIR: path.join(fixtureRoot, '.bolo'),
       },
       timeout: 120_000,
     })
