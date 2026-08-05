@@ -80,7 +80,10 @@ const LOCAL_AUTHORITATIVE: readonly ModelMetadataCatalogEntry[] = [
 export const BUILTIN_MODEL_METADATA: readonly ModelMetadataCatalogEntry[] = [
   ...LOCAL_AUTHORITATIVE,
   ...GENERATED_MODEL_METADATA.filter(
-    (g) => !LOCAL_AUTHORITATIVE.some((l) => l.model === g.model),
+    (g) =>
+      !LOCAL_AUTHORITATIVE.some(
+        (l) => l.model.toLowerCase() === g.model.toLowerCase(),
+      ),
   ),
 ]
 

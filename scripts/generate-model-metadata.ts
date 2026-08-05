@@ -72,11 +72,16 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === 'object' && !Array.isArray(v)
 }
 
-/** 只保留文本输出模型（跳过纯图像/语音输出——如图像生成、tts） */
+/** 只保留文本输出模型（跳过纯图像/语音/embedding 输出） */
 function isTextModel(entry: ModelsDevEntry): boolean {
   const output = entry.modalities?.output
   // output 未声明 → 保留（数据缺失不误杀）；声明了则必须含 text
   return !output || output.includes('text')
+}
+
+/** 跳过 embedding 模型（无对话 max output 语义） */
+function isEmbeddingModel(modelId: string): boolean {
+  return /embedding|text-embedding|ada-002/i.test(modelId)
 }
 
 async function main(): Promise<void> {
@@ -93,6 +98,10 @@ async function main(): Promise<void> {
       const entry = rawEntry as ModelsDevEntry
       if (!isRecord(rawEntry)) continue
       if (!isTextModel(entry)) continue
+      if (isEmbeddingModel(modelId)) {
+        skipped.push(`${providerId}/${modelId} (embedding model)`)
+        continue
+      }
       const output = entry.limit?.output
       if (!output || output <= 0) {
         skipped.push(`${providerId}/${modelId} (no output limit)`)
