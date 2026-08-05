@@ -253,6 +253,31 @@ async function main(): Promise<void> {
       'deepseek-v4-flash context comes from catalog (no fallback warning)',
     )
 
+    // deepseek-v4-pro：与 flash 同为 1M/384K（官方同表）
+    await writeConfig(userDir, {
+      defaultProvider: 'ds4p',
+      providers: {
+        ds4p: {
+          kind: 'openai-compatible',
+          model: 'deepseek-v4-pro',
+        },
+      },
+    })
+    const dsProWorkspace = await loadWorkspace({
+      cwd,
+      materializeUserState: false,
+      loadPlugins: false,
+    })
+    assert(
+      dsProWorkspace.resolvedModel.contextWindowTokens === 1_000_000 &&
+        dsProWorkspace.resolvedModel.maxOutputTokens === 384_000,
+      'deepseek-v4-pro resolves built-in 1M/384K',
+    )
+    assert(
+      dsProWorkspace.resolvedModel.sources.maxOutput === 'catalog',
+      'deepseek-v4-pro max output comes from catalog',
+    )
+
     const skills = fixtureSkills()
     const requestBodies: Array<Record<string, unknown>> = []
     const originalFetch = globalThis.fetch
