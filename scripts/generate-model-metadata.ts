@@ -81,7 +81,7 @@ function isTextModel(entry: ModelsDevEntry): boolean {
 
 /** 跳过 embedding 模型（无对话 max output 语义） */
 function isEmbeddingModel(modelId: string): boolean {
-  return /embedding|text-embedding|ada-002/i.test(modelId)
+  return /embed|ada-002/i.test(modelId)
 }
 
 async function main(): Promise<void> {

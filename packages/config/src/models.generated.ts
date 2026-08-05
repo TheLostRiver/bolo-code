@@ -189,7 +189,6 @@ export const GENERATED_MODEL_METADATA = [
   { model: 'MiniMaxAI/MiniMax-M2.5', maxOutputTokens: 131000, contextWindowTokens: 197000 },
   { model: 'ministral-3b-latest', maxOutputTokens: 128000, contextWindowTokens: 128000 },
   { model: 'ministral-8b-latest', maxOutputTokens: 128000, contextWindowTokens: 128000 },
-  { model: 'mistral-embed', maxOutputTokens: 3072, contextWindowTokens: 8000 },
   { model: 'mistral-large-2411', maxOutputTokens: 16384, contextWindowTokens: 131072 },
   { model: 'mistral-large-2512', maxOutputTokens: 262144, contextWindowTokens: 262144 },
   { model: 'mistral-large-latest', maxOutputTokens: 262144, contextWindowTokens: 262144 },
