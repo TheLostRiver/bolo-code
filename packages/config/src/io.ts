@@ -161,6 +161,8 @@ export function validateProviderKeyFieldWarnings(
 ): string[] {
   const out: string[] = []
   for (const [id, p] of Object.entries(config.providers ?? {})) {
+    // 手改配置可能出现 null 条目（删除 provider 时残留）——跳过不崩溃
+    if (!isRecord(p)) continue
     const name = p.apiKeyEnv?.trim()
     if (!name) continue
     if (/^sk-/i.test(name)) {

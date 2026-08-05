@@ -146,12 +146,20 @@ async function main() {
             model: 'm',
             apiKeyEnv: 'MY KEY',
           },
+          // null 条目（手改残留）不得崩溃——跳过
+          ghost: null,
         },
       }),
       'utf8',
     )
     const r = await loadConfigJsonWithWarnings({ configJson } as never)
     assert(r.warnings.length >= 2, 'sk- value and invalid name both warn')
+    assert(
+      r.warnings
+        .filter((w) => w.includes('ghost'))
+        .every((w) => w.includes('ignored')),
+      'null provider entry ignored (not crash)',
+    )
     assert(
       r.warnings.some((w) => w.includes('leaked') && w.includes('apiKeyEnv')),
       'sk- value warning names the provider',
