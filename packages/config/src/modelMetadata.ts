@@ -9,6 +9,7 @@ import type {
   ModelLimitsConfigJson,
   ProviderConfigJson,
 } from './types.ts'
+import { GENERATED_MODEL_METADATA } from './models.generated.ts'
 
 export const DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS = 128_000
 export const DEFAULT_MODEL_MAX_OUTPUT_TOKENS = 8_192
@@ -42,10 +43,11 @@ export type ModelMetadataCatalogEntry = {
 }
 
 /**
- * Deliberately small exact-model catalog. Unknown/proxy models must use
- * explicit provider/model config or an honest legacy/fallback source.
+ * 内置模型目录 = 本地权威（官方核验，覆盖 generated） + models.dev
+ * 生成目录（scripts/generate-model-metadata.ts → models.generated.ts）。
+ * 未知/代理模型仍可用显式 provider/model 配置或 fallback。
  */
-export const BUILTIN_MODEL_METADATA: readonly ModelMetadataCatalogEntry[] = [
+const LOCAL_AUTHORITATIVE: readonly ModelMetadataCatalogEntry[] = [
   {
     model: 'gpt-4o-mini',
     contextWindowTokens: 128_000,
@@ -59,7 +61,8 @@ export const BUILTIN_MODEL_METADATA: readonly ModelMetadataCatalogEntry[] = [
     providerKinds: ['openai-compatible', 'openai-responses'],
   },
   // DeepSeek V4（官方 API 文档 2026-08：CONTEXT LENGTH 1M /
-  // MAX OUTPUT MAXIMUM 384K；flash 与 pro 相同）
+  // MAX OUTPUT MAXIMUM 384K；flash 与 pro 相同）——本地权威条目
+  // 防止 models.dev 数据漂移
   {
     model: 'deepseek-v4-flash',
     contextWindowTokens: 1_000_000,
@@ -72,7 +75,14 @@ export const BUILTIN_MODEL_METADATA: readonly ModelMetadataCatalogEntry[] = [
     maxOutputTokens: 384_000,
     providerKinds: ['openai-compatible'],
   },
-] as const
+]
+
+export const BUILTIN_MODEL_METADATA: readonly ModelMetadataCatalogEntry[] = [
+  ...LOCAL_AUTHORITATIVE,
+  ...GENERATED_MODEL_METADATA.filter(
+    (g) => !LOCAL_AUTHORITATIVE.some((l) => l.model === g.model),
+  ),
+]
 
 export type ProviderModelMetadataProfile = {
   id?: string

@@ -84,6 +84,7 @@
     "smoke:live": "tsx scripts/smoke-live.ts",
     "test:config": "tsx scripts/test-config.ts",
     "test:model-metadata-config": "tsx scripts/test-model-metadata-config.ts",
+    "generate:models": "tsx scripts/generate-model-metadata.ts",
     "test:model-metadata-runtime": "tsx scripts/test-model-metadata-runtime.ts",
     "test:model-metadata-observability": "tsx scripts/test-model-metadata-observability.ts",
     "test:tool-presentation": "tsx scripts/test-tool-presentation.ts",

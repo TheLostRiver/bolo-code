@@ -268,6 +268,24 @@ async function main(): Promise<void> {
   assert(catalog.contextWindowTokens === 128_000, 'catalog context')
   assert(catalog.maxOutputTokens === 16_384, 'catalog output')
   assert(catalog.sources.contextWindow === 'catalog', 'catalog context source')
+
+  // generated 目录抽查（models.dev）：主流模型有真实限制而非 fallback
+  const gpt56 = resolveModelMetadata({ providerId: 'openai', model: 'gpt-5.6-sol' })
+  assert(
+    gpt56.contextWindowTokens === 1_050_000 && gpt56.maxOutputTokens === 128_000,
+    'generated: gpt-5.6-sol 1.05M/128K',
+  )
+  assert(gpt56.sources.contextWindow === 'catalog', 'generated: gpt-5.6-sol catalog source')
+  const claude5 = resolveModelMetadata({ providerId: 'anthropic', model: 'claude-sonnet-5' })
+  assert(
+    claude5.contextWindowTokens === 1_000_000 && claude5.maxOutputTokens === 128_000,
+    'generated: claude-sonnet-5 1M/128K',
+  )
+  const localDs = resolveModelMetadata({ providerId: 'deepseek', model: 'deepseek-v4-flash' })
+  assert(
+    localDs.contextWindowTokens === 1_000_000 && localDs.maxOutputTokens === 384_000,
+    'local authoritative wins over generated duplicates',
+  )
   assert(catalog.sources.maxOutput === 'catalog', 'catalog output source')
   assert(catalog.usedFallback === false, 'catalog is not fallback')
 
