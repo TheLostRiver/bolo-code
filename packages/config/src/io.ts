@@ -69,7 +69,9 @@ export function stripJsonc(raw: string): string {
 }
 
 export function parseJsonc<T>(raw: string): T {
-  return JSON.parse(stripJsonc(raw)) as T
+  // UTF-8 BOM（PowerShell/记事本保存常见）会令 JSON.parse 报
+  // "Unexpected token"——统一在此剥离（所有 JSONC 入口共享）
+  return JSON.parse(stripJsonc(raw.replace(/^\uFEFF/, ''))) as T
 }
 
 export async function readJsonFile<T>(
@@ -107,10 +109,9 @@ export async function readJsonFileResult<T>(
     }
   }
   try {
-    // UTF-8 BOM（常见于 PowerShell/记事本保存）会令 JSON.parse 报
-    // "Unexpected token"——加载前剥离（业界惯例，防止 BOM 让整个
-    // config 静默失效）
-    const value = parseJsonc<T>(raw.replace(/^\uFEFF/, ''))
+    // BOM 剥离统一在 parseJsonc 内完成（readJsonFileResult 与
+    // searxng/theme 等直接调用方共享同一入口）
+    const value = parseJsonc<T>(raw)
     if (value == null) {
       return { found: true, ok: false, reason: 'not a JSON object' }
     }
