@@ -225,6 +225,34 @@ async function main(): Promise<void> {
       'same prepare closure reads the new dynamic window',
     )
 
+    // deepseek-v4-flash：内置目录（官方 1M context / 384K max output）
+    await writeConfig(userDir, {
+      defaultProvider: 'ds4',
+      providers: {
+        ds4: {
+          kind: 'openai-compatible',
+          model: 'deepseek-v4-flash',
+        },
+      },
+    })
+    const dsWorkspace = await loadWorkspace({
+      cwd,
+      materializeUserState: false,
+      loadPlugins: false,
+    })
+    assert(
+      dsWorkspace.resolvedModel.contextWindowTokens === 1_000_000,
+      'deepseek-v4-flash resolves built-in 1M context',
+    )
+    assert(
+      dsWorkspace.resolvedModel.maxOutputTokens === 384_000,
+      'deepseek-v4-flash resolves built-in 384K max output',
+    )
+    assert(
+      dsWorkspace.resolvedModel.sources.contextWindow === 'catalog',
+      'deepseek-v4-flash context comes from catalog (no fallback warning)',
+    )
+
     const skills = fixtureSkills()
     const requestBodies: Array<Record<string, unknown>> = []
     const originalFetch = globalThis.fetch

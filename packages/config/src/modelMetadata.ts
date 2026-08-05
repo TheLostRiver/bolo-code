@@ -58,6 +58,20 @@ export const BUILTIN_MODEL_METADATA: readonly ModelMetadataCatalogEntry[] = [
     maxOutputTokens: 16_384,
     providerKinds: ['openai-compatible', 'openai-responses'],
   },
+  // DeepSeek V4（官方 API 文档 2026-08：CONTEXT LENGTH 1M /
+  // MAX OUTPUT MAXIMUM 384K；flash 与 pro 相同）
+  {
+    model: 'deepseek-v4-flash',
+    contextWindowTokens: 1_000_000,
+    maxOutputTokens: 384_000,
+    providerKinds: ['openai-compatible'],
+  },
+  {
+    model: 'deepseek-v4-pro',
+    contextWindowTokens: 1_000_000,
+    maxOutputTokens: 384_000,
+    providerKinds: ['openai-compatible'],
+  },
 ] as const
 
 export type ProviderModelMetadataProfile = {
