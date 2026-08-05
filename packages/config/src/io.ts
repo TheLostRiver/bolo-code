@@ -170,8 +170,9 @@ export function validateProviderKeyFieldWarnings(
           'move the key into that env var or use "apiKey" instead',
       )
     } else if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+      // 非法字符形态也可能含密钥片段——不回显值（零泄露）
       out.push(
-        `provider "${id}": apiKeyEnv "${name}" is not a valid environment ` +
+        `provider "${id}": apiKeyEnv value is not a valid environment ` +
           'variable name (letters/digits/underscore only)',
       )
     }

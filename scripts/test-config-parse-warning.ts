@@ -161,6 +161,12 @@ async function main() {
       'invalid env name warning names the provider',
     )
     assert(
+      r.warnings.some(
+        (w) => w.includes('spaced') && !w.includes('MY') && !w.includes('KEY'),
+      ),
+      'invalid env name warning does not echo the value',
+    )
+    assert(
       !r.warnings.some((w) => w.includes('good')),
       'valid apiKeyEnv name produces no warning',
     )
