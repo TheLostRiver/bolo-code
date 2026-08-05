@@ -107,7 +107,10 @@ export async function readJsonFileResult<T>(
     }
   }
   try {
-    const value = parseJsonc<T>(raw)
+    // UTF-8 BOM（常见于 PowerShell/记事本保存）会令 JSON.parse 报
+    // "Unexpected token"——加载前剥离（业界惯例，防止 BOM 让整个
+    // config 静默失效）
+    const value = parseJsonc<T>(raw.replace(/^\uFEFF/, ''))
     if (value == null) {
       return { found: true, ok: false, reason: 'not a JSON object' }
     }

@@ -63,6 +63,15 @@ async function main() {
     'JSONC comments still parse',
   )
 
+  // BOM 前缀（PowerShell/记事本保存常见）不得令解析失败
+  const bomPath = path.join(root, 'bom.json')
+  await fs.writeFile(bomPath, '\uFEFF{ "version": 1 }', 'utf8')
+  const bom = await readJsonFileResult<{ version: number }>(bomPath)
+  assert(
+    bom.found === true && bom.ok === true && bom.value.version === 1,
+    'UTF-8 BOM prefix tolerated',
+  )
+
   // ── 2) loadConfigJson 层：坏配置产生 warning，且不抛 ──
   {
     const dir = path.join(root, 'layout-bad')
