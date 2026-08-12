@@ -589,21 +589,39 @@ export function buildComposerColors(options: {
   palette?: ComposerAnsiPalette
 }): ComposerColors {
   const { color, palette } = options
-  if (!color || !palette) {
+  if (!color || (palette !== undefined && palette.accent === '')) {
     return {
-      border: color ? '\u001b[38;5;244m' : '',
-      borderDim: color ? '\u001b[38;5;244m' : '',
-      prompt: color ? '\u001b[38;5;81m' : '',
-      dim: color ? '\u001b[2m' : '',
-      reset: color ? '\u001b[0m' : '',
-      kbdFg: color ? '\u001b[1m' : '',
+      border: '',
+      borderDim: '',
+      prompt: '',
+      dim: '',
+      reset: '',
+      kbdFg: '',
       kbdBg: '',
-      accent: color ? '\u001b[38;5;81m' : '',
-      muted: color ? '\u001b[2m' : '',
-      inputFg: color ? '\u001b[1m' : '',
-      ghost: color ? '\u001b[2m' : '',
+      accent: '',
+      muted: '',
+      inputFg: '',
+      ghost: '',
       inputBg: '',
-      badgeBorder: color ? '\u001b[38;5;244m' : '',
+      badgeBorder: '',
+      badgeBg: '',
+    }
+  }
+  if (!palette) {
+    return {
+      border: '\u001b[38;5;244m',
+      borderDim: '\u001b[38;5;244m',
+      prompt: '\u001b[38;5;81m',
+      dim: '\u001b[2m',
+      reset: '\u001b[0m',
+      kbdFg: '\u001b[1m',
+      kbdBg: '',
+      accent: '\u001b[38;5;81m',
+      muted: '\u001b[2m',
+      inputFg: '\u001b[1m',
+      ghost: '\u001b[2m',
+      inputBg: '',
+      badgeBorder: '\u001b[38;5;244m',
       badgeBg: '',
     }
   }
@@ -611,7 +629,7 @@ export function buildComposerColors(options: {
     border: palette.border,
     borderDim: palette.borderDim,
     prompt: palette.accent,
-    dim: '\u001b[2m',
+    dim: palette.muted,
     reset: '\u001b[0m',
     kbdFg: palette.chipFg,
     kbdBg: palette.chipBg,
@@ -646,9 +664,9 @@ function footerSegmentsWidth(
 function toneStart(tone: FooterSegment['tone'], colors: ComposerColors): string {
   switch (tone) {
     case 'bold':
-      return '\u001b[1m'
+      return colors.reset ? '\u001b[1m' : ''
     case 'dim':
-      return '\u001b[2m'
+      return colors.reset ? '\u001b[2m' : ''
     case 'accent':
       return colors.accent
     case 'muted':
@@ -924,8 +942,8 @@ function renderSlashMenuRows(options: {
       )} ${clipTerminalText(candidate.description, descriptionWidth)}`
     }
     const body = padTerminalText(`${marker}${content}`, bodyWidth)
-    const selectedStart = colors && selected ? '\u001b[7m' : ''
-    const selectedEnd = colors && selected ? reset : ''
+    const selectedStart = colors.reset && selected ? '\u001b[7m' : ''
+    const selectedEnd = colors.reset && selected ? reset : ''
     const tone = selected ? prompt : ''
     rows.push(
       `${border}│${reset} ${selectedStart}${tone}${body}${selectedEnd} ${border}│${reset}`,

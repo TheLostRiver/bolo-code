@@ -11,9 +11,10 @@ import {
 import { getBoloHomeDir } from '../../../config/src/paths.ts'
 import {
   buildPaletteAnsi,
-  getTuiPalette,
   isTuiThemeId,
   resolveTuiTheme,
+  type TuiAnsiPalette,
+  type TuiThemeId,
 } from './theme.ts'
 import type { ComposerAnsiPalette } from './inputBox.ts'
 import {
@@ -98,7 +99,7 @@ import type {
 
 export type RetainedWelcomeOptions = Omit<
   InkLayoutOptions,
-  'columns' | 'env'
+  'columns' | 'env' | 'viewportRows' | 'color' | 'theme' | 'trueColor'
 >
 
 export type RetainedToolHistoryResult =
@@ -205,14 +206,36 @@ class WelcomeComponent implements Component {
   }
   private visible = true
 
-  constructor(private readonly env: NodeJS.ProcessEnv) {}
+  constructor(
+    private readonly env: NodeJS.ProcessEnv,
+    private themeId: TuiThemeId,
+    private readonly color: boolean,
+    private readonly getViewportRows: () => number,
+  ) {}
 
   configure(options: RetainedWelcomeOptions): void {
-    this.options = { ...options }
+    this.options = {
+      ...options,
+      ...(options.messagePreview
+        ? { messagePreview: [...options.messagePreview] }
+        : {}),
+      ...(options.session
+        ? {
+            session: {
+              ...options.session,
+              messages: { length: options.session.messages.length },
+            },
+          }
+        : {}),
+    }
   }
 
   setVisible(visible: boolean): void {
     this.visible = visible
+  }
+
+  setTheme(themeId: TuiThemeId): void {
+    this.themeId = themeId
   }
 
   invalidate(): void {}
@@ -223,6 +246,9 @@ class WelcomeComponent implements Component {
       ...this.options,
       columns: width,
       env: this.env,
+      theme: this.themeId,
+      color: this.color,
+      viewportRows: this.getViewportRows(),
     }).split(/\r?\n/gu)
   }
 }
@@ -258,16 +284,26 @@ class RetainedRoot extends Container {
     activity: RetainedActivity,
     color: boolean,
     palette: ComposerAnsiPalette | undefined,
+    themeId: TuiThemeId,
     getViewportRows: () => number,
   ) {
     super()
-    this.welcome = new WelcomeComponent(env)
-    this.transcript = new RetainedTranscript({ env, getViewportRows })
+    this.welcome = new WelcomeComponent(
+      env,
+      themeId,
+      color,
+      getViewportRows,
+    )
+    this.transcript = new RetainedTranscript({
+      env,
+      getViewportRows,
+      palette,
+    })
     this.activity = activity
     this.composer = composer
     this.commandSurface = new RetainedCommandSurface(
       createCliCommandSurfaceState(),
-      { color, getViewportRows },
+      { color, getViewportRows, palette },
     )
     this.footer = new RetainedComposerFooter(
       composer,
@@ -298,6 +334,15 @@ class RetainedRoot extends Container {
     this.transcript.setState(state)
     this.composer.setMode(state.composer.mode)
     this.commandSurface.setState(state.commandSurface)
+    this.markDirty()
+  }
+
+  setTheme(themeId: TuiThemeId, palette: TuiAnsiPalette): void {
+    this.welcome.setTheme(themeId)
+    this.transcript.setPalette(palette)
+    this.composer.setPalette(palette)
+    this.commandSurface.setPalette(palette)
+    this.footer.setPalette(palette)
     this.markDirty()
   }
 
@@ -504,7 +549,11 @@ export function createRetainedTuiController(options: {
   const color = options.color ?? env.NO_COLOR === undefined
   // 主题 palette：默认极光；/theme 预览时临时替换并触发重渲染，取消后恢复
   const theme = resolveTuiTheme({ env, theme: options.theme })
-  let palette = buildPaletteAnsi(theme.palette, theme.trueColor, color)
+  let palette = buildPaletteAnsi(
+    theme.palette,
+    theme.trueColor,
+    color && theme.ansi,
+  )
   const adapter: BoloTerminalAdapter = createBoloTerminalAdapter({
     writeOut: options.writeOut,
     input: options.input,
@@ -600,6 +649,7 @@ export function createRetainedTuiController(options: {
     activityView,
     color,
     palette,
+    theme.id,
     () => adapter.rows,
   )
   root.setVisible(options.rootVisible !== false)
@@ -621,6 +671,7 @@ export function createRetainedTuiController(options: {
       Math.max(1, adapter.columns - resolveTuiContentGutter(adapter.columns)),
     now,
     intervalMs: options.activityIntervalMs,
+    palette,
     renderFrame: (line) => activityView.setLine(line),
     clearFrame: () => activityView.clear(),
   })
@@ -1069,18 +1120,27 @@ export function createRetainedTuiController(options: {
     /** /theme 预览：临时切换 palette 并重渲染（不落盘） */
     previewTheme(id: string) {
       if (isTuiThemeId(id)) {
+        const preview = resolveTuiTheme({ env, theme: id })
         palette = buildPaletteAnsi(
-          getTuiPalette(id),
-          theme.trueColor,
-          color,
+          preview.palette,
+          preview.trueColor,
+          color && preview.ansi,
         )
-        requestComponentRender()
+        root.setTheme(preview.id, palette)
+        activity.setPalette(palette)
+        requestRender()
       }
     },
     /** 取消 /theme：恢复进入会话时的 palette */
     resetThemePreview() {
-      palette = buildPaletteAnsi(theme.palette, theme.trueColor, color)
-      requestComponentRender()
+      palette = buildPaletteAnsi(
+        theme.palette,
+        theme.trueColor,
+        color && theme.ansi,
+      )
+      root.setTheme(theme.id, palette)
+      activity.setPalette(palette)
+      requestRender()
     },
     openCatalogOverlay(overlayOptions) {
       if (stopped) {

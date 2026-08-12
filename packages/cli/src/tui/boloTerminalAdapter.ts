@@ -61,6 +61,8 @@ type RenderWaiter = {
 }
 
 const CLEAR_SCROLLBACK = '\u001b[3J'
+const CLEAR_VIEWPORT_AND_SCROLLBACK = '\u001b[2J\u001b[H\u001b[3J'
+const CLEAR_VIEWPORT_AND_HOME = '\u001b[2J\u001b[H'
 const SYNC_END = '\u001b[?2026l'
 const BRACKETED_PASTE_ENABLE = '\u001b[?2004h'
 const BRACKETED_PASTE_DISABLE = '\u001b[?2004l'
@@ -96,6 +98,10 @@ export function createBoloTerminalAdapter(options: {
   let inputWasRaw = false
   let mouseReportingEnabled = false
   let renderEpoch = 0
+  let retainedRedrawRows = positiveDimension(
+    options.output.rows,
+    options.fallbackRows ?? 24,
+  )
   // TERM-1：探测结果与超时兜底 timer
   let terminalCapabilities: TerminalCapabilities =
     createDefaultTerminalCapabilities()
@@ -121,6 +127,35 @@ export function createBoloTerminalAdapter(options: {
     if (!data.includes(CLEAR_SCROLLBACK)) return data
     const matches = data.match(/\u001b\[3J/gu)
     stats.filteredScrollbackClears += matches?.length ?? 0
+    const fullRedrawStart = data.indexOf(CLEAR_VIEWPORT_AND_SCROLLBACK)
+    const fullRedrawEnd = data.lastIndexOf(SYNC_END)
+    if (fullRedrawStart >= 0 && fullRedrawEnd > fullRedrawStart) {
+      // Pi replays its complete logical root after clearing. Since Bolo keeps
+      // native scrollback, only the physical viewport belongs to this redraw.
+      const contentStart =
+        fullRedrawStart + CLEAR_VIEWPORT_AND_SCROLLBACK.length
+      const content = data.slice(contentStart, fullRedrawEnd)
+      const lines = content === '' ? [] : content.split('\r\n')
+      const currentRows = positiveDimension(
+        options.output.rows,
+        options.fallbackRows ?? 24,
+      )
+      retainedRedrawRows = Math.min(retainedRedrawRows, currentRows)
+      const viewportLineCount = Math.min(lines.length, currentRows)
+      const visibleLineCount = Math.min(
+        viewportLineCount,
+        retainedRedrawRows,
+      )
+      const rowOffset = viewportLineCount - visibleLineCount
+      const visibleLines = lines.slice(-visibleLineCount)
+      return (
+        data.slice(0, fullRedrawStart) +
+        CLEAR_VIEWPORT_AND_HOME +
+        '\r\n'.repeat(rowOffset) +
+        visibleLines.join('\r\n') +
+        data.slice(fullRedrawEnd)
+      )
+    }
     return data.replaceAll(CLEAR_SCROLLBACK, '')
   }
 

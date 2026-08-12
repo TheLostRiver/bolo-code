@@ -108,6 +108,10 @@ export class RetainedComposer implements Component, Focusable {
     this.options.requestRender()
   }
 
+  setPalette(palette: ComposerAnsiPalette | undefined): void {
+    this.options.palette = palette
+  }
+
   getMode(): CliTuiComposerMode {
     return this.mode
   }
@@ -259,11 +263,19 @@ export class RetainedComposer implements Component, Focusable {
 }
 
 export class RetainedComposerFooter implements Component {
+  private palette?: ComposerAnsiPalette
+
   constructor(
     private readonly composer: RetainedComposer,
     private readonly color: boolean,
-    private readonly palette?: ComposerAnsiPalette,
-  ) {}
+    palette?: ComposerAnsiPalette,
+  ) {
+    this.palette = palette
+  }
+
+  setPalette(palette: ComposerAnsiPalette | undefined): void {
+    this.palette = palette
+  }
 
   invalidate(): void {}
 

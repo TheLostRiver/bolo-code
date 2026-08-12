@@ -6,6 +6,7 @@ import {
   clipTerminalText,
   measureTerminalText,
 } from './terminalText.ts'
+import type { TuiAnsiPalette } from './theme.ts'
 
 export type TurnActivityEvent = {
   type: string
@@ -22,6 +23,7 @@ export type TurnActivityIndicator = {
   finishThinkingSegment: () => number | undefined
   finish: (terminalReason?: string) => void
   isActive: () => boolean
+  setPalette: (palette: TuiAnsiPalette | undefined) => void
 }
 
 const ACTIVITY_GLYPHS = ['✦', '✧', '✶', '✧'] as const
@@ -32,6 +34,7 @@ export function formatTurnActivityLine(options: {
   frame: number
   color?: boolean
   columns?: number
+  palette?: TuiAnsiPalette
 }): string {
   const glyph =
     ACTIVITY_GLYPHS[
@@ -54,12 +57,14 @@ export function formatTurnActivityLine(options: {
       ? variants[0]!
       : (variants.find((line) => measureTerminalText(line) <= maxWidth) ??
         clipTerminalText(variants[variants.length - 1]!, maxWidth))
-  const color = options.color !== false
+  const color =
+    options.color !== false &&
+    (options.palette === undefined || options.palette.accent !== '')
   if (!color) return plain
 
-  const accent = color ? '\u001b[38;5;81m' : ''
-  const dim = color ? '\u001b[2m' : ''
-  const reset = color ? '\u001b[0m' : ''
+  const accent = options.palette?.accent ?? '\u001b[38;5;81m'
+  const dim = options.palette?.muted ?? '\u001b[2m'
+  const reset = '\u001b[0m'
   const body = plain.slice(glyph.length)
   const dimAt = body.indexOf(' ·')
   if (dimAt < 0) return `${accent}${glyph}${reset}${body}`
@@ -74,6 +79,7 @@ export function createTurnActivityIndicator(options: {
   intervalMs?: number
   renderFrame?: (line: string) => boolean
   clearFrame?: () => boolean
+  palette?: TuiAnsiPalette
 }): TurnActivityIndicator {
   const now = options.now ?? Date.now
   const intervalMs = Math.max(100, options.intervalMs ?? 250)
@@ -90,6 +96,7 @@ export function createTurnActivityIndicator(options: {
     | 'other'
     | undefined
   let activeToolName: string | undefined
+  let palette = options.palette
 
   const erase = () => {
     if (options.clearFrame?.() === true) return
@@ -102,6 +109,7 @@ export function createTurnActivityIndicator(options: {
       elapsedMs: now() - segmentStartedAt,
       frame,
       color: options.color,
+      palette,
       columns:
         typeof options.columns === 'function'
           ? options.columns()
@@ -220,6 +228,10 @@ export function createTurnActivityIndicator(options: {
     },
     isActive() {
       return active
+    },
+    setPalette(nextPalette) {
+      palette = nextPalette
+      if (active) draw()
     },
   }
 }

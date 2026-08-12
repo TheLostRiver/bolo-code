@@ -110,7 +110,7 @@ function main() {
   const plainPalette = buildPaletteAnsi(getTuiPalette('plain'), true, false)
   const plain = renderTuiInputBox({
     state,
-    color: false,
+    color: true,
     palette: plainPalette,
     includeFooter: true,
   })

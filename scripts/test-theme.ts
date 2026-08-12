@@ -49,9 +49,9 @@ function main() {
   assert.equal(resolveTuiTheme({ theme: 'default', trueColor: false }).trueColor, false)
   assert.equal(resolveTuiTheme({ theme: 'plain', trueColor: false }).trueColor, false)
 
-  // ---- palette 完整性：每个主题 13 个 token 均为三元组 ----
+  // ---- palette 完整性：每个主题 20 个 token 均为三元组 ----
   const tokenCount = Object.keys(getTuiPalette('default')).length
-  assert.equal(tokenCount, 13)
+  assert.equal(tokenCount, 20)
   for (const id of TUI_THEME_IDS) {
     const p = getTuiPalette(id)
     for (const [k, v] of Object.entries(p)) {
@@ -67,6 +67,8 @@ function main() {
   assertRgb(getTuiPalette('amber').accent, '#fbbf24')
   assertRgb(getTuiPalette('neon').accent, '#e879f9')
   assertRgb(getTuiPalette('default').inputBg, '#0e1a21')
+  assertRgb(getTuiPalette('default').success, '#86efac')
+  assertRgb(getTuiPalette('amber').error, '#f87171')
 
   // ---- 256 色降级 ----
   assert.equal(rgbToXterm256([0, 0, 0]), 16)
@@ -90,6 +92,8 @@ function main() {
   const ansiPalette = buildPaletteAnsi(getTuiPalette('default'), true, true)
   assert.ok(ansiPalette.accent.startsWith('\u001b[38;2;45;212;191m'))
   assert.ok(ansiPalette.badgeBg.startsWith('\u001b[48;2;'))
+  assert.ok(ansiPalette.surface.startsWith('\u001b[48;2;'))
+  assert.ok(ansiPalette.error.startsWith('\u001b[38;2;'))
   const plainPalette = buildPaletteAnsi(getTuiPalette('plain'), true, false)
   for (const value of Object.values(plainPalette)) {
     assert.equal(value, '', 'plain palette must be all empty')
@@ -107,3 +111,4 @@ function main() {
 }
 
 main()
+await import('./test-cli-theme-runtime.ts')

@@ -25,7 +25,10 @@ import {
 } from '../../../shared/src/index.ts'
 import { resolveTuiContentGutter } from './contentLayout.ts'
 import { stripTerminalAnsi } from './terminalText.ts'
-import { resolveTuiTheme } from './theme.ts'
+import {
+  resolveTuiTheme,
+  type TuiAnsiPalette,
+} from './theme.ts'
 import {
   groupAdjacentReadTools,
   checkMarkdownFidelity,
@@ -64,18 +67,57 @@ function createAnsiStyle(
   return (text) => `${open}${text}${RESET}`
 }
 
-function createTranscriptStyles(env: NodeJS.ProcessEnv): TranscriptStyles {
-  const ansi = resolveTuiTheme({ env }).ansi
-  const accent = createAnsiStyle(ansi, '\x1b[38;5;81m')
-  const linkUrl = createAnsiStyle(ansi, '\x1b[38;5;245m')
-  const code = createAnsiStyle(ansi, '\x1b[38;5;223m')
-  const codeBlock = createAnsiStyle(ansi, '\x1b[38;5;252m')
-  const border = createAnsiStyle(ansi, '\x1b[38;5;240m')
-  const quote = createAnsiStyle(ansi, '\x1b[38;5;245m')
-  const success = createAnsiStyle(ansi, '\x1b[38;5;114m')
-  const error = createAnsiStyle(ansi, '\x1b[38;5;203m')
-  const warning = createAnsiStyle(ansi, '\x1b[38;5;221m')
-  const dim = createAnsiStyle(ansi, '\x1b[2m')
+function createTranscriptStyles(
+  env: NodeJS.ProcessEnv,
+  palette?: TuiAnsiPalette,
+): TranscriptStyles {
+  const ansi = palette
+    ? palette.accent !== ''
+    : resolveTuiTheme({ env }).ansi
+  const accent = createAnsiStyle(
+    ansi,
+    palette?.accent ?? '\x1b[38;5;81m',
+  )
+  const link = createAnsiStyle(
+    ansi,
+    palette?.link ?? '\x1b[38;5;81m',
+  )
+  const linkUrl = createAnsiStyle(
+    ansi,
+    palette?.muted ?? '\x1b[38;5;245m',
+  )
+  const code = createAnsiStyle(
+    ansi,
+    palette?.code ?? '\x1b[38;5;223m',
+  )
+  const codeBlock = createAnsiStyle(
+    ansi,
+    palette?.text ?? '\x1b[38;5;252m',
+  )
+  const border = createAnsiStyle(
+    ansi,
+    palette?.borderDim ?? '\x1b[38;5;240m',
+  )
+  const quote = createAnsiStyle(
+    ansi,
+    palette?.muted ?? '\x1b[38;5;245m',
+  )
+  const success = createAnsiStyle(
+    ansi,
+    palette?.success ?? '\x1b[38;5;114m',
+  )
+  const error = createAnsiStyle(
+    ansi,
+    palette?.error ?? '\x1b[38;5;203m',
+  )
+  const warning = createAnsiStyle(
+    ansi,
+    palette?.warning ?? '\x1b[38;5;221m',
+  )
+  const dim = createAnsiStyle(
+    ansi,
+    palette?.muted ?? '\x1b[2m',
+  )
   const italic = createAnsiStyle(ansi, '\x1b[3m')
   const bold = createAnsiStyle(ansi, '\x1b[1m')
   const strikethrough = createAnsiStyle(ansi, '\x1b[9m')
@@ -85,7 +127,7 @@ function createTranscriptStyles(env: NodeJS.ProcessEnv): TranscriptStyles {
     ansi,
     markdown: {
       heading: accent,
-      link: accent,
+      link,
       linkUrl,
       code,
       codeBlock,
@@ -110,7 +152,12 @@ function createTranscriptStyles(env: NodeJS.ProcessEnv): TranscriptStyles {
     mutedText: dim,
     ...(ansi
       ? {
-          userBackground: createAnsiStyle(true, '\x1b[48;5;236m'),
+          userBackground: createAnsiStyle(
+            true,
+            palette
+              ? `${palette.surface}${palette.text}`
+              : '\x1b[48;5;236m',
+          ),
         }
       : {}),
   }
@@ -573,10 +620,12 @@ export type RetainedToolPagerContent = {
 }
 
 export class RetainedTranscript implements Component {
-  private readonly styles: TranscriptStyles
+  private styles: TranscriptStyles
   private readonly blockCache = new Map<string, RetainedTranscriptBlock>()
-  /** REN-2：渲染单元行缓存（分片续帧用；setState 重建后自动失效）。
-   * 容量 O(活动分片内已处理单元数)——瞬态、完成时清空（仅分片期间驻留）。 */
+  /**
+   * Rendered unit lines are retained after a slice completes so unrelated
+   * root renders cannot restart the transcript from its first slice.
+   */
   private unitCache = new Map<RenderUnit, string[]>()
   /** REN-2：渲染进度（已渲染 unit 数）；分片续帧起点 */
   private renderProgress = 0
@@ -595,17 +644,23 @@ export class RetainedTranscript implements Component {
   private seededFullHistory = false
   private tailWindow = false
   private blockHitLines = new Map<string, { start: number; end: number }>()
+  private latestState?: CliTuiViewState
+  private latestTurns?: CliTuiViewState['turns']
 
   constructor(
     private readonly options: {
       env: NodeJS.ProcessEnv
       getViewportRows?: () => number
+      palette?: TuiAnsiPalette
     },
   ) {
-    this.styles = createTranscriptStyles(options.env)
+    this.styles = createTranscriptStyles(options.env, options.palette)
   }
 
   setState(state: CliTuiViewState): void {
+    this.latestState = state
+    if (this.latestTurns === state.turns) return
+    this.resetUnitRenderCache()
     const renderUnits: RenderUnit[] = []
     const groupedBlockIds = new Set<string>()
     const seen = new Set<string>()
@@ -664,6 +719,18 @@ export class RetainedTranscript implements Component {
     }
     this.renderUnits = renderUnits
     this.groupedBlockIds = groupedBlockIds
+    this.latestTurns = state.turns
+  }
+
+  setPalette(palette: TuiAnsiPalette | undefined): void {
+    this.styles = createTranscriptStyles(this.options.env, palette)
+    this.blockCache.clear()
+    this.renderUnits = []
+    this.groupedBlockIds = new Set()
+    this.latestTurns = undefined
+    this.resetUnitRenderCache()
+    this.blockHitLines = new Map()
+    if (this.latestState) this.setState(this.latestState)
   }
 
   getBlockComponent(blockId: string): Component | undefined {
@@ -690,6 +757,7 @@ export class RetainedTranscript implements Component {
       const block = component?.getBlock()
       if (block?.kind === 'tool') component?.setBlock(block, state)
     }
+    this.resetUnitRenderCache()
     return mode
   }
 
@@ -806,8 +874,7 @@ export class RetainedTranscript implements Component {
       this.lastRenderedWidth !== normalizedWidth
     if (widthChanged) {
       // REN-2：宽度变化 → 行缓存失效 + 分片进度重置（全量重渲）
-      this.unitCache.clear()
-      this.renderProgress = 0
+      this.resetUnitRenderCache()
     }
     if (
       widthChanged &&
@@ -899,9 +966,8 @@ export class RetainedTranscript implements Component {
     if (this.renderIncomplete) {
       this.renderProgress = renderedUnits
     } else {
-      // 完成：进度归零 + 清缓存（缓存只服务分片续帧）
-      this.renderProgress = 0
-      this.unitCache.clear()
+      // Keep the complete cache until transcript content or width changes.
+      this.renderProgress = renderedUnits
     }
     return lines
   }
@@ -914,6 +980,8 @@ export class RetainedTranscript implements Component {
     // 否则分片中 resize 切到尾窗口后 renderIncomplete 残留 true →
     // flush 续帧循环永不退出（死循环）
     this.renderIncomplete = false
+    this.unitCache.clear()
+    this.renderProgress = 0
     const budget = this.tailWindowLineBudget()
     const sections: Array<{
       unit: RenderUnit
@@ -1013,6 +1081,12 @@ export class RetainedTranscript implements Component {
       TAIL_WINDOW_MIN_LINES,
       Math.floor(rows) * TAIL_WINDOW_VIEWPORT_MULTIPLIER,
     )
+  }
+
+  private resetUnitRenderCache(): void {
+    this.unitCache.clear()
+    this.renderProgress = 0
+    this.renderIncomplete = false
   }
 
   private resolveToolDisplayState(

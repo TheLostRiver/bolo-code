@@ -42,7 +42,21 @@ export type TuiPalette = {
   /** mode chip 前景/背景 */
   chipFg: Rgb
   chipBg: Rgb
+  /** transcript 用户消息等弱表面背景 */
+  surface: Rgb
+  /** 主要正文 */
+  text: Rgb
+  /** 链接与可交互引用 */
+  link: Rgb
+  /** 行内代码与代码块 */
+  code: Rgb
+  /** 成功、警告与错误语义 */
+  success: Rgb
+  warning: Rgb
+  error: Rgb
 }
+
+export type TuiAnsiPalette = Record<keyof TuiPalette, string>
 
 export type ResolveTuiThemeOptions = {
   env?: NodeJS.ProcessEnv
@@ -82,6 +96,13 @@ const AURORA: TuiPalette = {
   muted: [109, 148, 143], // #6d948f
   chipFg: [153, 246, 228], // #99f6e4
   chipBg: [15, 61, 58], // #0f3d3a
+  surface: [28, 38, 45], // #1c262d
+  text: [226, 232, 240], // #e2e8f0
+  link: [94, 234, 212], // #5eead4
+  code: [253, 230, 138], // #fde68a
+  success: [134, 239, 172], // #86efac
+  warning: [251, 191, 36], // #fbbf24
+  error: [251, 113, 133], // #fb7185
 }
 
 const AMBER: TuiPalette = {
@@ -98,6 +119,13 @@ const AMBER: TuiPalette = {
   muted: [156, 132, 79], // #9c844f
   chipFg: [254, 215, 170], // #fed7aa
   chipBg: [74, 44, 13], // #4a2c0d
+  surface: [39, 32, 24], // #272018
+  text: [245, 237, 224], // #f5ede0
+  link: [253, 186, 116], // #fdba74
+  code: [254, 215, 170], // #fed7aa
+  success: [134, 239, 172], // #86efac
+  warning: [251, 191, 36], // #fbbf24
+  error: [248, 113, 113], // #f87171
 }
 
 const NEON: TuiPalette = {
@@ -114,6 +142,13 @@ const NEON: TuiPalette = {
   muted: [146, 119, 184], // #9277b8
   chipFg: [233, 213, 255], // #e9d5ff
   chipBg: [51, 26, 77], // #331a4d
+  surface: [31, 24, 45], // #1f182d
+  text: [244, 239, 250], // #f4effa
+  link: [165, 180, 252], // #a5b4fc
+  code: [253, 224, 71], // #fde047
+  success: [52, 211, 153], // #34d399
+  warning: [251, 191, 36], // #fbbf24
+  error: [251, 113, 133], // #fb7185
 }
 
 const DIM: TuiPalette = {
@@ -130,6 +165,13 @@ const DIM: TuiPalette = {
   muted: [107, 114, 128], // #6b7280
   chipFg: [209, 213, 219], // #d1d5db
   chipBg: [31, 41, 55], // #1f2937
+  surface: [31, 41, 55], // #1f2937
+  text: [209, 213, 219], // #d1d5db
+  link: [156, 163, 175], // #9ca3af
+  code: [229, 231, 235], // #e5e7eb
+  success: [156, 163, 175], // #9ca3af
+  warning: [209, 213, 219], // #d1d5db
+  error: [209, 213, 219], // #d1d5db
 }
 
 /** plain：无 ANSI，所有 token 空串 */
@@ -147,6 +189,13 @@ const PLAIN_PALETTE: TuiPalette = {
   muted: [0, 0, 0],
   chipFg: [0, 0, 0],
   chipBg: [0, 0, 0],
+  surface: [0, 0, 0],
+  text: [0, 0, 0],
+  link: [0, 0, 0],
+  code: [0, 0, 0],
+  success: [0, 0, 0],
+  warning: [0, 0, 0],
+  error: [0, 0, 0],
 }
 
 const PALETTES: Record<TuiThemeId, TuiPalette> = {
@@ -203,7 +252,7 @@ export function buildPaletteAnsi(
   palette: TuiPalette,
   trueColor: boolean,
   ansi: boolean,
-): Record<keyof TuiPalette, string> {
+): TuiAnsiPalette {
   if (!ansi) {
     return {
       accent: '',
@@ -219,6 +268,13 @@ export function buildPaletteAnsi(
       muted: '',
       chipFg: '',
       chipBg: '',
+      surface: '',
+      text: '',
+      link: '',
+      code: '',
+      success: '',
+      warning: '',
+      error: '',
     }
   }
   return {
@@ -235,6 +291,13 @@ export function buildPaletteAnsi(
     muted: fmtFg(palette.muted, trueColor),
     chipFg: fmtFg(palette.chipFg, trueColor),
     chipBg: fmtBg(palette.chipBg, trueColor),
+    surface: fmtBg(palette.surface, trueColor),
+    text: fmtFg(palette.text, trueColor),
+    link: fmtFg(palette.link, trueColor),
+    code: fmtFg(palette.code, trueColor),
+    success: fmtFg(palette.success, trueColor),
+    warning: fmtFg(palette.warning, trueColor),
+    error: fmtFg(palette.error, trueColor),
   }
 }
 

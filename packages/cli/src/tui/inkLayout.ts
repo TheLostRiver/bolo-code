@@ -16,8 +16,10 @@ import {
 import { resolveTuiWelcomeWidth } from './frame.ts'
 import type { StatusLineSession } from './statusLine.ts'
 import {
+  buildPaletteAnsi,
   resolveTuiTheme,
   type ResolveTuiThemeOptions,
+  type TuiTheme,
   type TuiThemeId,
 } from './theme.ts'
 import {
@@ -36,36 +38,40 @@ export type InkLayoutOptions = BannerOptions &
     /** Recently restored session context. */
     messagePreview?: string[]
     hint?: string
+    /** Retained renderer viewport height; omitted by append-only callers. */
+    viewportRows?: number
+    /** Disable SGR without changing the selected structural theme. */
+    color?: boolean
   }
 
 type Tone = 'normal' | 'title' | 'accent' | 'dim' | 'border'
 type Align = 'left' | 'center'
-type Palette = Record<Exclude<Tone, 'normal'> | 'reset', string>
+type Palette = Record<Tone | 'reset', string>
 type LayoutSize = 'wide' | 'medium' | 'compact'
 
 const MIN_FRAMED_COLUMNS = 38
 const MEDIUM_LAYOUT_COLUMNS = 56
 const WIDE_LAYOUT_COLUMNS = 96
 
-function createPalette(options: {
-  ansi: boolean
-  dimTheme: boolean
-}): Palette {
-  if (!options.ansi) {
-    return { title: '', accent: '', dim: '', border: '', reset: '' }
-  }
-  const accent = options.dimTheme ? '\u001b[38;5;250m' : '\u001b[38;5;81m'
+function createPalette(theme: TuiTheme, color: boolean): Palette {
+  const ansi = theme.ansi && color
+  const compiled = buildPaletteAnsi(
+    theme.palette,
+    theme.trueColor,
+    ansi,
+  )
   return {
-    title: `\u001b[1m${accent}`,
-    accent,
-    dim: '\u001b[2m',
-    border: '\u001b[38;5;244m',
-    reset: '\u001b[0m',
+    normal: compiled.text,
+    title: ansi ? `\u001b[1m${compiled.accent}` : '',
+    accent: compiled.accent,
+    dim: compiled.muted,
+    border: compiled.borderDim,
+    reset: ansi ? '\u001b[0m' : '',
   }
 }
 
 function paint(text: string, tone: Tone, palette: Palette): string {
-  if (tone === 'normal' || !palette[tone]) return text
+  if (!palette[tone]) return text
   return `${palette[tone]}${text}${palette.reset}`
 }
 
@@ -454,6 +460,52 @@ function renderStructuredLayout(
   })
 }
 
+function renderCompactLayout(
+  opts: InkLayoutOptions,
+  columns: number,
+  palette: Palette,
+  ascii: boolean,
+): string {
+  const width = Math.max(1, Math.min(columns, resolveTuiWelcomeWidth(columns)))
+  const separator = ascii ? ' | ' : ' · '
+  const session = opts.session
+  const model = opts.model?.trim() || session?.model?.trim() || 'not configured'
+  const runtime = [
+    `model ${model}`,
+    session?.permissionMode ? `mode ${session.permissionMode}` : '',
+    session?.effortLevel ? `effort ${session.effortLevel}` : '',
+  ].filter(Boolean)
+  const lines: Array<{ text: string; tone: Tone }> = [
+    {
+      text: `BOLO CODE${separator}v${opts.version ?? '0.0.1'}`,
+      tone: 'title',
+    },
+    {
+      text: opts.headline?.trim() || 'Ready',
+      tone: 'accent',
+    },
+    {
+      text: `workspace  ${opts.cwd?.trim() || 'unavailable'}`,
+      tone: 'normal',
+    },
+    {
+      text: runtime.join(separator),
+      tone: 'dim',
+    },
+  ]
+  const preview = cleanPreview(opts.messagePreview)
+  if (preview) lines.push({ text: `recent  ${preview}`, tone: 'dim' })
+  lines.push({
+    text:
+      opts.hint ??
+      (ascii ? '/help | /provider | /permissions' : '/help · /provider · /permissions'),
+    tone: 'dim',
+  })
+  return lines
+    .map(({ text, tone }) => paint(clipTerminalText(text, width), tone, palette))
+    .join('\n')
+}
+
 function renderPlainLayout(
   opts: InkLayoutOptions,
   columns: number,
@@ -482,18 +534,27 @@ function usesExplicitPlainLayout(
 export function renderInkLayout(opts: InkLayoutOptions = {}): string {
   const env = opts.env ?? process.env
   const columns = getTerminalColumns({ columns: opts.columns, env })
-  if (
-    columns < MIN_FRAMED_COLUMNS ||
-    usesExplicitPlainLayout(opts, env)
-  ) {
+  if (columns < MIN_FRAMED_COLUMNS) {
     return renderPlainLayout(opts, columns)
   }
 
   const theme = resolveTuiTheme({ ...opts, env })
-  const palette = createPalette({
-    ansi: theme.ansi,
-    dimTheme: theme.id === 'dim',
-  })
+  const palette = createPalette(theme, opts.color !== false)
+  const compact =
+    opts.condensed === true ||
+    (typeof opts.viewportRows === 'number' &&
+      (columns < WIDE_LAYOUT_COLUMNS || opts.viewportRows <= 24))
+  if (compact) {
+    return renderCompactLayout(
+      opts,
+      columns,
+      palette,
+      shouldUseAsciiCrystal({ ascii: opts.ascii, env }),
+    )
+  }
+  if (usesExplicitPlainLayout(opts, env)) {
+    return renderPlainLayout(opts, columns)
+  }
   const width = resolveTuiWelcomeWidth(columns)
   const size: LayoutSize =
     columns >= WIDE_LAYOUT_COLUMNS

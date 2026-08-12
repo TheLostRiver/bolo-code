@@ -43,6 +43,7 @@
     "test:pi-terminal-image-stub": "tsx scripts/test-pi-terminal-image-stub.ts",
     "test:theme": "tsx scripts/test-theme.ts",
     "test:composer-palette": "tsx scripts/test-composer-palette.ts",
+    "test:cli-theme-runtime": "tsx scripts/test-cli-theme-runtime.ts",
     "test:theme-command": "tsx scripts/test-theme-command.ts",
     "test:model-catalog": "tsx scripts/test-model-catalog.ts",
     "test:desktop-xss": "tsx scripts/test-desktop-xss.ts",

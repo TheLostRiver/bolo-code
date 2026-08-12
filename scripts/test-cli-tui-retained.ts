@@ -67,6 +67,15 @@ function assertPhysicalFrame(
   assert(/BOLO/i.test(visible), `${label}: Bolo welcome remains visible`)
 }
 
+function countBufferLinesContaining(
+  terminal: HeadlessTerminalHarness,
+  marker: string,
+): number {
+  return terminal
+    .snapshot()
+    .lines.filter((line) => line.text.includes(marker)).length
+}
+
 async function createFixture(columns: number, rows = 36) {
   const terminal = new HeadlessTerminalHarness({
     columns,
@@ -118,6 +127,171 @@ async function main() {
     } finally {
       await fixture.controller.stop()
       fixture.terminal.dispose()
+    }
+  }
+
+  // A one-time welcome must not become a live dependency on the mutable
+  // session. When a top-of-root message count changes after the transcript
+  // has entered scrollback, Pi otherwise forces a full-root redraw and the
+  // adapter's scrollback preservation turns that redraw into duplicated
+  // welcome/history rows.
+  {
+    const terminal = new HeadlessTerminalHarness({
+      columns: 120,
+      rows: 25,
+      scrollback: 1_000,
+    })
+    const output = new ResizableOutput(120, 25)
+    const writes: string[] = []
+    const welcomeMessages = [
+      { role: 'user' as const, content: 'welcome session marker' },
+    ]
+    const controller = createRetainedTuiController({
+      writeOut: (text) => {
+        writes.push(text)
+        terminal.write(text)
+      },
+      writeErr: (text) => {
+        writes.push(text)
+        terminal.write(text)
+      },
+      output,
+      env: { TERM: 'xterm-256color' },
+      color: false,
+      activityIntervalMs: 60_000,
+    })
+    controller.configureWelcome({
+      version: '0.0.1',
+      headline: 'WELCOME REPLAY MARKER',
+      cwd: 'E:\\workspace\\history-replay',
+      model: 'openai/replay-fixture',
+      sessionId: 'sess_history_replay',
+      session: {
+        permissionMode: 'default',
+        model: 'replay-fixture',
+        messages: welcomeMessages,
+      },
+    })
+    try {
+      controller.restoreMessages([
+        { role: 'user', content: 'HISTORY REPLAY MARKER' },
+        {
+          role: 'assistant',
+          content: Array.from(
+            { length: 52 },
+            (_, index) => `completed history line ${index}`,
+          ).join('\n'),
+        },
+      ])
+      await controller.start()
+      await controller.flush()
+      await terminal.flush()
+
+      const initialWelcomeCount = countBufferLinesContaining(
+        terminal,
+        'BOLO CODE',
+      )
+      const initialHistoryCount = countBufferLinesContaining(
+        terminal,
+        'HISTORY REPLAY MARKER',
+      )
+      assert(
+        initialWelcomeCount === 1,
+        `welcome is committed to native scrollback exactly once initially; ` +
+          `count=${initialWelcomeCount} lines=${terminal.snapshot().lines.length} ` +
+          `clears=${controller.getTerminalStats().filteredScrollbackClears} ` +
+          `head=${JSON.stringify(
+            terminal.snapshot().lines.slice(0, 12).map((line) => line.text),
+          )}`,
+      )
+      assert(
+        initialHistoryCount === 1,
+        `completed history is committed to native scrollback exactly once initially; ` +
+          `count=${initialHistoryCount}`,
+      )
+
+      const clearsBefore =
+        controller.getTerminalStats().filteredScrollbackClears
+      welcomeMessages.push({
+        role: 'user',
+        content: 'new prompt mutates live session length',
+      })
+      const snapshottedWelcome = controller.root.render(120).join('\n')
+      assert(
+        snapshottedWelcome.includes('1 message') &&
+          !snapshottedWelcome.includes('2 messages'),
+        'one-time welcome renders its configured session snapshot',
+      )
+      controller.printer.beginTurn({
+        prompt: 'current prompt marker',
+        echoUser: true,
+        activity: true,
+      })
+      await controller.flush()
+      await terminal.flush()
+
+      assert(
+        controller.getTerminalStats().filteredScrollbackClears === clearsBefore,
+        'top-of-root welcome mutation does not trigger a forced full redraw',
+      )
+      assert(
+        countBufferLinesContaining(terminal, 'BOLO CODE') === 1,
+        'thinking does not append the one-time welcome to scrollback again',
+      )
+      assert(
+        countBufferLinesContaining(terminal, 'HISTORY REPLAY MARKER') === 1,
+        'thinking does not append completed history to scrollback again',
+      )
+
+      const resizeClearsBefore =
+        controller.getTerminalStats().filteredScrollbackClears
+      const resizeEpoch = controller.getRenderEpoch()
+      terminal.resize(100, 25)
+      output.resize(100, 25)
+      await controller.waitForRender(resizeEpoch)
+      await terminal.flush()
+      assert(
+        controller.getTerminalStats().filteredScrollbackClears >
+          resizeClearsBefore,
+        'resize still performs a clearing full redraw',
+      )
+      assert(
+        countBufferLinesContaining(terminal, 'BOLO CODE') === 1,
+        'resize redraw keeps the one-time welcome owned by existing scrollback',
+      )
+      assert(
+        countBufferLinesContaining(terminal, 'HISTORY REPLAY MARKER') === 1,
+        'resize redraw does not replay completed history into scrollback',
+      )
+
+      const heightResizeEpoch = controller.getRenderEpoch()
+      const beforeHeightResize = terminal.snapshot()
+      terminal.resize(100, 80)
+      output.resize(100, 80)
+      await controller.waitForRender(heightResizeEpoch)
+      await terminal.flush()
+      const afterHeightResize = terminal.snapshot()
+      assert(
+        countBufferLinesContaining(terminal, 'BOLO CODE') === 1,
+        'expanded viewport still contains only one welcome copy',
+      )
+      assert(
+        countBufferLinesContaining(terminal, 'HISTORY REPLAY MARKER') === 1,
+        `expanded viewport still contains only one completed history copy; ` +
+          `count=${countBufferLinesContaining(terminal, 'HISTORY REPLAY MARKER')} ` +
+          `before=${JSON.stringify({
+            baseY: beforeHeightResize.baseY,
+            viewportY: beforeHeightResize.viewportY,
+            lines: beforeHeightResize.lines.length,
+          })} after=${JSON.stringify({
+            baseY: afterHeightResize.baseY,
+            viewportY: afterHeightResize.viewportY,
+            lines: afterHeightResize.lines.length,
+          })}`,
+      )
+    } finally {
+      await controller.stop()
+      terminal.dispose()
     }
   }
 

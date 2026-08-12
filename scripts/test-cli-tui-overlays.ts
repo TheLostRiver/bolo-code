@@ -12,7 +12,10 @@ import { buildDiffViewModelFromPreview } from '../packages/core/src/index.ts'
 import { runNumberedArrowPicker } from '../packages/cli/src/tui/arrowPicker.ts'
 import { runRetainedArrowPicker } from '../packages/cli/src/tui/retainedPicker.ts'
 import { measureTerminalText } from '../packages/cli/src/tui/terminalText.ts'
-import type { AskQuestion } from '../packages/shared/src/index.ts'
+import type {
+  AskQuestion,
+  ChatMessage,
+} from '../packages/shared/src/index.ts'
 import type {
   RuntimeListView,
   RuntimeTurnListItem,
@@ -67,6 +70,33 @@ type Fixture = {
   input: RawInputHarness
   output: ResizableOutput
   terminal: HeadlessTerminalHarness
+  recorder: FrameRecorder
+}
+
+const SYNCHRONIZED_OUTPUT_END = '\u001b[?2026l'
+
+class FrameRecorder {
+  readonly events: Array<
+    | { type: 'write'; text: string }
+    | { type: 'resize'; columns: number; rows: number }
+  > = []
+  frameCount = 0
+
+  constructor(
+    private readonly terminal: HeadlessTerminalHarness,
+    readonly initialColumns: number,
+    readonly initialRows: number,
+  ) {}
+
+  write = (text: string): void => {
+    this.terminal.write(text)
+    this.events.push({ type: 'write', text })
+    this.frameCount += text.split(SYNCHRONIZED_OUTPUT_END).length - 1
+  }
+
+  resize(columns: number, rows: number): void {
+    this.events.push({ type: 'resize', columns, rows })
+  }
 }
 
 const request = {
@@ -184,9 +214,11 @@ async function createFixture(
   })
   const output = new ResizableOutput(columns, rows)
   const input = new RawInputHarness()
+  const recorder = new FrameRecorder(terminal, columns, rows)
+  output.on('resize', () => recorder.resize(output.columns, output.rows))
   const controller = createRetainedTuiController({
-    writeOut: (text) => terminal.write(text),
-    writeErr: (text) => terminal.write(text),
+    writeOut: recorder.write,
+    writeErr: recorder.write,
     input,
     output,
     color: false,
@@ -203,8 +235,8 @@ async function createFixture(
     },
   })
   await controller.start()
-  await settle({ controller, input, output, terminal })
-  return { controller, input, output, terminal }
+  await settle({ controller, input, output, terminal, recorder })
+  return { controller, input, output, terminal, recorder }
 }
 
 async function settle(fixture: Fixture): Promise<void> {
@@ -217,6 +249,50 @@ function screen(fixture: Fixture): string {
     .viewport()
     .map((line) => line.text)
     .join('\n')
+}
+
+async function replayFrameScreens(
+  recorder: FrameRecorder,
+): Promise<string[]> {
+  const terminal = new HeadlessTerminalHarness({
+    columns: recorder.initialColumns,
+    rows: recorder.initialRows,
+    scrollback: 1_000,
+  })
+  try {
+    const screens: string[] = []
+    for (const event of recorder.events) {
+      if (event.type === 'resize') {
+        terminal.resize(event.columns, event.rows)
+        continue
+      }
+      let pending = event.text
+      let end = pending.indexOf(SYNCHRONIZED_OUTPUT_END)
+      while (end >= 0) {
+        terminal.write(pending.slice(0, end + SYNCHRONIZED_OUTPUT_END.length))
+        await terminal.flush()
+        screens.push(
+          terminal
+            .viewport()
+            .map((line) => line.text)
+            .join('\n'),
+        )
+        pending = pending.slice(end + SYNCHRONIZED_OUTPUT_END.length)
+        end = pending.indexOf(SYNCHRONIZED_OUTPUT_END)
+      }
+      if (pending) terminal.write(pending)
+    }
+    return screens
+  } finally {
+    terminal.dispose()
+  }
+}
+
+function createOverlayFlickerHistory(): ChatMessage[] {
+  return Array.from({ length: 24 }, (_, index) => ({
+    role: index % 2 === 0 ? ('user' as const) : ('assistant' as const),
+    content: `retained history marker ${index + 1}`,
+  }))
 }
 
 function assertFits(fixture: Fixture, columns: number, label: string): void {
@@ -429,6 +505,55 @@ async function main(): Promise<void> {
       (await cancelledQuestion).kind === 'cancelled',
       'Esc cancels the whole question batch',
     )
+
+    fixture.controller.restoreMessages(createOverlayFlickerHistory())
+    await settle(fixture)
+    fixture.controller.printer.beginTurn({
+      prompt: 'open a question while activity is ticking',
+    })
+    const activeQuestion = fixture.controller.runQuestionOverlay({
+      questions: [questions[0]!],
+    })
+    await settle(fixture)
+    const stableQuestionScreen = screen(fixture)
+    const visibleHistoryMarker = Array.from(
+      { length: 24 },
+      (_, index) => `retained history marker ${index + 1}`,
+    ).find((marker) => stableQuestionScreen.includes(marker))
+    assert(
+      visibleHistoryMarker !== undefined,
+      'completed question frame keeps visible restored history',
+    )
+    const flickerFrameStart = fixture.recorder.frameCount
+    for (let index = 0; index < 3; index += 1) {
+      fixture.input.send('\u001b[B')
+      await new Promise((resolve) => setTimeout(resolve, 40))
+      fixture.input.send('\u001b[A')
+      await new Promise((resolve) => setTimeout(resolve, 120))
+    }
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    await settle(fixture)
+    const allScreens = await replayFrameScreens(fixture.recorder)
+    const activeScreens = allScreens.slice(flickerFrameStart)
+    const questionFrames = activeScreens.filter((content) =>
+      content.includes('Which database should Bolo use?'),
+    )
+    assert(
+      questionFrames.length >= 2,
+      'question remains active across multiple retained activity frames',
+    )
+    assert(
+      questionFrames.every((content) =>
+        content.includes(visibleHistoryMarker),
+      ),
+      'question activity frames never drop and restore visible transcript history',
+    )
+    fixture.input.send('\u001b')
+    assert(
+      (await activeQuestion).kind === 'cancelled',
+      'flicker regression question closes normally',
+    )
+    fixture.controller.printer.endTurn({ terminalReason: 'cancelled' })
 
     const provider = fixture.controller.runPickerOverlay({
       mode: 'provider',

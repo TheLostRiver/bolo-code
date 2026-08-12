@@ -5,6 +5,7 @@ import type {
   CliCommandSurfaceTone,
 } from '../../../shared/src/index.ts'
 import { resolveTuiDockWidth } from './frame.ts'
+import type { TuiAnsiPalette } from './theme.ts'
 import {
   clipTerminalText,
   measureTerminalText,
@@ -16,6 +17,7 @@ export type FormatCliCommandSurfaceOptions = {
   columns?: number
   rows?: number
   color?: boolean
+  palette?: TuiAnsiPalette
 }
 
 function normalizeDimension(
@@ -111,16 +113,19 @@ function tonePrefix(tone: CliCommandSurfaceTone): string {
   }
 }
 
-function toneColor(tone: CliCommandSurfaceTone): string {
+function toneColor(
+  tone: CliCommandSurfaceTone,
+  palette?: TuiAnsiPalette,
+): string {
   switch (tone) {
     case 'success':
-      return '\u001b[38;5;114m'
+      return palette?.success ?? '\u001b[38;5;114m'
     case 'warning':
-      return '\u001b[38;5;221m'
+      return palette?.warning ?? '\u001b[38;5;221m'
     case 'error':
-      return '\u001b[38;5;203m'
+      return palette?.error ?? '\u001b[38;5;203m'
     case 'info':
-      return '\u001b[38;5;81m'
+      return palette?.accent ?? '\u001b[38;5;81m'
   }
 }
 
@@ -131,9 +136,13 @@ export function formatCliCommandSurface(
   const columns = normalizeDimension(options.columns, 80)
   const rows = normalizeDimension(options.rows, 24)
   const frameWidth = Math.min(columns, resolveTuiDockWidth(columns))
-  const color = options.color !== false
+  const color =
+    options.color !== false &&
+    (options.palette === undefined || options.palette.accent !== '')
   const reset = color ? '\u001b[0m' : ''
-  const border = color ? '\u001b[38;5;244m' : ''
+  const border = color
+    ? options.palette?.borderDim ?? '\u001b[38;5;244m'
+    : ''
   const lines: string[] = []
 
   if (state.panel) {
@@ -168,14 +177,16 @@ export function formatCliCommandSurface(
     const visible = body.slice(0, maxToastRows)
     const first = clipTerminalText(`${prefix}${visible[0] ?? ''}`, frameWidth)
     lines.push(
-      color ? `${toneColor(state.toast.tone)}${first}${reset}` : first,
+      color
+        ? `${toneColor(state.toast.tone, options.palette)}${first}${reset}`
+        : first,
     )
     for (const rest of visible.slice(1)) {
       const clipped = clipTerminalText(rest, frameWidth)
       // 空行保留（渲染为空行）——行数与终端占行严格一致
       lines.push(
         color
-          ? `${toneColor(state.toast.tone)}${clipped}${reset}`
+          ? `${toneColor(state.toast.tone, options.palette)}${clipped}${reset}`
           : clipped,
       )
     }
@@ -192,6 +203,7 @@ export class RetainedCommandSurface implements Component {
     private readonly options: {
       color: boolean
       getViewportRows: () => number
+      palette?: TuiAnsiPalette
     },
   ) {
     this.state = state
@@ -201,6 +213,10 @@ export class RetainedCommandSurface implements Component {
     this.state = state
   }
 
+  setPalette(palette: TuiAnsiPalette | undefined): void {
+    this.options.palette = palette
+  }
+
   invalidate(): void {}
 
   render(width: number): string[] {
@@ -208,6 +224,7 @@ export class RetainedCommandSurface implements Component {
       columns: width,
       rows: this.options.getViewportRows(),
       color: this.options.color,
+      palette: this.options.palette,
     })
   }
 }
