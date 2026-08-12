@@ -18,7 +18,10 @@ import type {
   ProviderStreamEvent,
   ProviderUsage,
 } from './types.ts'
-import { mapEffort, DEFAULT_EFFORT_BASE_MAX_TOKENS } from './effort.ts'
+import {
+  DEFAULT_EFFORT_BASE_MAX_TOKENS,
+  resolveRequestMaxTokens,
+} from './effort.ts'
 import {
   applyBodyPatches,
   detectEffortDialectId,
@@ -38,6 +41,7 @@ export type OpenAICompatibleConfig = {
   model: string
   /** 默认 max_tokens（effort 倍率基准）；默认 8192 */
   maxTokens?: number
+  maxOutputTokens?: number
   /** 默认 120s */
   timeoutMs?: number
   /**
@@ -160,6 +164,7 @@ export function buildOpenAICompatibleRequestBody(
   config: {
     model: string
     maxTokens: number
+    maxOutputTokens?: number
     effortDialect?: string | EffortDialect | null
     /** 覆盖 detect；与 effortDialect 二选一优先 effortDialect */
     baseUrl?: string
@@ -175,7 +180,6 @@ export function buildOpenAICompatibleRequestBody(
     model: config.model,
     messages: toOpenAIMessages(messages),
     stream,
-    max_tokens: config.maxTokens,
   }
   if (stream) {
     body.stream_options = { include_usage: true }
@@ -218,13 +222,16 @@ export function buildOpenAICompatibleRequestBody(
     model: config.model,
     baseMaxTokens: config.maxTokens,
   })
+  const maxTokens = resolveRequestMaxTokens({
+    configuredMaxTokens: config.maxTokens,
+    maxOutputTokens: config.maxOutputTokens,
+    explicitMaxTokens: options?.maxTokens,
+    effortMaxTokens: plan.ok ? plan.maxTokens : undefined,
+  })
   if (plan.ok) {
     applyBodyPatches(body, plan.patches)
-    // max-tokens 方言：用 plan 倍率覆盖（若有）
-    if (plan.maxTokens != null && dialect.applyTokenScale) {
-      body.max_tokens = plan.maxTokens
-    }
   }
+  body.max_tokens = maxTokens
   return body
 }
 
@@ -247,23 +254,13 @@ export function createOpenAICompatibleProvider(
     options?: CompleteStreamOptions,
   ): AsyncIterable<ProviderStreamEvent> {
     const url = `${baseUrl}/chat/completions`
-    const dialect = resolveEffortDialect(effortDialect)
     const hasTools = Boolean(options?.tools?.length && !options?.disableTools)
-    const plan = resolveEffortWire(dialect, options?.effort, {
-      isAgent: hasTools,
-      model: (options?.model && options.model.trim()) || config.model,
-      baseMaxTokens,
-    })
-    const maxTokens =
-      options?.maxTokens ??
-      (plan.ok && plan.maxTokens != null
-        ? plan.maxTokens
-        : mapEffort(options?.effort, baseMaxTokens).maxTokens)
     const body = buildOpenAICompatibleRequestBody(
       messages,
       {
         model: (options?.model && options.model.trim()) || config.model,
-        maxTokens,
+        maxTokens: baseMaxTokens,
+        maxOutputTokens: config.maxOutputTokens,
         effortDialect,
         baseUrl: config.baseUrl ?? baseUrl,
       },
@@ -432,22 +429,12 @@ export function createOpenAICompatibleProvider(
     },
   ): Promise<string> {
     const url = `${baseUrl}/chat/completions`
-    const dialect = resolveEffortDialect(effortDialect)
-    const plan = resolveEffortWire(dialect, options?.effort, {
-      isAgent: false,
-      model: config.model,
-      baseMaxTokens,
-    })
-    const maxTokens =
-      options?.maxTokens ??
-      (plan.ok && plan.maxTokens != null
-        ? plan.maxTokens
-        : mapEffort(options?.effort, baseMaxTokens).maxTokens)
     const body = buildOpenAICompatibleRequestBody(
       messages,
       {
         model: config.model,
-        maxTokens,
+        maxTokens: baseMaxTokens,
+        maxOutputTokens: config.maxOutputTokens,
         effortDialect,
         baseUrl: config.baseUrl ?? baseUrl,
       },
@@ -457,6 +444,7 @@ export function createOpenAICompatibleProvider(
         enablePromptCaching: options?.enablePromptCaching,
         promptCacheKey: options?.promptCacheKey,
         effort: options?.effort,
+        maxTokens: options?.maxTokens,
         isAgent: false,
       },
     )

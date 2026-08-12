@@ -8,6 +8,30 @@ export type EffortLevel = 'low' | 'medium' | 'high' | 'max' | 'auto'
 /** 默认 base max_tokens（与 Anthropic 配置默认一致） */
 export const DEFAULT_EFFORT_BASE_MAX_TOKENS = 8192
 
+function positiveInteger(value: number | undefined): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? Math.floor(value)
+    : undefined
+}
+
+/** Resolve a request budget and enforce the model/provider output ceiling. */
+export function resolveRequestMaxTokens(options: {
+  configuredMaxTokens?: number
+  maxOutputTokens?: number
+  explicitMaxTokens?: number
+  effortMaxTokens?: number
+}): number {
+  const configured =
+    positiveInteger(options.configuredMaxTokens) ??
+    DEFAULT_EFFORT_BASE_MAX_TOKENS
+  const requested =
+    positiveInteger(options.explicitMaxTokens) ??
+    positiveInteger(options.effortMaxTokens) ??
+    configured
+  const ceiling = positiveInteger(options.maxOutputTokens)
+  return ceiling == null ? requested : Math.min(requested, ceiling)
+}
+
 /**
  * 将 effort 档位映射为 maxTokens。
  * - low: 0.5× base（下限 256）

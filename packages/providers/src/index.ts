@@ -68,6 +68,7 @@ export {
 export { createCompactSummarizerFromProvider } from './compactSummarizer.ts'
 export {
   mapEffort,
+  resolveRequestMaxTokens,
   DEFAULT_EFFORT_BASE_MAX_TOKENS,
   type EffortLevel,
 } from './effort.ts'

@@ -18,6 +18,7 @@ import {
   activeEffortPickerIndex,
   isAcceptableEffortInput,
   DIALECT_DEEPSEEK_CHAT,
+  createOpenAICompatibleProvider,
   buildOpenAICompatibleRequestBody,
   buildResponsesRequest,
   buildAnthropicRequestBody,
@@ -134,6 +135,43 @@ assert(
   assert(body.max_tokens === 4096, 'compatible keeps max_tokens')
 }
 
+// Regression: model metadata is a hard ceiling, not an effort multiplier base.
+{
+  const deepseek = buildOpenAICompatibleRequestBody(
+    msgs,
+    {
+      model: 'deepseek-v4-flash',
+      maxTokens: 384_000,
+      maxOutputTokens: 384_000,
+      effortDialect: 'deepseek-chat',
+    },
+    { effort: 'max', stream: true, isAgent: true },
+  )
+  assert(
+    deepseek.max_tokens === 384_000,
+    'deepseek max effort stays within 384K output ceiling',
+  )
+  assert(
+    deepseek.reasoning_effort === 'max',
+    'deepseek max effort keeps reasoning_effort',
+  )
+
+  const legacy = buildOpenAICompatibleRequestBody(
+    msgs,
+    {
+      model: 'generic-model',
+      maxTokens: 384_000,
+      maxOutputTokens: 384_000,
+      effortDialect: 'max-tokens',
+    },
+    { effort: 'max', stream: true },
+  )
+  assert(
+    legacy.max_tokens === 384_000,
+    'max-tokens scaling is clamped to the output ceiling',
+  )
+}
+
 // ── buildResponsesRequest ──
 {
   const body = buildResponsesRequest(
@@ -143,6 +181,101 @@ assert(
   )
   const re = (body as { reasoning?: { effort?: string } }).reasoning
   assert(re?.effort === 'high', 'responses reasoning.effort high')
+}
+
+{
+  const body = buildResponsesRequest(
+    msgs,
+    {
+      model: 'gpt-5.6',
+      maxTokens: 128_000,
+      maxOutputTokens: 128_000,
+      effortDialect: 'openai-responses',
+    },
+    { effort: 'max', maxTokens: 256_000, isAgent: true },
+  )
+  const re = (body as { reasoning?: { effort?: string } }).reasoning
+  assert(body.max_output_tokens === 128_000, 'responses output ceiling')
+  assert(re?.effort === 'max', 'responses max reasoning effort preserved')
+}
+
+// Full provider path: the serialized request must keep the catalog ceiling.
+{
+  const requestBodies: Array<Record<string, unknown>> = []
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = (async (_input, init) => {
+    requestBodies.push(
+      JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>,
+    )
+    return new Response('data: [DONE]\n\n', {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' },
+    })
+  }) as typeof fetch
+  try {
+    const provider = createOpenAICompatibleProvider({
+      apiKey: 'test-only-key',
+      baseUrl: 'https://provider.test/v1',
+      model: 'deepseek-v4-flash',
+      maxTokens: 384_000,
+      maxOutputTokens: 384_000,
+      effortDialect: 'deepseek-chat',
+    })
+    for await (const _event of provider.completeStream(msgs, {
+      effort: 'max',
+      tools: [
+        {
+          name: 'Bash',
+          description: 'x',
+          requiresPermission: true,
+        },
+      ],
+    })) {
+      // Drain the mock SSE stream so the serialized request is captured.
+    }
+    const captured = requestBodies[0]
+    assert(captured?.max_tokens === 384_000, 'provider sends 384K max_tokens')
+    assert(
+      captured?.reasoning_effort === 'max',
+      'provider sends max reasoning_effort',
+    )
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+}
+
+// Non-streaming provider path is used by compact/classifier helpers.
+{
+  let captured: Record<string, unknown> | undefined
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = (async (_input, init) => {
+    captured = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>
+    return new Response(
+      JSON.stringify({ choices: [{ message: { content: 'ok' } }] }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    )
+  }) as typeof fetch
+  try {
+    const provider = createOpenAICompatibleProvider({
+      apiKey: 'test-only-key',
+      baseUrl: 'https://provider.test/v1',
+      model: 'deepseek-v4-flash',
+      maxTokens: 384_000,
+      maxOutputTokens: 384_000,
+      effortDialect: 'deepseek-chat',
+    })
+    await provider.completeText?.(msgs, {
+      effort: 'max',
+      maxTokens: 768_000,
+    })
+    assert(captured?.max_tokens === 384_000, 'completeText output ceiling')
+    assert(
+      captured?.reasoning_effort === 'max',
+      'completeText reasoning effort preserved',
+    )
+  } finally {
+    globalThis.fetch = originalFetch
+  }
 }
 
 // ── config normalize ──
@@ -215,6 +348,31 @@ assert(status.includes('deepseek-chat'), 'status dialect')
   )
   // thinking 独立：未传 anthropicThinking 则无 thinking 字段
   assert(built.body.thinking == null, 'effort does not force thinking')
+
+  const capped = buildAnthropicRequestBody(
+    msgs,
+    {
+      model: 'claude-opus-4-6',
+      maxTokens: 128_000,
+      maxOutputTokens: 64_000,
+      effortDialect: 'anthropic-output',
+    },
+    {
+      effort: 'high',
+      maxTokens: 256_000,
+      anthropicThinking: 100_000,
+      stream: true,
+      isAgent: true,
+    },
+  )
+  const cappedThinking = capped.body.thinking as
+    | { budget_tokens?: number }
+    | undefined
+  assert(capped.body.max_tokens === 64_000, 'anthropic output ceiling')
+  assert(
+    cappedThinking?.budget_tokens === 63_999,
+    'anthropic thinking uses the clamped max_tokens',
+  )
 }
 
 // ── E6/E7/E8：choosable · anthropic max gate · picker ──

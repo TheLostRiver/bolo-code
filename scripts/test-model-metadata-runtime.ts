@@ -82,10 +82,12 @@ function fixtureSkills(count = 24): LoadedSkill[] {
 
 async function drainCall(
   session: Awaited<ReturnType<typeof createSession>>,
+  effort?: string,
 ): Promise<void> {
   for await (const _event of session.deps.callModel({
     messages: [{ role: 'user', content: 'runtime metadata request' }],
     model: session.model,
+    effort,
   })) {
     // Drain the provider stream so the captured request body is complete.
   }
@@ -380,6 +382,11 @@ async function main(): Promise<void> {
       assert(
         Number(requestBodies.at(-1)?.max_tokens) === 4_096,
         'provider request uses resolved net-v1 output baseline',
+      )
+      await drainCall(runtime, 'max')
+      assert(
+        Number(requestBodies.at(-1)?.max_tokens) === 4_096,
+        'provider effort scaling stays within resolved net-v1 output ceiling',
       )
 
       const toNetV2 = switchSessionModel(runtime, 'net-v2')

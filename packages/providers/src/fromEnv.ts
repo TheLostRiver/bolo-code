@@ -72,6 +72,7 @@ export type CreateProviderOptions = {
   model?: string
   timeoutMs?: number
   maxTokens?: number
+  maxOutputTokens?: number
   /** Effort 方言 id 或内联；见 docs/EFFORT.md */
   effortDialect?: string | import('./effortDialect.ts').EffortDialect
 }
@@ -157,6 +158,7 @@ export function createProviderFromEnv(
       model,
       timeoutMs: overrides?.timeoutMs,
       maxTokens: overrides?.maxTokens,
+      maxOutputTokens: overrides?.maxOutputTokens,
       effortDialect: overrides?.effortDialect,
     }
     return {
@@ -187,6 +189,7 @@ export function createProviderFromEnv(
       model,
       timeoutMs: overrides?.timeoutMs,
       maxTokens: overrides?.maxTokens,
+      maxOutputTokens: overrides?.maxOutputTokens,
       effortDialect: overrides?.effortDialect,
     }
     return {
@@ -204,6 +207,7 @@ export function createProviderFromEnv(
       model,
       timeoutMs: overrides?.timeoutMs,
       maxTokens: overrides?.maxTokens,
+      maxOutputTokens: overrides?.maxOutputTokens,
       effortDialect: overrides?.effortDialect,
     }),
     kind: 'openai-compatible',
@@ -254,6 +258,7 @@ export function createProviderFromProfile(
     model,
     timeoutMs: profile.timeoutMs,
     maxTokens: opts?.maxTokensOverride ?? profile.maxTokens,
+    maxOutputTokens: opts?.maxTokensOverride ?? profile.maxTokens,
     effortDialect:
       profile.effortDialect as CreateProviderOptions['effortDialect'],
   })

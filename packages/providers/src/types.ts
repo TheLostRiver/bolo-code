@@ -125,6 +125,15 @@ export type CompleteStreamOptions = {
   anthropicThinking?: boolean | 'off' | 'enabled' | number
 }
 
+export type CompleteTextOptions = Pick<
+  CompleteStreamOptions,
+  | 'signal'
+  | 'effort'
+  | 'maxTokens'
+  | 'enablePromptCaching'
+  | 'promptCacheKey'
+>
+
 export interface LlmProvider {
   id: ProviderId
   completeStream(
@@ -133,6 +142,6 @@ export interface LlmProvider {
   ): AsyncIterable<ProviderStreamEvent>
   completeText?(
     messages: ChatMessage[],
-    options?: { signal?: AbortSignal },
+    options?: CompleteTextOptions,
   ): Promise<string>
 }

@@ -22,7 +22,10 @@ import type {
   ProviderStreamEvent,
   ProviderUsage,
 } from './types.ts'
-import { mapEffort, DEFAULT_EFFORT_BASE_MAX_TOKENS } from './effort.ts'
+import {
+  DEFAULT_EFFORT_BASE_MAX_TOKENS,
+  resolveRequestMaxTokens,
+} from './effort.ts'
 import {
   applyBodyPatches,
   detectEffortDialectId,
@@ -43,6 +46,8 @@ export type OpenAIResponsesConfig = {
   model: string
   /** effort 基准 max_output_tokens；默认 8192 */
   maxTokens?: number
+  /** 模型/服务端允许的单次输出硬上限 */
+  maxOutputTokens?: number
   timeoutMs?: number
   /** 默认 false：不在服务端持久化 response（agent 自管 transcript） */
   store?: boolean
@@ -161,9 +166,12 @@ export function buildResponsesRequest(
   config: {
     model: string
     store?: boolean
+    maxTokens?: number
+    maxOutputTokens?: number
     effortDialect?: string | EffortDialect | null
   },
   options?: CompleteStreamOptions & {
+    /** Backward-compatible request budget alias used by direct builder callers. */
     maxOutputTokens?: number
     isAgent?: boolean
   },
@@ -177,9 +185,6 @@ export function buildResponsesRequest(
     parallel_tool_calls: true,
   }
   if (instructions) body.instructions = instructions
-  if (options?.maxOutputTokens != null) {
-    body.max_output_tokens = options.maxOutputTokens
-  }
   // hosted 搜索**不经过** toolsToResponses——那个 mapper 会把每一项包成
   // `{type:'function', name, parameters}`，而 hosted 工具只有一个 type 字段。
   // 缺省 = 关：直接调本函数的既有代码不该因此静默开启搜索并产生费用。
@@ -218,11 +223,26 @@ export function buildResponsesRequest(
   const plan = resolveEffortWire(dialect, options?.effort, {
     isAgent: options?.isAgent ?? hasTools,
     model: config.model,
-    baseMaxTokens: options?.maxOutputTokens,
+    baseMaxTokens: config.maxTokens,
   })
+  const hasTokenBudget =
+    config.maxTokens != null ||
+    config.maxOutputTokens != null ||
+    options?.maxTokens != null ||
+    options?.maxOutputTokens != null ||
+    (plan.ok && plan.maxTokens != null)
+  const maxOutputTokens = hasTokenBudget
+    ? resolveRequestMaxTokens({
+        configuredMaxTokens: config.maxTokens,
+        maxOutputTokens: config.maxOutputTokens,
+        explicitMaxTokens: options?.maxTokens ?? options?.maxOutputTokens,
+        effortMaxTokens: plan.ok ? plan.maxTokens : undefined,
+      })
+    : undefined
   if (plan.ok) {
     applyBodyPatches(body as unknown as Record<string, unknown>, plan.patches)
   }
+  if (maxOutputTokens != null) body.max_output_tokens = maxOutputTokens
   return body
 }
 
@@ -562,27 +582,17 @@ export function createOpenAIResponsesProvider(
   ): AsyncIterable<ProviderStreamEvent> {
     const url = `${baseUrl}/responses`
     const hasTools = Boolean(options?.tools?.length && !options?.disableTools)
-    const dialect = resolveEffortDialect(effortDialect)
-    const plan = resolveEffortWire(dialect, options?.effort, {
-      isAgent: hasTools,
-      model: (options?.model && options.model.trim()) || config.model,
-      baseMaxTokens,
-    })
-    const maxTokens =
-      options?.maxTokens ??
-      (plan.ok && plan.maxTokens != null
-        ? plan.maxTokens
-        : mapEffort(options?.effort, baseMaxTokens).maxTokens)
     const body = buildResponsesRequest(
       messages,
       {
         model: (options?.model && options.model.trim()) || config.model,
         store,
+        maxTokens: baseMaxTokens,
+        maxOutputTokens: config.maxOutputTokens,
         effortDialect,
       },
       {
         ...options,
-        maxOutputTokens: maxTokens,
         isAgent: hasTools,
       },
     )
@@ -711,23 +721,18 @@ export function createOpenAIResponsesProvider(
     options?: { signal?: AbortSignal; effort?: string; maxTokens?: number },
   ): Promise<string> {
     const url = `${baseUrl}/responses`
-    const dialect = resolveEffortDialect(effortDialect)
-    const plan = resolveEffortWire(dialect, options?.effort, {
-      isAgent: false,
-      model: config.model,
-      baseMaxTokens,
-    })
-    const maxTokens =
-      options?.maxTokens ??
-      (plan.ok && plan.maxTokens != null
-        ? plan.maxTokens
-        : mapEffort(options?.effort, baseMaxTokens).maxTokens)
     const body = buildResponsesRequest(
       messages,
-      { model: config.model, store, effortDialect },
+      {
+        model: config.model,
+        store,
+        maxTokens: baseMaxTokens,
+        maxOutputTokens: config.maxOutputTokens,
+        effortDialect,
+      },
       {
         disableTools: true,
-        maxOutputTokens: maxTokens,
+        maxTokens: options?.maxTokens,
         effort: options?.effort,
         isAgent: false,
       },

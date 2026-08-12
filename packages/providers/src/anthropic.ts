@@ -19,7 +19,10 @@ import type {
   LlmProvider,
   ProviderStreamEvent,
 } from './types.ts'
-import { mapEffort, DEFAULT_EFFORT_BASE_MAX_TOKENS } from './effort.ts'
+import {
+  DEFAULT_EFFORT_BASE_MAX_TOKENS,
+  resolveRequestMaxTokens,
+} from './effort.ts'
 import {
   applyBodyPatches,
   detectEffortDialectId,
@@ -41,6 +44,8 @@ export type AnthropicConfig = {
   baseUrl?: string
   model: string
   maxTokens?: number
+  /** 模型/服务端允许的单次输出硬上限 */
+  maxOutputTokens?: number
   /** 默认 2023-06-01 */
   anthropicVersion?: string
   timeoutMs?: number
@@ -175,6 +180,7 @@ export function buildAnthropicRequestBody(
   config: {
     model: string
     maxTokens: number
+    maxOutputTokens?: number
     effortDialect?: string | EffortDialect | null
   },
   options?: CompleteStreamOptions & {
@@ -186,7 +192,6 @@ export function buildAnthropicRequestBody(
   const caching = isPromptCachingEnabled(options)
   const body: Record<string, unknown> = {
     model: config.model,
-    max_tokens: config.maxTokens,
     messages: addMessageCacheBreakpoint(antMessages, caching),
     stream: options?.stream ?? true,
   }
@@ -216,12 +221,6 @@ export function buildAnthropicRequestBody(
       : clientTools
     body.tools = withToolsCacheBreakpoint(merged, caching)
   }
-  const thinking = resolveAnthropicThinking(
-    options?.anthropicThinking,
-    config.maxTokens,
-  )
-  if (thinking) body.thinking = thinking
-
   const dialectRaw =
     config.effortDialect ??
     detectEffortDialectId({ kind: 'anthropic', model: config.model })
@@ -232,16 +231,25 @@ export function buildAnthropicRequestBody(
     model: config.model,
     baseMaxTokens: config.maxTokens,
   })
+  const maxTokens = resolveRequestMaxTokens({
+    configuredMaxTokens: config.maxTokens,
+    maxOutputTokens: config.maxOutputTokens,
+    explicitMaxTokens: options?.maxTokens,
+    effortMaxTokens: plan.ok ? plan.maxTokens : undefined,
+  })
   let requestHeaders: Record<string, string> | undefined
   if (plan.ok) {
     applyBodyPatches(body, plan.patches)
-    if (plan.maxTokens != null && dialect.applyTokenScale) {
-      body.max_tokens = plan.maxTokens
-    }
     if (plan.requestHeaders) {
       requestHeaders = { ...plan.requestHeaders }
     }
   }
+  body.max_tokens = maxTokens
+  const thinking = resolveAnthropicThinking(
+    options?.anthropicThinking,
+    maxTokens,
+  )
+  if (thinking) body.thinking = thinking
   return { body, ...(requestHeaders ? { requestHeaders } : {}) }
 }
 
@@ -280,23 +288,12 @@ export function createAnthropicProvider(config: AnthropicConfig): LlmProvider {
   ): AsyncIterable<ProviderStreamEvent> {
     const url = `${baseUrl}/messages`
     const hasTools = Boolean(options?.tools?.length && !options?.disableTools)
-    const dialect = resolveEffortDialect(effortDialect)
-    const plan = resolveEffortWire(dialect, options?.effort, {
-      isAgent: hasTools,
-      model: (options?.model && options.model.trim()) || config.model,
-      baseMaxTokens,
-    })
-    const maxTokens =
-      options?.maxTokens ??
-      (plan.ok && plan.maxTokens != null
-        ? plan.maxTokens
-        : mapEffort(options?.effort, baseMaxTokens).maxTokens)
-
     const built = buildAnthropicRequestBody(
       messages,
       {
         model: (options?.model && options.model.trim()) || config.model,
-        maxTokens,
+        maxTokens: baseMaxTokens,
+        maxOutputTokens: config.maxOutputTokens,
         effortDialect,
       },
       { ...options, stream: true, isAgent: hasTools },
@@ -366,25 +363,20 @@ export function createAnthropicProvider(config: AnthropicConfig): LlmProvider {
     },
   ): Promise<string> {
     const url = `${baseUrl}/messages`
-    const dialect = resolveEffortDialect(effortDialect)
-    const plan = resolveEffortWire(dialect, options?.effort, {
-      isAgent: false,
-      model: config.model,
-      baseMaxTokens,
-    })
-    const maxTokens =
-      options?.maxTokens ??
-      (plan.ok && plan.maxTokens != null
-        ? plan.maxTokens
-        : mapEffort(options?.effort, baseMaxTokens).maxTokens)
     const built = buildAnthropicRequestBody(
       messages,
-      { model: config.model, maxTokens, effortDialect },
+      {
+        model: config.model,
+        maxTokens: baseMaxTokens,
+        maxOutputTokens: config.maxOutputTokens,
+        effortDialect,
+      },
       {
         stream: false,
         disableTools: true,
         enablePromptCaching: options?.enablePromptCaching,
         effort: options?.effort,
+        maxTokens: options?.maxTokens,
         isAgent: false,
       },
     )
